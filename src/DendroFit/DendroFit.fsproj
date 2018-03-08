@@ -5,7 +5,16 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="Time.fs" />
+    <Compile Include="Types.fs" />
+    <Compile Include="Differential.fs" />
+    <Compile Include="Optimisation.fs" />
+    <Compile Include="OptimisationTechniques.fs" />
     <Compile Include="Library.fs" />
+    <Compile Include="Equations.fs" />
   </ItemGroup>
+
+  <Import Project="fsc.props" />
+  <Import Project="..\..\.paket\Paket.Restore.targets" />
 
 </Project>
