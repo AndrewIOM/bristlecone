@@ -10,11 +10,19 @@
     <Compile Include="Differential.fs" />
     <Compile Include="Optimisation.fs" />
     <Compile Include="OptimisationTechniques.fs" />
+    <Compile Include="DataAccess.fs" />
     <Compile Include="Library.fs" />
     <Compile Include="Equations.fs" />
   </ItemGroup>
 
   <Import Project="fsc.props" />
   <Import Project="..\..\.paket\Paket.Restore.targets" />
+
+  <ItemGroup>
+    <Reference Include="Microsoft.Research.Oslo">
+      <HintPath>Microsoft.Research.Oslo.dll</HintPath>
+      <SpecificVersion>False</SpecificVersion> 
+    </Reference>
+  </ItemGroup>
 
 </Project>

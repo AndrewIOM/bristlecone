@@ -12,6 +12,20 @@ type DateTime with
         let d = DateTime(year,month,day)
         DateTime.SpecifyKind(d,DateTimeKind.Utc)
 
+type FixedTemporalResolution =
+| Annual
+| Monthly
+| Daily
+| CustomTicks of int64
+
+let (|Single|Empty|AllIdentical|Neither|) (lst:'a list) =
+    if lst.Length = 1 then Single
+    elif lst.Length = 0 then Empty
+    elif List.forall (fun elem -> elem = lst.[0]) lst then
+        AllIdentical
+    else
+        Neither
+
 [<AutoOpen>]
 module TimeSeries =
 
@@ -23,6 +37,7 @@ module TimeSeries =
     let private unwrapFixed (FixedTimeSeries (s,ts)) = s,ts
     let private wrap ts = TimeSteps ts
     let private floatingToFixed startDate ts = (startDate, ts) |> FixedTimeSeries
+    let private ensureOrdering times = times |> Seq.sort
 
     // Populate a time series with an existing sequence.
     // Equal time-steps are created using the stepping specified. 
@@ -33,8 +48,17 @@ module TimeSeries =
         |> TimeSteps
         |> floatingToFixed startTime
 
+    let createVarying<'a> (ticks:(DateTime * 'a) seq) : TimeSeries<'a> =
+        let startDate = ticks |> Seq.sortBy fst |> Seq.head |> fst
+        let timeSpans = ticks |> Seq.sortBy fst |> Seq.map fst |> Seq.windowed 2 |> Seq.map (fun w -> w.[1].Subtract w.[0])
+        timeSpans
+        |> Seq.zip (ticks |> Seq.map snd)
+        |> Seq.toArray
+        |> TimeSteps
+        |> floatingToFixed startDate
+
     // Map a function.
-    let map (series:TimeSeries<'a>) f : TimeSeries<'a> =
+    let map (series:TimeSeries<'a>) f : TimeSeries<'b> =
         series
         |> unwrapFixed
         |> snd
@@ -63,6 +87,26 @@ module TimeSeries =
         unwrapFixed s
         |> snd
 
+    let timeSteps s =
+        s
+        |> unwrapFixed
+        |> snd
+        |> unwrap
+        |> Array.map snd
+
+    let commonTimeline (series:TimeSeries<'a> list) =
+        let timeSteps = series |> List.map timeSteps
+        match timeSteps with
+        | Single
+        | AllIdentical -> Some timeSteps.Head
+        | Empty
+        | Neither -> None
+
+    let start (series:TimeSeries<'a>) =
+        series
+        |> unwrapFixed
+        |> fst
+
 
     [<AutoOpen>]
     module TimeSeriesExtensions =
@@ -89,11 +133,7 @@ module TimeSeries =
                 |> Array.head
 
             member this.TimeSteps =
-                this
-                |> unwrapFixed
-                |> snd
-                |> unwrap
-                |> Array.map snd
+                this |> timeSteps
 
             member this.Values =
                 this
@@ -101,3 +141,6 @@ module TimeSeries =
                 |> snd
                 |> unwrap
                 |> Array.map fst
+
+            member this.StartDate =
+                this |> start

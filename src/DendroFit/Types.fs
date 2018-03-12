@@ -1,6 +1,7 @@
 module Types
 
 open Time.TimeSeries
+open System.Collections
 
 // Year
 [<Measure>] type year
@@ -31,7 +32,7 @@ module EnvironmentalVariables =
     type LocalEnvironment = CodedMap<TimeSeries<float>>
 
 
-module Plant =
+module PlantIndividual =
 
     open EnvironmentalVariables
 
@@ -50,6 +51,10 @@ module Plant =
         InternalControls: Map<ShortCode,Trait>
         Environment: LocalEnvironment
     }
+
+    let zipEnv envName envData (plant:PlantIndividual) =
+        { plant with Environment = plant.Environment.Add (envName, envData) }
+
 
 [<AutoOpen>]
 module ParameterPool =
@@ -79,14 +84,40 @@ module ParameterEstimation =
 
     // Likelihood
     type PredictedSeries = {
-        Expected: FloatingTimeSeries<float>
-        Observed: FloatingTimeSeries<float> }
+        Expected: float[]
+        Observed: float[] }
     type Likelihood = ParameterPool -> CodedMap<PredictedSeries> -> float
 
     type ModelSystem = {
         Parameters: ParameterPool
-        Equation: ModelEquation
+        Equations: CodedMap<ModelEquation>
         Likelihood: Likelihood }
 
 let removeUnit (x:float<_>) =
     float x
+
+
+module Seq =
+
+    ///Groups two sequences together by key
+    let align a b = 
+
+        let simplifyEntry (key, values) =
+            let matches = [for value in values -> snd value]
+            key, matches
+
+        a 
+        |> Seq.append b
+        |> Seq.groupBy fst
+        |> Seq.map simplifyEntry
+        |> Seq.toList
+
+    
+    ///**Description**
+    /// Unifies two sequences into a tuple based on a string key
+    let keyMatch (a:(string*'a)seq) (b:(string*'b)seq) =
+        a
+        |> Seq.choose (fun (s,x) -> 
+            b 
+            |> Seq.tryFind(fun (s2,_) -> s2 = s)
+            |> Option.bind (fun f -> Some (s,x,snd f)))

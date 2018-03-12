@@ -3,32 +3,30 @@ namespace DendroFit
 open Types
 open Types.ParameterEstimation
 open Time
+open System
 
 module Objective =
 
     open Optimisation.Amoeba
     open OptimisationHelpers
-    
+
     let parameteriseModel parameterPool point (model:ModelEquation) =
         model (point |> toParamList parameterPool)
 
-    let integrate integrator model =
-        // TEMP: Remove environment from model
-        let modelNoEnv t x = model t x ( [] |>Map.ofList )
-        integrator 0. 0.01 modelNoEnv [] []
-        ||> TimeSeries.fromSeq
-
-    let pairObservationsToExpected (observed:FloatingTimeSeries<float>) (expected:FloatingTimeSeries<float>) : CodedMap<PredictedSeries> =
-        [ ShortCode.create "x", { Expected = expected; Observed = observed } ]
-        |> Map.ofList
+    let pairObservationsToExpected (observed:CodedMap<float[]>) (expected:CodedMap<float[]>) : CodedMap<PredictedSeries> =
+        expected
+        |> Map.map (fun key value ->
+            { Expected = value
+              Observed = observed |> Map.find key } )
 
     let negativeLogLikelihood likelihood series =
-        (*-log*) (series |> likelihood)
+        (*-log*) (series |> likelihood)        
 
-    let create (system:ModelSystem) integrator observed (p:Point) : float =
-        system.Equation
-        |> parameteriseModel system.Parameters p
-        |> integrate integrator
+    let create (system:ModelSystem) integrate (observed:CodedMap<float array>) (p:Point) : float =
+        printfn "P = %A" p
+        system.Equations
+        |> Map.map (fun _ v -> parameteriseModel system.Parameters p v)
+        |> integrate
         |> pairObservationsToExpected observed
         |> negativeLogLikelihood (system.Likelihood (p |> toParamList system.Parameters))
 
@@ -44,14 +42,54 @@ module DendroFit =
         let optimisationLevels = 6
         let amoebaCount = 10
 
-    let estimate' iterations (system:ModelSystem) (series:TimeSeries<float>) =
-        let timeSteps = series.TimeSteps |> Seq.map (fun x -> x.TotalDays) |> Seq.toList
-        let integrator = ODE.rungeKutta4Variable timeSteps.Head timeSteps.Tail
-        let optimise = heuristicOptimisation DefaultSetup.optimisationLevels iterations DefaultSetup.amoebaCount (system.Parameters |> toDomain)
-        let f = Objective.create system integrator (series |> TimeSeries.toFloating)
-        optimise f
+    let startingValues (series:CodedMap<TimeSeries<float<_>>>) : CodedMap<float> =
+        series
+        |> Map.map (fun _ v -> v.Values.[0] ) //TODO handle empty cases
 
-    let estimate iterations system growth =
+    let getCommonTime series =
+        series
+        |> Map.toList
+        |> List.map snd
+        |> TimeSeries.commonTimeline
+
+    let dataToResolution resolution (series:TimeSeries<float>) =
+        match resolution with
+        | Annual ->  
+            let steps =
+                series.TimeSteps 
+                |> Array.scan (+) TimeSpan.Zero 
+                |> Array.map (fun t -> float (series.StartDate + t).Year)
+                |> Array.tail
+            series.Values
+            |> Array.zip steps
+        | Monthly -> invalidOp "not implemented"
+        | Daily -> invalidOp "not implemented"
+        | CustomTicks _ -> invalidOp "not implemented"
+
+    let conditionStartTime (series:(float*float)[]) = 
+        // At the moment, simply replicate the t1 value to t0, for all series
+        let first = series |> Array.head
+        series |> Array.append [|(fst first - 1.),(snd first)|] 
+
+    // Common timelines only
+    // Fixed temporal resolution only
+    let estimate' resolution iterations (system:ModelSystem) (series:CodedMap<TimeSeries<float<_>>>) =
+        match series |> getCommonTime with
+        | None -> invalidOp "The timeline is not common for these series. The timeline must be the same for all series"
+        | Some _ ->
+            let scaledSeries = series |> Map.map (fun _ s -> s |> dataToResolution resolution |> conditionStartTime)
+            printfn "Series scaled: %A" scaledSeries
+            let cumulativeTime = scaledSeries |> Map.toList |> List.head |> snd |> Array.map fst |> Array.toList
+            let startTime = cumulativeTime.Head
+            let endTime = cumulativeTime |> List.last
+            let timeStep = (cumulativeTime.Tail.Head) - cumulativeTime.Head
+            printfn "Start = %A, end = %A, step = %A" startTime endTime timeStep
+            let integrator = ODE.Oslo.solve startTime endTime timeStep (startingValues series)
+            let optimise = heuristicOptimisation DefaultSetup.optimisationLevels iterations DefaultSetup.amoebaCount (system.Parameters |> toDomain)
+            let f = Objective.create system integrator (scaledSeries |> Map.map (fun _ value -> value |> Array.map snd))
+            optimise f
+
+    let estimate resolution iterations system (growth:GrowthSeries<_>) =
         // Mess around getting float series out of data...
         let g =
             match growth with
@@ -59,7 +97,7 @@ module DendroFit =
             | Cumulative g -> g // Cannot have missing data!
         // Check series is not empty
         // Condition for initial conditions...?
-        estimate' iterations system g
+        estimate' resolution iterations system ([ShortCode.create "x", g] |> Map.ofList)
 
 
 
