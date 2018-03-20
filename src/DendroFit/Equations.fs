@@ -2,27 +2,41 @@ module ModelLibrary
 
 module Likelihood =
 
+    open Types
     open Types.ParameterEstimation
 
-    let sumOfSquares paramaters exp obs =
+    let sumOfSquares' exp obs =
         Array.zip obs exp
         |> Array.sumBy (fun d -> ((fst d) - (snd d)) ** 2.)
 
-//     let private bivariateGaussian' (p:Map<string,ParameterPool>) obsx obsy expx expy = 
-//         let diffx = obsx - expx
-//         let diffy = obsy - expy
-//         let zta1 = diffx ** 2. / p.["sigmax"].Value ** 2.
-//         let zta2 = 2. * p.["rho"].Value * ((diffx * diffy) / (p.["sigmax"].Value * p.["sigmay"].Value))
-//         let zta3 = diffy ** 2. / p.["sigmay"].Value ** 2.
-//         let z = zta1 - zta2 + zta3
-//         -log((1./(2.*System.Math.PI*p.["sigmax"].Value*p.["sigmay"].Value*sqrt(1.-(p.["rho"].Value*p.["rho"].Value)))) * exp (-z / (2. * (1. - (p.["rho"].Value * p.["rho"].Value)))))    
+    let private getData s (predictions:CodedMap<PredictedSeries>) = predictions.Item (ShortCode.create s)
 
-//     /// <summary> 
-//     /// Log likelihood function for dual simultaneous system, assuming Gaussian error for both x and y.
-//     /// </summary> 
-//     let bivariateGaussian (p:Map<string,ParameterPool>) (obsx:float list) (obsy:float list) (expx: float list) (expy: float list) = 
-//         [1 .. (List.length obsx) - 1] 
-//         |> List.sumBy (fun x -> (bivariateGaussian' p obsx.[x] obsy.[x] expx.[x] expy.[x])) 
+    let sumOfSquares keys _ (data:CodedMap<PredictedSeries>) =
+        keys
+        |> List.sumBy (fun k -> 
+            let d = data |> getData k
+            sumOfSquares' d.Expected d.Observed )
+
+    let bivariateGaussian' (p:ParameterPool) obsx obsy expx expy = 
+        let diffx = obsx - expx
+        let diffy = obsy - expy
+        let sigmax = p |> ParameterPool.getEstimate "sigmax"
+        let sigmay = p |> ParameterPool.getEstimate "sigmay"
+        let rho = p |> ParameterPool.getEstimate "rho"
+        let zta1 = diffx ** 2. / sigmax ** 2.
+        let zta2 = 2. * rho * ((diffx * diffy) / sigmax * sigmay)
+        let zta3 = diffy ** 2. / sigmay ** 2.
+        let z = zta1 - zta2 + zta3
+        -log((1./(2.*System.Math.PI*sigmax*sigmay*sqrt(1.-(rho*rho)))) * exp (-z / (2. * (1. - (rho * rho)))))
+
+    /// <summary> 
+    /// Log likelihood function for dual simultaneous system, assuming Gaussian error for both x and y.
+    /// </summary> 
+    let bivariateGaussian key1 key2 p data = 
+        let x = data |> getData key1
+        let y = data |> getData key2
+        [1 .. (Array.length x.Observed) - 1] 
+        |> List.sumBy (fun i -> (bivariateGaussian' p x.Observed.[i] y.Observed.[i] x.Expected.[i] y.Expected.[i])) 
 
 // /// <summary> 
 // /// Models of absolute plant growth rate (AGR), in the form dx/dt

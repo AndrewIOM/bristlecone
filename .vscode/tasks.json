@@ -1,6 +1,4 @@
 {
-    // See https://go.microsoft.com/fwlink/?LinkId=733558
-    // for the documentation about the tasks.json format
     "version": "2.0.0",
     "tasks": [
         {
@@ -15,6 +13,17 @@
                 "reveal": "silent"
             },
             "problemMatcher": "$msCompile"
+        },
+        {
+            "label": "test",
+            "command": "dotnet test",
+            "args": [
+                "tests/DendroFit.Tests/DendroFit.Tests.fsproj"
+            ],
+            "type": "shell",
+            "presentation": {
+                "reveal": "silent"
+            }
         }
     ]
 }

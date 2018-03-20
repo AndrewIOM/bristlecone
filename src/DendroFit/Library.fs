@@ -4,6 +4,7 @@ open Types
 open Types.ParameterEstimation
 open Time
 open System
+open Types.PlantIndividual
 
 module Objective =
 
@@ -19,16 +20,12 @@ module Objective =
             { Expected = value
               Observed = observed |> Map.find key } )
 
-    let negativeLogLikelihood likelihood series =
-        (*-log*) (series |> likelihood)        
-
     let create (system:ModelSystem) integrate (observed:CodedMap<float array>) (p:Point) : float =
-        printfn "P = %A" p
         system.Equations
         |> Map.map (fun _ v -> parameteriseModel system.Parameters p v)
         |> integrate
         |> pairObservationsToExpected observed
-        |> negativeLogLikelihood (system.Likelihood (p |> toParamList system.Parameters))
+        |> system.Likelihood (p |> toParamList system.Parameters)
 
 
 module DendroFit =
@@ -77,7 +74,7 @@ module DendroFit =
         match series |> getCommonTime with
         | None -> invalidOp "The timeline is not common for these series. The timeline must be the same for all series"
         | Some _ ->
-            let scaledSeries = series |> Map.map (fun _ s -> s |> dataToResolution resolution |> conditionStartTime)
+            let scaledSeries = series |> Map.map (fun _ s -> s |> dataToResolution resolution)//|> conditionStartTime)
             printfn "Series scaled: %A" scaledSeries
             let cumulativeTime = scaledSeries |> Map.toList |> List.head |> snd |> Array.map fst |> Array.toList
             let startTime = cumulativeTime.Head
@@ -99,13 +96,24 @@ module DendroFit =
         // Condition for initial conditions...?
         estimate' resolution iterations system ([ShortCode.create "x", g] |> Map.ofList)
 
-
-
     // let likelihoodSample (p:ParameterPool) (pred:CodedMap<PredictedSeries>) : float =
     //     p.["H"] + pred.Item["x"].Expected
 
-
-
+    let growthSeries plant =
+        match plant with
+        | PlantIndividual.RingWidth rw ->
+            match rw with
+            | Absolute rws -> TimeSeries.map rws (fun (x,t) -> removeUnit x, t) |> Absolute
+            | Cumulative _ -> invalidOp "Not implemented"
+        | _ -> invalidOp "Not implemented"
+        
+    let estimateShrub resolution iterations system (plant:PlantIndividual) =
+        let g =
+            match plant.Growth |> growthSeries with
+            | Absolute g -> g
+            | Cumulative g -> g
+        let predictors = plant.Environment |> Map.add (ShortCode.create "x") g
+        estimate' resolution iterations system predictors
 
 
 

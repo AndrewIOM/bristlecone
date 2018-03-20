@@ -30,8 +30,7 @@ let (|Single|Empty|AllIdentical|Neither|) (lst:'a list) =
 module TimeSeries =
 
     type FloatingTimeSeries<'T> = private TimeSteps of array<'T * TimeSpan>
-    type StartDate = DateTime
-    type TimeSeries<'T> = private FixedTimeSeries of StartDate * FloatingTimeSeries<'T>
+    type TimeSeries<'T> = private FixedTimeSeries of DateTime * FloatingTimeSeries<'T>
 
     let private unwrap (TimeSteps ts) = ts
     let private unwrapFixed (FixedTimeSeries (s,ts)) = s,ts
@@ -39,8 +38,8 @@ module TimeSeries =
     let private floatingToFixed startDate ts = (startDate, ts) |> FixedTimeSeries
     let private ensureOrdering times = times |> Seq.sort
 
-    // Populate a time series with an existing sequence.
-    // Equal time-steps are created using the stepping specified. 
+    /// Populate a time series with an existing sequence.
+    /// Equal time-steps are created using the stepping specified. 
     let create (startTime:DateTime) (stepping:TimeSpan) values =
         (List.init (Seq.length values) (fun t -> stepping |> TimeSpan.Multiply t))
         |> Seq.zip values
@@ -83,10 +82,6 @@ module TimeSeries =
     let toFixed start s =
         floatingToFixed start s
 
-    let toFloating s =
-        unwrapFixed s
-        |> snd
-
     let timeSteps s =
         s
         |> unwrapFixed
@@ -94,6 +89,10 @@ module TimeSeries =
         |> unwrap
         |> Array.map snd
 
+    ///**Description**
+    /// Determines if multiple time series have the same temporal extent and time steps. 
+    ///**Output Type**
+    ///  * A `TimeSpan [] option` containing the common timeline, or `None` if there is no common timeline.
     let commonTimeline (series:TimeSeries<'a> list) =
         let timeSteps = series |> List.map timeSteps
         match timeSteps with
@@ -106,6 +105,45 @@ module TimeSeries =
         series
         |> unwrapFixed
         |> fst
+
+    let endDate (series:TimeSeries<'a>) =
+        let start, floating = series |> unwrapFixed
+        floating
+        |> unwrap 
+        |> Array.map snd 
+        |> Array.fold (+) start
+
+    let trimEnd endDate (series:TimeSeries<'a>) =
+        let start, floatingSeries = series |> unwrapFixed
+        let includedTimes = 
+            floatingSeries 
+            |> unwrap 
+            |> Array.map snd 
+            |> Array.scan (+) start
+            |> Array.takeWhile (fun x -> x <= endDate)
+            |> Array.length
+        printfn "Start = %A, included times = %A, length = %i" start includedTimes (floatingSeries |> unwrap |> Array.length)
+        floatingSeries
+        |> unwrap
+        |> Array.take (includedTimes - 1)
+        |> wrap
+        |> floatingToFixed start
+
+    let trimStart startDate (series:TimeSeries<'a>) =
+        let currentStart = series |> start
+        let currentEnd = series |> endDate
+        if currentStart < startDate 
+        then
+            series 
+            |> shift (startDate - currentStart)
+            |> trimEnd currentEnd
+        else 
+            series
+
+    let bound start endDate series =
+        series
+        |> trimStart start
+        |> trimEnd endDate
 
 
     [<AutoOpen>]

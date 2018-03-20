@@ -3,8 +3,6 @@ module Optimisation
 // Nelder Mead implementation
 // Modified from https://github.com/mathias-brandewinder/Amoeba
 
-open System
-
 module Amoeba =
 
     type Point = float []
@@ -85,7 +83,7 @@ module Amoeba =
             let dim = Array.length domain
             let rng = System.Random()
             let start =             
-                [| for i in 1 .. settings.Size -> initialize domain rng |]
+                [| for _ in 1 .. settings.Size -> initialize domain rng |]
                 |> Array.map (evaluate f)
                 |> Array.sortBy fst
             let amoeba = { Dim = dim; Solutions = start }

@@ -1,7 +1,6 @@
 module Types
 
 open Time.TimeSeries
-open System.Collections
 
 // Year
 [<Measure>] type year
@@ -61,17 +60,42 @@ module ParameterPool =
 
     type EstimationStartingBounds = float * float
 
-    type Parameter =
+    type Constraint =
+    | Unconstrained
+    | PositiveOnly
+
+    type Estimation =
     | NotEstimated of EstimationStartingBounds
     | Estimated of float
 
+    type Parameter = Parameter of Constraint * Estimation
+    let private unwrapP (Parameter (c,e)) = c,e
+
     type ParameterPool = CodedMap<Parameter>
 
-    let value key pool : float =
-        let p = pool |> Map.find (ShortCode.create key)
-        match p with
+    let getEstimate key (pool:ParameterPool) : float =
+        let c,estimate = pool |> Map.find (ShortCode.create key) |> unwrapP
+        match estimate with
         | NotEstimated _ -> invalidOp (sprintf "Oops: Parameter %s not available" key)
-        | Estimated v -> v
+        | Estimated v ->
+            match c with
+            | Unconstrained -> v
+            | PositiveOnly -> exp v
+
+    let getBoundsForEstimation (pool:ParameterPool) key : float * float =
+        let c,estimate = pool |> Map.find key |> unwrapP
+        match estimate with
+        | NotEstimated (s,e) ->
+            match c with
+            | Unconstrained -> s,e
+            | PositiveOnly -> log s, log e
+        | Estimated _ -> invalidOp "Already estimated"
+
+    let setEstimate parameter value =
+        let c,_ = parameter |> unwrapP
+        match c with
+        | Unconstrained -> Parameter (Unconstrained, Estimated value)
+        | PositiveOnly -> Parameter (PositiveOnly, Estimated value)
 
 
 module ParameterEstimation =
