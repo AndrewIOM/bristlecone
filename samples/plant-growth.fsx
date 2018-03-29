@@ -1,85 +1,80 @@
-#r "../packages/NETStandard.Library.NETFramework/build/net461/lib/netstandard.dll"
-#r "../packages/FSharp.Data/lib/net45/FSharp.Data.dll"
-#r "../src/DendroFit/bin/Debug/netstandard2.0/Microsoft.Research.Oslo.dll"
-#r "../src/DendroFit/bin/Debug/netstandard2.0/DendroFit.dll"
+#load "dendrofit.fsx"
 
 ///////////////////////////////////
-/// Shrub Modelling with DendroFit
+/// Growth Modelling with DendroFit
 ///////////////////////////////////
 
-(* Some description of the modelling procedure. *)
+(* An example model fit to ring width data. 
+   Growth models are defined in continuous time
+   as relative growth rate (RGR) on the basis of
+   current size. *)
 
 open DendroFit
 open Types.ParameterEstimation
 open Types
 open Time
 
-/////////////////////////////////////////
-// HELPER STUFF - TO MOVE INTO DENDROFIT
+// 0. Configure Options
+// ----------------------------
 
-let growthSeries plant =
-    match plant with
-    | PlantIndividual.RingWidth rw ->
-        match rw with
-        | Absolute rws -> TimeSeries.map rws (fun (x,t) -> removeUnit x, t) |> Absolute
-        | Cumulative _ -> invalidOp "Not implemented"
-    | _ -> invalidOp "Not implemented"
-
-// END HELPER STUFF
-/////////////////////////////////////////
-
-// 1. Setup model system
-
-let eq (p:CodedMap<Parameter>) _ x _ =
-    (p |> ParameterPool.value "r") * x * ( 1. - (x / (p |> ParameterPool.value "k")))
-
-let l parameters (predictions: CodedMap<PredictedSeries>) =
-    let predicted = predictions.Item (ShortCode.create "x")
-    ModelLibrary.Likelihood.sumOfSquares parameters predicted.Expected predicted.Observed
-
-let p = [ ShortCode.create "r", NotEstimated (0.01 ,0.2 )
-          ShortCode.create "k", NotEstimated (1., 10.) ] |> Map.ofList
-
-let system = { Equations = [ShortCode.create "x", eq] |> Map.ofList; Likelihood = l; Parameters = p }
-
-// 2. Load Data
-let yuribei = DataAccess.Shrub.loadRingWidths "/Users/andrewmartin/Documents/DPhil Zoology/Modelling/DendroFit/samples/yuribei-rw.csv"
-
-// 3. Predict
-yuribei.[1..1] |> List.map (fun x -> DendroFit.estimate Annual 1 system (growthSeries x.Growth))
+module Options =
+    let resolution = Annual
+    let iterations = 1000
+    let testSeriesLength = 20
+    let bootstrapTimes = 20
 
 
-///////////////////
-/// EXAMPLE 2. Coupled Model
-///////////////////
+// 1. Create Hypotheses
+// ----------------------------
 
-// 1. Load in Environmental Data
-let d15N = DataAccess.Shrub.loadLocalEnvironmentVariable "/Users/andrewmartin/Documents/DPhil Zoology/Modelling/DendroFit/samples/yuribei-d15N.csv"
-    
-let shrubData = 
-    yuribei
-    |> Seq.map (fun s -> s.Identifier.Value, s)
-    |> Seq.keyMatch d15N
-    |> Seq.map (fun (_,plant,d15N) -> PlantIndividual.zipEnv (ShortCode.create "d15N") plant d15N)
-    |> Seq.toList
+let hypotheses =
 
-// 2. Define N-growth models
+    let ``logistic (RGR - mass basis)`` =
+        let dxdt p _ m _ = (p |> Pool.getEstimate "r") * (1. - (m / (p |> Pool.getEstimate "k")))
+        { Equations  = [ ShortCode.create "x", dxdt] |> Map.ofList 
+          Parameters = [ ShortCode.create "r", Parameter.create PositiveOnly 0.01 0.5
+                         ShortCode.create "k", Parameter.create PositiveOnly 10. 11. ] |> Map.ofList
+          Likelihood = ModelLibrary.Likelihood.sumOfSquares ["x"] }
 
-let dxdt (p:CodedMap<Parameter>) _ x environment =
-     (p |> ParameterPool.value "r") * (p |> ParameterPool.value "a") * x * ( 1. - (x / (p |> ParameterPool.value "k")))
+    [ ``logistic (RGR - mass basis)`` ]
 
-let dndt (p:CodedMap<Parameter>) _ x environment =
-    2.
 
-let pCoupled = [ ShortCode.create "r", NotEstimated (0.01 / 365.00 ,0.5 / 365.00 )
-                 ShortCode.create "k", NotEstimated (1., 100.)
-                 ShortCode.create "a", NotEstimated (1., 100.) ] |> Map.ofList
+// 2. Test Hypotheses Work
+// ----------------------------
+let test = 
+    hypotheses
+    |> List.map (DendroFit.test' Options.resolution Options.iterations Options.testSeriesLength)
 
-let systemCoupled = { Equations = [dxdt; dndt]; Likelihood = l; Parameters = pCoupled }
+
+// 3. Load Real Data and Estimate
+// ----------------------------
+let ringWidths = DataAccess.Shrub.loadRingWidths (__SOURCE_DIRECTORY__ + "/yuribei-rw.csv") 
+let rgr = ringWidths |> List.map PlantIndividual.toRelativeGrowth
+let estimate = rgr |> List.map (fun x -> DendroFit.estimate Options.resolution Options.iterations hypotheses.[0] (PlantIndividual.growthSeries x.Growth))
+
+
+// 4. Generate Confidence Intervals
+// ----------------------------
+let confidenceIntervals = 
+    ringWidths
+    |> List.map (DendroFit.bootstrapPlant Options.resolution Options.iterations Options.bootstrapTimes hypotheses.[0])
+
+
+// 5. Model Selection
+// ----------------------------
+let aicc =
+    estimate
+    |> List.map (fun r -> ModelSelection.Akaike.aicc r.Series.Count r.Parameters.Count r.Likelihood)
 
 
 
-let brusselator t x1 x2 = (1.0+x1*x1*x2-4.0*x1, 3.0*x1-x1*x1*x2) // right part of the ODE
-let solution = ODE.Oslo.solve2D 0.0 1.01 3.0 brusselator 20.0 1. // initial time and x1,x2; right part; end time; step.
+// Appendix A. R Graphics
+// ----------------------------
+#load "plotting.fsx"
+open RProvider
+open RProvider.graphics
 
-solution |> Array.map (fun x -> x.X.ToArray())
+let plot =
+    R.par(namedParams [ "mfrow", [2;1]] ) |> ignore
+    R.plot (estimate.[0].Series.[ShortCode.create "x"].Observed) |> ignore
+    R.plot (estimate.[0].Series.[ShortCode.create "x"].Expected) |> ignore

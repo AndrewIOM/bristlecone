@@ -69,21 +69,26 @@ module Oslo =
             | Some u -> snd u
             | None -> value )
 
-    let solve t tEnd tStep initialConditions modelMap =
-    
-        let keys,values = initialConditions |> Map.toArray |> Array.unzip
+    let solve tInitial tEnd tStep initialConditions modelMap =
+
         let modelKeys,modelEqs = modelMap |> Map.toArray |> Array.unzip
+        let vectorKeys, initialVector =
+            modelMap
+            |> Map.toArray
+            |> Array.map(fun (k,_) -> k, initialConditions |> Map.find k )
+            |> Array.unzip
 
         let rp t (x:Vector) = 
+            let newEnv = updateEnvironment x vectorKeys initialConditions
             modelEqs
-            |> Array.map (fun m -> m t x.[0] (updateEnvironment x keys initialConditions))
+            |> Array.mapi (fun i m -> m t x.[i] newEnv)
             |> Vector
 
         let options = Options(AbsoluteTolerance = 1e-6, RelativeTolerance = 1e-6)
-        let rk = Ode.RK547M(t, (values |> Vector), System.Func<double,Vector,Vector> rp, options)
-
+        let rk = Ode.GearBDF(tInitial, (initialVector |> Vector), System.Func<double,Vector,Vector> rp, options)
+        
         let result =
-            rk.SolveFromToStep(t, tEnd, tStep) 
+            rk.SolveFromToStep(tInitial, tEnd, tStep) 
             |> Seq.map (fun x -> x.X.ToArray())
             |> Seq.toArray
 

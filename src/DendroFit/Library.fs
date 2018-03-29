@@ -1,15 +1,14 @@
 namespace DendroFit
 
 open Types
-open Types.ParameterEstimation
-open Time
 open System
 open Types.PlantIndividual
 
 module Objective =
 
     open Optimisation.Amoeba
-    open OptimisationHelpers
+    open OptimisationTechniques
+    open Types.ParameterEstimation
 
     let parameteriseModel parameterPool point (model:ModelEquation) =
         model (point |> toParamList parameterPool)
@@ -30,18 +29,21 @@ module Objective =
 
 module DendroFit =
 
-    open OptimisationHelpers
-    open OptimisationHelpers.HeuristicOptimisation
+    open OptimisationTechniques
+    open OptimisationTechniques.HeuristicOptimisation
+    open Time
+    open Types.ParameterEstimation
 
     let private unwrap (x:float<_>) = float x
 
     module DefaultSetup =
         let optimisationLevels = 6
         let amoebaCount = 10
+        let testGridSectors = 10
 
     let startingValues (series:CodedMap<TimeSeries<float<_>>>) : CodedMap<float> =
         series
-        |> Map.map (fun _ v -> v.Values.[0] ) //TODO handle empty cases
+        |> Map.map (fun _ v -> v.Values.[0] )
 
     let getCommonTime series =
         series
@@ -54,7 +56,7 @@ module DendroFit =
         | Annual ->  
             let steps =
                 series.TimeSteps 
-                |> Array.scan (+) TimeSpan.Zero 
+                |> Array.scan (+) TimeSpan.Zero
                 |> Array.map (fun t -> float (series.StartDate + t).Year)
                 |> Array.tail
             series.Values
@@ -64,7 +66,6 @@ module DendroFit =
         | CustomTicks _ -> invalidOp "not implemented"
 
     let conditionStartTime (series:(float*float)[]) = 
-        // At the moment, simply replicate the t1 value to t0, for all series
         let first = series |> Array.head
         series |> Array.append [|(fst first - 1.),(snd first)|] 
 
@@ -74,7 +75,7 @@ module DendroFit =
         match series |> getCommonTime with
         | None -> invalidOp "The timeline is not common for these series. The timeline must be the same for all series"
         | Some _ ->
-            let scaledSeries = series |> Map.map (fun _ s -> s |> dataToResolution resolution)//|> conditionStartTime)
+            let scaledSeries = series |> Map.map (fun _ s -> s |> dataToResolution resolution)
             printfn "Series scaled: %A" scaledSeries
             let cumulativeTime = scaledSeries |> Map.toList |> List.head |> snd |> Array.map fst |> Array.toList
             let startTime = cumulativeTime.Head
@@ -84,7 +85,16 @@ module DendroFit =
             let integrator = ODE.Oslo.solve startTime endTime timeStep (startingValues series)
             let optimise = heuristicOptimisation DefaultSetup.optimisationLevels iterations DefaultSetup.amoebaCount (system.Parameters |> toDomain)
             let f = Objective.create system integrator (scaledSeries |> Map.map (fun _ value -> value |> Array.map snd))
-            optimise f
+            
+            // Get results, and rewrap point as parameters
+            let likelihood,point = optimise f
+            let estimated = fromPoint system.Parameters point
+
+            // Get predicted and observed series together
+            let estimatedSeries = ODE.Oslo.solve startTime endTime timeStep (startingValues series) (system.Equations |> Map.map (fun _ v -> v estimated))
+            let paired = estimatedSeries |> Map.map (fun k v -> { Expected = v; Observed = series |> Map.find k |> TimeSeries.toSeq |> Seq.map fst |> Seq.toArray })
+           
+            { Likelihood = likelihood; Parameters = estimated; Series = paired }
 
     let estimate resolution iterations system (growth:GrowthSeries<_>) =
         // Mess around getting float series out of data...
@@ -92,214 +102,114 @@ module DendroFit =
             match growth with
             | Absolute g -> g // Can have missing data
             | Cumulative g -> g // Cannot have missing data!
+            | Relative g -> g
         // Check series is not empty
         // Condition for initial conditions...?
+        // ** IF ABSOLUTE DATA BUT FITTING CUMULATIVE FUNCTION, TAKE DERIV OF PREDICTION BEFORE LIKELIHOOD? **
         estimate' resolution iterations system ([ShortCode.create "x", g] |> Map.ofList)
 
-    // let likelihoodSample (p:ParameterPool) (pred:CodedMap<PredictedSeries>) : float =
-    //     p.["H"] + pred.Item["x"].Expected
-
-    let growthSeries plant =
-        match plant with
-        | PlantIndividual.RingWidth rw ->
-            match rw with
-            | Absolute rws -> TimeSeries.map rws (fun (x,t) -> removeUnit x, t) |> Absolute
-            | Cumulative _ -> invalidOp "Not implemented"
-        | _ -> invalidOp "Not implemented"
-        
-    let estimateShrub resolution iterations system (plant:PlantIndividual) =
+    let estimatePlant resolution iterations system (plant:PlantIndividual) =
         let g =
             match plant.Growth |> growthSeries with
             | Absolute g -> g
             | Cumulative g -> g
+            | Relative g -> g
         let predictors = plant.Environment |> Map.add (ShortCode.create "x") g
         estimate' resolution iterations system predictors
-
-
-
-
-    // let private estimate' (hypothesis:ModelSystem) iterations (chronology:GrowthChronology) =
-    //     let startDate = float (fst chronology.Head).Year - 1.
-    //     let endDate = float (fst (List.last chronology)).Year
-    //     let timeStep = 1.
-    //     let initialMass = chronology |> List.head |> snd |> unwrap
-
-    //     let f (p:Point) =
-    //         let pointParams = p |> toParamList hypothesis.Parameters
-    //         let expected = ODE.rungekutta4 startDate initialMass timeStep endDate (hypothesis.Model pointParams) [] []
-    //         let obs = chronology |> List.map (fun x -> (removeUnit (snd x)))
-
-    //         if (snd expected) |> containsNan then modelError
-    //         else 
-    //             if isWithinParameterSpace pointParams
-    //                 then hypothesis.LogLikelihood pointParams (snd expected) obs
-    //                 else
-    //                     let nearestPoint = getNearestValidPoint pointParams
-    //                     let likelihood = hypothesis.LogLikelihood nearestPoint (snd expected) obs
-    //                     likelihood
-
-    //     let result = heuristicOptimisation 6 iterations 10 (hypothesis.Parameters |> toDomain) f 
-    //     result
-
-    // ///<summary>Estimator modified for coupled model systems.</summary>
-    // let private estimateCoupled' (hypothesis:CoupledModelSystem) iterations (response:GrowthChronology) (predictor:PredictorChronology) =
-
-    //     let commonTimeScale = commonTimeScale response predictor
-    //     let timeStep = 3.//float (commonTimeScale.[1].Year - commonTimeScale.[0].Year) // TODO assumes equal time steps
-    //     let startDate = float (commonTimeScale.Head.Year) - timeStep
-    //     let endDate = float (List.last commonTimeScale).Year // TODO Remove (this is temporary fix for bootstrapping)
-    //     let initialMass = removeUnit (snd (response.[0])) // TODO condition on first value of time series?
-    //     let initialPredictor = snd (predictor.[0])
-
-    //     printfn "Starting at %f (N), %f (mass)" initialPredictor initialMass
-
-    //     let responseOnCommonTime = response |> List.filter(fun x -> (commonTimeScale |> Seq.exists (fun y -> y = (fst x))))
-    //     let predictorOnCommonTime = predictor |> List.filter(fun x -> (commonTimeScale |> Seq.exists (fun y -> y = (fst x))))
-
-    //     let f (p:Point) =
-    //         let pointParams = p |> toParamList hypothesis.Parameters
-    //         let expected = ODE.rungekutta4dual startDate initialMass initialPredictor timeStep endDate (hypothesis.Response pointParams) (hypothesis.Predictor pointParams) [] [] []
-    //         let obsx = responseOnCommonTime |> List.map (fun x -> (removeUnit (snd x)))
-    //         let obsy = predictorOnCommonTime |> List.map snd
-    //         let expt, expx, expy = expected
-    //         if (expx |> containsNan) || (expy |> containsNan) then modelError
-    //         else
-    //             let l = hypothesis.LogLikelihood pointParams obsx obsy expx expy
-    //             if Double.IsNaN l then infinity
-    //             else l
-    //             // if not (isWithinParameterSpace pointParams)
-    //             // then hypothesis.LogLikelihood pointParams obsx obsy expx expy
-    //             // else hypothesis.LogLikelihood pointParams obsx obsy expx expy
-    //                 //let nearestPoint = getNearestValidPoint pointParams
-    //                 //let likelihood = hypothesis.LogLikelihood nearestPoint obsx obsy expx expy
-    //                 //likelihood + (constraintPenalty pointParams)
-
-    //     let result = heuristicOptimisation 6 iterations 10 (hypothesis.Parameters |> toDomain) f 
-    //     result
     
-    // // <summary>
-    // // Estimate parameters once for the given model system and plant individual.
-    // // </summary>
-    // let estimate hypothesis iterations plant =
-    //     printfn "%s: Estimating parameters" plant.Identifier
-    //     plant, (estimate' hypothesis iterations plant.Chronology)
+    let test' resolution iterations timeSeriesLength (system:ModelSystem) =
+        // Systematically sample parameter space for multiple outcomes:
+        // - Establish 'true' parameters within parameter space
 
-    // // <summary>
-    // // Estimate parameters for many plant individuals in parallel
-    // // </summary>
-    // let estimateParallel hypothesis iterations plants =
-    //     List.toArray plants |> Array.Parallel.map (estimate hypothesis iterations)
+        let sectors = DefaultSetup.testGridSectors
+        let trueParameters =
+            [ 0 .. sectors ]
+            |> List.map (fun i -> 
+                system.Parameters 
+                |> Map.map (fun _ v -> 
+                    printfn "%A" v
+                    let lower,upper = Parameter.bounds v
+                    let step = (upper - lower) / (float sectors)
+                    let trueValue = lower + step * (float i)
+                    Parameter.setEstimate v trueValue ) )
 
-    // let estimateParallelWindowed hypothesis windowSize iterations plants =
+        // - Find the expected values for all times
 
-    //     let parallelProcessWindow window =
-    //         //printfn "Starting bin number %i" x
-    //         let solution = estimate' hypothesis iterations window
-    //         //printfn "Finished bin #%i: -loglikelihood=%f" x (fst solution)
-    //         solution
+        let applyFakeTime s = TimeSeries.create (DateTime(2000,01,01)) (TimeSpan.FromDays 370. ) s
+        let startTime = 0.
+        let endTime = timeSeriesLength |> float
+        let timeStep = 1.
 
-    //     plants
-    //     |> List.map (fun x -> Seq.windowed windowSize x.Chronology |> Seq.toList)
-    //     |> List.toArray
-    //     |> Array.Parallel.map (fun plant -> Array.Parallel.map parallelProcessWindow)
-        
+        let solve p =
+            let eqs =
+                system.Equations
+                |> Map.map (fun _ v -> v p)
+            let startValues = [ ShortCode.create "x", 0.01; ShortCode.create "N", 1.0] |> Map.ofList
+            ODE.Oslo.solve startTime endTime timeStep startValues eqs
 
-    // // <summary>
-    // // Boostrapping removes a single observation from the time series, and estimates parameters 'n' times.
-    // // </summary>
-    // // <returns>Details of the plant invidual, alongside an array of parameter estimates.</returns>
-    // let bootstrap hypothesis iterations bootstrapCount plant =
+        let trueSeries = trueParameters |> List.map solve
+ 
+        // - Estimate the parameters given the parameter space
 
-    //     printfn "Bootstrapping parameter estimation for %s (x%i)" plant.Identifier bootstrapCount
+        let est = estimate' resolution iterations system
+        let estimates =
+            trueSeries |> List.map (Map.map (fun _ v -> v |> applyFakeTime) >> est)
 
-    //     let rec bootstrap obs numberOfTimes solutions =
-    //         if (numberOfTimes > 0) then
-    //             let subset = removeSingle obs
-    //             let result = estimate' hypothesis iterations obs
-    //             printfn "%s: completed bootstrap %i" plant.Identifier numberOfTimes
-    //             bootstrap obs (numberOfTimes - 1) (solutions |> List.append [result])
-    //         else solutions
+        // Grid out parameter space
+        // NB How does computation rely on co-variance of parameters?
 
-    //     let estimates = bootstrap plant.Chronology bootstrapCount []
-    //     plant, estimates
+        // - Compare the expected and 'true' time series, and likelihoods
+        let likelihood = 
+            estimates
+            |> List.sumBy (fun e -> e.Likelihood)
+        // likelihood / (float sectors) / (startTime - endTime)
 
-    // // <summary>
-    // // Boostrapping removes a single observation from the time series, and estimates parameters 'n' times.
-    // // </summary>
-    // // <returns>Details of the plant invidual, alongside an array of parameter estimates.</returns>
-    // let bootstrapParallel hypothesis iterations bootstrapCount plants =
-    //     List.toArray plants |> Array.Parallel.map (bootstrap hypothesis iterations bootstrapCount)    
-    
-    // // <summary>
-    // // Estimate parameters once for the given model system and plant individual.
-    // // </summary>
-    // let estimateCoupled hypothesis iterations plant =
-    //     printfn "%s: Estimating parameters" plant.Identifier
-    //     match plant.Predictor with 
-    //     | Some x -> plant, (estimateCoupled' hypothesis iterations plant.Chronology x)
-    //     | None -> plant, (estimateCoupled' hypothesis iterations plant.Chronology []) // TODO Clean up
+        // Generate a 'sensitivity' for each parameter
+        // This is the value generated versus the 'true' value
+        let sensitivity =
+            trueParameters
+            |> List.zip estimates
+            |> List.collect (fun (e,p) ->
+                e.Parameters
+                |> Map.map (fun k v -> 
+                    let other = p |> Map.find k |> Parameter.getEstimate
+                    [other; v |> Parameter.getEstimate ]
+                    |> Seq.stddev  )
+                |> Map.toList )
+            |> List.groupBy fst
+            |> List.map(fun (k,s) -> k, s |> List.map(fun (_,l2) -> l2 ) |> Seq.stddev )
 
+        likelihood, sensitivity
 
-    // // <summary>
-    // // Estimate parameters for many plant individuals in parallel
-    // // </summary>
-    // let estimateCoupledParallel hypothesis iterations plants =
-    //     List.toArray plants |> Array.Parallel.map (estimateCoupled hypothesis iterations)
+    let bootstrap resolution hypothesis iterations bootstrapCount (identifier:ShortCode) series =
 
+        let rec bootstrap s numberOfTimes solutions =
+            if (numberOfTimes > 0) then
+                let subset = OptimisationTechniques.Bootstrap.removeSingle s
+                let result = estimate' resolution hypothesis iterations subset
+                printfn "%s: completed bootstrap %i" identifier.Value numberOfTimes
+                bootstrap s (numberOfTimes - 1) (solutions |> List.append [result])
+            else solutions
 
-    // let estimateCoupledParallelWindowed hypothesis windowSize iterations plants =
-
-    //     let parallelProcessWindow x y =
-    //         //printfn "Starting bin number %i" x
-    //         let solution = estimateCoupled' hypothesis iterations x y
-    //         printfn "%f" (fst solution)
-    //         //printfn "Finished bin #%i: -loglikelihood=%f" x (fst solution)
-    //         solution
-
-    //     let windows = 
-    //         plants
-    //         |> List.map (fun plant -> Seq.windowed windowSize plant.Chronology |> Seq.toList, Seq.windowed windowSize plant.Predictor.Value |> Seq.toList)
-
-    //     // Plant * List of arrays
-    //     windows.[0]
+        bootstrap series bootstrapCount []
 
 
-    // // <summary>
-    // // Boostrapping removes a single observation from the time series, and estimates parameters 'n' times.
-    // // </summary>
-    // // <returns>Details of the plant invidual, alongside an array of parameter estimates.</returns>
-    // let bootstrapCoupled hypothesis iterations bootstrapCount (plant:PlantIndividual) =
+    ///**Description**
+    ///Boostrapping removes a single observation from the time series, and estimates parameters 'n' times.
+    ///**Output Type**
+    ///Details of the plant invidual, alongside an array of parameter estimates.
+    let bootstrapPlant resolution iterations bootstrapCount hypothesis plant =
+        printfn "Bootstrapping parameter estimation for %s (x%i)" plant.Identifier.Value bootstrapCount
+        let g =
+            match plant.Growth |> growthSeries with
+            | Absolute g -> g
+            | Cumulative g -> g
+            | Relative g -> g
+        let predictors = plant.Environment |> Map.add (ShortCode.create "x") g
+        bootstrap resolution iterations hypothesis bootstrapCount plant.Identifier predictors
 
-    //     printfn "Bootstrapping parameter estimation for %s (x%i)" plant.Identifier bootstrapCount
 
-    //     // A. Setup time series on common timescale (to know how many are available to remove)
-    //     let predictor =
-    //         match plant.Predictor with 
-    //         | Some x -> x
-    //         | None -> [] // TODO Clean up
-    //     let commonTimeScale = commonTimeScale plant.Chronology predictor
-    //     let responseOnCommonTime = plant.Chronology |> List.filter(fun x -> (commonTimeScale |> Seq.exists (fun y -> y = (fst x))))
-    //     let predictorOnCommonTime = predictor |> List.filter(fun x -> (commonTimeScale |> Seq.exists (fun y -> y = (fst x))))
+    module Parallel =
 
-    //     // B. Bootstrap function
-    //     let rec bootstrap (resp:GrowthChronology) (pred:PredictorChronology) numberOfTimes solutions =
-    //         let respBoot,predBoot = removeSingleCoupled resp pred
-    //         let result = estimateCoupled' hypothesis iterations respBoot predBoot
-    //         printfn "%s: completed bootstrap %i" plant.Identifier numberOfTimes
-    //         if (numberOfTimes > 0) then bootstrap responseOnCommonTime predictorOnCommonTime (numberOfTimes - 1) (solutions |> List.append [result])
-    //         else solutions
-        
-    //     let pred = 
-    //         match plant.Predictor with 
-    //         | Some x -> x
-    //         | None -> [] // TODO fail here
-
-    //     let estimates = bootstrap plant.Chronology pred bootstrapCount []
-    //     plant, estimates
-
-    // // <summary>
-    // // Boostrapping removes a single observation from the time series, and estimates parameters 'n' times.
-    // // </summary>
-    // // <returns>Details of the plant invidual, alongside an array of parameter estimates.</returns>
-    // let bootstrapCoupledParallel hypothesis iterations bootstrapCount plants =
-    //     List.toArray plants |> Array.Parallel.map (bootstrapCoupled hypothesis iterations bootstrapCount)
+        let estimate resolution iterations system growth =
+            growth |> Array.Parallel.map (estimate resolution iterations system)

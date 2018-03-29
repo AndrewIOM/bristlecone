@@ -1,7 +1,7 @@
-module OptimisationHelpers
+module OptimisationTechniques
 
-open System
 open Types
+open System
 open Optimisation.Amoeba
 open Solver
 open Time
@@ -18,21 +18,16 @@ let private rnd = Random()
 
 module Bootstrap =
 
-    let removeAt index input =
-        input 
-        |> List.mapi (fun i el -> (i <> index, el)) 
-        |> List.filter fst |> List.map snd
-
-    let removeSingle data =
-        let removedUnit = data |> List.map (fun x -> (fst x), (removeUnit (snd x)))
-        let upper = List.length removedUnit
-        let selection = rnd.Next(0, upper)
-        removedUnit |> removeAt selection
-
-    // let removeSingleCoupled response predictor : GrowthSeries<'u> * TimeSeries<float> =
-    //     let upper = List.length response
-    //     let selection = rnd.Next(0, upper - 1)
-    //     (response |> removeAt selection), (predictor |> removeAt selection)
+    let removeSingle (data:CodedMap<TimeSeries<float<'v>>>) =
+        let commonTimeSeries = TimeSeries.commonTimeline (data |> Map.toList |> List.map snd)
+        match commonTimeSeries with
+        | None -> invalidOp "The time series are not on common time"
+        | Some ts ->
+            match ts.Length with
+            | 0 -> invalidOp "The time series was empty"
+            | _ ->
+                let selection = rnd.Next(0, ts.Length - 1)
+                data |> Map.map (fun _ v -> v |> TimeSeries.bootstrapFixedStep (TimeSpan.FromDays(366.)) selection )
 
 
 module HeuristicOptimisation =
@@ -87,3 +82,13 @@ let toParamList (domainplist:ParameterPool) (p:Point) : ParameterPool =
 
 let toDomain (p:ParameterPool) : Domain =
     p |> Map.toArray |> Array.map (fst >> getBoundsForEstimation p)
+
+let fromPoint (pool:ParameterPool) (point:Point) : ParameterPool =
+    if pool.Count = point.Length
+    then
+        pool 
+        |> Map.toList
+        |> List.mapi (fun i (sc,p) -> sc, Parameter.setEstimate p point.[i] )
+        |> Map.ofList
+    else
+        invalidOp "The number of parameters estimated differs from those in the parameter pool"

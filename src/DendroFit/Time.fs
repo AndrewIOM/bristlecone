@@ -41,7 +41,7 @@ module TimeSeries =
     /// Populate a time series with an existing sequence.
     /// Equal time-steps are created using the stepping specified. 
     let create (startTime:DateTime) (stepping:TimeSpan) values =
-        (List.init (Seq.length values) (fun t -> stepping |> TimeSpan.Multiply t))
+        (List.init (Seq.length values) (fun _ -> stepping))
         |> Seq.zip values
         |> Seq.toArray
         |> TimeSteps
@@ -78,6 +78,13 @@ module TimeSeries =
         |> Seq.zip s
         |> Seq.toArray
         |> TimeSteps
+
+    let toSeq s =
+        s
+        |> unwrapFixed
+        |> snd
+        |> unwrap
+        |> Array.toSeq
 
     let toFixed start s =
         floatingToFixed start s
@@ -130,20 +137,45 @@ module TimeSeries =
         |> floatingToFixed start
 
     let trimStart startDate (series:TimeSeries<'a>) =
-        let currentStart = series |> start
-        let currentEnd = series |> endDate
-        if currentStart < startDate 
-        then
-            series 
-            |> shift (startDate - currentStart)
-            |> trimEnd currentEnd
-        else 
-            series
+        let start, floatingSeries = series |> unwrapFixed
+        let newStartIndex = 
+            floatingSeries 
+            |> unwrap 
+            |> Array.map snd 
+            |> Array.scan (+) start
+            |> Array.findIndex (fun x -> x >= startDate)
+        floatingSeries
+        |> unwrap
+        |> Array.splitAt newStartIndex |> snd
+        |> wrap
+        |> floatingToFixed startDate
 
     let bound start endDate series =
         series
         |> trimStart start
         |> trimEnd endDate
+
+    let rec private remove i l =
+        match i, l with
+        | 0, x::xs -> xs
+        | i, x::xs -> x::remove (i - 1) xs
+        | i, [] -> failwith "index out of range"
+
+    /// Removing a step takes account of leap years.
+    let bootstrapFixedStep stepping i series =
+        let start, _ = series |> unwrapFixed
+        let newData =
+            series
+            |> unwrapFixed
+            |> snd
+            |> unwrap
+            |> Array.map fst
+            |> Array.toList |> remove i |> List.toArray
+        (List.init (Seq.length newData) (fun _ -> stepping))
+        |> Seq.zip newData
+        |> Seq.toArray
+        |> wrap
+        |> floatingToFixed start
 
 
     [<AutoOpen>]

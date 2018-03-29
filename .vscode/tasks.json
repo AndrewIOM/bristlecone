@@ -3,7 +3,7 @@
     "tasks": [
         {
             "label": "build",
-            "command": "dotnet build",
+            "command": "dotnet build -c release",
             "args": [
                 "src/DendroFit/DendroFit.fsproj"
             ],

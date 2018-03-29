@@ -1,6 +1,10 @@
 module Types
 
 open Time.TimeSeries
+open Time
+
+let removeUnit (x:float<_>) =
+    float x
 
 // Year
 [<Measure>] type year
@@ -8,9 +12,20 @@ open Time.TimeSeries
 // Millimetre
 [<Measure>] type mm
 
-type GrowthSeries<[<Measure>] 'u> =
-| Cumulative of TimeSeries<float<'u>>
-| Absolute of TimeSeries<float<'u>>
+[<AutoOpen>]
+module GrowthSeries =
+
+    type GrowthSeries<[<Measure>] 'u> =
+    | Cumulative of TimeSeries<float<'u>>
+    | Absolute of TimeSeries<float<'u>>
+    | Relative of TimeSeries<float<'u>>
+
+    let growthToTime growth =
+        match growth with
+        | Absolute g -> g
+        | Cumulative g -> g
+        | Relative g -> g
+
 
 [<AutoOpen>]
 module ShortCode =
@@ -54,9 +69,54 @@ module PlantIndividual =
     let zipEnv envName envData (plant:PlantIndividual) =
         { plant with Environment = plant.Environment.Add (envName, envData) }
 
+    let growthSeries plant =
+        match plant with
+        | RingWidth rw ->
+            match rw with
+            | Absolute rws -> TimeSeries.map rws (fun (x,t) -> removeUnit x, t) |> Absolute
+            | Cumulative _ -> invalidOp "Not implemented"
+            | Relative rws -> TimeSeries.map rws (fun (x,t) -> removeUnit x, t) |> Relative
+        | _ -> invalidOp "Not implemented"
+
+    let private toRelativeGrowth' (growth:GrowthSeries<_>) =
+        match growth with
+        | Absolute g -> 
+            let time = g |> toSeq |> Seq.map snd |> Seq.scan (+) (g |> TimeSeries.start)
+            let agr = g |> toSeq |> Seq.map fst
+            let biomass = agr |> Seq.scan (+) 0.<_> |> Seq.tail |> Seq.toList
+            let rgr = agr |> Seq.mapi (fun i a -> a / biomass.[i] * 1.<_> )
+            TimeSeries.createVarying (Seq.zip time rgr) |> Relative
+        | Relative _ -> growth
+        | Cumulative g -> 
+            // Calculate agr and divide agr by biomass
+            failwith "Not implemented"
+
+    let toRelativeGrowth (plant:PlantIndividual) =
+        match plant.Growth with
+        | RingWidth s -> { plant with Growth = s |> toRelativeGrowth' |> RingWidth }
+        | _ -> invalidOp "Not implemented"
+        // | BasalArea s -> { plant with Growth = s |> toRelativeGrowth' |> BasalArea }
+        // | StemVolume s -> { plant with Growth = s |> toRelativeGrowth' |> StemVolume }
+
+    let keepCommonYears (plant:PlantIndividual) =
+        let allSeries = 
+            let response = plant.Growth |> growthSeries |> growthToTime
+            let envSeries = plant.Environment |> Map.toList |> List.map snd
+            response :: envSeries
+        let startDates, endDates =
+            allSeries
+            |> List.map (fun s -> TimeSeries.start s, TimeSeries.endDate s)
+            |> List.unzip
+        let startDate = startDates |> List.max
+        let endDate = endDates |> List.min
+        let mapts f s = TimeSeries.map s f
+        printfn "Start = %A End = %A" startDate endDate
+        { plant with Environment = plant.Environment |> Map.toList |> List.map (fun (x,y) -> x,y |> TimeSeries.bound startDate endDate) |> Map.ofList
+                     Growth = plant.Growth |> growthSeries |> growthToTime |> TimeSeries.bound startDate endDate |> mapts (fun (x,t) -> x * 1.<mm>, t) |> Absolute |> RingWidth }
+
 
 [<AutoOpen>]
-module ParameterPool =
+module Parameter =
 
     type EstimationStartingBounds = float * float
 
@@ -68,22 +128,21 @@ module ParameterPool =
     | NotEstimated of EstimationStartingBounds
     | Estimated of float
 
-    type Parameter = Parameter of Constraint * Estimation
-    let private unwrapP (Parameter (c,e)) = c,e
+    type Parameter = private Parameter of Constraint * Estimation
 
-    type ParameterPool = CodedMap<Parameter>
+    let private unwrap (Parameter (c,e)) = c,e
 
-    let getEstimate key (pool:ParameterPool) : float =
-        let c,estimate = pool |> Map.find (ShortCode.create key) |> unwrapP
-        match estimate with
-        | NotEstimated _ -> invalidOp (sprintf "Oops: Parameter %s not available" key)
-        | Estimated v ->
-            match c with
-            | Unconstrained -> v
-            | PositiveOnly -> exp v
+    let create con bound1 bound2 =
+        Parameter (con, (NotEstimated ([bound1; bound2] |> Seq.min, [bound1; bound2] |> Seq.max)))
 
-    let getBoundsForEstimation (pool:ParameterPool) key : float * float =
-        let c,estimate = pool |> Map.find key |> unwrapP
+    let setEstimate parameter value =
+        let c,_ = parameter |> unwrap
+        match c with
+        | Unconstrained -> Parameter (Unconstrained, Estimated value)
+        | PositiveOnly -> Parameter (PositiveOnly, Estimated (exp value))
+
+    let bounds (p:Parameter) : float * float =
+        let c,estimate = p |> unwrap
         match estimate with
         | NotEstimated (s,e) ->
             match c with
@@ -91,11 +150,37 @@ module ParameterPool =
             | PositiveOnly -> log s, log e
         | Estimated _ -> invalidOp "Already estimated"
 
-    let setEstimate parameter value =
-        let c,_ = parameter |> unwrapP
-        match c with
-        | Unconstrained -> Parameter (Unconstrained, Estimated value)
-        | PositiveOnly -> Parameter (PositiveOnly, Estimated value)
+    let getEstimate (p:Parameter) : float =
+        let c,estimate = p |> unwrap
+        match estimate with
+        | NotEstimated _ -> invalidOp (sprintf "Oops: Parameter not available")
+        | Estimated v ->
+            match c with
+            | Unconstrained -> v
+            | PositiveOnly -> v
+
+    [<AutoOpen>]
+    module Pool =
+
+        type ParameterPool = CodedMap<Parameter>
+
+        let getEstimate key (pool:ParameterPool) : float =
+            let c,estimate = pool |> Map.find (ShortCode.create key) |> unwrap
+            match estimate with
+            | NotEstimated _ -> invalidOp (sprintf "Oops: Parameter %s not available" key)
+            | Estimated v ->
+                match c with
+                | Unconstrained -> v
+                | PositiveOnly -> v
+
+        let getBoundsForEstimation (pool:ParameterPool) key : float * float =
+            let c,estimate = pool |> Map.find key |> unwrap
+            match estimate with
+            | NotEstimated (s,e) ->
+                match c with
+                | Unconstrained -> s,e
+                | PositiveOnly -> log s, log e
+            | Estimated _ -> invalidOp "Already estimated"
 
 
 module ParameterEstimation =
@@ -117,8 +202,10 @@ module ParameterEstimation =
         Equations: CodedMap<ModelEquation>
         Likelihood: Likelihood }
 
-let removeUnit (x:float<_>) =
-    float x
+    type EstimationResult = {
+        Likelihood: float
+        Parameters: ParameterPool
+        Series: CodedMap<PredictedSeries> }
 
 
 module Seq =
@@ -136,7 +223,7 @@ module Seq =
         |> Seq.map simplifyEntry
         |> Seq.toList
 
-    
+
     ///**Description**
     /// Unifies two sequences into a tuple based on a string key
     let keyMatch (a:(string*'a)seq) (b:(string*'b)seq) =
@@ -145,3 +232,19 @@ module Seq =
             b 
             |> Seq.tryFind(fun (s2,_) -> s2 = s)
             |> Option.bind (fun f -> Some (s,x,snd f)))
+
+    let private sqr x = x * x
+
+    let stddev nums =
+        let mean = nums |> List.average
+        let variance = nums |> List.averageBy (fun x -> sqr(x - mean))
+        sqrt(variance)
+
+
+module Map =
+
+    let merge group1 group2 appender = 
+        group1 |> Seq.fold(fun (acc:Map<'a,'b>) (KeyValue(key, values)) -> 
+                          match acc.TryFind key with
+                                            | Some items -> Map.add key (appender values items) acc
+                                            | None -> Map.add key values acc) group2
