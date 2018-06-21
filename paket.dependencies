@@ -1,5 +1,7 @@
 source https://www.nuget.org/api/v2
 
-nuget FSharp.Data
+nuget FSharp.Data >= 3 beta rc
 nuget NETStandard.Library.NETFramework
 nuget RProvider
+nuget MathNet.Numerics
+nuget MathNet.Numerics.FSharp
