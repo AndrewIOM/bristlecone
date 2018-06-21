@@ -74,9 +74,19 @@ module PlantIndividual =
         | RingWidth rw ->
             match rw with
             | Absolute rws -> TimeSeries.map rws (fun (x,t) -> removeUnit x, t) |> Absolute
-            | Cumulative _ -> invalidOp "Not implemented"
+            | Cumulative m -> TimeSeries.map m (fun (x,t) -> removeUnit x, t) |> Cumulative
             | Relative rws -> TimeSeries.map rws (fun (x,t) -> removeUnit x, t) |> Relative
         | _ -> invalidOp "Not implemented"
+
+    let private toCumulativeGrowth' (growth:GrowthSeries<_>) =
+        match growth with
+        | Absolute g ->
+            let time = g |> toSeq |> Seq.map snd |> Seq.scan (+) (g |> TimeSeries.start)
+            let agr = g |> toSeq |> Seq.map fst
+            let biomass = agr |> Seq.scan (+) 0.<_> |> Seq.tail |> Seq.toList
+            TimeSeries.createVarying (Seq.zip time biomass) |> Cumulative
+        | Relative _ -> failwith "Not implemented"
+        | Cumulative _ -> growth
 
     let private toRelativeGrowth' (growth:GrowthSeries<_>) =
         match growth with
@@ -95,8 +105,11 @@ module PlantIndividual =
         match plant.Growth with
         | RingWidth s -> { plant with Growth = s |> toRelativeGrowth' |> RingWidth }
         | _ -> invalidOp "Not implemented"
-        // | BasalArea s -> { plant with Growth = s |> toRelativeGrowth' |> BasalArea }
-        // | StemVolume s -> { plant with Growth = s |> toRelativeGrowth' |> StemVolume }
+
+    let toCumulativeGrowth (plant:PlantIndividual) =
+        match plant.Growth with
+        | RingWidth s -> { plant with Growth = s |> toCumulativeGrowth' |> RingWidth }
+        | _ -> invalidOp "Not implemented"
 
     let keepCommonYears (plant:PlantIndividual) =
         let allSeries = 
@@ -205,7 +218,12 @@ module ParameterEstimation =
     type EstimationResult = {
         Likelihood: float
         Parameters: ParameterPool
-        Series: CodedMap<PredictedSeries> }
+        Series: CodedMap<PredictedSeries>
+        Trace: float list * float [] list }
+
+type StartingValues =
+| FirstDataItem
+| Custom of CodedMap<float>
 
 
 module Seq =

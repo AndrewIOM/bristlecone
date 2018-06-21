@@ -17,6 +17,9 @@ module Likelihood =
             let d = data |> getData k
             sumOfSquares' d.Expected d.Observed )
 
+    let sumOfSquaresNegativeLog keys _ (data:CodedMap<PredictedSeries>) =
+        -log(sumOfSquares keys () data)
+
     let bivariateGaussian' (p:ParameterPool) obsx obsy expx expy = 
         let diffx = obsx - expx
         let diffy = obsy - expy
@@ -27,6 +30,7 @@ module Likelihood =
         let zta2 = 2. * rho * ((diffx * diffy) / sigmax * sigmay)
         let zta3 = diffy ** 2. / sigmay ** 2.
         let z = zta1 - zta2 + zta3
+        printfn "sigmax = %f; sigma y = %f; rho = %f; L = %f (%f)" sigmax sigmay rho (-log((1./(2.*System.Math.PI*sigmax*sigmay*sqrt(1.-(rho*rho)))) * exp (-z / (2. * (1. - (rho * rho)))))) (((1./(2.*System.Math.PI*sigmax*sigmay*sqrt(1.-(rho*rho)))) * exp (-z / (2. * (1. - (rho * rho))))))
         -log((1./(2.*System.Math.PI*sigmax*sigmay*sqrt(1.-(rho*rho)))) * exp (-z / (2. * (1. - (rho * rho)))))
 
     /// <summary> 

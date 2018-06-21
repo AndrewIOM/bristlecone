@@ -42,6 +42,17 @@ let rec rungeKutta4Variable currentStep (steps:float list) t x f tt xx =
     if (steps.Length = 0) then ((List.append tt [t+currentStep]),(List.append xx [x']))
     else rungeKutta4Variable steps.Head steps.Tail (t+currentStep) x' f (List.append tt [t+currentStep]) (List.append xx [x'])
 
+module Fake =
+
+    let solve tInitial tEnd tStep modelMap =
+        let variables = modelMap |> Map.toArray |> Array.unzip |> fst
+        let fakeSeries =
+            let count = (tEnd - tInitial + 1.) / tStep |> int
+            [ 1 .. count ] |> List.map (fun _ -> nan ) |> List.toArray
+        variables
+        |> Array.map (fun k -> k,fakeSeries )
+        |> Map.ofArray 
+
 
 module Oslo =
 
@@ -84,8 +95,8 @@ module Oslo =
             |> Array.mapi (fun i m -> m t x.[i] newEnv)
             |> Vector
 
-        let options = Options(AbsoluteTolerance = 1e-6, RelativeTolerance = 1e-6)
-        let rk = Ode.GearBDF(tInitial, (initialVector |> Vector), System.Func<double,Vector,Vector> rp, options)
+        let options = Options(AbsoluteTolerance = 1e-6, RelativeTolerance = 1e-6, MaxStep = tStep, MinStep = tStep, MaxScale = 1., MinScale = 1., OutputStep = 1.)
+        let rk = Ode.RK547M(tInitial, (initialVector |> Vector), System.Func<double,Vector,Vector> rp, options)
         
         let result =
             rk.SolveFromToStep(tInitial, tEnd, tStep) 
@@ -95,3 +106,69 @@ module Oslo =
         modelKeys
         |> Seq.mapi(fun i k -> k, result |> Array.map(fun x -> x.[i]))
         |> Map.ofSeq
+
+    /// On integration errors, assigns the maximum float value to every data point.
+    let solveWithErrorHandling tInitial tEnd tStep initialConditions modelMap =
+        try solve tInitial tEnd tStep initialConditions modelMap with
+        | _ -> Fake.solve tInitial tEnd tStep modelMap
+
+
+module MathNet =
+
+    open MathNet.Numerics.LinearAlgebra
+    open MathNet.Numerics.OdeSolvers
+
+    let private updateEnvironment (newValues:Vector<float>) newValueKeys environment =
+        let newEnv = newValues.ToArray() |> Array.zip newValueKeys
+        environment
+        |> Map.map(fun key value ->
+            let updated = newEnv |> Array.tryFind(fun (k2,_) -> k2 = key)
+            match updated with
+            | Some u -> snd u
+            | None -> value )
+
+    let solve tInitial tEnd tStep initialConditions modelMap =
+
+        let modelKeys,modelEqs = modelMap |> Map.toArray |> Array.unzip
+        let vectorKeys, initial =
+            modelMap
+            |> Map.toArray
+            |> Array.map(fun (k,_) -> k, initialConditions |> Map.find k )
+            |> Array.unzip
+
+        let rp t (x:Vector<float>) = 
+            let newEnv = updateEnvironment x vectorKeys initialConditions
+            modelEqs
+            |> Array.mapi (fun i m -> m t x.[i] newEnv)
+            |> vector
+
+        let n = (tEnd - tInitial + 1.) / tStep |> int
+
+        let f = System.Func<float, Vector<float>, Vector<float>> rp
+        let result = RungeKutta.FourthOrder(initial |> vector, tInitial, tEnd, n, f)
+
+        modelKeys
+        |> Seq.mapi(fun i k -> k, result |> Array.map(fun x -> x.[i]))
+        |> Map.ofSeq
+
+
+module RootFinding =
+
+    /// Secant method for finding root of non-linear equations. This method is faster than bisection, but may not converge on a root.
+    let rec secant n N f x0 x1 x2 : float =
+        if n >= N then x0
+        else
+            let x = x1 - (f(x1))*((x1 - x0)/(f(x1) - f(x0)))
+            secant (n + 1) N f x x0 x2
+
+    /// Bisect method for finding root of non-linear equations. A "strong and stable" algorithm.
+    let rec bisect n N f a b t : float =
+        if n >= N then nan
+        else
+            let c = (a + b) / 2.
+            if (f c) = 0.0 || (b - a) / 2. < t 
+                then c
+                else 
+                    if sign(f c) = sign (f a)
+                    then bisect (n + 1) N f c b t
+                    else bisect (n + 1) N f a c t

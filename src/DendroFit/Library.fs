@@ -14,10 +14,10 @@ module Objective =
         model (point |> toParamList parameterPool)
 
     let pairObservationsToExpected (observed:CodedMap<float[]>) (expected:CodedMap<float[]>) : CodedMap<PredictedSeries> =
-        expected
+        observed
         |> Map.map (fun key value ->
-            { Expected = value
-              Observed = observed |> Map.find key } )
+            { Observed = value
+              Expected = expected |> Map.find key } )
 
     let create (system:ModelSystem) integrate (observed:CodedMap<float array>) (p:Point) : float =
         system.Equations
@@ -71,7 +71,7 @@ module DendroFit =
 
     // Common timelines only
     // Fixed temporal resolution only
-    let estimate' resolution iterations (system:ModelSystem) (series:CodedMap<TimeSeries<float<_>>>) =
+    let estimate' resolution iterations (system:ModelSystem) (start:StartingValues) (series:CodedMap<TimeSeries<float<_>>>) =
         match series |> getCommonTime with
         | None -> invalidOp "The timeline is not common for these series. The timeline must be the same for all series"
         | Some _ ->
@@ -82,21 +82,27 @@ module DendroFit =
             let endTime = cumulativeTime |> List.last
             let timeStep = (cumulativeTime.Tail.Head) - cumulativeTime.Head
             printfn "Start = %A, end = %A, step = %A" startTime endTime timeStep
-            let integrator = ODE.Oslo.solve startTime endTime timeStep (startingValues series)
-            let optimise = heuristicOptimisation DefaultSetup.optimisationLevels iterations DefaultSetup.amoebaCount (system.Parameters |> toDomain)
+            let startingValues = 
+                match start with
+                | FirstDataItem -> startingValues series
+                | Custom x -> x
+            // let integrator = ODE.Oslo.solveWithErrorHandling startTime endTime timeStep startingValues
+            let integrator = ODE.MathNet.solve startTime endTime timeStep startingValues
+            //let optimise = heuristicOptimisation DefaultSetup.optimisationLevels iterations DefaultSetup.amoebaCount (system.Parameters |> toDomain)
+            let optimise = Optimisation.MCMC.randomWalk 5000 iterations (system.Parameters |> toDomain)
             let f = Objective.create system integrator (scaledSeries |> Map.map (fun _ value -> value |> Array.map snd))
-            
+
             // Get results, and rewrap point as parameters
             let likelihood,point = optimise f
-            let estimated = fromPoint system.Parameters point
+            let estimated = fromPoint system.Parameters (point |> List.head)
 
             // Get predicted and observed series together
-            let estimatedSeries = ODE.Oslo.solve startTime endTime timeStep (startingValues series) (system.Equations |> Map.map (fun _ v -> v estimated))
-            let paired = estimatedSeries |> Map.map (fun k v -> { Expected = v; Observed = series |> Map.find k |> TimeSeries.toSeq |> Seq.map fst |> Seq.toArray })
-           
-            { Likelihood = likelihood; Parameters = estimated; Series = paired }
+            let estimatedSeries = integrator (system.Equations |> Map.map (fun _ v -> v estimated))
+            let paired = series |> Map.map (fun k v -> { Observed = v |> TimeSeries.toSeq |> Seq.map fst |> Seq.toArray; Expected = estimatedSeries |> Map.find k })
 
-    let estimate resolution iterations system (growth:GrowthSeries<_>) =
+            { Likelihood = (likelihood |> List.head); Parameters = estimated; Series = paired; Trace = likelihood,point }
+
+    let estimate resolution iterations system (start:StartingValues) (growth:GrowthSeries<_>) =
         // Mess around getting float series out of data...
         let g =
             match growth with
@@ -106,22 +112,23 @@ module DendroFit =
         // Check series is not empty
         // Condition for initial conditions...?
         // ** IF ABSOLUTE DATA BUT FITTING CUMULATIVE FUNCTION, TAKE DERIV OF PREDICTION BEFORE LIKELIHOOD? **
-        estimate' resolution iterations system ([ShortCode.create "x", g] |> Map.ofList)
+        estimate' resolution iterations system start ([ShortCode.create "x", g] |> Map.ofList)
 
-    let estimatePlant resolution iterations system (plant:PlantIndividual) =
+    let estimatePlant resolution iterations system start (plant:PlantIndividual) =
         let g =
             match plant.Growth |> growthSeries with
             | Absolute g -> g
             | Cumulative g -> g
             | Relative g -> g
         let predictors = plant.Environment |> Map.add (ShortCode.create "x") g
-        estimate' resolution iterations system predictors
-    
-    let test' resolution iterations timeSeriesLength (system:ModelSystem) =
+        estimate' resolution iterations system start predictors
+
+    let test' resolution iterations timeSeriesLength startValues (system:ModelSystem) =
         // Systematically sample parameter space for multiple outcomes:
         // - Establish 'true' parameters within parameter space
 
         let sectors = DefaultSetup.testGridSectors
+
         let trueParameters =
             [ 0 .. sectors ]
             |> List.map (fun i -> 
@@ -144,14 +151,13 @@ module DendroFit =
             let eqs =
                 system.Equations
                 |> Map.map (fun _ v -> v p)
-            let startValues = [ ShortCode.create "x", 0.01; ShortCode.create "N", 1.0] |> Map.ofList
             ODE.Oslo.solve startTime endTime timeStep startValues eqs
 
         let trueSeries = trueParameters |> List.map solve
  
         // - Estimate the parameters given the parameter space
 
-        let est = estimate' resolution iterations system
+        let est = estimate' resolution iterations system (StartingValues.Custom startValues)
         let estimates =
             trueSeries |> List.map (Map.map (fun _ v -> v |> applyFakeTime) >> est)
 
@@ -186,7 +192,7 @@ module DendroFit =
         let rec bootstrap s numberOfTimes solutions =
             if (numberOfTimes > 0) then
                 let subset = OptimisationTechniques.Bootstrap.removeSingle s
-                let result = estimate' resolution hypothesis iterations subset
+                let result = estimate' resolution hypothesis iterations FirstDataItem subset
                 printfn "%s: completed bootstrap %i" identifier.Value numberOfTimes
                 bootstrap s (numberOfTimes - 1) (solutions |> List.append [result])
             else solutions

@@ -31,16 +31,16 @@ module Bootstrap =
 
 
 module HeuristicOptimisation =
+
     let rec heuristicOptimisation numberOfLevels iterationsPerLevel numberOfAomeba (paramBounds:Domain) (f:Point->float) =
-            
-        // let aomebaResults = 
-        //     [|1 .. numberOfAomeba|]
-        //     |> Array.collect (fun _ -> 
-        //         try [|solve Default paramBounds f iterationsPerLevel|]
-        //         with | _ -> [||] )
-        let aomebaResults =
-            [| 1 .. numberOfAomeba |]
-            |> Array.map (fun _ -> solve Default paramBounds f iterationsPerLevel)
+
+        let aomebaResults = 
+            [|1 .. numberOfAomeba|]
+            |> Array.collect (fun _ -> 
+                try [|solve Default paramBounds f iterationsPerLevel|]
+                with | e -> 
+                    printfn "Warning: Could not generate numercal solution for point (with EXN %s): %A" e.Message paramBounds
+                    [||] )
 
         let mostLikely = aomebaResults |> Array.minBy fst
 

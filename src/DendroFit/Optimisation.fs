@@ -1,8 +1,86 @@
 module Optimisation
 
+type Point = float []
+type Solution = float * Point
+type Objective = Point -> float
+type Domain = (float*float) []
+
+/// MCMC random walk algorithm.
+/// For more information, see https://doi.org/10.3389/fams.2017.00006.
+module MCMC =
+    
+    let initialise (d:Domain) (rng:System.Random) =
+        [| for (min,max) in d -> min + (max-min) * rng.NextDouble() |]
+
+    /// Current implementation draws from an independent univariate normal distribution for each individual parameter. 
+    let draw random mean stdev =
+        let distribution = MathNet.Numerics.Distributions.Normal(mean,stdev,random)
+        fun () -> distribution.Sample()
+
+    /// NB Requires log-likelihood generating objective
+    let rec metropolis' propose f theta1 l1 remaining d vl =
+
+        let theta2 = propose theta1
+        let l2 = f theta2
+
+        // printfn "Proposal %f" l2
+
+        let thetaAccepted, lAccepted = 
+            if l2 < l1  && l2 <> -infinity
+                then 
+                    // printfn "Accepting %f" l2
+                    theta2, l2
+                else
+                    // TODO Move randomiser somewhere else
+                    let rand = (MathNet.Numerics.Distributions.ContinuousUniform(0.,1.)).Sample()
+                    let ratio = - (l2 - l1) |> exp
+
+                    // printfn "Original was %f. New is %f Ratio is %f" l1 l2 ratio
+
+                    if rand < ratio && l2 <> infinity && l2 <> -infinity && l2 <> nan
+                        then 
+                            // printfn "Accepting l2. Original was %f. Ratio is %f" l1 ratio
+                            theta2, l2
+                        else 
+                            // printfn "Rejecting %f (current is %f" l2 l1
+                            theta1, l1
+        
+        match remaining with 
+        | r when r <= 0 -> vl, d
+        | _ -> 
+            if remaining % 500 = 0 then printfn "MCMC Optimisation: %i remaining iterations" remaining
+            metropolis' propose f thetaAccepted lAccepted (remaining - 1) (thetaAccepted::d) (lAccepted::vl)
+
+    let randomWalk burn n domain (f:Point->float) =
+
+        // 1. Randomly determine a candidate set of parameters theta
+        let random = MathNet.Numerics.Random.MersenneTwister(true)
+        let theta = initialise domain random
+
+        // 2. Compute L1 = L(01)
+        let l1 = f theta
+
+        if l1 = nan then invalidOp "Initial likelihood could not be calculated"
+
+        // Assume bounds for parameters represent -2 and 2 sigma (95%) confidence bounds
+        // Set a variance that spreads these to six-sigma
+        // Use an independent normal distribution for each parameter
+        // 3. Define jumping method / distributions / priors in here
+        let proposeJump theta = 
+            domain 
+            |> Array.map (fun (low,high) -> draw random 0. ((high - low) / 2.) () )
+            |> Array.zip theta
+            |> Array.map (fun (thetai,zi) -> thetai + zi)
+
+        // 3. Burn
+        let burnedL,burnedP = metropolis' proposeJump f theta l1 burn [] []
+
+        // 4. Iterate
+        metropolis' proposeJump f burnedP.Head burnedL.Head n [] []
+
+
 // Nelder Mead implementation
 // Modified from https://github.com/mathias-brandewinder/Amoeba
-
 module Amoeba =
 
     type Point = float []
