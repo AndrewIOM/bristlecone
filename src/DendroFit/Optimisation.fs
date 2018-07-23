@@ -17,18 +17,48 @@ module MCMC =
         let distribution = MathNet.Numerics.Distributions.Normal(mean,stdev,random)
         fun () -> distribution.Sample()
 
+    /// Find an appropriate scale factor for a standard deviation and its acceptance rate.
+    /// [Replicated from PyMC3]
+    let tuneScale scale accRate =
+        match accRate with
+        | a when a < 0.001  -> scale * 0.1
+        | a when a < 0.05   -> scale * 0.5
+        | a when a < 0.2    -> scale * 0.9
+        | a when a > 0.95   -> scale * 10.0
+        | a when a > 0.95   -> scale * 2.0
+        | a when a > 0.5    -> scale * 1.1
+        | _ -> scale
+
+
     /// NB Requires log-likelihood generating objective
-    let rec metropolis' propose f theta1 l1 remaining d vl =
+    let rec metropolis' propose f theta1 l1 remaining d vl scale =
 
-        let theta2 = propose theta1
-        let l2 = f theta2
+        // TEMPORARY: TUNING STEP (hardcoded to every 1000)
+        let tuneInterval = 5000
+        let sc =
+            if remaining % tuneInterval = 0 then
+                printfn "Tuning MCMC (current scale is %f)" scale
+                if vl |> Seq.length > tuneInterval then
+                    let acceptance = float ((vl |> Seq.take tuneInterval |> Seq.pairwise |> Seq.where(fun (x,y) -> x <> y) |> Seq.length)) / (float tuneInterval)
+                    let tuned = tuneScale scale acceptance
+                    printfn "Tuned original distribution by scale: %f (acceptance rate = %f per %i)" tuned acceptance tuneInterval
+                    tuned
+                else scale
+            else scale
+        // END TUNING STEP
 
-        // printfn "Proposal %f" l2
-
+        let theta2 = propose (theta1 |> Array.map ((*) sc))
         let thetaAccepted, lAccepted = 
-            if l2 < l1  && l2 <> -infinity
+            // if theta2 |> Seq.tryFind (fun i -> i < 0.) |> Option.isSome 
+            // then 
+            //     // printfn "A parameter was negative! Rejecting proposal"
+            //     theta1, l1 // Reject when any of the parameters are negative or zero
+            // else 
+                let l2 = f theta2
+                // printfn "Proposal %f" l2
+                if l2 < l1
                 then 
-                    // printfn "Accepting %f" l2
+                    printfn "Accepting %f" l2
                     theta2, l2
                 else
                     // TODO Move randomiser somewhere else
@@ -39,17 +69,17 @@ module MCMC =
 
                     if rand < ratio && l2 <> infinity && l2 <> -infinity && l2 <> nan
                         then 
-                            // printfn "Accepting l2. Original was %f. Ratio is %f" l1 ratio
+                            printfn "Accepting %f on backwards jump (previous was %f). The ratio was %f" l2 l1 ratio
                             theta2, l2
                         else 
-                            // printfn "Rejecting %f (current is %f" l2 l1
+                            printfn "Rejecting %f (current is %f" l2 l1
                             theta1, l1
-        
+
         match remaining with 
         | r when r <= 0 -> vl, d
         | _ -> 
-            if remaining % 500 = 0 then printfn "MCMC Optimisation: %i remaining iterations" remaining
-            metropolis' propose f thetaAccepted lAccepted (remaining - 1) (thetaAccepted::d) (lAccepted::vl)
+            if remaining % 5000 = 0 then printfn "MCMC Optimisation: %i remaining iterations" remaining
+            metropolis' propose f thetaAccepted lAccepted (remaining - 1) (thetaAccepted::d) (lAccepted::vl) sc
 
     let randomWalk burn n domain (f:Point->float) =
 
@@ -63,20 +93,20 @@ module MCMC =
         if l1 = nan then invalidOp "Initial likelihood could not be calculated"
 
         // Assume bounds for parameters represent -2 and 2 sigma (95%) confidence bounds
-        // Set a variance that spreads these to six-sigma
+        // Set standard deviation based on range specified on each parameter
         // Use an independent normal distribution for each parameter
         // 3. Define jumping method / distributions / priors in here
         let proposeJump theta = 
             domain 
-            |> Array.map (fun (low,high) -> draw random 0. ((high - low) / 2.) () )
+            |> Array.map (fun (low,high) -> draw random 0. ((high - low) / 4.) () )
             |> Array.zip theta
             |> Array.map (fun (thetai,zi) -> thetai + zi)
 
         // 3. Burn
-        let burnedL,burnedP = metropolis' proposeJump f theta l1 burn [] []
+        let burnedL,burnedP = metropolis' proposeJump f theta l1 burn [] [] 1.
 
         // 4. Iterate
-        metropolis' proposeJump f burnedP.Head burnedL.Head n [] []
+        metropolis' proposeJump f burnedP.Head burnedL.Head n [] [] 1.
 
 
 // Nelder Mead implementation
