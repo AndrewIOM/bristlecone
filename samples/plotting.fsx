@@ -1,4 +1,4 @@
-#load "dendrofit.fsx"
+#load "../src/Bristlecone/bristlecone.fsx"
 #load "../packages/RProvider/RProvider.fsx"
 open RProvider
 open RProvider.graphics

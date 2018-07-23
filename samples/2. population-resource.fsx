@@ -1,4 +1,4 @@
-#load "dendrofit.fsx"
+#load "../src/Bristlecone/bristlecone.fsx"
 
 ////////////////////////////////////////////////////
 /// Population growth with a single limiting resource
@@ -6,7 +6,7 @@
 
 (* Replication of Jeffers et al 2011 analysis. *)
 
-open DendroFit
+open Bristlecone
 open Types.ParameterEstimation
 open Types
 open Time
@@ -56,7 +56,7 @@ let startValues = [ ShortCode.create "x", 1.00; ShortCode.create "y", 2.00 ] |> 
 
 let test =
     ``population with single resource limitation``
-    |> DendroFit.test' Options.resolution Options.iterations Options.testSeriesLength startValues
+    |> Bristlecone.test' Options.resolution Options.iterations Options.testSeriesLength startValues
 
 
 // 3. Plot test (using R)

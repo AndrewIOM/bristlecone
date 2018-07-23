@@ -1,4 +1,4 @@
-#load "dendrofit.fsx"
+#load "../src/Bristlecone/bristlecone.fsx"
 
 ////////////////////////////////////////////////////
 /// Snowshoe Hare and Lynx Predator-Prey Dynamics
@@ -8,7 +8,7 @@
    of snowshoe hare and lynx pelts purchased by the 
    Hudson's Bay Company of Canada. Data is in 1000s. *)
 
-open DendroFit
+open Bristlecone
 open Types.ParameterEstimation
 open Types
 open Time
@@ -59,7 +59,7 @@ let ``predator-prey`` =
 
 let startValues = [ ShortCode.create "lynx", 30.09; ShortCode.create "hare", 19.58 ] |> Map.ofList
 
-let test = ``predator-prey`` |> DendroFit.test' Options.resolution Options.iterations Options.testSeriesLength startValues
+let test = ``predator-prey`` |> Bristlecone.test' Options.resolution Options.iterations Options.testSeriesLength startValues
 
 
 // 3. Load in Real Data
@@ -72,7 +72,7 @@ let data =
     [ ShortCode.create "hare", TimeSeries.createVarying (csv.Rows |> Seq.map(fun r -> r.Year, float r.Hare))
       ShortCode.create "lynx", TimeSeries.createVarying (csv.Rows |> Seq.map(fun r -> r.Year, float r.Lynx)) ] |> Map.ofList
 
-let result = DendroFit.estimate' Options.resolution Options.iterations ``predator-prey`` StartingValues.FirstDataItem data
+let result = Bristlecone.estimate' Options.resolution Options.iterations ``predator-prey`` StartingValues.FirstDataItem data
 
 
 // 4. Plot with ggplot

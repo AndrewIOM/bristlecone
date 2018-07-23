@@ -89,15 +89,19 @@ module Oslo =
             |> Array.map(fun (k,_) -> k, initialConditions |> Map.find k )
             |> Array.unzip
 
+        let mutable iteration = 1
+
         let rp t (x:Vector) = 
+            if iteration % 5000 = 0 then printfn "RK457M %f - %A" t x
+            iteration <- iteration + 1
             let newEnv = updateEnvironment x vectorKeys initialConditions
             modelEqs
             |> Array.mapi (fun i m -> m t x.[i] newEnv)
             |> Vector
 
-        let options = Options(AbsoluteTolerance = 1e-6, RelativeTolerance = 1e-6, MaxStep = tStep, MinStep = tStep, MaxScale = 1., MinScale = 1., OutputStep = 1.)
+        let options = Options(AbsoluteTolerance = 0.1, RelativeTolerance = 0.1, MinStep = 0., MaxStep = 1., MinScale = 0.9, MaxScale = 1.1, OutputStep = 1.)
         let rk = Ode.RK547M(tInitial, (initialVector |> Vector), System.Func<double,Vector,Vector> rp, options)
-        
+
         let result =
             rk.SolveFromToStep(tInitial, tEnd, tStep) 
             |> Seq.map (fun x -> x.X.ToArray())

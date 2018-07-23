@@ -1,9 +1,8 @@
 module TimeTests
 
 open Xunit
-open DomainTypes
+open Types
 open Time
-open Time.TimeSeries
 open System
 
 [<Fact>]
