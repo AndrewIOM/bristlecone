@@ -1,7 +1,7 @@
 module IntegrationTests
 
 open Xunit
-open DendroFit
+open Bristlecone
 
 [<Fact>]
 let ``need to add tests`` () =
