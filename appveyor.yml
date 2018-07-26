@@ -8,7 +8,7 @@ init:
 - ps: $Env:LABEL = "CI" + $Env:APPVEYOR_BUILD_NUMBER.PadLeft(5, "0")
 before_build:
 - appveyor-retry dotnet restore "src\Bristlecone\Bristlecone.fsproj" -v Minimal
-- appveyor-retry dotnet restore "test\Bristlecone.Tests\Bristlecone.Tests.fsproj" -v Minimal
+- appveyor-retry dotnet restore "tests\Bristlecone.Tests\Bristlecone.Tests.fsproj" -v Minimal
 build_script:
 - dotnet build "src\Bristlecone\Bristlecone.fsproj" -c %CONFIGURATION% --version-suffix %LABEL%
 test_script:
