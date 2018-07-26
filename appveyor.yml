@@ -6,8 +6,6 @@ environment:
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
 init:
 - ps: $Env:LABEL = "CI" + $Env:APPVEYOR_BUILD_NUMBER.PadLeft(5, "0")
-- npm install -g gulp
-- npm install -g bower
 before_build:
 - appveyor-retry dotnet restore "src\Bristlecone\Bristlecone.fsproj" -v Minimal
 - appveyor-retry dotnet restore "test\Bristlecone.Tests\Bristlecone.Tests.fsproj" -v Minimal
