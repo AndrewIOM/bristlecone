@@ -12,7 +12,7 @@ before_build:
 build_script:
 - dotnet build "src\Bristlecone\Bristlecone.fsproj" -c %CONFIGURATION% --version-suffix %LABEL%
 test_script:
-- dotnet test "test\Bristlecone.Tests\Bristlecone.Tests.fsproj" -c %CONFIGURATION%
+- dotnet test "tests\Bristlecone.Tests\Bristlecone.Tests.fsproj" -c %CONFIGURATION%
 artifacts:
 - path: artifacts\**\*.*
 cache:
