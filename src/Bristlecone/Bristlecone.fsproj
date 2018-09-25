@@ -1,15 +1,16 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Time.fs" />
     <Compile Include="Types.fs" />
-    <Compile Include="Differential.fs" />
+    <Compile Include="Integration.fs" />
     <Compile Include="Optimisation.fs" />
     <Compile Include="OptimisationTechniques.fs" />
     <Compile Include="DataAccess.fs" />
     <Compile Include="ModelSelection.fs" />
+    <Compile Include="EstimationEngine.fs" />
     <Compile Include="Library.fs" />
     <Compile Include="Equations.fs" />
   </ItemGroup>
