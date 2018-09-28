@@ -36,20 +36,26 @@ module Bristlecone =
     open ModelSystem
     open EstimationEngine
 
-    let conditionStartTime condition (series:(float*'a)[]) =
+    let conditionStartTime condition key (series:(float*float)[]) =
         match condition with
         | NoConditioning -> series
         | RepeatFirstDataPoint ->
             let first = series |> Array.head
             series |> Array.append [|(fst first - 1.),(snd first)|] 
-        | _ -> series
+        | Custom precomputed -> 
+            let custom = precomputed |> Map.find key
+            let first = series |> Array.head
+            series |> Array.append [| (fst first - 1.), custom |] 
 
-    let makeSolverWithData timeMode series =
+    let makeSolverWithData timeMode conditioning series =
         match timeMode with
         | Discrete -> invalidOp "Not supported yet"
         | Continuous i ->
             let data = (series |> Map.map (fun _ value -> value |> Array.map snd))
-            let initialPoint = (series |> Map.map (fun _ value -> value |> Array.map snd |> Array.head))
+            let initialPoint =
+                match conditioning with
+                | Custom c -> c
+                | _ -> (series |> Map.map (fun _ value -> value |> Array.map snd |> Array.head))
             let cumulativeTime = series |> Map.toList |> List.head |> snd |> Array.map fst |> Array.toList
             let timeStep = (cumulativeTime.Tail.Head) - cumulativeTime.Head
             let solver = i cumulativeTime.Head (cumulativeTime |> List.last) timeStep initialPoint
@@ -118,8 +124,8 @@ module Bristlecone =
             timeSeriesData
             |> TimeSeries.validateCommonTimeline
             |> Map.map (fun _ v -> Resolution.scaleTimeSeriesToResolution Annual v)
-            |> Map.map (fun _ v -> conditionStartTime engine.Conditioning v)
-            |> makeSolverWithData engine.TimeHandling
+            |> Map.map (fun k v -> conditionStartTime engine.Conditioning k v)
+            |> makeSolverWithData engine.TimeHandling engine.Conditioning
             ||> Objective.create model
 
         let optimise = engine.OptimiseWith burnin iterations (model.Parameters |> ParameterPool.toDomain)
@@ -185,6 +191,7 @@ module Bristlecone =
                 | Cumulative g -> g
                 | Relative g -> g
             let predictors = plant.Environment |> Map.add (ShortCode.create "x") g
+            printfn "Predictors: %A" predictors
             fit engine iterations burnin predictors system
 
 
