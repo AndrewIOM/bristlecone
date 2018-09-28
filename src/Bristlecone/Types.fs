@@ -1,10 +1,86 @@
-module Types
+namespace Bristlecone
 
 open Time.TimeSeries
 open Time
 
-let removeUnit (x:float<_>) =
-    float x
+[<AutoOpen>]
+module Result =
+
+    let succeed x = 
+        Ok x
+
+    let fail x = 
+        Error x
+
+    let either successFunc failureFunc twoTrackInput =
+        match twoTrackInput with
+        | Ok s -> successFunc s
+        | Error f -> failureFunc f
+
+    let bind f = 
+        either f fail
+
+    let (>>=) x f = 
+        bind f x
+
+    let switch f = 
+        f >> succeed
+
+    let map f = 
+        either (f >> succeed) fail
+
+    let tee f x = 
+        f x; x 
+
+    let tryCatch f exnHandler x =
+        try
+            f x |> succeed
+        with
+        | ex -> exnHandler ex |> fail
+
+    let doubleMap successFunc failureFunc =
+        either (successFunc >> succeed) (failureFunc >> fail)
+
+    let plus addSuccess addFailure switch1 switch2 x = 
+        match (switch1 x),(switch2 x) with
+        | Ok s1,Ok s2 -> Ok (addSuccess s1 s2)
+        | Error f1,Ok _  -> Error f1
+        | Ok _ ,Error f2 -> Error f2
+        | Error f1,Error f2 -> Error (addFailure f1 f2)
+
+
+    let toErrorList (result:Result<'a,'b>) : Result<'a,'b list> =
+        match result with
+        | Error e -> Error [e]
+        | Ok c -> Ok c
+
+    let apply f result =
+        match f,result with
+        | Ok f, Ok x -> 
+            f x |> Ok 
+        | Error e, Ok _ 
+        | Ok _, Error e -> 
+            e |> Error
+        | Error e1, Error e2 -> 
+            e1 |> Error 
+
+    let lift f result =
+        let f' =  f |> succeed
+        apply f' result
+
+    let (<*>) = apply
+    let (<!>) = lift
+
+    let retn = Ok
+
+    let rec mapResult f list =
+        let cons head tail = head :: tail
+        match list with
+        | [] -> 
+            retn []
+        | head::tail ->
+            retn cons <*> (f head) <*> (mapResult f tail)
+
 
 // Year
 [<Measure>] type year
@@ -46,183 +122,9 @@ module EnvironmentalVariables =
     type LocalEnvironment = CodedMap<TimeSeries<float>>
 
 
-module PlantIndividual =
-
-    open EnvironmentalVariables
-
-    type PlantGrowth =
-    | RingWidth of GrowthSeries<mm>
-    | BasalArea of GrowthSeries<mm^2>
-    | StemVolume of GrowthSeries<mm^3>
-
-    type Trait =
-    | Static of float
-    | Variable of TimeSeries<float>
-
-    type PlantIndividual = {
-        Identifier: ShortCode
-        Growth: PlantGrowth
-        InternalControls: Map<ShortCode,Trait>
-        Environment: LocalEnvironment
-    }
-
-    let zipEnv envName envData (plant:PlantIndividual) =
-        { plant with Environment = plant.Environment.Add (envName, envData) }
-
-    let growthSeries plant =
-        match plant with
-        | RingWidth rw ->
-            match rw with
-            | Absolute rws -> TimeSeries.map rws (fun (x,t) -> removeUnit x, t) |> Absolute
-            | Cumulative m -> TimeSeries.map m (fun (x,t) -> removeUnit x, t) |> Cumulative
-            | Relative rws -> TimeSeries.map rws (fun (x,t) -> removeUnit x, t) |> Relative
-        | _ -> invalidOp "Not implemented"
-
-    let private toCumulativeGrowth' (growth:GrowthSeries<_>) =
-        match growth with
-        | Absolute g ->
-            let time = g |> toSeq |> Seq.map snd |> Seq.scan (+) (g |> TimeSeries.start)
-            let agr = g |> toSeq |> Seq.map fst
-            let biomass = agr |> Seq.scan (+) 0.<_> |> Seq.tail |> Seq.toList
-            TimeSeries.createVarying (Seq.zip time biomass) |> Cumulative
-        | Relative _ -> failwith "Not implemented"
-        | Cumulative _ -> growth
-
-    let private toRelativeGrowth' (growth:GrowthSeries<_>) =
-        match growth with
-        | Absolute g -> 
-            let time = g |> toSeq |> Seq.map snd |> Seq.scan (+) (g |> TimeSeries.start)
-            let agr = g |> toSeq |> Seq.map fst
-            let biomass = agr |> Seq.scan (+) 0.<_> |> Seq.tail |> Seq.toList
-            let rgr = agr |> Seq.mapi (fun i a -> a / biomass.[i] * 1.<_> )
-            TimeSeries.createVarying (Seq.zip time rgr) |> Relative
-        | Relative _ -> growth
-        | Cumulative g -> 
-            // Calculate agr and divide agr by biomass
-            failwith "Not implemented"
-
-    let toRelativeGrowth (plant:PlantIndividual) =
-        match plant.Growth with
-        | RingWidth s -> { plant with Growth = s |> toRelativeGrowth' |> RingWidth }
-        | _ -> invalidOp "Not implemented"
-
-    let toCumulativeGrowth (plant:PlantIndividual) =
-        match plant.Growth with
-        | RingWidth s -> { plant with Growth = s |> toCumulativeGrowth' |> RingWidth }
-        | _ -> invalidOp "Not implemented"
-
-    let keepCommonYears (plant:PlantIndividual) =
-        let allSeries = 
-            let response = plant.Growth |> growthSeries |> growthToTime
-            let envSeries = plant.Environment |> Map.toList |> List.map snd
-            response :: envSeries
-        let startDates, endDates =
-            allSeries
-            |> List.map (fun s -> TimeSeries.start s, TimeSeries.endDate s)
-            |> List.unzip
-        let startDate = startDates |> List.max
-        let endDate = endDates |> List.min
-        let mapts f s = TimeSeries.map s f
-        printfn "Start = %A End = %A" startDate endDate
-        { plant with Environment = plant.Environment |> Map.toList |> List.map (fun (x,y) -> x,y |> TimeSeries.bound startDate endDate) |> Map.ofList
-                     Growth = plant.Growth |> growthSeries |> growthToTime |> TimeSeries.bound startDate endDate |> mapts (fun (x,t) -> x * 1.<mm>, t) |> Absolute |> RingWidth }
-
-
-[<AutoOpen>]
-module Parameter =
-
-    type EstimationStartingBounds = float * float
-
-    type Constraint =
-    | Unconstrained
-    | PositiveOnly
-
-    type Estimation =
-    | NotEstimated of EstimationStartingBounds
-    | Estimated of float
-
-    type Parameter = private Parameter of Constraint * Estimation
-
-    let private unwrap (Parameter (c,e)) = c,e
-
-    let create con bound1 bound2 =
-        Parameter (con, (NotEstimated ([bound1; bound2] |> Seq.min, [bound1; bound2] |> Seq.max)))
-
-    let setEstimate parameter value =
-        let c,_ = parameter |> unwrap
-        match c with
-        | Unconstrained -> Parameter (Unconstrained, Estimated value)
-        | PositiveOnly -> Parameter (PositiveOnly, Estimated (exp value))
-
-    let bounds (p:Parameter) : float * float =
-        let c,estimate = p |> unwrap
-        match estimate with
-        | NotEstimated (s,e) ->
-            match c with
-            | Unconstrained -> s,e
-            | PositiveOnly -> log s, log e
-        | Estimated _ -> invalidOp "Already estimated"
-
-    let getEstimate (p:Parameter) : float =
-        let c,estimate = p |> unwrap
-        match estimate with
-        | NotEstimated _ -> invalidOp (sprintf "Oops: Parameter not available")
-        | Estimated v ->
-            match c with
-            | Unconstrained -> v
-            | PositiveOnly -> v
-
-    [<AutoOpen>]
-    module Pool =
-
-        type ParameterPool = CodedMap<Parameter>
-
-        let getEstimate key (pool:ParameterPool) : float =
-            let c,estimate = pool |> Map.find (ShortCode.create key) |> unwrap
-            match estimate with
-            | NotEstimated _ -> invalidOp (sprintf "Oops: Parameter %s not available" key)
-            | Estimated v ->
-                match c with
-                | Unconstrained -> v
-                | PositiveOnly -> v
-
-        let getBoundsForEstimation (pool:ParameterPool) key : float * float =
-            let c,estimate = pool |> Map.find key |> unwrap
-            match estimate with
-            | NotEstimated (s,e) ->
-                match c with
-                | Unconstrained -> s,e
-                | PositiveOnly -> log s, log e
-            | Estimated _ -> invalidOp "Already estimated"
-
-
-module ParameterEstimation =
-
-    // Models 
-    type Response = float
-    type Environment = CodedMap<float>
-    type Time = float
-    type ModelEquation = ParameterPool -> Time -> Response -> Environment -> float
-
-    // Likelihood
-    type PredictedSeries = {
-        Expected: float[]
-        Observed: float[] }
-    type Likelihood = ParameterPool -> CodedMap<PredictedSeries> -> float
-
-    type ModelSystem = {
-        Parameters: ParameterPool
-        Equations: CodedMap<ModelEquation>
-        Likelihood: Likelihood }
-
-    type EstimationResult = {
-        Likelihood: float
-        Parameters: ParameterPool
-        Series: CodedMap<PredictedSeries>
-        Trace: float list * float [] list }
-
-type StartingValues =
-| FirstDataItem
+type Conditioning =
+| NoConditioning
+| RepeatFirstDataPoint
 | Custom of CodedMap<float>
 
 

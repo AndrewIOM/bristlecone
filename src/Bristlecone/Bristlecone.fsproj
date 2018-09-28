@@ -5,12 +5,14 @@
   <ItemGroup>
     <Compile Include="Time.fs" />
     <Compile Include="Types.fs" />
+    <Compile Include="Logging.fs" />
     <Compile Include="Integration.fs" />
+    <Compile Include="Parameter.fs" />
     <Compile Include="Optimisation.fs" />
-    <Compile Include="OptimisationTechniques.fs" />
-    <Compile Include="DataAccess.fs" />
-    <Compile Include="ModelSelection.fs" />
     <Compile Include="EstimationEngine.fs" />
+    <Compile Include="OptimisationTechniques.fs" />
+    <Compile Include="Plant.fs" />
+    <Compile Include="ModelSelection.fs" />
     <Compile Include="Library.fs" />
     <Compile Include="Equations.fs" />
   </ItemGroup>

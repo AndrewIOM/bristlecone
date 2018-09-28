@@ -1,10 +1,9 @@
-#load "../src/Bristlecone/bristlecone.fsx"
+#load "../src/bristlecone.fsx"
 #load "../packages/RProvider/RProvider.fsx"
 open RProvider
 open RProvider.graphics
 open RProvider.ggplot2
-open Types
-open Types.ParameterEstimation
+open Bristlecone
 
 module Plotting =
 

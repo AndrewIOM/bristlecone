@@ -1,4 +1,4 @@
-module Optimisation
+namespace Bristlecone.Optimisation
 
 type Point = float []
 type Solution = float * Point
@@ -7,8 +7,8 @@ type Domain = (float*float) []
 
 /// MCMC random walk algorithm.
 /// For more information, see https://doi.org/10.3389/fams.2017.00006.
-module MCMC =
-    
+module MonteCarlo =
+
     let initialise (d:Domain) (rng:System.Random) =
         [| for (min,max) in d -> min + (max-min) * rng.NextDouble() |]
 
@@ -29,84 +29,76 @@ module MCMC =
         | a when a > 0.5    -> scale * 1.1
         | _ -> scale
 
-
     /// NB Requires log-likelihood generating objective
-    let rec metropolis' propose f theta1 l1 remaining d vl scale =
+    let rec metropolis' propose f theta1 l1 remaining d scale =
 
-        // TEMPORARY: TUNING STEP (hardcoded to every 1000)
-        let tuneInterval = 5000
+        let tuneInterval = 50000000
         let sc =
             if remaining % tuneInterval = 0 then
-                printfn "Tuning MCMC (current scale is %f)" scale
-                if vl |> Seq.length > tuneInterval then
-                    let acceptance = float ((vl |> Seq.take tuneInterval |> Seq.pairwise |> Seq.where(fun (x,y) -> x <> y) |> Seq.length)) / (float tuneInterval)
+                if d |> Seq.length > tuneInterval then
+                    let acceptance = float ((d |> Seq.take tuneInterval |> Seq.pairwise |> Seq.where(fun (x,y) -> x <> y) |> Seq.length)) / (float tuneInterval)
                     let tuned = tuneScale scale acceptance
-                    printfn "Tuned original distribution by scale: %f (acceptance rate = %f per %i)" tuned acceptance tuneInterval
+                    printfn "Tuning: %f (AR = %f; -logL = %f)" tuned acceptance l1
                     tuned
                 else scale
             else scale
-        // END TUNING STEP
 
-        let theta2 = propose (theta1 |> Array.map ((*) sc))
+        // Propose jump
+        let theta2 =
+            let drawn = theta1 |> propose
+            let difference = Array.zip theta1 drawn |> Array.map(fun (a,b) -> b - a)
+            Array.zip theta1 difference |> Array.mapi(fun i (a,b) -> 
+                if (a + (b * sc)) < 0. && i <> 7
+                    then (a - (b * sc)) 
+                    else (a + (b * sc))
+            )
+
         let thetaAccepted, lAccepted = 
-            // if theta2 |> Seq.tryFind (fun i -> i < 0.) |> Option.isSome 
-            // then 
-            //     // printfn "A parameter was negative! Rejecting proposal"
-            //     theta1, l1 // Reject when any of the parameters are negative or zero
-            // else 
-                let l2 = f theta2
-                // printfn "Proposal %f" l2
-                if l2 < l1
-                then 
-                    printfn "Accepting %f" l2
-                    theta2, l2
-                else
-                    // TODO Move randomiser somewhere else
-                    let rand = (MathNet.Numerics.Distributions.ContinuousUniform(0.,1.)).Sample()
-                    let ratio = - (l2 - l1) |> exp
+            let l2 = f theta2
+            // printfn "Proposal %f" l2
+            if l2 < l1
+            then 
+                printfn "Accepting %f" l2
+                theta2, l2
+            else
+                // TODO Move randomiser somewhere else
+                let rand = (MathNet.Numerics.Distributions.ContinuousUniform(0.,1.)).Sample()
+                let ratio = - (l2 - l1) |> exp
 
-                    // printfn "Original was %f. New is %f Ratio is %f" l1 l2 ratio
+                // printfn "Original was %f. New is %f Ratio is %f" l1 l2 ratio
 
-                    if rand < ratio && l2 <> infinity && l2 <> -infinity && l2 <> nan
-                        then 
-                            printfn "Accepting %f on backwards jump (previous was %f). The ratio was %f" l2 l1 ratio
-                            theta2, l2
-                        else 
-                            printfn "Rejecting %f (current is %f" l2 l1
-                            theta1, l1
+                if rand < ratio && l2 <> infinity && l2 <> -infinity && l2 <> nan
+                    then 
+                        printfn "Accepting %f on backwards jump (previous was %f). The ratio was %f" l2 l1 ratio
+                        theta2, l2
+                    else 
+                        // printfn "Rejecting %f (current is %f" l2 l1
+                        theta1, l1
 
         match remaining with 
-        | r when r <= 0 -> vl, d
+        | r when r <= 0 -> d
         | _ -> 
-            if remaining % 5000 = 0 then printfn "MCMC Optimisation: %i remaining iterations" remaining
-            metropolis' propose f thetaAccepted lAccepted (remaining - 1) (thetaAccepted::d) (lAccepted::vl) sc
+            if remaining % 1000 = 0 then printfn "Optimisation: %i remaining iterations" remaining
+            metropolis' propose f thetaAccepted lAccepted (remaining - 1) ((lAccepted,thetaAccepted)::d) sc
 
-    let randomWalk burn n domain (f:Point->float) =
+    let randomWalk burn n domain (f:Point->float) : (float * float[]) list =
 
-        // 1. Randomly determine a candidate set of parameters theta
         let random = MathNet.Numerics.Random.MersenneTwister(true)
         let theta = initialise domain random
-
-        // 2. Compute L1 = L(01)
-        let l1 = f theta
-
-        if l1 = nan then invalidOp "Initial likelihood could not be calculated"
-
-        // Assume bounds for parameters represent -2 and 2 sigma (95%) confidence bounds
-        // Set standard deviation based on range specified on each parameter
-        // Use an independent normal distribution for each parameter
-        // 3. Define jumping method / distributions / priors in here
         let proposeJump theta = 
             domain 
             |> Array.map (fun (low,high) -> draw random 0. ((high - low) / 4.) () )
             |> Array.zip theta
             |> Array.map (fun (thetai,zi) -> thetai + zi)
 
-        // 3. Burn
-        let burnedL,burnedP = metropolis' proposeJump f theta l1 burn [] [] 1.
-
-        // 4. Iterate
-        metropolis' proposeJump f burnedP.Head burnedL.Head n [] [] 1.
+        let l1 = f theta
+        if l1 = nan then invalidOp "Initial likelihood could not be calculated"
+        printfn "Burn: Starting %i iterations" burn
+        let burnedL,burnedP = 
+            metropolis' proposeJump f theta l1 burn [] 1.
+            |> List.head
+        printfn "Burn: Complete"
+        metropolis' proposeJump f burnedP burnedL n [] 1.
 
 
 // Nelder Mead implementation
@@ -203,3 +195,25 @@ module Amoeba =
                     a.Solutions.[0]
 
             search iter amoeba
+
+
+module RootFinding =
+
+    /// Secant method for finding root of non-linear equations. This method is faster than bisection, but may not converge on a root.
+    let rec secant n N f x0 x1 x2 : float =
+        if n >= N then x0
+        else
+            let x = x1 - (f(x1))*((x1 - x0)/(f(x1) - f(x0)))
+            secant (n + 1) N f x x0 x2
+
+    /// Bisect method for finding root of non-linear equations. A "strong and stable" algorithm.
+    let rec bisect n N f a b t : float =
+        if n >= N then nan
+        else
+            let c = (a + b) / 2.
+            if (f c) = 0.0 || (b - a) / 2. < t 
+                then c
+                else 
+                    if sign(f c) = sign (f a)
+                    then bisect (n + 1) N f c b t
+                    else bisect (n + 1) N f a c t

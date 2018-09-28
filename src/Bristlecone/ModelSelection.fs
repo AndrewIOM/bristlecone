@@ -1,4 +1,4 @@
-module ModelSelection
+namespace Bristlecone.ModelSelection
 
 module Akaike =
 
@@ -10,7 +10,7 @@ module Akaike =
     let aic (k:int) logLikelihood =
         2. * (float k) - 2. * logLikelihood
 
-    
+
     ///**Description**
     /// The Akaike information criterion, corrected for small sample sizes. 
     /// It represents standardised index of model fit quality for models that have different numbers of parameters.

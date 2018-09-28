@@ -1,6 +1,7 @@
 module OptimisationTests
 
-open Optimisation
+open Bristlecone.Optimisation
+open Bristlecone
 open Expecto
 open Expecto.ExpectoFsCheck
 

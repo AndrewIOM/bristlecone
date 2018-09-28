@@ -1,8 +1,8 @@
-module OptimisationTechniques
+module Bristlecone.Optimisation.Techniques
 
-open Types
 open System
-open Optimisation.Amoeba
+open Bristlecone
+open Bristlecone.Optimisation.Amoeba
 open Solver
 open Time
 
@@ -74,21 +74,23 @@ module HeuristicOptimisation =
             else mostLikely
 
     
-let toParamList (domainplist:ParameterPool) (p:Point) : ParameterPool =
-    let plist = Map.toList domainplist
-    [0 .. Array.length p - 1]
-    |> List.map (fun i -> (fst plist.[i]), setEstimate (snd plist.[i]) p.[i])
-    |> Map.ofList
+module ParameterPool =
 
-let toDomain (p:ParameterPool) : Domain =
-    p |> Map.toArray |> Array.map (fst >> getBoundsForEstimation p)
-
-let fromPoint (pool:ParameterPool) (point:Point) : ParameterPool =
-    if pool.Count = point.Length
-    then
-        pool 
-        |> Map.toList
-        |> List.mapi (fun i (sc,p) -> sc, Parameter.setEstimate p point.[i] )
+    let toParamList (domainplist:ParameterPool) (p:Point) : ParameterPool =
+        let plist = Map.toList domainplist
+        [0 .. Array.length p - 1]
+        |> List.map (fun i -> (fst plist.[i]), setEstimate (snd plist.[i]) p.[i])
         |> Map.ofList
-    else
-        invalidOp "The number of parameters estimated differs from those in the parameter pool"
+
+    let toDomain (p:ParameterPool) : Domain =
+        p |> Map.toArray |> Array.map (fst >> getBoundsForEstimation p)
+
+    let fromPoint (pool:ParameterPool) (point:Point) : ParameterPool =
+        if pool.Count = point.Length
+        then
+            pool 
+            |> Map.toList
+            |> List.mapi (fun i (sc,p) -> sc, Parameter.setEstimate p point.[i] )
+            |> Map.ofList
+        else
+            invalidOp "The number of parameters estimated differs from those in the parameter pool"

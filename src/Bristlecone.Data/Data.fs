@@ -1,12 +1,12 @@
-module DataAccess
+namespace Bristlecone.DataAccess
 
-open Types
+open Bristlecone
 open Time
 
 module Shrub =
 
     open FSharp.Data
-    open Types.PlantIndividual
+    open Bristlecone.PlantIndividual
 
     type RingWidthData = CsvProvider<"data-types/plant-growth.csv">
     type EnvironmentVariableData = CsvProvider<"data-types/env-variable.csv">

@@ -1,0 +1,2 @@
+namespace Bristlecone.Charts.R
+

@@ -2,7 +2,7 @@ module TimeTests
 
 open Expecto
 open Expecto.ExpectoFsCheck
-open Time
+open Bristlecone
 
 [<Tests>]
 let timeSeries =
