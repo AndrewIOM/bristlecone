@@ -48,16 +48,16 @@ module Bristlecone =
             series |> Array.append [| (fst first - 1.), custom |] 
 
     let makeSolverWithData timeMode conditioning series =
+        let data = (series |> Map.map (fun _ value -> value |> Array.map snd))
+        let initialPoint =
+            match conditioning with
+            | Custom c -> c
+            | _ -> (series |> Map.map (fun _ value -> value |> Array.map snd |> Array.head))
+        let cumulativeTime = series |> Map.toList |> List.head |> snd |> Array.map fst |> Array.toList
+        let timeStep = (cumulativeTime.Tail.Head) - cumulativeTime.Head
         match timeMode with
-        | Discrete -> invalidOp "Not supported yet"
+        | Discrete -> invalidOp "Not implemented"
         | Continuous i ->
-            let data = (series |> Map.map (fun _ value -> value |> Array.map snd))
-            let initialPoint =
-                match conditioning with
-                | Custom c -> c
-                | _ -> (series |> Map.map (fun _ value -> value |> Array.map snd |> Array.head))
-            let cumulativeTime = series |> Map.toList |> List.head |> snd |> Array.map fst |> Array.toList
-            let timeStep = (cumulativeTime.Tail.Head) - cumulativeTime.Head
             let solver = i cumulativeTime.Head (cumulativeTime |> List.last) timeStep initialPoint
             solver, data
 
@@ -75,7 +75,6 @@ module Bristlecone =
     let drawParameterSet parameters =
         parameters
         |> Map.map (fun _ v -> 
-            printfn "%A" v
             let lower,upper = Parameter.bounds v
             let trueValue = (drawNormal lower upper).Sample()
             Parameter.setEstimate v trueValue )
@@ -86,6 +85,7 @@ module Bristlecone =
         TimeHandling = Discrete
         OptimiseWith = Optimisation.MonteCarlo.randomWalk
         OnError = ignore
+        Constrain = ConstraintMode.Detached
         Conditioning = NoConditioning }
 
     /// A standard `EstimationEngine` for ordinary differential equation models.
@@ -93,6 +93,7 @@ module Bristlecone =
         TimeHandling = Continuous Integration.MsftOslo.integrateWithErrorHandling
         OptimiseWith = Optimisation.MonteCarlo.randomWalk
         OnError = ignore
+        Constrain = ConstraintMode.Detached
         Conditioning = NoConditioning }
 
     /// Use a custom integration method
@@ -118,22 +119,34 @@ module Bristlecone =
     ///
     /// **Exceptions**
     ///
-    let fit engine iterations burnin (timeSeriesData:CodedMap<TimeSeries<float>>) model =
-    
+    let fit engine iterations burnin (timeSeriesData:CodedMap<TimeSeries<float>>) (model:ModelSystem) =
+
+        let constrainedParameters, optimisationConstraints = 
+            match engine.Constrain with
+            | Transform -> model.Parameters, [1 .. model.Parameters.Count] |> List.map(fun _ -> Unconstrained)
+            | Detached -> 
+                let par,con = 
+                    model.Parameters 
+                    |> Map.map (fun k v -> detatchConstraint v) 
+                    |> Map.toList 
+                    |> List.map (fun (k,(x,y)) -> (k,x),y)
+                    |> List.unzip
+                par |> Map.ofList, con
+
         let objective =
             timeSeriesData
             |> TimeSeries.validateCommonTimeline
             |> Map.map (fun _ v -> Resolution.scaleTimeSeriesToResolution Annual v)
             |> Map.map (fun k v -> conditionStartTime engine.Conditioning k v)
             |> makeSolverWithData engine.TimeHandling engine.Conditioning
-            ||> Objective.create model
+            ||> Objective.create { model with Parameters = constrainedParameters }
 
-        let optimise = engine.OptimiseWith burnin iterations (model.Parameters |> ParameterPool.toDomain)
+        let optimise = engine.OptimiseWith burnin iterations (constrainedParameters |> ParameterPool.toDomain optimisationConstraints)
         let result = objective |> optimise
         let lowestLikelihood, bestPoint = result |> List.minBy (fun (_,l) -> l)
 
         { Likelihood = lowestLikelihood
-          Parameters = bestPoint |> ParameterPool.fromPoint model.Parameters
+          Parameters = bestPoint |> ParameterPool.fromPoint constrainedParameters
           Series = [ ShortCode.create "", { Expected = [||]; Observed = [||]} ] |> Map.ofList
           Trace = result }
 
@@ -191,7 +204,6 @@ module Bristlecone =
                 | Cumulative g -> g
                 | Relative g -> g
             let predictors = plant.Environment |> Map.add (ShortCode.create "x") g
-            printfn "Predictors: %A" predictors
             fit engine iterations burnin predictors system
 
 

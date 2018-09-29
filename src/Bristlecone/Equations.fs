@@ -6,20 +6,17 @@ module Likelihood =
     open Bristlecone.ModelSystem
     let private pi = System.Math.PI
 
+    let private getData s (predictions:CodedMap<PredictedSeries>) = predictions.Item (ShortCode.create s)
+
     let sumOfSquares' exp obs =
         Array.zip obs exp
         |> Array.sumBy (fun d -> ((fst d) - (snd d)) ** 2.)
-
-    let private getData s (predictions:CodedMap<PredictedSeries>) = predictions.Item (ShortCode.create s)
 
     let sumOfSquares keys _ (data:CodedMap<PredictedSeries>) =
         keys
         |> List.sumBy (fun k -> 
             let d = data |> getData k
             sumOfSquares' d.Expected d.Observed )
-
-    let sumOfSquaresLog keys _ (data:CodedMap<PredictedSeries>) =
-        log(sumOfSquares keys () data)
 
     /// Negative log likelihood for a bivariate normal distribution.
     /// For two random variables with bivariate normal N(u1,u2,sigma1,sigma2,rho).
@@ -30,11 +27,10 @@ module Likelihood =
         let sigmay = p |> Pool.getEstimate "sigmay"
         let rho = p |> Pool.getEstimate "rho"
         let zta1 = (diffx / sigmax) ** 2.
-        let zta2 = 2. * rho * ((diffx / sigmax) ** 1.) * ((diffy / sigmay) ** 1.) // NB removed squares
+        let zta2 = 2. * rho * ((diffx / sigmax) ** 1.) * ((diffy / sigmay) ** 1.)
         let zta3 = (diffy / sigmay) ** 2.
         let vNegLog = 2. * pi * sigmax * sigmay * sqrt (1. - rho ** 2.)
         let q = (1. / (1. - rho ** 2.)) * (zta1 - zta2 + zta3)
-        // printfn "-logL = %f (q=%f) (sigmax = %f; sigmay = %f; rho = %f; diffx %f; diffy %f; z1 = %f; z2 = %f; z3 = %f)" (vNegLog + (1./2.) * q) q sigmax sigmay rho diffx diffy zta1 zta2 zta3
         vNegLog + (1./2.) * q
 
     /// <summary>

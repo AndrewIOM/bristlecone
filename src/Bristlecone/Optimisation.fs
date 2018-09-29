@@ -3,14 +3,14 @@ namespace Bristlecone.Optimisation
 type Point = float []
 type Solution = float * Point
 type Objective = Point -> float
-type Domain = (float*float) []
+type Domain = (float*float*Bristlecone.Parameter.Constraint) []
 
 /// MCMC random walk algorithm.
 /// For more information, see https://doi.org/10.3389/fams.2017.00006.
 module MonteCarlo =
 
     let initialise (d:Domain) (rng:System.Random) =
-        [| for (min,max) in d -> min + (max-min) * rng.NextDouble() |]
+        [| for (min,max,_) in d -> min + (max-min) * rng.NextDouble() |]
 
     /// Current implementation draws from an independent univariate normal distribution for each individual parameter. 
     let draw random mean stdev =
@@ -29,10 +29,19 @@ module MonteCarlo =
         | a when a > 0.5    -> scale * 1.1
         | _ -> scale
 
+    let constrainedJump a b (scaleFactor:float) c =
+        match c with
+        | Bristlecone.Parameter.Constraint.Unconstrained -> a + (b * scaleFactor)
+        | Bristlecone.Parameter.Constraint.PositiveOnly ->
+            if (a + (b * scaleFactor)) < 0.
+                then (a - (b * scaleFactor)) 
+                else (a + (b * scaleFactor))
+
+
     /// NB Requires log-likelihood generating objective
     let rec metropolis' propose f theta1 l1 remaining d scale =
 
-        let tuneInterval = 50000000
+        let tuneInterval = 5000
         let sc =
             if remaining % tuneInterval = 0 then
                 if d |> Seq.length > tuneInterval then
@@ -43,15 +52,7 @@ module MonteCarlo =
                 else scale
             else scale
 
-        // Propose jump
-        let theta2 =
-            let drawn = theta1 |> propose
-            let difference = Array.zip theta1 drawn |> Array.map(fun (a,b) -> b - a)
-            Array.zip theta1 difference |> Array.mapi(fun i (a,b) -> 
-                if (a + (b * sc)) < 0. && i <> 7
-                    then (a - (b * sc)) 
-                    else (a + (b * sc))
-            )
+        let theta2 = theta1 |> propose scale
 
         let thetaAccepted, lAccepted = 
             let l2 = f theta2
@@ -83,13 +84,17 @@ module MonteCarlo =
 
     let randomWalk burn n domain (f:Point->float) : (float * float[]) list =
 
+        // Given a set of parameters
+        // - when a jump is proposed
+        // - make sure it is valid, reject it, or have it pre-transformed
+
         let random = MathNet.Numerics.Random.MersenneTwister(true)
         let theta = initialise domain random
-        let proposeJump theta = 
-            domain 
-            |> Array.map (fun (low,high) -> draw random 0. ((high - low) / 4.) () )
+        let proposeJump scale theta =
+            domain
+            |> Array.map (fun (low,high,con) -> draw random 0. ((high - low) / 4.) (), con )
             |> Array.zip theta
-            |> Array.map (fun (thetai,zi) -> thetai + zi)
+            |> Array.map (fun (thetai,(zi,con)) -> constrainedJump thetai zi scale con)
 
         let l1 = f theta
         if l1 = nan then invalidOp "Initial likelihood could not be calculated"
@@ -108,7 +113,6 @@ module Amoeba =
     type Point = float []
     type Solution = float * Point
     type Objective = Point -> float
-    type Domain = (float*float) []
 
     module Solver = 
 
@@ -177,7 +181,7 @@ module Amoeba =
                         shrink a f s
 
         let initialize (d:Domain) (rng:System.Random) =
-            [| for (min,max) in d -> min + (max-min) * rng.NextDouble() |]
+            [| for (min,max,_) in d -> min + (max-min) * rng.NextDouble() |]
 
         let solve settings domain f iter =
             let dim = Array.length domain

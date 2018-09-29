@@ -58,7 +58,7 @@ module HeuristicOptimisation =
             let max = points |> Array.maxBy (fun p -> p.[dim])
             let min = points |> Array.minBy (fun p -> p.[dim])
             printfn "Min %f Max %f" min.[dim] max.[dim]
-            min.[dim],max.[dim]
+            min.[dim],max.[dim],Unconstrained
 
         let bounds =
             [|0 .. dims - 1|]
@@ -66,14 +66,14 @@ module HeuristicOptimisation =
 
         let boundWidth =
             bounds
-            |> Array.sumBy (fun dim -> snd dim - fst dim)
+            |> Array.sumBy (fun (l,h,_) -> h - l)
         printfn "Bound width: %f" boundWidth 
         
         if (numberOfLevels > 1 && boundWidth > 0.01) 
             then heuristicOptimisation (numberOfLevels-1) iterationsPerLevel numberOfAomeba bounds f
             else mostLikely
 
-    
+
 module ParameterPool =
 
     let toParamList (domainplist:ParameterPool) (p:Point) : ParameterPool =
@@ -82,8 +82,13 @@ module ParameterPool =
         |> List.map (fun i -> (fst plist.[i]), setEstimate (snd plist.[i]) p.[i])
         |> Map.ofList
 
-    let toDomain (p:ParameterPool) : Domain =
-        p |> Map.toArray |> Array.map (fst >> getBoundsForEstimation p)
+    let toDomain (optimisationConstraints:Constraint list) (pool:ParameterPool) : Domain =
+        let x,y = 
+            pool
+            |> Map.toList
+            |> List.map (snd >> Parameter.bounds)
+            |> List.unzip
+        List.zip3 x y optimisationConstraints |> List.toArray
 
     let fromPoint (pool:ParameterPool) (point:Point) : ParameterPool =
         if pool.Count = point.Length

@@ -11,52 +11,69 @@ module Distibution =
 [<AutoOpen>]
 module Parameter =
 
-    type EstimationStartingBounds = float * float
+    type ConstraintMode =
+    | Transform
+    | Detached
 
     type Constraint =
     | Unconstrained
     | PositiveOnly
 
+    let transformOut con value =
+        match con with
+        | Unconstrained -> value
+        | PositiveOnly -> log value
+
+    let transformIn con value =
+        match con with
+        | Unconstrained -> value
+        | PositiveOnly -> exp value
+
+    type EstimationStartingBounds = float * float
+
     type Estimation =
     | NotEstimated of EstimationStartingBounds
     | Estimated of float
 
-    type Parameter = private Parameter of Constraint * Estimation
+    type Parameter = private Parameter of Constraint * ConstraintMode * Estimation
 
-    let private unwrap (Parameter (c,e)) = c,e
+    let private unwrap (Parameter (c,m,e)) = c,m,e
 
     let create con bound1 bound2 =
-        Parameter (con, (NotEstimated ([bound1; bound2] |> Seq.min, [bound1; bound2] |> Seq.max)))
-
-    let setEstimate parameter value =
-        let c,_ = parameter |> unwrap
-        match c with
-        | Unconstrained -> Parameter (Unconstrained, Estimated value)
-        | PositiveOnly -> Parameter (PositiveOnly, Estimated (exp value))
+        Parameter (con, Transform, (NotEstimated ([bound1; bound2] |> Seq.min, [bound1; bound2] |> Seq.max)))
 
     let bounds (p:Parameter) : float * float =
-        let c,estimate = p |> unwrap
+        let c,m,estimate = p |> unwrap
         match estimate with
-        | NotEstimated (s,e) ->
-            match c with
-            | Unconstrained -> s,e
-            | PositiveOnly -> log s, log e
         | Estimated _ -> invalidOp "Already estimated"
+        | NotEstimated (s,e) ->
+            match m with
+            | Detached -> s,e
+            | Transform -> s |> transformOut c, e |> transformOut c
 
     let getEstimate (p:Parameter) : float =
-        let c,estimate = p |> unwrap
+        let c,m,estimate = p |> unwrap
         match estimate with
-        | NotEstimated _ -> invalidOp (sprintf "Oops: Parameter not available")
+        | NotEstimated _ -> invalidOp "Parameter has not been estimated"
         | Estimated v ->
-            match c with
-            | Unconstrained -> v
-            | PositiveOnly -> v
+            match m with
+            | Detached -> v
+            | Transform -> v |> transformOut c
 
     let detatchConstraint (p:Parameter) : Parameter * Constraint =
-        let c,estimate = p |> unwrap
+        let c,_,estimate = p |> unwrap
         match estimate with
-        | NotEstimated x -> Parameter (Unconstrained, NotEstimated x), c
-        | Estimated v -> Parameter (Unconstrained, Estimated v), c
+        | NotEstimated x -> Parameter (c, Detached, NotEstimated x), c
+        | Estimated v -> Parameter (c, Detached, Estimated v), c
+
+    let setEstimate parameter value =
+        let c,m,_ = parameter |> unwrap
+        match m with
+        | Detached -> Parameter (c, m, Estimated value)
+        | Transform ->
+            match c with
+            | Unconstrained -> Parameter (c, m, Estimated value)
+            | PositiveOnly -> Parameter (c, m, Estimated (exp value))
 
 
     [<AutoOpen>]
@@ -65,19 +82,11 @@ module Parameter =
         type ParameterPool = CodedMap<Parameter>
 
         let getEstimate key (pool:ParameterPool) : float =
-            let c,estimate = pool |> Map.find (ShortCode.create key) |> unwrap
-            match estimate with
-            | NotEstimated _ -> invalidOp (sprintf "Oops: Parameter %s not available" key)
-            | Estimated v ->
-                match c with
-                | Unconstrained -> v
-                | PositiveOnly -> v
+            pool 
+            |> Map.find (ShortCode.create key)
+            |> getEstimate
 
         let getBoundsForEstimation (pool:ParameterPool) key : float * float =
-            let c,estimate = pool |> Map.find key |> unwrap
-            match estimate with
-            | NotEstimated (s,e) ->
-                match c with
-                | Unconstrained -> s,e
-                | PositiveOnly -> log s, log e
-            | Estimated _ -> invalidOp "Already estimated"
+            pool 
+            |> Map.find key
+            |> bounds

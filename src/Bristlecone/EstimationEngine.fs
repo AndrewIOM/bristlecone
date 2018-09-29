@@ -49,14 +49,7 @@ module EstimationEngine =
         TimeHandling: TimeMode<'data,'time>
         OptimiseWith: Optimise<'data>
         Conditioning: Conditioning
+        Constrain: ConstraintMode
         // EndWhen: EndCondition
         OnError : (string*exn) -> unit
     }
-
-
-
-// 1. Make engines
-
-// 2. Run engines in different configurations:
-// - TEST DATA
-// - REAL DATA

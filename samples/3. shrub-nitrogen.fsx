@@ -18,8 +18,8 @@ open Bristlecone.PlantIndividual
 module Options =
 
     let resolution = Annual
-    let iterations = 500
-    let burn = 500
+    let iterations = 1000
+    let burn = 5000
     let chains = 5
     let testSeriesLength = 40
 
@@ -219,19 +219,19 @@ let ``nutrient-dependent growth`` =
                      ShortCode.create "bs",     dbsdt
                      ShortCode.create "N",      dndt ] |> Map.ofList
       Parameters = [ // for growth function
-                     ShortCode.create "fMax",   Parameter.create Unconstrained   0.500 1.000   // Maximum rate of resource-saturated growth per unit biomass
-                     ShortCode.create "h",      Parameter.create Unconstrained   0.100 1.000   // Soil resource availability for growth at half of maximum rate
+                     ShortCode.create "fMax",   Parameter.create PositiveOnly   0.500 1.000   // Maximum rate of resource-saturated growth per unit biomass
+                     ShortCode.create "h",      Parameter.create PositiveOnly   0.100 1.000   // Soil resource availability for growth at half of maximum rate
                      // for nitrogen replenishment
-                     ShortCode.create "lambda", Parameter.create Unconstrained   0.010 0.200   // Rate of nitrogen replenishment
-                     ShortCode.create "gamman", Parameter.create Unconstrained   0.200 0.300   // Loss rate of nitrogen
+                     ShortCode.create "lambda", Parameter.create PositiveOnly   0.010 0.200   // Rate of nitrogen replenishment
+                     ShortCode.create "gamman", Parameter.create PositiveOnly   0.200 0.300   // Loss rate of nitrogen
                      // for shrub allocation and physiology
-                     ShortCode.create "r",      Parameter.create Unconstrained   0.001 0.500   // Respiration cost per unit biomass
-                     ShortCode.create "q",      Parameter.create Unconstrained   0.001 0.100  // Nutrient requirement per unit biomass
-                     ShortCode.create "gammab", Parameter.create Unconstrained   0.001 0.200  // Loss rate of biomass
+                     ShortCode.create "r",      Parameter.create PositiveOnly   0.001 0.500   // Respiration cost per unit biomass
+                     ShortCode.create "q",      Parameter.create PositiveOnly   0.001 0.100  // Nutrient requirement per unit biomass
+                     ShortCode.create "gammab", Parameter.create PositiveOnly   0.001 0.200  // Loss rate of biomass
                      // for likelihood function
                      ShortCode.create "rho",    Parameter.create Unconstrained  -0.20 0.20   // Covariance between growth and nitrogen
-                     ShortCode.create "sigmax", Parameter.create Unconstrained   0.10 0.50   // Standard deviation of x (biomass)
-                     ShortCode.create "sigmay", Parameter.create Unconstrained   0.10 0.50   // Standard deviation of y (nitrogen)
+                     ShortCode.create "sigmax", Parameter.create PositiveOnly   0.10 0.50   // Standard deviation of x (biomass)
+                     ShortCode.create "sigmay", Parameter.create PositiveOnly   0.10 0.50   // Standard deviation of y (nitrogen)
                     ] |> Map.ofList
       Likelihood = ModelLibrary.Likelihood.bivariateGaussian "x" "N" }
 
@@ -239,14 +239,10 @@ let ``nutrient-dependent growth`` =
 // 2. Test Hypotheses Work
 // ----------------------------
 
-let engine = 
-    Bristlecone.mkContinuous 
-    |> Bristlecone.withConditioning RepeatFirstDataPoint
-
 let startValues = [ ShortCode.create "x", 0.23; ShortCode.create "N", 4.64; ShortCode.create "bs", 471.5475542] |> Map.ofList
 
 ``nutrient-dependent growth``
-|> Bristlecone.testModel engine Options.testSeriesLength startValues Options.iterations Options.burn
+|> Bristlecone.testModel (Bristlecone.mkContinuous |> Bristlecone.withConditioning (Custom startValues)) Options.testSeriesLength startValues Options.iterations Options.burn
 
 
 // 3. Load Real Data and Estimate
@@ -291,7 +287,8 @@ let estimated =
             let startDate = common.Environment.[ShortCode.create "N"] |> TimeSeries.start
             let startConditions = getStartValues startDate shrub
             common
-            |> Bristlecone.PlantIndividual.fit engine Options.iterations Options.burn ``nutrient-dependent growth`` ))
+            |> Bristlecone.PlantIndividual.fit (Bristlecone.mkContinuous |> Bristlecone.withConditioning (Custom startConditions)) Options.iterations Options.burn ``nutrient-dependent growth`` ))
+
 
 
 // 4. Plot Results (using R)

@@ -127,7 +127,6 @@ type Conditioning =
 | RepeatFirstDataPoint
 | Custom of CodedMap<float>
 
-
 module Seq =
 
     ///Groups two sequences together by key
