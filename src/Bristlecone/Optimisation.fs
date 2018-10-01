@@ -18,15 +18,15 @@ module MonteCarlo =
         fun () -> distribution.Sample()
 
     /// Find an appropriate scale factor for a standard deviation and its acceptance rate.
-    /// [Replicated from PyMC3]
+    /// [Adapted from PyMC3]
     let tuneScale scale accRate =
         match accRate with
+        | a when a > 0.95   -> scale * 10.0
+        | a when a > 0.75   -> scale * 2.0
+        | a when a > 0.50   -> scale * 1.1
         | a when a < 0.001  -> scale * 0.1
         | a when a < 0.05   -> scale * 0.5
-        | a when a < 0.2    -> scale * 0.9
-        | a when a > 0.95   -> scale * 10.0
-        | a when a > 0.95   -> scale * 2.0
-        | a when a > 0.5    -> scale * 1.1
+        | a when a < 0.20   -> scale * 0.9
         | _ -> scale
 
     let constrainedJump a b (scaleFactor:float) c =
@@ -41,7 +41,7 @@ module MonteCarlo =
     /// NB Requires log-likelihood generating objective
     let rec metropolis' propose f theta1 l1 remaining d scale =
 
-        let tuneInterval = 5000
+        let tuneInterval = 1000
         let sc =
             if remaining % tuneInterval = 0 then
                 if d |> Seq.length > tuneInterval then

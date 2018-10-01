@@ -17,7 +17,7 @@ module Objective =
             { Observed = value
               Expected = expected |> Map.find key } )
 
-    let predict (system:ModelSystem) integrate (p:Point) =
+    let predict (system:ModelSystem) integrate (p:float[]) =
         system.Equations
         |> Map.map (fun _ v -> parameteriseModel system.Parameters p v)
         |> integrate
@@ -133,21 +133,26 @@ module Bristlecone =
                     |> List.unzip
                 par |> Map.ofList, con
 
-        let objective =
+        let solver,data =
             timeSeriesData
             |> TimeSeries.validateCommonTimeline
             |> Map.map (fun _ v -> Resolution.scaleTimeSeriesToResolution Annual v)
             |> Map.map (fun k v -> conditionStartTime engine.Conditioning k v)
             |> makeSolverWithData engine.TimeHandling engine.Conditioning
-            ||> Objective.create { model with Parameters = constrainedParameters }
+        let objective = Objective.create { model with Parameters = constrainedParameters } solver data
 
         let optimise = engine.OptimiseWith burnin iterations (constrainedParameters |> ParameterPool.toDomain optimisationConstraints)
         let result = objective |> optimise
         let lowestLikelihood, bestPoint = result |> List.minBy (fun (_,l) -> l)
 
+        // Generate model output for best parameter set
+        let estimated = ParameterPool.fromPoint model.Parameters bestPoint
+        let estimatedSeries = solver (model.Equations |> Map.map (fun _ v -> v estimated))
+        let paired = timeSeriesData |> Map.map (fun k v -> { Observed = v |> TimeSeries.toSeq |> Seq.map fst |> Seq.toArray; Expected = estimatedSeries |> Map.find k })
+
         { Likelihood = lowestLikelihood
           Parameters = bestPoint |> ParameterPool.fromPoint constrainedParameters
-          Series = [ ShortCode.create "", { Expected = [||]; Observed = [||]} ] |> Map.ofList
+          Series = paired
           Trace = result }
 
 
