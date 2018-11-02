@@ -79,9 +79,11 @@ module MonteCarlo =
         let theta2 = theta1 |> propose sc
         let thetaAccepted, lAccepted = 
             let l2 = f theta2
+            // printf " [-logL = %f]" l2
             if l2 < l1
             then 
-                // printfn "Accepting %A" l2
+                // printf "[✓]"
+                // printfn "[Optimisation] Accepting %A" l2
                 theta2, l2
             else
                 let rand = MathNet.Numerics.Distributions.ContinuousUniform(0.,1.).Sample()
@@ -94,15 +96,12 @@ module MonteCarlo =
         match remaining with 
         | r when r <= 0 -> d, sc
         | _ -> 
-            if remaining % 250 = 0 && d |> Seq.length >= 250 then 
+            if remaining % 1000 = 0 && d |> Seq.length >= 250 then 
                 let ar = float ((d |> Seq.take 250 |> Seq.pairwise |> Seq.where(fun (x,y) -> x <> y) |> Seq.length)) / (float 250)
-                printfn "Optimisation: %i remaining iterations (value %f, AR = %f)" remaining lAccepted ar
+                printfn "[Optimisation] %i remaining iterations (value %f, AR = %f)" remaining lAccepted ar
             metropolisHastings' propose tune f thetaAccepted lAccepted (remaining - 1) ((lAccepted,thetaAccepted)::d) sc
 
     module TuningMode =
-
-        // Tuning   : History -> Remaining Iterations -> TuningSetting
-        // Propose  : TuningSetting -> Theta1 -> Theta2
 
         /// Find an appropriate scale factor for a standard deviation and its acceptance rate.
         let tuneScale scale accRate =
@@ -163,20 +162,12 @@ module MonteCarlo =
         let covariance tuneInterval weighting remaining (history:(float*float[]) seq) scale =
             if remaining % tuneInterval = 0 then
                 if history |> Seq.length >= tuneInterval then
-                    // let ar = float ((history |> Seq.take tuneInterval |> Seq.pairwise |> Seq.where(fun (x,y) -> x <> y) |> Seq.length)) / (float tuneInterval)
-                    // if ar > 0.20 && ar < 0.50 
-                    // then scale
-                    // else 
-                        // There are now enough samples to compare recent versus original covariance matrix,
-                        // and AR requires some kind of tuning.
-                        // Take 500 off the top of history, and, compute covariance off these
-                        // printfn "Tuning covariance."
-                        history
-                        |> Seq.map snd
-                        |> Seq.take tuneInterval
-                        |> matrix
-                        |> computeCovariance
-                        |> tuneCovariance weighting scale
+                    history
+                    |> Seq.map snd
+                    |> Seq.take tuneInterval
+                    |> matrix
+                    |> computeCovariance
+                    |> fun c -> try tuneCovariance weighting scale c with | e -> printfn "Error tuning covariance: %A" e; scale
                 else scale
             else scale
 
@@ -191,12 +182,36 @@ module MonteCarlo =
             let tunedSc = scaleFactor tuneInterval remaining history sc
             cov, tunedSc
 
+        let covarianceOnly tuneInterval weighting remaining history tuningFactors =
+            let cov,sc = tuningFactors
+            let tunedCov = covariance tuneInterval weighting remaining history cov
+            tunedCov, sc
+
         let none _ _ factors = factors
 
-    let randomWalk nTune n domain (f:Point->float) : (float * float[]) list =
+    type TuneMethod =
+        | Covariance of float
+        | Scale
+        | CovarianceWithScale of float
 
+    let toFn method interval =
+        match method with
+        | Covariance w -> TuningMode.covarianceOnly interval w
+        | Scale -> TuningMode.scaleOnly interval
+        | CovarianceWithScale w -> TuningMode.dual interval w
+
+    // type EndCondition =
+    //     | Iterations of int
+    //     | EndTest of ((float * float[]) -> bool)
+
+    type Frequency = int
+    type TuneStep = TuneMethod * Frequency * int
+
+    let randomWalk (tuningSteps:TuneStep seq) n domain (f:Point->float) : (float * float[]) list =
+        printfn "[Optimisation] Starting MCMC Random Walk"
         let random = MathNet.Numerics.Random.MersenneTwister(true)
         let theta = initialise domain random
+        printfn "[Optimisation] Initial theta is %A" theta
         let initialCovariance = TuningMode.covarianceFromBounds 10000 domain random
         let sample cov = Distribution.MutlivariateNormal.sample cov random
         let proposeJump (cov:Matrix<float>,scale) (theta:float[]) =
@@ -207,7 +222,13 @@ module MonteCarlo =
             |> Array.zip theta
             |> Array.map (fun (thetai,(zi,(_,_,con))) -> constrainJump thetai zi scale con)
 
-        metropolisHastings' proposeJump (TuningMode.scaleOnly 1000) f theta (f theta) nTune [] (initialCovariance,1.) |> snd
+        tuningSteps
+        |> Seq.fold(fun (s,sc) (method,frequency,endCondition) -> 
+            metropolisHastings' proposeJump (toFn method frequency) f theta (f theta) endCondition s sc ) ([], (initialCovariance,1.))
+        ||> fun r s -> 
+            let l,t = r |> Seq.head
+            metropolisHastings' proposeJump (TuningMode.none) f t l n r s
+        |> fst
 
 
 // Nelder Mead implementation
@@ -287,7 +308,7 @@ module Amoeba =
         let initialize (d:Domain) (rng:System.Random) =
             [| for (min,max,_) in d -> min + (max-min) * rng.NextDouble() |]
 
-        let solve settings domain f iter =
+        let solve settings iter domain f =
             let dim = Array.length domain
             let rng = System.Random()
             let start =             
@@ -303,6 +324,9 @@ module Amoeba =
                     a.Solutions.[0]
 
             search iter amoeba
+
+        let solveTrace settings iter domain f =
+            [ solve settings iter domain f ]
 
 
 module RootFinding =

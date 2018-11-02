@@ -49,7 +49,7 @@ module Bristlecone =
 
     let makeSolverWithData timeMode conditioning series =
         let data = (series |> Map.map (fun _ value -> value |> Array.map snd))
-        let initialPoint =
+        let t0 =
             match conditioning with
             | Custom c -> c
             | _ -> (series |> Map.map (fun _ value -> value |> Array.map snd |> Array.head))
@@ -58,7 +58,10 @@ module Bristlecone =
         match timeMode with
         | Discrete -> invalidOp "Not implemented"
         | Continuous i ->
-            let solver = i cumulativeTime.Head (cumulativeTime |> List.last) timeStep initialPoint
+            let solver x = 
+                // The solver discards the conditioned time point (t0), and only returns data for t1..tn
+                i (cumulativeTime.Head - timeStep) (cumulativeTime |> List.last) timeStep t0 x
+                |> Map.map(fun _ v -> v |> Array.tail)
             solver, data
 
     let generateFixedSeries equations timeMode seriesLength startPoint theta =
@@ -79,11 +82,10 @@ module Bristlecone =
             let trueValue = (drawNormal lower upper).Sample()
             Parameter.setEstimate v trueValue )
 
-
     /// A standard estimation engine using a random-walk monte carlo optimiser.
-    let mkDiscrete = {
+    let mkDiscrete : EstimationEngine<float,float> = {
         TimeHandling = Discrete
-        OptimiseWith = Optimisation.MonteCarlo.randomWalk
+        OptimiseWith = Optimisation.MonteCarlo.randomWalk []
         OnError = ignore
         Constrain = ConstraintMode.Detached
         Conditioning = NoConditioning }
@@ -91,7 +93,7 @@ module Bristlecone =
     /// A standard `EstimationEngine` for ordinary differential equation models.
     let mkContinuous = {
         TimeHandling = Continuous Integration.MsftOslo.integrateWithErrorHandling
-        OptimiseWith = Optimisation.MonteCarlo.randomWalk
+        OptimiseWith = Optimisation.MonteCarlo.randomWalk []
         OnError = ignore
         Constrain = ConstraintMode.Detached
         Conditioning = NoConditioning }
@@ -103,6 +105,12 @@ module Bristlecone =
     /// Choose how the start point is chosen when solving the model system
     let withConditioning c engine =
         { engine with Conditioning = c }
+
+    let withTunedMCMC tuning engine =
+        { engine with OptimiseWith = Optimisation.MonteCarlo.randomWalk tuning }
+
+    let withGradientDescent engine =
+        { engine with OptimiseWith = Optimisation.Amoeba.Solver.solveTrace Optimisation.Amoeba.Solver.Default }
 
 
     /// **Description**
@@ -119,7 +127,7 @@ module Bristlecone =
     ///
     /// **Exceptions**
     ///
-    let fit engine iterations burnin (timeSeriesData:CodedMap<TimeSeries<float>>) (model:ModelSystem) =
+    let fit engine iterations (timeSeriesData:CodedMap<TimeSeries<float>>) (model:ModelSystem) =
 
         let constrainedParameters, optimisationConstraints = 
             match engine.Constrain with
@@ -137,11 +145,11 @@ module Bristlecone =
             timeSeriesData
             |> TimeSeries.validateCommonTimeline
             |> Map.map (fun _ v -> Resolution.scaleTimeSeriesToResolution Annual v)
-            |> Map.map (fun k v -> conditionStartTime engine.Conditioning k v)
+            // |> Map.map (fun k v -> conditionStartTime engine.Conditioning k v)
             |> makeSolverWithData engine.TimeHandling engine.Conditioning
         let objective = Objective.create { model with Parameters = constrainedParameters } solver data
 
-        let optimise = engine.OptimiseWith burnin iterations (constrainedParameters |> ParameterPool.toDomain optimisationConstraints)
+        let optimise = engine.OptimiseWith iterations (constrainedParameters |> ParameterPool.toDomain optimisationConstraints)
         let result = objective |> optimise
         let lowestLikelihood, bestPoint = result |> List.minBy (fun (_,l) -> l)
 
@@ -163,11 +171,21 @@ module Bristlecone =
     ///   * `permutations` - number of times to generate random parameters
     ///   * `startingConditions` - a coded map of values at t=0
     ///   * `engine` - an `EstimationEngine`
-    let testModel engine timeSeriesLength startingConditions iterations burnin (model:ModelSystem) =
-        let theta = drawParameterSet model.Parameters
-        let trueSeries = theta |> generateFixedSeries model.Equations engine.TimeHandling timeSeriesLength startingConditions
-        printfn "True time series is: %A" trueSeries
-        let estimated = fit engine iterations burnin trueSeries model
+    let testModel engine timeSeriesLength startingConditions iterations generationRules (model:ModelSystem) =
+
+        let rec generateData attempts =
+            let theta = drawParameterSet model.Parameters
+            let trueSeries = theta |> generateFixedSeries model.Equations engine.TimeHandling timeSeriesLength startingConditions
+            let brokeTheRules = 
+                generationRules
+                |> List.map(fun (key,ruleFn) -> trueSeries |> Map.find key |> TimeSeries.toSeq |> Seq.map fst |> ruleFn)
+                |> List.contains false
+            match brokeTheRules with
+            | true -> if attempts = 0 then invalidOp "Could not generate given rules" else generateData (attempts - 1)
+            | false -> theta, trueSeries
+
+        let theta, trueSeries = generateData 100000
+        let estimated = fit engine iterations trueSeries model
         estimated, trueSeries, theta
 
 
@@ -191,7 +209,7 @@ module Bristlecone =
         let rec bootstrap s numberOfTimes solutions =
             if (numberOfTimes > 0) then
                 let subset = Optimisation.Techniques.Bootstrap.removeSingle s
-                let result = fit engine iterations burnin subset hypothesis
+                let result = fit engine iterations subset hypothesis
                 printfn "%s: completed bootstrap %i" identifier.Value numberOfTimes
                 bootstrap s (numberOfTimes - 1) (solutions |> List.append [result])
             else solutions
@@ -202,20 +220,20 @@ module Bristlecone =
 
         open PlantIndividual
 
-        let fit engine iterations burnin system (plant:PlantIndividual) =
+        let fit engine iterations system (plant:PlantIndividual) =
             let g =
                 match plant.Growth |> growthSeries with
                 | Absolute g -> g
                 | Cumulative g -> g
                 | Relative g -> g
             let predictors = plant.Environment |> Map.add (ShortCode.create "x") g
-            fit engine iterations burnin predictors system
+            fit engine iterations predictors system
 
 
     module Parallel =
 
         let fit engine resolution iterations system growth =
-            growth |> Array.Parallel.map (fit engine resolution iterations system)
+            growth |> Array.Parallel.map (fit engine iterations system)
 
 
 [<AutoOpen>]

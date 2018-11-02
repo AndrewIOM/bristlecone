@@ -11,6 +11,9 @@
 open Bristlecone
 open Bristlecone.ModelSystem
 open Bristlecone.PlantIndividual
+open FSharp.Data
+
+type BristleconeResult = CsvProvider<Sample = "PlantCode (string), Hypothesis (int), Iteration (int), Chain (int), Parameter (string), Likelihood (float), value (float)">
 
 // 0. Configure Options
 // ----------------------------
@@ -18,10 +21,9 @@ open Bristlecone.PlantIndividual
 module Options =
 
     let resolution = Annual
-    let iterations = 1000
-    let burn = 5000
-    let chains = 5
-    let testSeriesLength = 40
+    let iterations = 20000
+    let chains = 3
+    let testSeriesLength = 30
 
 
 module Constants =
@@ -128,20 +130,32 @@ module ModelComponents =
             |> massToVolume woodDensity
             |> findRadius
 
-    module GrowthRate =
+    module GrowthLimitation =
+
+        /// A rearranged version of a Monod model
+        let hollingDiscModel a h (r:float) =
+            (a * r) / (1. + (a * h * r))
+
+        /// Is saturation ever reached?
+        let linear a (r:float) =
+            a * r
+
+        /// The resource enforces no limitation on growth, and is negated
+        let none (r:float) =
+            1.
 
         /// **Description**
         /// A monotonically increasing function of a resource `r`.
         /// **Parameters**
-        ///   * `fMax` - maximum specific growth rate
         ///   * `h` - soil resource concentration required for growth at half the maximum rate
         ///   * `r` - the current resource concentration
-        let michaelisMenten fMax h (r:float) =
-            fMax * (r / (h + r))
+        let michaelisMenten h (r:float) =
+            r / (h + r)
 
         /// From Jabot and Pottier 2012
         let monod k (r:float) =
             r / (k + r)
+
 
     module AbioticResource =
 
@@ -158,92 +172,195 @@ module ModelComponents =
 // 2. Create Hypotheses
 // ----------------------------
 
-/// Radius in millimetres
-let toBiomass radius = 
-    radius / 10. |> ModelComponents.Allometrics.shrubBiomass Constants.b Constants.a Constants.rtip Constants.p Constants.lmin Constants.k5 Constants.k6 Constants.numberOfStems Constants.salixWoodDensity
+module Proxies =
 
-let ``nutrient-dependent growth`` =
+    /// Radius in millimetres
+    let toBiomassMM radiusMM = 
+        radiusMM / 10. |> ModelComponents.Allometrics.shrubBiomass Constants.b Constants.a Constants.rtip Constants.p Constants.lmin Constants.k5 Constants.k6 Constants.numberOfStems Constants.salixWoodDensity
+
+    /// Biomass in grams
+    let toRadiusMM biomassGrams = 
+        let radiusCm = biomassGrams |> ModelComponents.Allometrics.shrubRadius Constants.b Constants.a Constants.rtip Constants.p Constants.lmin Constants.k5 Constants.k6 Constants.numberOfStems Constants.salixWoodDensity
+        radiusCm * 10.
 
     /// d15N to N availability. From Craine 2009, as shown in Craine 2015 (Plant and Soil).
     /// Assuming d15N is a linear index of N availability, the minimum supported value of d15N is -3.09, as 0 N availability.
     let d15NtoAvailability d15N =
         (100. * d15N + 309.) / 359.
 
-    /// Biomass in grams
-    let toRadius biomass = 
-        let radiusCm = biomass |> ModelComponents.Allometrics.shrubRadius Constants.b Constants.a Constants.rtip Constants.p Constants.lmin Constants.k5 Constants.k6 Constants.numberOfStems Constants.salixWoodDensity
-        radiusCm * 10.
 
-    /// Resource-dependent growth function
-    /// AKA Specific growth rate
-    /// Maximum rate of photosynthesis per unit of photosynthetic tissue under optimal conditions
-    let f = ModelComponents.GrowthRate.michaelisMenten
+module Allocation =
+
+    type PlantMass =
+    | TotalMass of float
+    | Compartments of PlantBiomass
+
+    and PlantBiomass = {
+        Leaf: float
+        Root: float
+        Stem: float
+        LeafToStemRatio: float
+        RootToStemRatio: float }
+
+    /// All biomass is assumed to be photosynthetic, with no allocation based on tissue function. 
+    let none b = TotalMass b
+
+    /// Roots, leaves, and stem are in equal 1:1:1 ratio. 
+    let equal bs = Compartments { Stem = bs; Root = bs; Leaf = bs; LeafToStemRatio = 1.; RootToStemRatio = 1. }
+
+    /// Floating allocation. 
+    let floating al ar bs = Compartments { Stem = bs; Leaf = (bs * al); Root = (bs * ar); LeafToStemRatio = al; RootToStemRatio = ar }
+
+    /// Root:Shoot allocation only, on a stem biomass basis.
+    /// This scenario turns off stem mass.
+    let rootShoot rootToShootRatio stemBiomass =
+        Compartments { Stem = 0.
+                       Leaf = stemBiomass
+                       Root = stemBiomass * rootToShootRatio
+                       LeafToStemRatio = 0.
+                       RootToStemRatio = rootToShootRatio }
+
+
+module GeometricConstraint = 
+
+    /// Linear growth rate in dM/dt form.
+    let none _ = 1.
+
+    /// A dM/dt form of the von Bertalanffy monomollecular growth function, where M = mass.
+    let vonBertalanffy k m = 
+        (k / m)
+
+    /// The dM/dt form of the Chapman-Richards growth function, where M = mass.
+    let chapmanRichards k m =
+        (1. - (m / k))
+
+
+module FeedbackToSoil =
+
+    let none b : float = 0. * b
+    let withBiomassLoss alpha gammab b : float = alpha * b * gammab
+
+
+module BaseEquations =
+
+    open Allocation
+
+    module ProportionalAllocation =
     
+        /// In this model, nutrient aquisition depends on root mass, while photosynthesis depends on leaf mass.
+        /// Stem mass serves no function.
+
+        /// Effective nutrient availability, depending on the plant's allocation to nutrient-seeking tissues
+        let effectiveNutrient n rootMass leafMass : float = 
+            n * rootMass / leafMass
+
+        /// Cumulative stem biomass [dBs/dt]
+        let stemBiomass b n al ar gammab rr r f =
+            (1. / (1. + al + ar)) * ((b.Leaf * r(b.Leaf) * f(effectiveNutrient n b.Root b.Leaf) - rr * (b.Leaf + b.Stem + b.Root)) - gammab * (b.Leaf + b.Stem + b.Root))
+
+        /// Soil nitrogen availability
+        let soilNitrogen n b q rr gamman y r f feedback =
+            y - q * (b.Leaf * r(b.Leaf) * f(effectiveNutrient n b.Root b.Leaf) - rr * (b.Leaf + b.Stem + b.Root)) - gamman * n  + feedback(b.Leaf + b.Stem + b.Root)
+
+    module NoAllocation =
+
+        /// Cumulative stem biomass [dBs/dt]
+        let biomass b n rr gammab r f : float =
+            f(n) * b * r(b)- rr * b - gammab * b
+
+        let soilNitrogen n b q rr gamman y r f feedback : float =
+            y - q * (r(b) * b * f(n) - rr * b) - gamman * n + feedback(b)
+
+let ``base model`` maxGrowthRate nLimitation allocationMode nitrogenFeedback additionalParameters =
+
     /// Cumulative stem biomass [bs].
-    let dbsdt' bs n fMax h m r = 
-        let photosyntheticCapacity = bs * (f fMax h n) - r * bs
-        photosyntheticCapacity - m * bs
+    let dbsdt' (bs:float) n gammab rr maxGrowthRate allocationMode limit = 
+        match bs |> allocationMode with
+        | Allocation.TotalMass b -> BaseEquations.NoAllocation.biomass b n rr gammab maxGrowthRate limit
+        | Allocation.Compartments b -> BaseEquations.ProportionalAllocation.stemBiomass b n b.LeafToStemRatio b.RootToStemRatio gammab rr maxGrowthRate limit
 
     /// Bioavailable soil nitrogen [N]
-    let dndt' (bs:float) (n:float) lambda gamman q fMax h r : float =
-        let photosyntheticCapacity = bs * (f fMax h n) - r * bs
-        lambda - q * photosyntheticCapacity - gamman * n
+    let dndt' bs n lambda gamman q rr maxGrowthRate allocationMode feedback limit = 
+        match bs |> allocationMode with
+        | Allocation.TotalMass b -> BaseEquations.NoAllocation.soilNitrogen n b q rr gamman lambda maxGrowthRate limit feedback
+        | Allocation.Compartments b -> BaseEquations.ProportionalAllocation.soilNitrogen n b q rr gamman lambda maxGrowthRate limit feedback
 
     /// Measurement variable: stem radius [rw].
-    /// If there has been biomass accumulation during the time interval, wood accumulation occurs, according to shrub allometric relationships. 
-    let drwdt' bs n fMax h m r = 
-        let biomassStemChange = dbsdt' bs n fMax h m r
+    let drwdt' bs n gammab rr maxGrowthRate allocationMode limit = 
+        let biomassStemChange = dbsdt' bs n gammab rr maxGrowthRate allocationMode limit
         if biomassStemChange > 0.
             then
-                let oldRadius = bs |> toRadius
-                let newRadius = (bs + biomassStemChange) |> toRadius
+                let oldRadius = bs |> Proxies.toRadiusMM
+                let newRadius = (bs + biomassStemChange) |> Proxies.toRadiusMM
+                // printfn "Radius +(%f): %f -> %f / Biomass %f -> %f" (newRadius - oldRadius) oldRadius newRadius bs (bs + biomassStemChange)
                 newRadius - oldRadius
-            else 0.
+            else
+                // printfn "Radius --------------- / Biomass %f -> %f" bs (bs + biomassStemChange) 
+                0.
 
     /// Bristlecone function for dBs/dt
     let dbsdt p _ bs (e:Environment) =
-        dbsdt' bs ((e.[ShortCode.create "N"]) |> d15NtoAvailability) (p |> Pool.getEstimate "fMax") (p |> Pool.getEstimate "h")
-            (p |> Pool.getEstimate "gammab") (p |> Pool.getEstimate "r")
+        dbsdt' bs ((e.[ShortCode.create "N"]) |> Proxies.d15NtoAvailability)
+            (p |> Pool.getEstimate "gammab") (p |> Pool.getEstimate "rr") (maxGrowthRate p) (allocationMode p) (nLimitation p)
 
     /// Bristlecone function for dN/dt
     let dndt p _ n (e:Environment) =
-        dndt' (e.[ShortCode.create "x"]) (n |> d15NtoAvailability) (p |> Pool.getEstimate "lambda") (p |> Pool.getEstimate "gamman") 
-            (p |> Pool.getEstimate "q") (p |> Pool.getEstimate "fMax") (p |> Pool.getEstimate "h") (p |> Pool.getEstimate "r")
+        dndt' (e.[ShortCode.create "bs"]) (n |> Proxies.d15NtoAvailability) (p |> Pool.getEstimate "lambda") (p |> Pool.getEstimate "gamman") 
+            (p |> Pool.getEstimate "q") (p |> Pool.getEstimate "rr") (maxGrowthRate p) (allocationMode p) (nitrogenFeedback p) (nLimitation p)
 
     /// Bristlecone function for dr/dt
     let drwdt p _ _ (e:Environment) =
-        drwdt' (e.[ShortCode.create "bs"]) ((e.[ShortCode.create "N"]) |> d15NtoAvailability) (p |> Pool.getEstimate "fMax") 
-            (p |> Pool.getEstimate "h") (p |> Pool.getEstimate "gammab") (p |> Pool.getEstimate "r")
+        drwdt' (e.[ShortCode.create "bs"]) ((e.[ShortCode.create "N"]) |> Proxies.d15NtoAvailability)
+            (p |> Pool.getEstimate "gammab") (p |> Pool.getEstimate "rr") (maxGrowthRate p) (allocationMode p) (nLimitation p)
 
     { Equations  = [ ShortCode.create "x",      drwdt
                      ShortCode.create "bs",     dbsdt
                      ShortCode.create "N",      dndt ] |> Map.ofList
-      Parameters = [ // for growth function
-                     ShortCode.create "fMax",   Parameter.create PositiveOnly   0.500 1.000   // Maximum rate of resource-saturated growth per unit biomass
-                     ShortCode.create "h",      Parameter.create PositiveOnly   0.100 1.000   // Soil resource availability for growth at half of maximum rate
-                     // for nitrogen replenishment
-                     ShortCode.create "lambda", Parameter.create PositiveOnly   0.010 0.200   // Rate of nitrogen replenishment
-                     ShortCode.create "gamman", Parameter.create PositiveOnly   0.200 0.300   // Loss rate of nitrogen
+      Parameters = [ // for nitrogen replenishment
+                     ShortCode.create "lambda", Parameter.create PositiveOnly   0.100 1.000   // Rate of nitrogen replenishment
+                     ShortCode.create "gamman", Parameter.create PositiveOnly   0.001 2.000   // Loss rate of nitrogen
                      // for shrub allocation and physiology
-                     ShortCode.create "r",      Parameter.create PositiveOnly   0.001 0.500   // Respiration cost per unit biomass
-                     ShortCode.create "q",      Parameter.create PositiveOnly   0.001 0.100  // Nutrient requirement per unit biomass
-                     ShortCode.create "gammab", Parameter.create PositiveOnly   0.001 0.200  // Loss rate of biomass
+                     ShortCode.create "rr",     Parameter.create PositiveOnly   0.00001 0.0001// Respiration cost per unit biomass
+                     ShortCode.create "q",      Parameter.create PositiveOnly   0.00001 0.005  // Nutrient requirement per unit biomass
+                     ShortCode.create "gammab", Parameter.create PositiveOnly   0.001 0.250  // Loss rate of biomass
                      // for likelihood function
-                     ShortCode.create "rho",    Parameter.create Unconstrained  -0.20 0.20   // Covariance between growth and nitrogen
-                     ShortCode.create "sigmax", Parameter.create PositiveOnly   0.10 0.50   // Standard deviation of x (biomass)
-                     ShortCode.create "sigmay", Parameter.create PositiveOnly   0.10 0.50   // Standard deviation of y (nitrogen)
-                    ] |> Map.ofList
+                     ShortCode.create "rho",    Parameter.create Unconstrained  -0.50 0.500   // Covariance between growth and nitrogen
+                     ShortCode.create "sigmax", Parameter.create PositiveOnly   0.100 1.200   // Standard deviation of x (biomass)
+                     ShortCode.create "sigmay", Parameter.create PositiveOnly   0.250 0.750   // Standard deviation of y (nitrogen)
+                    ] |> List.append additionalParameters |> Map.ofList
       Likelihood = ModelLibrary.Likelihood.bivariateGaussian "x" "N" }
 
+let hypotheses =
 
-// 2. Test Hypotheses Work
-// ----------------------------
+    // A plant may be subject to mechanical constraints on its maximum size
+    let geometricModes = 
+        [  (fun p -> GeometricConstraint.none), []
+           (fun p -> GeometricConstraint.chapmanRichards (p |> Pool.getEstimate "k")),
+           [ ShortCode.create "k",  Parameter.create PositiveOnly   5000.00 5010.00 ] ] // In grams...
 
-let startValues = [ ShortCode.create "x", 0.23; ShortCode.create "N", 4.64; ShortCode.create "bs", 471.5475542] |> Map.ofList
+    // Nitrogen uptake may limit plant photosynthesis
+    let limitationModes =
+        [ (fun p -> ModelComponents.GrowthLimitation.hollingDiscModel (p |> Pool.getEstimate "a") (p |> Pool.getEstimate "h")),
+          [ ShortCode.create "a",      Parameter.create PositiveOnly   0.500 1.500
+            ShortCode.create "h",      Parameter.create PositiveOnly   0.100 3.000 ]
+          (fun p -> ModelComponents.GrowthLimitation.linear (p |> Pool.getEstimate "a")), 
+          [ ShortCode.create "a",      Parameter.create PositiveOnly   1.000 1.05 ]
+          (fun _ -> ModelComponents.GrowthLimitation.none), [] ]
 
-``nutrient-dependent growth``
-|> Bristlecone.testModel (Bristlecone.mkContinuous |> Bristlecone.withConditioning (Custom startValues)) Options.testSeriesLength startValues Options.iterations Options.burn
+    // Loss of plant material may feedback into the soil pool of available nitrogen
+    let feedbackModes =
+        [ (fun _ -> FeedbackToSoil.none), []
+          (fun p -> FeedbackToSoil.withBiomassLoss (p |> Pool.getEstimate "alpha") (p |> Pool.getEstimate "gammab") ),
+          [ ShortCode.create "alpha",  Parameter.create PositiveOnly   0.0001 0.0002 ] ]
 
+    let allocationModes =
+        [ (fun _ -> Allocation.none), []
+          (fun p -> Allocation.rootShoot (p |> Pool.getEstimate "rootShootRatio")), 
+          [ ShortCode.create "rootShootRatio",     Parameter.create PositiveOnly  0.995 1.000 ] ]
+
+    List.combine4 geometricModes limitationModes feedbackModes allocationModes
+    |> List.map (fun ((growth,gp),(limit,lp),(feedback,fp),(allocation,ap)) -> 
+        ``base model`` growth limit allocation feedback (List.concat [lp; ap; fp; gp]))
 
 // 3. Load Real Data and Estimate
 // ----------------------------
@@ -257,146 +374,103 @@ let shrubs =
     |> Seq.map (fun (_,plant,d15N) -> PlantIndividual.zipEnv (ShortCode.create "N") plant d15N)
     |> Seq.toList
 
-// Start value configuration
-let getStartValues startDate (plant:PlantIndividual) =
+let getStartValues (startDate:System.DateTime) (plant:PlantIndividual) =
     let initialRadius =
         match plant.Growth with
         | PlantIndividual.PlantGrowth.RingWidth s -> 
             match s with
             | GrowthSeries.Absolute c -> c.Head |> fst |> removeUnit
-            | GrowthSeries.Cumulative c -> 6.3 //c.Head |> fst |> removeUnit
-            | _ -> invalidOp "Not implemented"
+            | GrowthSeries.Cumulative c -> 
+                let start = (c |> TimeSeries.trimStart (startDate - System.TimeSpan.FromDays(366.))).Values |> Array.head |> removeUnit
+                printfn "Start cumulative growth = %f" start
+                start
+            | GrowthSeries.Relative _ -> invalidOp "Not implemented"
         | _ -> invalidOp "Not implemented 2"
-    let initialMass = initialRadius |> removeUnit |> toBiomass
+    let initialMass = initialRadius |> removeUnit |> Proxies.toBiomassMM
     let initialNitrogen = plant.Environment.[ShortCode.create "N"].Head |> fst
     [ ShortCode.create "x", initialRadius
       ShortCode.create "N", initialNitrogen 
       ShortCode.create "bs", initialMass ] |> Map.ofList
-
-// Match environment and growth lengths
-// If n-1 time point has a value in the original set, append to new set
-
-// Run 4 chains at once to assess convergence
-
-let estimated =
-    [| 1 .. Options.chains |]
-    |> Array.Parallel.map(fun _ ->
-        [shrubs.[0]] |> List.map (fun s ->
-            let shrub = s |> PlantIndividual.toCumulativeGrowth
-            let common = shrub |> PlantIndividual.keepCommonYears
-            let startDate = common.Environment.[ShortCode.create "N"] |> TimeSeries.start
-            let startConditions = getStartValues startDate shrub
-            common
-            |> Bristlecone.PlantIndividual.fit (Bristlecone.mkContinuous |> Bristlecone.withConditioning (Custom startConditions)) Options.iterations Options.burn ``nutrient-dependent growth`` ))
-
-
-
-// 4. Plot Results (using R)
-// ----------------------------
-
-#load "plotting.fsx"
-open RProvider
-open RProvider.graphics
-open RProvider.ggplot2
-open RProvider.grDevices
-R.x11()
-
-// i. Plot likelihood by iteration (for MCMC)
-R.plot( namedParams [ "x", box (estimated.[0].[0].Trace |> fst |> List.rev |> List.skip 1000) ; "type", box "l"; "xlab", box "Iteration"; "ylab", box "-log likelihood" ]) |> ignore
-
-// i. Estimated versus Observed Series
-R.par(namedParams [ "mfrow", [2;2]] ) |> ignore
-R.plot (namedParams [ "x",box estimated.[0].[0].Series.[ShortCode.create "x"].Observed; "type", box "l"; "xlab", box "Year"; "ylab", box "Stem Radius (Observed)" ]) |> ignore
-R.plot (namedParams [ "x",box estimated.[0].[0].Series.[ShortCode.create "x"].Expected; "type", box "l"; "xlab", box "Year"; "ylab", box "Stem Radius (Model)" ]) |> ignore
-R.plot (namedParams [ "x",box estimated.[0].[0].Series.[ShortCode.create "N"].Observed; "type", box "l"; "xlab", box "Year"; "ylab", box "Nitrogen (Observed)" ]) |> ignore
-R.plot (namedParams [ "x",box estimated.[0].[0].Series.[ShortCode.create "N"].Expected; "type", box "l"; "xlab", box "Year"; "ylab", box "Nitrogen (Model)" ]) |> ignore
-
-// iii. For each parameter, find mean and standard deviation, and plot graph with histogram behind it
-
-let burnin = 0
 
 let everyNth n seq = 
     seq |> Seq.mapi (fun i el -> el, i)              // Add index to element
         |> Seq.filter (fun (el, i) -> i % n = n - 1) // Take every nth element
         |> Seq.map fst                               // Drop index from the result
 
-let chainsDataFrame =
-    estimated
-    |> Array.mapi (fun chainNumber chain -> 
-        chain.[0].Trace
-        |> snd
-        |> List.rev
-        |> List.skip burnin // Skip burn in period
-        |> everyNth 5 // Thinning by this amount
-        |> Seq.mapi (fun iterationNumber values ->
-            chain.[0].Parameters
-            |> Map.toList
-            |> List.mapi(fun i (name,p) -> 
-                iterationNumber + 1,
-                chainNumber + 1,
-                name.Value,
-                values.[i] )
-        )
-        |> List.concat
-        |> Seq.toList
-    )
-    |> Array.toList
-    |> List.concat
+let workPackages shrubs (hypotheses:ModelSystem list) saveDirectory =
+    seq {
+        for s in shrubs do
+            for hi in [ 1.. hypotheses.Length ] do
+                    let estimate() =
+                        printfn "Starting estimate for shrub %s (H%i)" s.Identifier.Value hi
+                        let estimates =
+                            [hypotheses.[hi-1]]
+                            |> List.toArray
+                            |> Array.map(fun h ->
+                                [| 1 .. Options.chains |]
+                                |> Array.Parallel.map(fun _ ->
+                                    [s] |> List.map (fun s ->
+                                        let shrub = s |> PlantIndividual.toCumulativeGrowth
+                                        let common = shrub |> PlantIndividual.keepCommonYears
+                                        let startDate = common.Environment.[ShortCode.create "N"] |> TimeSeries.start
+                                        let startConditions = getStartValues startDate shrub
+                                        try 
+                                            let engine = 
+                                                Bristlecone.mkContinuous 
+                                                |> Bristlecone.withConditioning (Custom startConditions)
+                                                |> Bristlecone.withContinuousTime Integration.MathNet.integrate
+                                                |> Bristlecone.withTunedMCMC [ Optimisation.MonteCarlo.TuneMethod.CovarianceWithScale 0.750, 500, 12000 ]
+                                            let result = common |> Bristlecone.PlantIndividual.fit engine Options.iterations h
+                                            Some (s.Identifier, h, result)
+                                        with 
+                                        | e ->
+                                            printfn "A chain failed with expection: %A" e
+                                            None
+                                    )))
+                        printfn "Done with estimates for %s. Saving..." s.Identifier.Value
 
-let df =
-    namedParams [
-        "Iteration", chainsDataFrame |> List.map(fun (a,_,_,_) -> a) |> box 
-        "Chain", chainsDataFrame |> List.map(fun (_,a,_,_) -> a) |> box
-        "Parameter", chainsDataFrame |> List.map(fun (_,_,a,_) -> a) |> box
-        "value", chainsDataFrame |> List.map(fun (_,_,_,a) -> a) |> box
-    ]
-    |> R.data_frame
+                        // PlantCode, Hypothesis, Iteration, Chain, Parameter, Likelihood
+                        let chainsDataFrame =
+                            estimates
+                            |> Array.mapi (fun hypothesisNumber hypothesis -> 
+                                hypothesis
+                                |> Array.mapi (fun chainNumber chain ->
+                                    chain
+                                    |> List.choose id
+                                    |> List.map (fun (plantCode,model,result) ->
+                                        result.Trace
+                                        |> List.rev
+                                        |> Seq.mapi (fun iterationNumber (likelihood,values) ->
+                                            result.Parameters
+                                            |> Map.toList
+                                            |> List.mapi(fun i (name,p) -> 
+                                                plantCode.Value,
+                                                hypothesisNumber,
+                                                iterationNumber + 1,
+                                                chainNumber + 1,
+                                                name.Value,
+                                                likelihood,
+                                                values.[i] )
+                                        )
+                                        |> everyNth 25 // Thinning by this amount
+                                        |> List.concat
+                                        |> Seq.toList
+                                    )
+                                    |> List.concat )
+                                |> Array.toList
+                                |> List.concat )
+                            |> Array.toList
+                            |> List.concat
 
-// // Generate MCMC report
-// open RProvider.ggmcmc
-// df.SetAttribute("nParameters", R.integer ``nutrient-dependent growth``.Parameters.Count )
-// df.SetAttribute("nChains", R.integer Options.chains)
-// df.SetAttribute("nIterations", R.integer Options.iterations)
-// df.SetAttribute("nBurnin", R.integer burnin)
-// df.SetAttribute("nThin", R.integer 5)
-// df.SetAttribute("description", R.toString "Bristlecone MCMC result")
-// R.ggmcmc(df)
+                        // Save as CSV file
+                        let buildRowFromObject = fun (a,b,c,d,e,f,g) -> BristleconeResult.Row(a,b,c,d,e,f,g)
+                        let buildTableFromObjects = (Seq.map buildRowFromObject) >> Seq.toList >> BristleconeResult
+                        let myCsv = chainsDataFrame |> buildTableFromObjects
+                        myCsv.Save(sprintf "%sdphil-shrub-output-%s-H%i.csv" saveDirectory s.Identifier.Value hi)
+                    yield estimate
+            }
 
-// Save out R data frame of MCMC results (for use later from R etc.)
-R.assign("chains", df)
-R.save(list = ["chains"], file = "dphil-shrub-chain.rdata")
-
-
-/// Plot allometrics
-
-/// Radius in millimetres
-let toBiomass stems radius = 
-    radius |> ModelComponents.Allometrics.shrubBiomass Constants.b Constants.a Constants.rtip Constants.p Constants.lmin Constants.k5 Constants.k6 stems Constants.salixWoodDensity
-
-/// Biomass in grams
-let toRadius biomass = 
-    let radiusCm = biomass |> ModelComponents.Allometrics.shrubRadius Constants.b Constants.a Constants.rtip Constants.p Constants.lmin Constants.k5 Constants.k6 Constants.numberOfStems Constants.salixWoodDensity
-    radiusCm
-
-let r,b,s =
-    [ 2.]
-    |> List.collect(fun stems ->
-        [ 1. .. 5. ]
-        |> List.map(fun r -> r, toBiomass (float stems) r, float stems ) )
-    |> List.unzip3
-
-let df = 
-    namedParams [
-        "StemRadius", r |> box
-        "Biomass", b |> box
-        "StemCount", s |> box ]
-    |> R.data_frame
-
-let (++) (plot1:RDotNet.SymbolicExpression) (plot2:RDotNet.SymbolicExpression) = 
-    R.``+``(plot1, plot2)
-
-
-R.ggplot(df, R.aes__string(namedParams [ "x", box "StemRadius"; "y", box "Biomass"; "color", box "StemCount" ])) 
-++ R.geom__line()
-
-1000000. |> toRadius
+workPackages (shrubs |> List.take 1) (hypotheses |> List.skip 0) "/Users/andrewmartin/Desktop/ShrubResults/"
+|> Seq.chunkBySize 2
+|> Seq.toArray
+|> Array.map (fun f -> f |> Array.Parallel.map(fun g -> g()))

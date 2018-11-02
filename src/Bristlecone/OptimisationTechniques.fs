@@ -37,7 +37,7 @@ module HeuristicOptimisation =
         let aomebaResults = 
             [|1 .. numberOfAomeba|]
             |> Array.collect (fun _ -> 
-                try [|solve Default paramBounds f iterationsPerLevel|]
+                try [|solve Default iterationsPerLevel paramBounds f|]
                 with | e -> 
                     printfn "Warning: Could not generate numercal solution for point (with EXN %s): %A" e.Message paramBounds
                     [||] )

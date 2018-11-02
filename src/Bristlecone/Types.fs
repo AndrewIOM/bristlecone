@@ -167,3 +167,12 @@ module Map =
                           match acc.TryFind key with
                                             | Some items -> Map.add key (appender values items) acc
                                             | None -> Map.add key values acc) group2
+
+module List =
+
+    let combine4 xs ys zs bs = [
+        for x in xs do
+        for y in ys do
+        for z in zs do
+        for b in bs do
+        yield x, y, z, b ]

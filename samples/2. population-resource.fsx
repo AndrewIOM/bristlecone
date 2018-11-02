@@ -15,7 +15,6 @@ open Bristlecone.ModelSystem
 module Options =
     let resolution = Annual
     let iterations = 100000
-    let burnin = 20000
     let testSeriesLength = 50
 
 
@@ -59,7 +58,7 @@ let startValues = [ ShortCode.create "x", 1.00; ShortCode.create "y", 2.00 ] |> 
 
 let test =
     ``population with single resource limitation``
-    |> Bristlecone.testModel engine Options.testSeriesLength startValues Options.iterations Options.burnin
+    |> Bristlecone.testModel engine Options.testSeriesLength startValues Options.iterations []
 
 
 // 3. Plot test (using R)

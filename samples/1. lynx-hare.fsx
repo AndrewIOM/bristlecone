@@ -16,8 +16,7 @@ open Bristlecone.ModelSystem
 
 module Options =
     let resolution = Annual
-    let iterations = 20000
-    let burn = 5000
+    let iterations = 100000
     let testSeriesLength = 50
 
 
@@ -57,9 +56,13 @@ let ``predator-prey`` =
 // ----------------------------
 // A bristlecone engine provides a fixed setup for estimating parameters from data.
 // Use the same engine for all model fits within a single study.
+// This engine uses a gradident descent method (Nelder Mead simplex), and a basic
+// Runge-Kutta 4 integration method provided by MathNet Numerics.
 
 let engine = 
     Bristlecone.mkContinuous
+    |> Bristlecone.withGradientDescent
+    |> Bristlecone.withContinuousTime Integration.MathNet.integrate
     |> Bristlecone.withConditioning RepeatFirstDataPoint
 
 
@@ -71,7 +74,7 @@ let engine =
 
 let startValues = [ ShortCode.create "lynx", 30.09; ShortCode.create "hare", 19.58 ] |> Map.ofList
 
-``predator-prey`` |> Bristlecone.testModel engine Options.testSeriesLength startValues Options.iterations Options.burn
+``predator-prey`` |> Bristlecone.testModel engine Options.testSeriesLength startValues Options.iterations []
 
 
 // 3. Load in Real Data
@@ -87,7 +90,7 @@ let data =
 
 // 4. Fit Model to Real Data
 // -----------------------------------
-let result = ``predator-prey`` |> Bristlecone.fit engine Options.iterations Options.burn data
+let result = ``predator-prey`` |> Bristlecone.fit engine Options.iterations data
 
 
 // 5. Plot with ggplot

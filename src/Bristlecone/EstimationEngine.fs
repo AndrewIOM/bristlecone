@@ -36,7 +36,7 @@ module EstimationEngine =
     type ODE = Time -> State -> Environment -> State
 
     type Integrate<'data,'time> = 'time -> 'time -> 'time -> CodedMap<'data> -> CodedMap<ODE> -> CodedMap<'data[]>
-    type Optimise<'data> = int -> int -> Domain -> ('data[] -> 'data) -> ('data * 'data []) list
+    type Optimise<'data> = int -> Domain -> ('data[] -> 'data) -> ('data * 'data []) list
 
     type TimeMode<'data, 'time> =
     | Discrete
@@ -50,6 +50,5 @@ module EstimationEngine =
         OptimiseWith: Optimise<'data>
         Conditioning: Conditioning
         Constrain: ConstraintMode
-        // EndWhen: EndCondition
         OnError : (string*exn) -> unit
     }

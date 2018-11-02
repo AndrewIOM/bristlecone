@@ -36,7 +36,7 @@ module Base =
         // B. Setup composite function to integrate
         let mutable iteration = 1
         let rp (t:float) x = 
-            if iteration % 5000 = 0 then printfn "Warning: Slow integration (step # %f - %A)" t x
+            if iteration % 50000 = 0 then printfn "[Integration] Slow for %f - %A" t x
             iteration <- iteration + 1
             let newEnv = updateEnvironment x vectorKeys initialConditions
             modelEqs
@@ -61,7 +61,7 @@ module MsftOslo =
             Options(
                 AbsoluteTolerance = 1e-6, 
                 RelativeTolerance = 1e-3, 
-                MinStep = 0., MaxStep = 1., 
+                MinStep = 0.1, MaxStep = 1., 
                 MinScale = 0.9, 
                 MaxScale = 1.1, OutputStep = 1.)
 
