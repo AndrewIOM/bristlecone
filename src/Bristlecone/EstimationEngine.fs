@@ -35,7 +35,8 @@ module EstimationEngine =
     type State = float
     type ODE = Time -> State -> Environment -> State
 
-    type Integrate<'data,'time> = 'time -> 'time -> 'time -> CodedMap<'data> -> CodedMap<ODE> -> CodedMap<'data[]>
+
+    type Integrate<'data,'time> = 'time -> 'time -> 'time -> CodedMap<'data> -> CodedMap<('time*'data)[]> -> CodedMap<ODE> -> CodedMap<'data[]>
     type Optimise<'data> = int -> Domain -> ('data[] -> 'data) -> ('data * 'data []) list
 
     type TimeMode<'data, 'time> =

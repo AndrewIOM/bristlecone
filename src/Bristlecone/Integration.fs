@@ -14,7 +14,7 @@ module Base =
         |> Array.map (fun k -> k,fakeSeries )
         |> Map.ofArray 
 
-    let updateEnvironment newValues newValueKeys environment =
+    let applyDynamicVariables newValues newValueKeys environment =
         let newEnv = newValues |> Array.zip newValueKeys
         environment
         |> Map.map(fun key value ->
@@ -23,7 +23,14 @@ module Base =
             | Some u -> snd u
             | None -> value )
 
-    let solve integrate tInitial tEnd tStep initialConditions modelMap : Map<'a, float[]> =
+    let applyExternalEnvironment (time:float) (externalEnv:Map<'a,(float*float)[]>) (currentEnv:Map<'a,float>) =
+        currentEnv |> Map.map(fun k v ->
+            let updated = externalEnv |> Map.tryFind k
+            match updated with
+            | Some ts -> ts |> Array.find (fun (t,_) -> t = (System.Math.Floor time)) |> snd
+            | None -> v )
+
+    let solve integrate tInitial tEnd tStep initialConditions externalEnvironment modelMap : Map<'a, float[]> =
 
         // A. Setup initial vector
         let modelKeys,modelEqs = modelMap |> Map.toArray |> Array.unzip
@@ -38,9 +45,16 @@ module Base =
         let rp (t:float) x = 
             if iteration % 50000 = 0 then printfn "[Integration] Slow for %f - %A" t x
             iteration <- iteration + 1
-            let newEnv = updateEnvironment x vectorKeys initialConditions
+            let environment = 
+                if t < tInitial + tStep then 
+                    initialConditions
+                    |> applyDynamicVariables x vectorKeys
+                else
+                    initialConditions
+                    |> applyExternalEnvironment t externalEnvironment
+                    |> applyDynamicVariables x vectorKeys
             modelEqs
-            |> Array.mapi (fun i m -> m t x.[i] newEnv)
+            |> Array.mapi (fun i m -> m t x.[i] environment)
 
         // C. Integrate
         let result : float[][] = integrate tInitial tEnd tStep initialVector rp
@@ -75,8 +89,8 @@ module MsftOslo =
         Base.solve (integrate' Options.defaultOptions) tInitial tEnd tStep initialConditions modelMap
 
     /// On integration errors, assigns the maximum float value to every data point.
-    let integrateWithErrorHandling tInitial tEnd tStep initialConditions modelMap =
-        try integrate tInitial tEnd tStep initialConditions modelMap with
+    let integrateWithErrorHandling tInitial tEnd tStep initialConditions externalEnvironment modelMap =
+        try integrate tInitial tEnd tStep initialConditions externalEnvironment modelMap with
         | _ -> Base.nanResult tInitial tEnd tStep modelMap
 
 
@@ -91,8 +105,8 @@ module MathNet =
         RungeKutta.FourthOrder(initialVector |> vector, tInitial, tEnd, n, f)
         |> Array.map Vector.toArray
 
-    let integrate tInitial tEnd tStep initialConditions modelMap =
-        Base.solve integrate' tInitial tEnd tStep initialConditions modelMap
+    let integrate tInitial tEnd tStep initialConditions externalEnvironment modelMap =
+        Base.solve integrate' tInitial tEnd tStep initialConditions externalEnvironment modelMap
 
 
 module Simple =

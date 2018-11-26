@@ -170,9 +170,32 @@ module Map =
 
 module List =
 
+    let combine6 xs ys zs bs cs ds = [
+        for x in xs do
+        for y in ys do
+        for z in zs do
+        for b in bs do
+        for c in cs do
+        for d in ds do
+        yield x, y, z, b, c, d ]
+
+    let combine5 xs ys zs bs cs = [
+        for x in xs do
+        for y in ys do
+        for z in zs do
+        for b in bs do
+        for c in cs do
+        yield x, y, z, b, c ]
+        
     let combine4 xs ys zs bs = [
         for x in xs do
         for y in ys do
         for z in zs do
         for b in bs do
         yield x, y, z, b ]
+
+    let combine3 xs ys zs = [
+        for x in xs do
+        for y in ys do
+        for z in zs do
+        yield x, y, z ]

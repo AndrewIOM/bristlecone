@@ -11,8 +11,11 @@ module Objective =
     let parameteriseModel parameterPool point (model:ModelEquation) =
         model (point |> ParameterPool.toParamList parameterPool)
 
+    /// Pairs observed time series to predicted series for dynamic variables only.
+    /// Environmental forcings and hidden variables are removed.
     let pairObservationsToExpected (observed:CodedMap<float[]>) (expected:CodedMap<float[]>) : CodedMap<PredictedSeries> =
         observed
+        |> Map.filter(fun key _ -> expected |> Map.containsKey key)
         |> Map.map (fun key value ->
             { Observed = value
               Expected = expected |> Map.find key } )
@@ -60,7 +63,7 @@ module Bristlecone =
         | Continuous i ->
             let solver x = 
                 // The solver discards the conditioned time point (t0), and only returns data for t1..tn
-                i (cumulativeTime.Head - timeStep) (cumulativeTime |> List.last) timeStep t0 x
+                i (cumulativeTime.Head - timeStep) (cumulativeTime |> List.last) timeStep t0 series x
                 |> Map.map(fun _ v -> v |> Array.tail)
             solver, data
 
@@ -70,7 +73,7 @@ module Bristlecone =
         match timeMode with
         | Discrete -> invalidOp "Not supported yet"
         | Continuous i -> 
-            i 0. (seriesLength |> float) 1. startPoint eqs
+            i 0. (seriesLength |> float) 1. startPoint Map.empty eqs // TODO allow testing to incorporate environmental forcings
             |> Map.map (fun _ v -> applyFakeTime v)
 
     let drawNormal min max = MathNet.Numerics.Distributions.Normal((max - min),(max - min) / 4.)
@@ -145,7 +148,6 @@ module Bristlecone =
             timeSeriesData
             |> TimeSeries.validateCommonTimeline
             |> Map.map (fun _ v -> Resolution.scaleTimeSeriesToResolution Annual v)
-            // |> Map.map (fun k v -> conditionStartTime engine.Conditioning k v)
             |> makeSolverWithData engine.TimeHandling engine.Conditioning
         let objective = Objective.create { model with Parameters = constrainedParameters } solver data
 
@@ -156,7 +158,10 @@ module Bristlecone =
         // Generate model output for best parameter set
         let estimated = ParameterPool.fromPoint model.Parameters bestPoint
         let estimatedSeries = solver (model.Equations |> Map.map (fun _ v -> v estimated))
-        let paired = timeSeriesData |> Map.map (fun k v -> { Observed = v |> TimeSeries.toSeq |> Seq.map fst |> Seq.toArray; Expected = estimatedSeries |> Map.find k })
+        let paired = 
+            timeSeriesData 
+            |> Map.filter(fun key _ -> estimatedSeries |> Map.containsKey key)
+            |> Map.map (fun k v -> { Observed = v |> TimeSeries.toSeq |> Seq.map fst |> Seq.toArray; Expected = estimatedSeries |> Map.find k })
 
         { Likelihood = lowestLikelihood
           Parameters = bestPoint |> ParameterPool.fromPoint constrainedParameters
