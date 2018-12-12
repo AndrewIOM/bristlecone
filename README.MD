@@ -3,7 +3,8 @@
 
 An F# library for model-fitting model-selection (MFMS) of ecological models to observational data. The library was developed for individual-based plant modelling using tree ring time-series, but can be used for any ecological models. 
 
-[![Build status](https://ci.appveyor.com/api/projects/status/0rh5alxrdct225st/branch/master?svg=true)](https://ci.appveyor.com/project/AndrewIOM/dendro-fit/branch/master)
+[![Build status](https://ci.appveyor.com/api/projects/status/0rh5alxrdct225st/branch/master?svg=true)](https://ci.appveyor.com/project/AndrewIOM/dendro-fit/branch/master) 
+[![NugetStatus](https://img.shields.io/nuget/v/Bristlecone.Dendro.svg)]
 
 User Guide:
 
