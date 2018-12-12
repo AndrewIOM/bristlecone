@@ -6,11 +6,12 @@
   <ItemGroup>
     <Compile Include="Time.fs" />
     <Compile Include="Optimisation.fs" />
+    <Compile Include="ModelSelection.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Expecto" Version="8.2" />
-    <PackageReference Include="YoloDev.Expecto.TestSdk" Version="0.*" />
+    <PackageReference Include="Expecto" Version="8.6.0" />
+    <PackageReference Include="YoloDev.Expecto.TestSdk" Version="0.6.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="15.*" />
   </ItemGroup>
   <ItemGroup>
