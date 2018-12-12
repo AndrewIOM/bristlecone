@@ -5,5 +5,4 @@
 
 #r "Bristlecone/bin/Debug/netstandard2.0/Microsoft.Research.Oslo.dll"
 #r "Bristlecone/bin/Debug/netstandard2.0/Bristlecone.dll"
-#r "Bristlecone.Data/bin/Debug/netstandard2.0/Bristlecone.Data.dll"
-#r "Bristlecone.Charts.R/bin/Debug/netstandard2.0/Bristlecone.Charts.R.dll"
+#r "Bristlecone.Dendro/bin/Debug/netstandard2.0/Bristlecone.Dendro.dll"

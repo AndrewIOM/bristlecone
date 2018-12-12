@@ -1,9 +1,10 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
+    <PackageVersion>1.0.0-alpha1</PackageVersion>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="Charts.fs" />
+    <Compile Include="Data.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Bristlecone\Bristlecone.fsproj" />
