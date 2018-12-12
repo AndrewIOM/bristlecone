@@ -10,7 +10,7 @@ module Akaike =
     ///  * `k` - The number of parameters within the model in question.
     ///  * `logLikelihood` - a `float` representing the minimum log-likelihood achieved for the model in question.
     let aic (k:int) logLikelihood =
-        2. * (float k) - 2. * logLikelihood
+        2. * logLikelihood + 2. * (float k)
 
 
     ///**Description**
@@ -29,9 +29,17 @@ module Akaike =
         let aic = aic k logLikelihood
         let correction = (2. * ((float k) ** 2.) + 2. * (float k)) / ((float n) - (float k) - 1.)
         aic + correction
+    
+    
+    let akaikeWeights' n modelResults =
+        let aiccs = modelResults |> Seq.map(fun (l,p) -> aicc n p l)
+        let relativeLikelihoods =
+            aiccs
+            |> Seq.map(fun aicc -> exp ( - (1. / 2.) * (aicc - (aiccs |> Seq.min))))
+        let totalLikelihood = relativeLikelihoods |> Seq.sum
+        relativeLikelihoods
+        |> Seq.map (fun relative -> relative / totalLikelihood)
 
-    
-    
     /// **Description**
     /// Akaike weights for a set of models.
     /// The weights can be directly interpreted as conditional probabilities for each model.
@@ -42,15 +50,11 @@ module Akaike =
     /// **Exceptions**
     ///   * `ArgumentException` - occurs when there are no observations within an estimation result.
     let akaikeWeights (models:EstimationResult seq) =
-        let aiccs =
+        match models |> Seq.tryHead with
+        | None -> seq[]
+        | Some m ->
+            let n = (m.Series |> Seq.head).Value.Observed.Length
             models
-            |> Seq.map(fun m ->
-                let n = (m.Series |> Seq.head).Value.Observed.Length
-                aicc n m.Parameters.Count m.Likelihood)
-        let relativeLikelihoods =
-            aiccs
-            |> Seq.map(fun aicc -> exp ( - (1. / 2.) * (aicc - (aiccs |> Seq.min))))
-        let totalLikelihood = relativeLikelihoods |> Seq.sum
-        relativeLikelihoods
-        |> Seq.map (fun relative -> relative / totalLikelihood)
-        |> Seq.zip models
+            |> Seq.map(fun m -> m.Likelihood, m.Parameters.Count)
+            |> akaikeWeights' n 
+            |> Seq.zip models
