@@ -1,14 +1,13 @@
-namespace Bristlecone.DataAccess
+namespace Bristlecone.Data
 
 open Bristlecone
-open Time
 
-module Shrub =
+module PlantIndividual =
 
     open FSharp.Data
     open Bristlecone.PlantIndividual
 
-    type RingWidthData = CsvProvider<"data-types/plant-growth.csv">
+    type RingWidthData = CsvProvider<"data-types/ring-width.csv">
     type EnvironmentVariableData = CsvProvider<"data-types/env-variable.csv">
 
     let loadRingWidths (fileName:string) =

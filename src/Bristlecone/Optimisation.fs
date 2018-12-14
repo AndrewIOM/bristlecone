@@ -1,5 +1,7 @@
 namespace Bristlecone.Optimisation
 
+open Bristlecone.Logging
+
 type Point = float []
 type Solution = float * Point
 type Objective = Point -> float
@@ -60,10 +62,6 @@ module MonteCarlo =
     let initialise (d:Domain) (rng:System.Random) =
         [| for (min,max,_) in d -> (draw rng (min + (max-min) / 2.) ((max - min) / 6.))() |]
 
-    // let drawZeroMeanMultivariate random sigma domain =
-    //     let distribution = MathNet.Numerics.Distributions.MatrixNormal(sigma, covarianceMatrix (domain |> Seq.length) 0., sigma, random)
-    //     fun () -> distribution.Sample()
-
     let constrainJump a b (scaleFactor:float) c =
         match c with
         | Bristlecone.Parameter.Constraint.Unconstrained -> a + (b * scaleFactor)
@@ -73,24 +71,19 @@ module MonteCarlo =
                 else (a + (b * scaleFactor))
 
     /// f -> a log-likelihood function
-    let rec metropolisHastings' propose tune f theta1 l1 remaining d scale =
+    let rec metropolisHastings' writeOut propose tune f theta1 l1 remaining d scale =
 
         let sc = scale |> tune remaining d
         let theta2 = theta1 |> propose sc
         let thetaAccepted, lAccepted = 
             let l2 = f theta2
-            // printf " [-logL = %f]" l2
             if l2 < l1
-            then 
-                // printf "[✓]"
-                // printfn "[Optimisation] Accepting %A" l2
-                theta2, l2
+            then theta2, l2
             else
                 let rand = MathNet.Numerics.Distributions.ContinuousUniform(0.,1.).Sample()
                 let ratio = - (l2 - l1) |> exp
                 if rand < ratio && l2 <> infinity && l2 <> -infinity && l2 <> nan
-                    then 
-                        theta2, l2
+                    then theta2, l2
                     else theta1, l1
 
         match remaining with 
@@ -98,8 +91,8 @@ module MonteCarlo =
         | _ -> 
             if remaining % 1000 = 0 && d |> Seq.length >= 250 then 
                 let ar = float ((d |> Seq.take 250 |> Seq.pairwise |> Seq.where(fun (x,y) -> x <> y) |> Seq.length)) / (float 250)
-                printfn "[Optimisation] %i remaining iterations (value %f, AR = %f)" remaining lAccepted ar
-            metropolisHastings' propose tune f thetaAccepted lAccepted (remaining - 1) ((lAccepted,thetaAccepted)::d) sc
+                writeOut <| GeneralEvent (sprintf "[Optimisation] %i remaining iterations (value %f, AR = %f)" remaining lAccepted ar)
+            metropolisHastings' writeOut propose tune f thetaAccepted lAccepted (remaining - 1) ((lAccepted,thetaAccepted)::d) sc
 
     module TuningMode =
 
@@ -119,9 +112,7 @@ module MonteCarlo =
             if remainingIterations % tuneInterval = 0 then
                 if history |> Seq.length >= tuneInterval then
                     let acceptance = float ((history |> Seq.take tuneInterval |> Seq.pairwise |> Seq.where(fun (x,y) -> x <> y) |> Seq.length)) / (float tuneInterval)
-                    let tuned = tuneScale scale acceptance
-                    printfn "[Tuning] Scale Factor: %f" tuned
-                    tuned
+                    tuneScale scale acceptance
                 else scale
             else scale
 
@@ -167,7 +158,7 @@ module MonteCarlo =
                     |> Seq.take tuneInterval
                     |> matrix
                     |> computeCovariance
-                    |> fun c -> try tuneCovariance weighting scale c with | e -> printfn "Error tuning covariance: %A" e; scale
+                    |> fun c -> tuneCovariance weighting scale c
                 else scale
             else scale
 
@@ -200,18 +191,14 @@ module MonteCarlo =
         | Scale -> TuningMode.scaleOnly interval
         | CovarianceWithScale w -> TuningMode.dual interval w
 
-    // type EndCondition =
-    //     | Iterations of int
-    //     | EndTest of ((float * float[]) -> bool)
-
     type Frequency = int
     type TuneStep = TuneMethod * Frequency * int
 
-    let randomWalk (tuningSteps:TuneStep seq) n domain (f:Point->float) : (float * float[]) list =
-        printfn "[Optimisation] Starting MCMC Random Walk"
+    let randomWalk (tuningSteps:TuneStep seq) writeOut n domain (f:Point->float) : (float * float[]) list =
+        writeOut <| GeneralEvent (sprintf "[Optimisation] Starting MCMC Random Walk")
         let random = MathNet.Numerics.Random.MersenneTwister(true)
         let theta = initialise domain random
-        printfn "[Optimisation] Initial theta is %A" theta
+        writeOut <| GeneralEvent (sprintf "[Optimisation] Initial theta is %A" theta)
         let initialCovariance = TuningMode.covarianceFromBounds 10000 domain random
         let sample cov = Distribution.MutlivariateNormal.sample cov random
         let proposeJump (cov:Matrix<float>,scale) (theta:float[]) =
@@ -224,10 +211,11 @@ module MonteCarlo =
 
         tuningSteps
         |> Seq.fold(fun (s,sc) (method,frequency,endCondition) -> 
-            metropolisHastings' proposeJump (toFn method frequency) f theta (f theta) endCondition s sc ) ([], (initialCovariance,1.))
+            let l,t = s |> Seq.head
+            metropolisHastings' writeOut proposeJump (toFn method frequency) f t l endCondition s sc ) ([f theta, theta], (initialCovariance,1.))
         ||> fun r s -> 
             let l,t = r |> Seq.head
-            metropolisHastings' proposeJump (TuningMode.none) f t l n r s
+            metropolisHastings' writeOut proposeJump (TuningMode.none) f t l n r s
         |> fst
 
 
@@ -251,11 +239,11 @@ module Amoeba =
 
         let Default = { Alpha=1.0; Sigma=0.5; Gamma=2.0; Rho=(-0.5); Size=3 }
 
-        let print (a:Amoeba) = 
-            printfn "Amoeba state"
+        let print logger (a:Amoeba) = 
+            logger <| GeneralEvent "Amoeba state"
             a.Solutions 
             |> Seq.iter (fun (v,x) -> 
-                printfn "  %.2f, %s" v (x |> Seq.map string |> String.concat ","))
+                logger <| GeneralEvent (sprintf "  %.2f, %s" v (x |> Seq.map string |> String.concat ",")))
 
         let evaluate (f:Objective) (x:Point) = f x, x
         let valueOf (s:Solution) = fst s
@@ -308,7 +296,7 @@ module Amoeba =
         let initialize (d:Domain) (rng:System.Random) =
             [| for (min,max,_) in d -> min + (max-min) * rng.NextDouble() |]
 
-        let solve settings iter domain f =
+        let solve settings logger iter domain f =
             let dim = Array.length domain
             let rng = System.Random()
             let start =             
@@ -320,13 +308,13 @@ module Amoeba =
             let rec search i a =
                 if i > 0 then search (i-1) (update a f settings)
                 else 
-                    printfn "Solution: -L = %f" (fst a.Solutions.[0])
+                    logger <| GeneralEvent (sprintf "Solution: -L = %f" (fst a.Solutions.[0]))
                     a.Solutions.[0]
 
             search iter amoeba
 
-        let solveTrace settings iter domain f =
-            [ solve settings iter domain f ]
+        let solveTrace settings log iter domain f =
+            [ solve settings log iter domain f ]
 
 
 module RootFinding =

@@ -1,6 +1,7 @@
 namespace Bristlecone
 
 open System
+open Bristlecone.Logging
 
 module Objective =
 
@@ -50,7 +51,7 @@ module Bristlecone =
             let first = series |> Array.head
             series |> Array.append [| (fst first - 1.), custom |] 
 
-    let makeSolverWithData timeMode conditioning series =
+    let makeSolverWithData timeMode conditioning logger series =
         let data = (series |> Map.map (fun _ value -> value |> Array.map snd))
         let t0 =
             match conditioning with
@@ -59,21 +60,21 @@ module Bristlecone =
         let cumulativeTime = series |> Map.toList |> List.head |> snd |> Array.map fst |> Array.toList
         let timeStep = (cumulativeTime.Tail.Head) - cumulativeTime.Head
         match timeMode with
-        | Discrete -> invalidOp "Not implemented"
+        | Discrete -> failwith "Not implemented"
         | Continuous i ->
             let solver x = 
                 // The solver discards the conditioned time point (t0), and only returns data for t1..tn
-                i (cumulativeTime.Head - timeStep) (cumulativeTime |> List.last) timeStep t0 series x
+                i logger (cumulativeTime.Head - timeStep) (cumulativeTime |> List.last) timeStep t0 series x
                 |> Map.map(fun _ v -> v |> Array.tail)
             solver, data
 
-    let generateFixedSeries equations timeMode seriesLength startPoint theta =
+    let generateFixedSeries writeOut equations timeMode seriesLength startPoint theta =
         let applyFakeTime s = TimeSeries.create (DateTime(DateTime.Now.Year,01,01)) Annual s
         let eqs = equations |> Map.map (fun _ v -> v theta)
         match timeMode with
         | Discrete -> invalidOp "Not supported yet"
         | Continuous i -> 
-            i 0. (seriesLength |> float) 1. startPoint Map.empty eqs // TODO allow testing to incorporate environmental forcings
+            i writeOut 0. (seriesLength |> float) 1. startPoint Map.empty eqs // TODO allow testing to incorporate environmental forcings
             |> Map.map (fun _ v -> applyFakeTime v)
 
     let drawNormal min max = MathNet.Numerics.Distributions.Normal((max - min),(max - min) / 4.)
@@ -89,17 +90,21 @@ module Bristlecone =
     let mkDiscrete : EstimationEngine<float,float> = {
         TimeHandling = Discrete
         OptimiseWith = Optimisation.MonteCarlo.randomWalk []
-        OnError = ignore
+        LogTo = Bristlecone.Logging.Console.logger()
         Constrain = ConstraintMode.Detached
         Conditioning = NoConditioning }
 
     /// A standard `EstimationEngine` for ordinary differential equation models.
     let mkContinuous = {
-        TimeHandling = Continuous Integration.MsftOslo.integrateWithErrorHandling
+        TimeHandling = Continuous <| Integration.MathNet.integrate
         OptimiseWith = Optimisation.MonteCarlo.randomWalk []
-        OnError = ignore
+        LogTo = Bristlecone.Logging.Console.logger()
         Constrain = ConstraintMode.Detached
         Conditioning = NoConditioning }
+
+    /// Add a writer
+    let withOutput out engine =
+        { engine with LogTo = out }
 
     /// Use a custom integration method
     let withContinuousTime t engine =
@@ -148,10 +153,10 @@ module Bristlecone =
             timeSeriesData
             |> TimeSeries.validateCommonTimeline
             |> Map.map (fun _ v -> Resolution.scaleTimeSeriesToResolution Annual v)
-            |> makeSolverWithData engine.TimeHandling engine.Conditioning
+            |> makeSolverWithData engine.TimeHandling engine.Conditioning engine.LogTo
         let objective = Objective.create { model with Parameters = constrainedParameters } solver data
 
-        let optimise = engine.OptimiseWith iterations (constrainedParameters |> ParameterPool.toDomain optimisationConstraints)
+        let optimise = engine.OptimiseWith engine.LogTo iterations (constrainedParameters |> ParameterPool.toDomain optimisationConstraints)
         let result = objective |> optimise
         let lowestLikelihood, bestPoint = result |> List.minBy (fun (_,l) -> l)
 
@@ -180,7 +185,7 @@ module Bristlecone =
 
         let rec generateData attempts =
             let theta = drawParameterSet model.Parameters
-            let trueSeries = theta |> generateFixedSeries model.Equations engine.TimeHandling timeSeriesLength startingConditions
+            let trueSeries = theta |> generateFixedSeries engine.LogTo model.Equations engine.TimeHandling timeSeriesLength startingConditions
             let brokeTheRules = 
                 generationRules
                 |> List.map(fun (key,ruleFn) -> trueSeries |> Map.find key |> TimeSeries.toSeq |> Seq.map fst |> ruleFn)
@@ -215,7 +220,7 @@ module Bristlecone =
             if (numberOfTimes > 0) then
                 let subset = Optimisation.Techniques.Bootstrap.removeSingle s
                 let result = fit engine iterations subset hypothesis
-                printfn "%s: completed bootstrap %i" identifier.Value numberOfTimes
+                engine.LogTo <| GeneralEvent (sprintf "%s: completed bootstrap %i" identifier.Value numberOfTimes)
                 bootstrap s (numberOfTimes - 1) (solutions |> List.append [result])
             else solutions
         bootstrap series bootstrapCount []
@@ -248,4 +253,7 @@ module DSL =
 
     let code = ShortCode.create
 
-    let lookup (map:CodedMap<float>) name = map.[code name]
+    let lookup (map:CodedMap<float>) name = 
+        match map.TryFind (code name) with
+        | Some k -> k
+        | None -> invalidOp (sprintf "Could not find %s in the map" name)

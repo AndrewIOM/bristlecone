@@ -1,29 +1,35 @@
 namespace Bristlecone.Logging
 
-module ModelFit =
+type LogEvent =
+    | OptimisationEvent of ModelFitState
+    | DifferentiationEvent of string
+    | GeneralEvent of string
 
-    type ModelFitState = {
-        ThreadId: int
-        Subject: string
-        Hypothesis: string
-        AcceptanceRate: float
-        Iteration: int
-        TotalIterations: int
-        Likelihood: float
-    }
+and ModelFitState = {
+    AcceptanceRate: float
+    Iteration: int
+    TotalIterations: int
+    Likelihood: float
+}
 
-    let printModelState state =
-        printfn "%i - %i iteration" state.ThreadId state.Iteration
+module Console =
 
+    open System.Threading
 
-    type ConsoleLogger() = 
+    let print threadId (x:LogEvent) = printfn "##%i## %A" threadId x
+
+    let logger () =
 
         let agent = MailboxProcessor.Start(fun inbox -> 
-            let rec messageLoop () = async{
-                let! msg = inbox.Receive()
-                printModelState msg
+            let rec messageLoop () = async {
+                let! threadId,msg = inbox.Receive()
+                print threadId msg
                 return! messageLoop ()
                 }
             messageLoop () )
 
-        member this.Log msg = agent.Post msg
+        agent.Error.Add(fun e -> printfn "Error = %A" e)
+
+        fun msg -> 
+            let threadId = Thread.CurrentThread.ManagedThreadId
+            agent.Post (threadId, msg)

@@ -32,14 +32,16 @@ module Bootstrap =
 
 module HeuristicOptimisation =
 
-    let rec heuristicOptimisation numberOfLevels iterationsPerLevel numberOfAomeba (paramBounds:Domain) (f:Point->float) =
+    open Bristlecone.Logging
+
+    let rec heuristicOptimisation logger numberOfLevels iterationsPerLevel numberOfAomeba (paramBounds:Domain) (f:Point->float) =
 
         let aomebaResults = 
             [|1 .. numberOfAomeba|]
             |> Array.collect (fun _ -> 
-                try [|solve Default iterationsPerLevel paramBounds f|]
+                try [|solve Default logger iterationsPerLevel paramBounds f|]
                 with | e -> 
-                    printfn "Warning: Could not generate numercal solution for point (with EXN %s): %A" e.Message paramBounds
+                    logger <| GeneralEvent (sprintf "Warning: Could not generate numercal solution for point (with EXN %s): %A" e.Message paramBounds)
                     [||] )
 
         let mostLikely = aomebaResults |> Array.minBy fst
@@ -47,7 +49,7 @@ module HeuristicOptimisation =
         // Drop worst 20% of likelihoods
         let percentile80thRank = int (Math.Floor (float (80. / 100. * (float aomebaResults.Length + 1.))))
         let percentile80thValue = fst aomebaResults.[percentile80thRank - 1]
-        printfn "80th percentile = %f" percentile80thValue
+        logger <| GeneralEvent (sprintf "80th percentile = %f" percentile80thValue)
         let ranked = aomebaResults |> Array.filter (fun x -> (fst x) <= percentile80thValue)
 
         let dims = Array.length paramBounds
@@ -57,7 +59,7 @@ module HeuristicOptimisation =
         let getBounds (dim:int) (points:Point array) =
             let max = points |> Array.maxBy (fun p -> p.[dim])
             let min = points |> Array.minBy (fun p -> p.[dim])
-            printfn "Min %f Max %f" min.[dim] max.[dim]
+            logger <| GeneralEvent (sprintf "Min %f Max %f" min.[dim] max.[dim])
             min.[dim],max.[dim],Unconstrained
 
         let bounds =
@@ -67,10 +69,10 @@ module HeuristicOptimisation =
         let boundWidth =
             bounds
             |> Array.sumBy (fun (l,h,_) -> h - l)
-        printfn "Bound width: %f" boundWidth 
+        logger <| GeneralEvent (sprintf "Bound width: %f" boundWidth)
         
         if (numberOfLevels > 1 && boundWidth > 0.01) 
-            then heuristicOptimisation (numberOfLevels-1) iterationsPerLevel numberOfAomeba bounds f
+            then heuristicOptimisation logger (numberOfLevels-1) iterationsPerLevel numberOfAomeba bounds f
             else mostLikely
 
 

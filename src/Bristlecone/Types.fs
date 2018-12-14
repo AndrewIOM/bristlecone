@@ -142,6 +142,11 @@ module Seq =
         |> Seq.map simplifyEntry
         |> Seq.toList
 
+    let everyNth n seq = 
+        seq |> Seq.mapi (fun i el -> el, i)              // Add index to element
+            |> Seq.filter (fun (el, i) -> i % n = n - 1) // Take every nth element
+            |> Seq.map fst                               // Drop index from the result
+
 
     ///**Description**
     /// Unifies two sequences into a tuple based on a string key

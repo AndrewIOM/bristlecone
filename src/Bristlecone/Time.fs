@@ -150,7 +150,6 @@ module Time =
                 |> Array.scan (+) start
                 |> Array.takeWhile (fun x -> x <= endDate)
                 |> Array.length
-            printfn "Start = %A, included times = %A, length = %i" start includedTimes (floatingSeries |> unwrap |> Array.length)
             floatingSeries
             |> unwrap
             |> Array.take (includedTimes - 1)

@@ -2,6 +2,8 @@ namespace Bristlecone.Integration
 
 module Base =
 
+    open Bristlecone.Logging
+
     // Module provides functions that 'wrap' a raw integration
     // routine into a form that can be used for Bristlecone types
 
@@ -30,7 +32,7 @@ module Base =
             | Some ts -> ts |> Array.find (fun (t,_) -> t = (System.Math.Floor time)) |> snd
             | None -> v )
 
-    let solve integrate tInitial tEnd tStep initialConditions externalEnvironment modelMap : Map<'a, float[]> =
+    let solve log integrate tInitial tEnd tStep initialConditions externalEnvironment modelMap : Map<'a, float[]> =
 
         // A. Setup initial vector
         let modelKeys,modelEqs = modelMap |> Map.toArray |> Array.unzip
@@ -43,7 +45,7 @@ module Base =
         // B. Setup composite function to integrate
         let mutable iteration = 1
         let rp (t:float) x = 
-            if iteration % 50000 = 0 then printfn "[Integration] Slow for %f - %A" t x
+            if iteration % 5000 = 0 then log <| GeneralEvent (sprintf "[Integration] Slow for %f - %A" t x)
             iteration <- iteration + 1
             let environment = 
                 if t < tInitial + tStep then 
@@ -79,18 +81,27 @@ module MsftOslo =
                 MinScale = 0.9, 
                 MaxScale = 1.1, OutputStep = 1.)
 
+        let custom absTol relTol = 
+            Options(
+                AbsoluteTolerance = absTol, 
+                RelativeTolerance = relTol, 
+                MinStep = 0.1, MaxStep = 1., 
+                MinScale = 0.9, 
+                MaxScale = 1.1, OutputStep = 1.)
+
+
     let integrate' options tInitial tEnd tStep initialVector rp = 
         let rk = Ode.RK547M(tInitial, (initialVector |> Vector), System.Func<double,Vector,Vector> (fun x y -> rp x (y.ToArray()) |> Vector), options)
         rk.SolveFromToStep(tInitial, tEnd, tStep) 
         |> Seq.map (fun x -> x.X.ToArray())
         |> Seq.toArray
 
-    let integrate tInitial tEnd tStep initialConditions modelMap =
-        Base.solve (integrate' Options.defaultOptions) tInitial tEnd tStep initialConditions modelMap
+    let integrate options log tInitial tEnd tStep initialConditions modelMap =
+        Base.solve log (integrate' options) tInitial tEnd tStep initialConditions modelMap
 
     /// On integration errors, assigns the maximum float value to every data point.
-    let integrateWithErrorHandling tInitial tEnd tStep initialConditions externalEnvironment modelMap =
-        try integrate tInitial tEnd tStep initialConditions externalEnvironment modelMap with
+    let integrateWithErrorHandling options log tInitial tEnd tStep initialConditions externalEnvironment modelMap =
+        try integrate options log tInitial tEnd tStep initialConditions externalEnvironment modelMap with
         | _ -> Base.nanResult tInitial tEnd tStep modelMap
 
 
@@ -105,8 +116,8 @@ module MathNet =
         RungeKutta.FourthOrder(initialVector |> vector, tInitial, tEnd, n, f)
         |> Array.map Vector.toArray
 
-    let integrate tInitial tEnd tStep initialConditions externalEnvironment modelMap =
-        Base.solve integrate' tInitial tEnd tStep initialConditions externalEnvironment modelMap
+    let integrate log tInitial tEnd tStep initialConditions externalEnvironment modelMap =
+        Base.solve log integrate' tInitial tEnd tStep initialConditions externalEnvironment modelMap
 
 
 module Simple =

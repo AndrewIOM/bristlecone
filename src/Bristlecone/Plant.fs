@@ -81,6 +81,5 @@ module PlantIndividual =
         let startDate = startDates |> List.max
         let endDate = endDates |> List.min
         let mapts f s = TimeSeries.map s f
-        printfn "Start = %A End = %A" startDate endDate
         { plant with Environment = plant.Environment |> Map.toList |> List.map (fun (x,y) -> x,y |> TimeSeries.bound startDate endDate) |> Map.ofList
                      Growth = plant.Growth |> growthSeries |> growthToTime |> TimeSeries.bound startDate endDate |> mapts (fun (x,t) -> x * 1.<mm>, t) |> Absolute |> RingWidth }
