@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
+    <PackageVersion>1.0.0-alpha1</PackageVersion>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Time.fs" />
@@ -11,10 +12,19 @@
     <Compile Include="Optimisation.fs" />
     <Compile Include="EstimationEngine.fs" />
     <Compile Include="OptimisationTechniques.fs" />
+    <Compile Include="DataAccess.fs" />
     <Compile Include="Plant.fs" />
     <Compile Include="ModelSelection.fs" />
     <Compile Include="Library.fs" />
     <Compile Include="Equations.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="../Bristlecone.Charts.R/charts.fsx" Pack="true" PackagePath=".">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="bristlecone.fsx" Pack="true" PackagePath=".">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <Reference Include="Microsoft.Research.Oslo">

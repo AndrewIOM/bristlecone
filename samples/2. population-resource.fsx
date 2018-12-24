@@ -1,4 +1,4 @@
-#load "../src/bristlecone.fsx"
+#load "bristlecone.fsx"
 
 ////////////////////////////////////////////////////
 /// Population growth with a single limiting resource
@@ -59,22 +59,3 @@ let startValues = [ ShortCode.create "x", 1.00; ShortCode.create "y", 2.00 ] |> 
 let test =
     ``population with single resource limitation``
     |> Bristlecone.testModel engine Options.testSeriesLength startValues Options.iterations []
-
-
-// 3. Plot test (using R)
-// ----------------------------
-
-// #load "plotting.fsx"
-// open RProvider
-// open RProvider.graphics
-// open RProvider.ggplot2
-
-// // i. Plot likelihood by iteration (for MCMC)
-// R.plot (namedParams [ "x", box (test.Trace |> fst |> List.rev |> List.skip 10) ; "type", box "l"; "xlab", box "Iteration"; "ylab", box "-log likelihood" ]) |> ignore
-
-// // i. testsus Observed Series
-// R.par  (namedParams [ "mfrow", [2;2]] ) |> ignore
-// R.plot (namedParams [ "x",box test.Series.[ShortCode.create "x"].Observed; "type", box "l"; "xlab", box "Year"; "ylab", box "X (Observed)" ]) |> ignore
-// R.plot (namedParams [ "x",box test.Series.[ShortCode.create "x"].Expected; "type", box "l"; "xlab", box "Year"; "ylab", box "X (Model)" ]) |> ignore
-// R.plot (namedParams [ "x",box test.Series.[ShortCode.create "y"].Observed; "type", box "l"; "xlab", box "Year"; "ylab", box "Y (Observed)" ]) |> ignore
-// R.plot (namedParams [ "x",box test.Series.[ShortCode.create "y"].Expected; "type", box "l"; "xlab", box "Year"; "ylab", box "Y (Model)" ]) |> ignore

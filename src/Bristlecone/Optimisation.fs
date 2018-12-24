@@ -71,7 +71,7 @@ module MonteCarlo =
                 else (a + (b * scaleFactor))
 
     /// f -> a log-likelihood function
-    let rec metropolisHastings' writeOut propose tune f theta1 l1 remaining d scale =
+    let rec metropolisHastings' (writeOut:'a->unit) propose tune f theta1 l1 remaining d scale =
 
         let sc = scale |> tune remaining d
         let theta2 = theta1 |> propose sc
@@ -89,9 +89,9 @@ module MonteCarlo =
         match remaining with 
         | r when r <= 0 -> d, sc
         | _ -> 
-            if remaining % 1000 = 0 && d |> Seq.length >= 250 then 
+            if remaining % 100 = 0 && d |> Seq.length >= 250 then 
                 let ar = float ((d |> Seq.take 250 |> Seq.pairwise |> Seq.where(fun (x,y) -> x <> y) |> Seq.length)) / (float 250)
-                writeOut <| GeneralEvent (sprintf "[Optimisation] %i remaining iterations (value %f, AR = %f)" remaining lAccepted ar)
+                writeOut <| OptimisationEvent { Iteration = remaining; Likelihood = lAccepted; Theta = thetaAccepted }
             metropolisHastings' writeOut propose tune f thetaAccepted lAccepted (remaining - 1) ((lAccepted,thetaAccepted)::d) sc
 
     module TuningMode =

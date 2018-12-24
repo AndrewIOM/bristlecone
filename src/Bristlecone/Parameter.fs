@@ -82,9 +82,9 @@ module Parameter =
         type ParameterPool = CodedMap<Parameter>
 
         let getEstimate key (pool:ParameterPool) : float =
-            pool 
-            |> Map.find (ShortCode.create key)
-            |> getEstimate
+            match pool  |> Map.tryFind (ShortCode.create key) with
+            | Some p -> p |> getEstimate
+            | None -> invalidOp (sprintf "[Parameter] The parameter %s has not been added to the parameter pool" key)
 
         let getBoundsForEstimation (pool:ParameterPool) key : float * float =
             pool 

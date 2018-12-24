@@ -15,9 +15,11 @@ open Bristlecone.ModelSystem
 // ----------------------------
 
 module Options =
-    let resolution = Annual
-    let iterations = 100000
-    let testSeriesLength = 50
+    let iterations = 10
+    let traceGraph = Bristlecone.Logging.RealTimeTrace.TraceGraph(Logging.Device.X11)
+    let logger event = 
+        let consolePost = Bristlecone.Logging.Console.logger()
+        consolePost event; traceGraph.Log event
 
 
 // 1. Model System
@@ -59,22 +61,12 @@ let ``predator-prey`` =
 // This engine uses a gradident descent method (Nelder Mead simplex), and a basic
 // Runge-Kutta 4 integration method provided by MathNet Numerics.
 
-let engine = 
-    Bristlecone.mkContinuous
-    |> Bristlecone.withGradientDescent
+let engine =
+    Bristlecone.mkContinuous 
     |> Bristlecone.withContinuousTime Integration.MathNet.integrate
-    |> Bristlecone.withConditioning RepeatFirstDataPoint
-
-
-// 3. Test Engine and Model
-// ----------------------------
-// Running a full test is strongly recommended. The test will demonstrate if the current
-// configuration can find known parameters for a model. If this step fails, there is an
-// issue with either your model, or the Bristlecone configuration.
-
-let startValues = [ ShortCode.create "lynx", 30.09; ShortCode.create "hare", 19.58 ] |> Map.ofList
-
-``predator-prey`` |> Bristlecone.testModel engine Options.testSeriesLength startValues Options.iterations []
+    |> Bristlecone.withOutput Options.logger
+    |> Bristlecone.withTunedMCMC [ Optimisation.MonteCarlo.TuneMethod.Scale, 2000, 10000
+                                   Optimisation.MonteCarlo.TuneMethod.CovarianceWithScale 0.250, 500, 30000 ]
 
 
 // 3. Load in Real Data

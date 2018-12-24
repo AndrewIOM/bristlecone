@@ -159,10 +159,10 @@ module Bristlecone =
         let optimise = engine.OptimiseWith engine.LogTo iterations (constrainedParameters |> ParameterPool.toDomain optimisationConstraints)
         let result = objective |> optimise
         let lowestLikelihood, bestPoint = result |> List.minBy (fun (_,l) -> l)
+        printfn "Lowest Likelihood = %f (best point = %A)" lowestLikelihood bestPoint
 
-        // Generate model output for best parameter set
-        let estimated = ParameterPool.fromPoint model.Parameters bestPoint
-        let estimatedSeries = solver (model.Equations |> Map.map (fun _ v -> v estimated))
+        let estimatedSeries = Objective.predict { model with Parameters = constrainedParameters } solver bestPoint
+        printfn "Estimated = %A" estimatedSeries
         let paired = 
             timeSeriesData 
             |> Map.filter(fun key _ -> estimatedSeries |> Map.containsKey key)

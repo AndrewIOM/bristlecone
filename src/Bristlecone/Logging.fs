@@ -6,11 +6,11 @@ type LogEvent =
     | GeneralEvent of string
 
 and ModelFitState = {
-    AcceptanceRate: float
     Iteration: int
-    TotalIterations: int
     Likelihood: float
+    Theta: float seq
 }
+
 
 module Console =
 
