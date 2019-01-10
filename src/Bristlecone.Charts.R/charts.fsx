@@ -28,8 +28,10 @@ module RealTimeTrace =
     open RHelper
 
     let decompose state =
+        let likelihood = state.Iteration, state.Likelihood, "-logL", state.Likelihood
         state.Theta
-        |> Seq.mapi(fun i v -> state.Iteration, state.Likelihood, string i, v)
+        |> Seq.mapi(fun i v -> state.Iteration, state.Likelihood, sprintf "theta_%i "i, v)
+        |> Seq.append [likelihood]
 
     let convertToDataFrame d =
         let data =
