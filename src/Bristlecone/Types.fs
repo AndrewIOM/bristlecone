@@ -204,3 +204,17 @@ module List =
         for y in ys do
         for z in zs do
         yield x, y, z ]
+
+    // See: https://stackoverflow.com/questions/32891307/matrix-transposition-in-f
+    let flip matrix = 
+      match matrix with
+      | [] -> []
+      | x::xs ->
+        let rec loop matrix partial = 
+          match matrix with
+          | [] -> partial
+          | y::ys ->let newPartial = (y, partial) ||> List.map2(fun x y->x::y)
+                    loop ys newPartial
+        let length = List.length x
+        loop matrix (List.init length (fun _ -> [] ))
+        |> List.map(fun x->x |> List.rev)

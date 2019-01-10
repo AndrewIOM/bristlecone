@@ -6,6 +6,7 @@ type Point = float []
 type Solution = float * Point
 type Objective = Point -> float
 type Domain = (float*float*Bristlecone.Parameter.Constraint) []
+type EndCondition = (float*float[]) list -> bool
 
 module Distribution =
 
@@ -43,6 +44,16 @@ module Distribution =
                 R * v
 
 
+module Regression =
+
+    open Accord.Statistics.Analysis
+
+    let pValueForLinearSlopeCoefficient (x:float[]) y =
+        let x' = x |> Array.map (fun a -> [|a|])
+        let mlr = MultipleLinearRegressionAnalysis(true)
+        let _ = mlr.Learn(x',y)
+        (mlr.Coefficients |> Seq.head).TTest.PValue
+
 
 /// MCMC random walk algorithm.
 /// For more information, see https://doi.org/10.3389/fams.2017.00006.
@@ -70,10 +81,63 @@ module MonteCarlo =
                 then (a - (b * scaleFactor)) 
                 else (a + (b * scaleFactor))
 
-    /// f -> a log-likelihood function
-    let rec metropolisHastings' (writeOut:'a->unit) propose tune f theta1 l1 remaining d scale =
 
-        let sc = scale |> tune remaining d
+    module EndConditions =
+
+        let afterIteration iteration : EndCondition =
+            fun results -> 
+                results |> Seq.length >= iteration
+
+        let stationarySquaredJumpDistance : EndCondition =
+            fun results ->
+                let fixedBin = 200
+                let pointsRequired = 5
+
+                if (results |> Seq.length) % (fixedBin * pointsRequired) = 0
+                then
+                    // Calculate mean squared jumping distance per 200 iterations
+                    printfn "Calculating mean squared jumping distances"
+
+                    // Array of MSJD by parameter, containing an array of MSJDs per bin
+                    let msjd =
+                        results
+                        |> List.take (fixedBin * pointsRequired)
+                        |> List.chunkBySize fixedBin
+                        |> List.map(fun bin ->
+                            bin
+                            |> List.map (snd >> Array.toList)
+                            |> Bristlecone.List.flip
+                            |> List.map(fun p -> 
+                                p 
+                                |> List.pairwise
+                                |> List.map(fun (a,b) -> (b - a) ** 2.) // Squared jump
+                                |> List.average ) )                     // Mean squared jump
+                        |> fun x -> printfn "Averages: %A" x; x
+                        |> Bristlecone.List.flip
+
+
+                    let trendSignificance =
+                        msjd
+                        |> List.map(fun msjds -> 
+                            printfn "Trying to get p value for X = %A, Y = %A" ([|1. .. msjds |> Seq.length |> float |]) (msjds |> List.toArray)
+                            Regression.pValueForLinearSlopeCoefficient [|1. .. msjds |> Seq.length |> float |] (msjds |> List.toArray) )
+
+                    printfn "MSJDs = %A" msjd
+                    printfn "Significance of linear models: %A" trendSignificance
+
+                    if trendSignificance |> List.exists(fun p -> p <= 0.1) || trendSignificance.Length = 0
+                    then false
+                    else true
+
+                else false
+
+
+    /// f -> a log-likelihood function
+    /// Current iteration is the length of the results
+    let rec metropolisHastings' writeOut endCondition propose tune f theta1 l1 d scale =
+
+        let iteration = d |> Seq.length
+        let sc = scale |> tune iteration d
         let theta2 = theta1 |> propose sc
         let thetaAccepted, lAccepted = 
             let l2 = f theta2
@@ -86,13 +150,13 @@ module MonteCarlo =
                     then theta2, l2
                     else theta1, l1
 
-        match remaining with 
-        | r when r <= 0 -> d, sc
-        | _ -> 
-            if remaining % 100 = 0 && d |> Seq.length >= 250 then 
-                let ar = float ((d |> Seq.take 250 |> Seq.pairwise |> Seq.where(fun (x,y) -> x <> y) |> Seq.length)) / (float 250)
-                writeOut <| OptimisationEvent { Iteration = remaining; Likelihood = lAccepted; Theta = thetaAccepted }
-            metropolisHastings' writeOut propose tune f thetaAccepted lAccepted (remaining - 1) ((lAccepted,thetaAccepted)::d) sc
+        if endCondition d
+        then d, sc
+        else
+            //if iteration % 1000 = 0 && d |> Seq.length >= 1000 then 
+            writeOut <| OptimisationEvent { Iteration = iteration; Likelihood = lAccepted; Theta = thetaAccepted }
+            metropolisHastings' writeOut endCondition propose tune f thetaAccepted lAccepted ((lAccepted,thetaAccepted)::d) sc
+
 
     module TuningMode =
 
@@ -148,6 +212,13 @@ module MonteCarlo =
                 |> samplesToMatrix
                 |> computeCovariance
 
+        let covarianceFromSigmas n random sigmas =
+            [| 1 .. n |]
+            |> Array.map(fun _ ->
+                sigmas
+                |> Array.map (fun s -> draw random 0. (s**2.) () ) )
+                |> samplesToMatrix
+                |> computeCovariance
 
         /// Tune previously observed covariance based on most recent period
         let covariance tuneInterval weighting remaining (history:(float*float[]) seq) scale =
@@ -178,28 +249,44 @@ module MonteCarlo =
             let tunedCov = covariance tuneInterval weighting remaining history cov
             tunedCov, sc
 
+        /// Tune previously observed covariance based on most recent period
+        let covarianceAllTime tuneInterval weighting remaining (history:(float*float[]) seq) scale =
+            if remaining % tuneInterval = 0 then
+                if history |> Seq.length >= tuneInterval then
+                    history
+                    |> Seq.map snd
+                    |> matrix
+                    |> computeCovariance
+                    |> fun c -> tuneCovariance weighting scale c
+                else scale
+            else scale
+
+        let dualTotalHistory tuneInterval weighting remaining history tuningFactors =
+            let cov,sc = tuningFactors
+            let tunedSc = scaleFactor tuneInterval remaining history sc
+            let tunedCov = covarianceAllTime tuneInterval weighting remaining history cov
+            tunedCov, tunedSc
+
         let none _ _ factors = factors
 
     type TuneMethod =
         | Covariance of float
         | Scale
         | CovarianceWithScale of float
+        | CovarianceWithScaleTotalHistory of float
 
     let toFn method interval =
         match method with
         | Covariance w -> TuningMode.covarianceOnly interval w
         | Scale -> TuningMode.scaleOnly interval
         | CovarianceWithScale w -> TuningMode.dual interval w
+        | CovarianceWithScaleTotalHistory w -> TuningMode.dualTotalHistory interval w
 
     type Frequency = int
-    type TuneStep = TuneMethod * Frequency * int
+    type TuneStep = TuneMethod * Frequency * EndCondition
 
-    let randomWalk (tuningSteps:TuneStep seq) writeOut n domain (f:Point->float) : (float * float[]) list =
+    let randomWalk' initialCovariance initialScale theta (tuningSteps:TuneStep seq) random writeOut (endCondition:EndCondition) (domain:Domain) (f:Point->float) =
         writeOut <| GeneralEvent (sprintf "[Optimisation] Starting MCMC Random Walk")
-        let random = MathNet.Numerics.Random.MersenneTwister(true)
-        let theta = initialise domain random
-        writeOut <| GeneralEvent (sprintf "[Optimisation] Initial theta is %A" theta)
-        let initialCovariance = TuningMode.covarianceFromBounds 10000 domain random
         let sample cov = Distribution.MutlivariateNormal.sample cov random
         let proposeJump (cov:Matrix<float>,scale) (theta:float[]) =
             sample ((2.38 ** 2.) * cov / (float theta.Length)) <| ()
@@ -210,13 +297,169 @@ module MonteCarlo =
             |> Array.map (fun (thetai,(zi,(_,_,con))) -> constrainJump thetai zi scale con)
 
         tuningSteps
-        |> Seq.fold(fun (s,sc) (method,frequency,endCondition) -> 
+        |> Seq.fold(fun (s,sc) (method,frequency,endCon) -> 
             let l,t = s |> Seq.head
-            metropolisHastings' writeOut proposeJump (toFn method frequency) f t l endCondition s sc ) ([f theta, theta], (initialCovariance,1.))
+            metropolisHastings' writeOut endCon proposeJump (toFn method frequency) f t l s sc ) ([f theta, theta], (initialCovariance,initialScale))
         ||> fun r s -> 
             let l,t = r |> Seq.head
-            metropolisHastings' writeOut proposeJump (TuningMode.none) f t l n r s
-        |> fst
+            metropolisHastings' writeOut endCondition proposeJump (TuningMode.none) f t l r s
+
+    let randomWalk (tuningSteps:TuneStep seq) writeOut n domain (f:Point->float) : (float * float[]) list =
+        let random = MathNet.Numerics.Random.MersenneTwister(true)
+        let initialCovariance = TuningMode.covarianceFromBounds 10000 domain random
+        let theta = initialise domain random
+        writeOut <| GeneralEvent (sprintf "[Optimisation] Initial theta is %A" theta)
+        randomWalk' initialCovariance 1. theta tuningSteps random writeOut n domain f |> fst
+
+
+    module MetropolisWithinGibbs =
+
+        /// Propose a jump, while leaving all but one parameter value fixed
+        let propose (theta:float[]) j lsj domain random =
+            theta
+            |> Array.mapi(fun i e ->
+                if i = j
+                then e, MathNet.Numerics.Distributions.Normal(0.,(exp lsj)**2.,random).Sample()
+                else e, 0. )
+            |> Array.zip domain
+            |> Array.map (fun ((_,_,con), (e,jump)) -> constrainJump e jump 1. con)
+
+        /// Tune variance of a parameter based on its acceptance rate.
+        /// The magnitude of tuning reduces as more batches have been run.
+        let tune sigma acceptanceRate batchNumber =
+            if acceptanceRate < 0.44
+            then sigma - (1./(float batchNumber)) // Lower variance
+            else sigma + (1./(float batchNumber)) // Increase variance
+
+        /// Adaptive-metropolis-within-Gibbs algorithm, which can work in both adaptive and fixed modes
+        let rec core isAdaptive writeOut random domain f results batchLength batchNumber (theta:float[]) sigmas =
+
+            let ds =
+                theta
+                |> Array.zip sigmas
+                |> Array.scan (fun (j,results) (lsj,_) -> 
+                    let l,theta = results |> Seq.head
+                    let proposeJump = fun _ t -> propose t j lsj domain random
+                    let results = metropolisHastings' ignore (EndConditions.afterIteration batchLength) proposeJump TuningMode.none f theta l [] () |> fst
+                    j+1,results) (0,[f theta, theta])
+                |> Array.tail       // Skip initial state
+                |> Array.map snd    // Discard parameter number
+
+            let d =
+                ds
+                |> Array.rev        // MH results are ordered with most recent at head
+                |> List.concat      // Results sorted last to first
+
+            let fullResults = List.concat [d; results]
+
+            writeOut <| OptimisationEvent { Iteration = batchNumber; Likelihood = d |> Seq.head |> fst; Theta = d |> Seq.head |> snd }
+
+            if isAdaptive then
+                // Tune variance according to the per-parameter acceptance rate.
+                // Only end when all acceptance rates are in acceptable range.
+                let acceptanceRates =
+                    ds |> Array.map(fun results ->
+                        let accepted = 
+                            results
+                            |> List.pairwise
+                            |> List.where(fun (x,y) -> x <> y)
+                            |> List.length
+                        (float accepted) / (float batchLength) )
+                let tunedSigmas =
+                    acceptanceRates
+                    |> Array.zip sigmas
+                    |> Array.map(fun (ls,ar) -> tune ls ar batchNumber)
+                writeOut <| GeneralEvent (sprintf "[Tuning] Sigmas: %A | Acceptance rates: %A" tunedSigmas acceptanceRates)
+                if acceptanceRates |> Array.exists(fun s -> s < 0.28 || s > 0.60)
+                then core isAdaptive writeOut random domain f fullResults batchLength (batchNumber+1) (fullResults |> Seq.head |> snd) tunedSigmas
+                else batchNumber, fullResults, tunedSigmas
+
+            else 
+                // Stop only when there is no linear trend
+                let linearTrendPValues = 
+                    fullResults |> List.chunkBySize batchLength  // So we now have each individual 'fixed' run listed out
+                    |> List.mapi(fun i batch ->      // Get unfixed values and their parameter index number
+                        let paramNumber = i % theta.Length
+                        let paramValues = batch |> List.map snd |> List.map(fun x -> x.[paramNumber]) |> List.average
+                        paramNumber, paramValues )
+                    |> List.groupBy fst
+                    |> List.where(fun (_,g) -> g.Length >= 5)   // Only calculate regression when 5 or more points
+                    |> List.map (fun (i,p) -> 
+                        let x,y = 
+                            p
+                            |> List.take 5                      // Use only 5 most recent batches
+                            |> List.map snd
+                            |> List.mapi (fun i v -> float i,v )
+                            |> List.toArray
+                            |> Array.unzip
+                        let pValue = Regression.pValueForLinearSlopeCoefficient x y
+                        pValue )
+
+                writeOut <| GeneralEvent (sprintf "Linear trend p-values: %A" linearTrendPValues)
+
+                if linearTrendPValues |> List.exists(fun p -> p <= 0.1) || linearTrendPValues.Length = 0
+                then core isAdaptive writeOut random domain f fullResults batchLength (batchNumber+1) (fullResults |> Seq.head |> snd) sigmas
+                else batchNumber, fullResults, sigmas
+
+
+    let ``Adaptive-Metropolis-within Gibbs`` writeOut n domain (f:Point->float) : (float * float[]) list =
+        let random = MathNet.Numerics.Random.MersenneTwister(true)
+        let theta = initialise domain random
+        let sigmas = theta |> Array.map(fun _ -> 0.)
+        let _,result,_ = MetropolisWithinGibbs.core true writeOut random domain f [] 100 1 (theta:float[]) sigmas
+        result
+
+    let ``Metropolis-within Gibbs`` writeOut n domain (f:Point->float) : (float * float[]) list =
+        let random = MathNet.Numerics.Random.MersenneTwister(true)
+        let theta = initialise domain random
+        let sigmas = theta |> Array.map(fun _ -> 0.)
+        let _,result,_ = MetropolisWithinGibbs.core false writeOut random domain f [] 100 1 (theta:float[]) sigmas
+        result
+
+    /// Implementation similar to that proposed by Yang and Rosenthal: "Automatically Tuned General-Purpose MCMC via New Adaptive Diagnostics"
+    /// Reference: http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.70.7198&rep=rep1&type=pdf
+    let ``Automatic MCMC (Adaptive Diagnostics)`` writeOut n domain (f:Point->float) : (float * float[]) list =
+
+        // Starting condition
+        let random = MathNet.Numerics.Random.MersenneTwister(true)
+        let initialTheta = initialise domain random
+        let initialSigma = initialTheta |> Array.map(fun _ -> 0.)
+
+        let mwg adapt batchSize currentBatch theta sigmas =
+                MetropolisWithinGibbs.core adapt writeOut random domain f [] batchSize currentBatch theta sigmas
+
+        // 1st Adaptive Phase
+        writeOut <| GeneralEvent "Generalised MCMC: Starting 1st Adaptive Phase"
+        let batches,results,tunedSigmas = 
+            initialSigma
+            |> mwg true 100 1 initialTheta
+            |> fun (b,r,s) -> 
+                let _,theta = r |> Seq.head
+                mwg true 200 b theta s
+            |> fun (b,r,s) -> 
+                let _,theta = r |> Seq.head
+                mwg true 400 b theta s
+            // Transient phase
+            |> fun (b,r,s) -> 
+                writeOut <| GeneralEvent "Generalised MCMC: Starting Transient Phase"
+                let _,theta = r |> Seq.head
+                mwg false 200 b theta s
+
+        // 2nd Adaptive Phase
+        // a) Compute a covariance matrix from the previous sigma values
+        let covariance = 
+            tunedSigmas
+            |> Array.map exp
+            |> TuningMode.covarianceFromSigmas 10000 random
+
+        // b) Continue the chain using the covariance matrix and last theta
+        writeOut <| GeneralEvent "Generalised MCMC: Starting 2nd Adaptive Phase"
+        let secondAdaptation, finalScale = 
+            randomWalk' covariance 1. (results |> Seq.head |> snd) [ TuneMethod.CovarianceWithScaleTotalHistory 0.750, 200, EndConditions.stationarySquaredJumpDistance ] random writeOut (EndConditions.afterIteration 0) domain f
+
+        // 3. Burn-in and sampling
+        writeOut <| GeneralEvent "Generalised MCMC: Starting Sampling Phase (random walk MCMC, with burnin and clean trace)"
+        randomWalk' (finalScale |> fst) (finalScale |> snd) (secondAdaptation |> Seq.head |> snd) [] random writeOut n domain f |> fst
 
 
 // Nelder Mead implementation
@@ -296,7 +539,7 @@ module Amoeba =
         let initialize (d:Domain) (rng:System.Random) =
             [| for (min,max,_) in d -> min + (max-min) * rng.NextDouble() |]
 
-        let solve settings logger iter domain f =
+        let solve settings logger (iter:EndCondition) domain f =
             let dim = Array.length domain
             let rng = System.Random()
             let start =             
@@ -305,13 +548,13 @@ module Amoeba =
                 |> Array.sortBy fst
             let amoeba = { Dim = dim; Solutions = start }
 
-            let rec search i a =
-                if i > 0 then search (i-1) (update a f settings)
+            let rec search (a:Amoeba) =
+                if iter (a.Solutions |> Array.toList) then search (update a f settings) // TODO unify array vs list
                 else 
                     logger <| GeneralEvent (sprintf "Solution: -L = %f" (fst a.Solutions.[0]))
                     a.Solutions.[0]
 
-            search iter amoeba
+            search amoeba
 
         let solveTrace settings log iter domain f =
             [ solve settings log iter domain f ]
