@@ -90,7 +90,7 @@ module Bristlecone =
     let mkDiscrete : EstimationEngine<float,float> = {
         TimeHandling = Discrete
         OptimiseWith = Optimisation.MonteCarlo.randomWalk []
-        LogTo = Bristlecone.Logging.Console.logger()
+        LogTo = Bristlecone.Logging.Console.logger(30.)
         Constrain = ConstraintMode.Detached
         Conditioning = NoConditioning }
 
@@ -98,7 +98,7 @@ module Bristlecone =
     let mkContinuous = {
         TimeHandling = Continuous <| Integration.MathNet.integrate
         OptimiseWith = Optimisation.MonteCarlo.randomWalk []
-        LogTo = Bristlecone.Logging.Console.logger()
+        LogTo = Bristlecone.Logging.Console.logger(30.)
         Constrain = ConstraintMode.Detached
         Conditioning = NoConditioning }
 
@@ -120,6 +120,8 @@ module Bristlecone =
     let withGradientDescent engine =
         { engine with OptimiseWith = Optimisation.Amoeba.Solver.solveTrace Optimisation.Amoeba.Solver.Default }
 
+    let withCustomOptimisation optim engine =
+        { engine with OptimiseWith = optim }
 
     /// **Description**
     /// Fit a mathematical model to data. 
@@ -135,7 +137,7 @@ module Bristlecone =
     ///
     /// **Exceptions**
     ///
-    let fit engine iterations (timeSeriesData:CodedMap<TimeSeries<float>>) (model:ModelSystem) =
+    let fit engine endCondition (timeSeriesData:CodedMap<TimeSeries<float>>) (model:ModelSystem) =
 
         let constrainedParameters, optimisationConstraints = 
             match engine.Constrain with
@@ -155,8 +157,8 @@ module Bristlecone =
             |> Map.map (fun _ v -> Resolution.scaleTimeSeriesToResolution Annual v)
             |> makeSolverWithData engine.TimeHandling engine.Conditioning engine.LogTo
         let objective = Objective.create { model with Parameters = constrainedParameters } solver data
-
-        let optimise = engine.OptimiseWith engine.LogTo iterations (constrainedParameters |> ParameterPool.toDomain optimisationConstraints)
+        
+        let optimise = engine.OptimiseWith engine.LogTo endCondition (constrainedParameters |> ParameterPool.toDomain optimisationConstraints)
         let result = objective |> optimise
         let lowestLikelihood, bestPoint = result |> List.minBy (fun (_,l) -> l)
         printfn "Lowest Likelihood = %f (best point = %A)" lowestLikelihood bestPoint
