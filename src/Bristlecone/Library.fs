@@ -5,8 +5,8 @@ open Bristlecone.Logging
 
 module Objective =
 
-    open Optimisation.Amoeba
-    open Optimisation.Techniques
+    open Bristlecone.Optimisation
+    open Bristlecone.Optimisation.Techniques
     open ModelSystem
 
     let parameteriseModel parameterPool point (model:ModelEquation) =
@@ -21,12 +21,12 @@ module Objective =
             { Observed = value
               Expected = expected |> Map.find key } )
 
-    let predict (system:ModelSystem) integrate (p:float[]) =
+    let predict (system:ModelSystem) integrate (p:Point<'a>) =
         system.Equations
         |> Map.map (fun _ v -> parameteriseModel system.Parameters p v)
         |> integrate
 
-    let create (system:ModelSystem) integrate (observed:CodedMap<float array>) (p:Point) =
+    let create (system:ModelSystem) integrate (observed:CodedMap<float array>) (p:Point<'a>) =
         p
         |> predict system integrate
         |> pairObservationsToExpected observed
@@ -90,7 +90,7 @@ module Bristlecone =
     let mkDiscrete : EstimationEngine<float,float> = {
         TimeHandling = Discrete
         OptimiseWith = Optimisation.MonteCarlo.randomWalk []
-        LogTo = Bristlecone.Logging.Console.logger(30.)
+        LogTo = Bristlecone.Logging.Console.logger()
         Constrain = ConstraintMode.Detached
         Conditioning = NoConditioning }
 
@@ -98,7 +98,7 @@ module Bristlecone =
     let mkContinuous = {
         TimeHandling = Continuous <| Integration.MathNet.integrate
         OptimiseWith = Optimisation.MonteCarlo.randomWalk []
-        LogTo = Bristlecone.Logging.Console.logger(30.)
+        LogTo = Bristlecone.Logging.Console.logger()
         Constrain = ConstraintMode.Detached
         Conditioning = NoConditioning }
 
@@ -118,7 +118,7 @@ module Bristlecone =
         { engine with OptimiseWith = Optimisation.MonteCarlo.randomWalk tuning }
 
     let withGradientDescent engine =
-        { engine with OptimiseWith = Optimisation.Amoeba.Solver.solveTrace Optimisation.Amoeba.Solver.Default }
+        { engine with OptimiseWith = Optimisation.Amoeba.Solver.solveSingle Optimisation.Amoeba.Solver.Default }
 
     let withCustomOptimisation optim engine =
         { engine with OptimiseWith = optim }

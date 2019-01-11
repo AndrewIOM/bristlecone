@@ -34,32 +34,32 @@ module HeuristicOptimisation =
 
     open Bristlecone.Logging
 
-    let rec heuristicOptimisation logger numberOfLevels iterationsPerLevel numberOfAomeba (paramBounds:Domain) (f:Point->float) =
+    let rec heuristicOptimisation logger numberOfLevels iterationsPerLevel numberOfAomeba (paramBounds:Domain) (f:Objective<'a>) =
 
         let aomebaResults = 
             [|1 .. numberOfAomeba|]
             |> Array.collect (fun _ -> 
-                try [|solve Default logger iterationsPerLevel paramBounds f|]
+                try [|solveSingle Default logger iterationsPerLevel paramBounds f|]
                 with | e -> 
                     logger <| GeneralEvent (sprintf "Warning: Could not generate numercal solution for point (with EXN %s): %A" e.Message paramBounds)
                     [||] )
 
-        let mostLikely = aomebaResults |> Array.minBy fst
+        let mostLikely = aomebaResults |> Array.map List.head |> Array.minBy fst
 
         // Drop worst 20% of likelihoods
         let percentile80thRank = int (Math.Floor (float (80. / 100. * (float aomebaResults.Length + 1.))))
-        let percentile80thValue = fst aomebaResults.[percentile80thRank - 1]
+        let percentile80thValue = fst aomebaResults.[0].[percentile80thRank - 1]
         logger <| GeneralEvent (sprintf "80th percentile = %f" percentile80thValue)
-        let ranked = aomebaResults |> Array.filter (fun x -> (fst x) <= percentile80thValue)
+        let ranked = aomebaResults |> Array.map List.head |> Array.filter (fun x -> (fst x) <= percentile80thValue)
 
         let dims = Array.length paramBounds
 
         let boundsList = ranked |> Array.map snd
 
-        let getBounds (dim:int) (points:Point array) =
+        let getBounds (dim:int) (points:Point<'a> array) =
             let max = points |> Array.maxBy (fun p -> p.[dim])
             let min = points |> Array.minBy (fun p -> p.[dim])
-            logger <| GeneralEvent (sprintf "Min %f Max %f" min.[dim] max.[dim])
+            logger <| GeneralEvent (sprintf "Min %A Max %A" min.[dim] max.[dim])
             min.[dim],max.[dim],Unconstrained
 
         let bounds =
@@ -78,7 +78,7 @@ module HeuristicOptimisation =
 
 module ParameterPool =
 
-    let toParamList (domainplist:ParameterPool) (p:Point) : ParameterPool =
+    let toParamList (domainplist:ParameterPool) (p:Point<'a>) : ParameterPool =
         let plist = Map.toList domainplist
         [0 .. Array.length p - 1]
         |> List.map (fun i -> (fst plist.[i]), setEstimate (snd plist.[i]) p.[i])
@@ -92,7 +92,7 @@ module ParameterPool =
             |> List.unzip
         List.zip3 x y optimisationConstraints |> List.toArray
 
-    let fromPoint (pool:ParameterPool) (point:Point) : ParameterPool =
+    let fromPoint (pool:ParameterPool) (point:Point<'a>) : ParameterPool =
         if pool.Count = point.Length
         then
             pool 

@@ -2,76 +2,68 @@ namespace Bristlecone.Optimisation
 
 open Bristlecone.Logging
 
-type Point = float []
-type Solution = float * Point
-type Objective = Point -> float
+/// Point is generic to allow choice of number precision
+type Point<'a> = 'a []
+type Solution<'a> = float * Point<'a>
+type Objective<'a> = Point<'a> -> float
+type EndCondition<'a> = Solution<'a> list -> bool
 type Domain = (float*float*Bristlecone.Parameter.Constraint) []
-type EndCondition = (float*float[]) list -> bool
 
-module Distribution =
+module EndConditions =
 
-    open MathNet.Numerics.LinearAlgebra
+    open Bristlecone.Statistics
 
-    let mapply (m:Matrix<float>) f = 
-        m.EnumerateIndexed() |> Seq.iter(fun (i,j,v) -> m.[i,j] <- f v ); m
+    /// End the optimisation procedure when a minimum number of iterations is exceeded.
+    let afterIteration iteration : EndCondition<'a> =
+        fun results -> 
+            results |> Seq.length >= iteration
 
-    module MutlivariateNormal =
+    /// An `EndCondition` that calculates that segregates the most recent 1000 results into
+    /// five bins of 200, and runs a regression to detect a temporal variation in the mean
+    /// squared jumping distance (MSJD). The significance of the slope coefficient of a linear
+    /// regression is assessed to determine if the MSJD is increasing through time for every
+    /// parameter sequentially: if all p-values are >0.1, then the `EndCondition` is true.
+    let stationarySquaredJumpDistance : EndCondition<'a> =
+        fun results ->
+            let fixedBin = 200
+            let pointsRequired = 5
+            if (results |> Seq.length) % (fixedBin * pointsRequired) = 0
+            then
+                let trendSignificance =
+                    results
+                    |> List.take (fixedBin * pointsRequired)
+                    |> List.chunkBySize fixedBin
+                    |> List.map(fun bin ->
+                        bin
+                        |> List.map (snd >> Array.toList)
+                        |> Bristlecone.List.flip
+                        |> List.map(fun p -> 
+                            p 
+                            |> List.pairwise
+                            |> List.map(fun (a,b) -> (b - a) ** 2.) // Squared jump
+                            |> List.average ) )                     // Mean squared jump
+                    |> Bristlecone.List.flip
+                    |> List.map(fun msjds -> Regression.pValueForLinearSlopeCoefficient [|1. .. msjds |> Seq.length |> float |] (msjds |> List.toArray) )
+                if trendSignificance |> List.exists(fun p -> p <= 0.1) || trendSignificance.Length = 0
+                then false
+                else true
+            else false
 
-        // See: https://stackoverflow.com/questions/11277146/multivariate-normal-distribution-with-math-net
-        let sample' (rnd:System.Random) = 
-            fun () ->
-                let rec randomNormal () = 
-                    let u1, u2 = rnd.NextDouble(),rnd.NextDouble()
-                    let r = sqrt (-2. * (log u1))
-                    let theta = 2. * System.Math.PI * u2  
-                    seq { 
-                        yield r * sin theta
-                        yield r * cos theta 
-                        yield! randomNormal() }
-                randomNormal ()
-
-        let sample (cov:Matrix<float>) rnd = 
-            let R = 
-                if cov.Determinant() = 0. 
-                then
-                    let t = cov.Svd true
-                    let u,d = t.U, t.W
-                    let A = (mapply d sqrt) * u.Transpose()
-                    let qr = A.QR() in qr.R.Transpose()
-                else cov.Cholesky().Factor
-            fun () -> 
-                let v = vector ( sample' rnd () |> Seq.take cov.ColumnCount |> List.ofSeq )
-                R * v
-
-
-module Regression =
-
-    open Accord.Statistics.Analysis
-
-    let pValueForLinearSlopeCoefficient (x:float[]) y =
-        let x' = x |> Array.map (fun a -> [|a|])
-        let mlr = MultipleLinearRegressionAnalysis(true)
-        let _ = mlr.Learn(x',y)
-        (mlr.Coefficients |> Seq.head).TTest.PValue
-
-
-/// MCMC random walk algorithm.
-/// For more information, see https://doi.org/10.3389/fams.2017.00006.
-/// See also Haario, Saksman and Tamminen 2001: https://projecteuclid.org/download/pdf_1/euclid.bj/1080222083 
+/// A module containing Monte Carlo Markov Chain (MCMC) methods for optimisation.
+/// 
+/// **Reference** An introduction to MCMC approaches is provided by Reali, Priami, and Marchetti (2017): 
+/// https://doi.org/10.3389/fams.2017.00006.
+/// 
 module MonteCarlo =
 
-    // NB Lets set this up so that tuning only occurs during the burnin phase, then stops.
-    // TODO Move all MathNet distribution work into a seperate module
-
+    open Bristlecone.Statistics.Distributions
     open MathNet.Numerics.LinearAlgebra
 
-    /// Current implementation draws from an independent univariate normal distribution for each individual parameter. 
-    let draw random mean stdev =
-        let distribution = MathNet.Numerics.Distributions.Normal(mean,stdev,random)
-        fun () -> distribution.Sample()
-
+    /// Generate a random point from bounds specified as a `Domain`.  
+    /// A value for each dimension is drawn from a univariate normal distribution, assuming that
+    /// the bounds represent the 99th percentiles of the distribution.
     let initialise (d:Domain) (rng:System.Random) =
-        [| for (min,max,_) in d -> (draw rng (min + (max-min) / 2.) ((max - min) / 6.))() |]
+        [| for (min,max,_) in d -> (Normal.draw rng (min + (max-min) / 2.) ((max - min) / 6.))() |]
 
     let constrainJump a b (scaleFactor:float) c =
         match c with
@@ -81,61 +73,27 @@ module MonteCarlo =
                 then (a - (b * scaleFactor)) 
                 else (a + (b * scaleFactor))
 
-
-    module EndConditions =
-
-        let afterIteration iteration : EndCondition =
-            fun results -> 
-                results |> Seq.length >= iteration
-
-        let stationarySquaredJumpDistance : EndCondition =
-            fun results ->
-                let fixedBin = 200
-                let pointsRequired = 5
-
-                if (results |> Seq.length) % (fixedBin * pointsRequired) = 0
-                then
-                    // Calculate mean squared jumping distance per 200 iterations
-                    printfn "Calculating mean squared jumping distances"
-
-                    // Array of MSJD by parameter, containing an array of MSJDs per bin
-                    let msjd =
-                        results
-                        |> List.take (fixedBin * pointsRequired)
-                        |> List.chunkBySize fixedBin
-                        |> List.map(fun bin ->
-                            bin
-                            |> List.map (snd >> Array.toList)
-                            |> Bristlecone.List.flip
-                            |> List.map(fun p -> 
-                                p 
-                                |> List.pairwise
-                                |> List.map(fun (a,b) -> (b - a) ** 2.) // Squared jump
-                                |> List.average ) )                     // Mean squared jump
-                        |> fun x -> printfn "Averages: %A" x; x
-                        |> Bristlecone.List.flip
-
-
-                    let trendSignificance =
-                        msjd
-                        |> List.map(fun msjds -> 
-                            printfn "Trying to get p value for X = %A, Y = %A" ([|1. .. msjds |> Seq.length |> float |]) (msjds |> List.toArray)
-                            Regression.pValueForLinearSlopeCoefficient [|1. .. msjds |> Seq.length |> float |] (msjds |> List.toArray) )
-
-                    printfn "MSJDs = %A" msjd
-                    printfn "Significance of linear models: %A" trendSignificance
-
-                    if trendSignificance |> List.exists(fun p -> p <= 0.1) || trendSignificance.Length = 0
-                    then false
-                    else true
-
-                else false
-
-
-    /// f -> a log-likelihood function
-    /// Current iteration is the length of the results
-    let rec metropolisHastings' writeOut endCondition propose tune f theta1 l1 d scale =
-
+    
+    /// A recursive metropolis hastings algirhtm, when ends when `endCondition` returns true.
+    /// 
+    /// **Parameters**
+    ///   * `random` - `System.Random` to be used for drawing from a uniform distribution.
+    ///   * `writeOut` - side-effect function for handling `LogEvent` items.
+    ///   * `endCondition` - `EndCondition` that dictates when the MH algorithm ends.
+    ///   * `propose` - proposal `'scale -> 'theta -> 'theta` that generates a jump based on the scale value.
+    ///   * `tune` - parameter of type `int -> (float * 'a) list -> 'b -> 'b`, where `int` is current iteration, 
+    ///   * `f` - an objective function, `'a -> float`, to optimise.
+    ///   * `theta1` - initial position in parameter space of type `'a`.
+    ///   * `l1` - initial value of -log likelihood at theta1 in parameter space
+    ///   * `d` - history of the chain, of type `(float * 'a) list`. Passing a list here allows continuation of a previous analysis.
+    ///   * `scale` - a scale of type `'b`, which is compatible with the scale tuning function `tune`
+    ///
+    /// **Output Type**
+    ///   * `(float * 'a) list * 'b` - A tuple containing a list of results, and the final scale used in
+    ///   the analysis. The `(float * 'a) list` represents a list of paired -log likelihood values with
+    ///   the proposed theta. 
+    /// 
+    let rec metropolisHastings' random writeOut endCondition propose tune f theta1 l1 d scale =
         let iteration = d |> Seq.length
         let sc = scale |> tune iteration d
         let theta2 = theta1 |> propose sc
@@ -144,18 +102,16 @@ module MonteCarlo =
             if l2 < l1
             then theta2, l2
             else
-                let rand = MathNet.Numerics.Distributions.ContinuousUniform(0.,1.).Sample()
+                let rand = ContinuousUniform.draw random 0. 1. ()
                 let ratio = - (l2 - l1) |> exp
                 if rand < ratio && l2 <> infinity && l2 <> -infinity && l2 <> nan
                     then theta2, l2
                     else theta1, l1
-
         if endCondition d
         then d, sc
         else
-            //if iteration % 1000 = 0 && d |> Seq.length >= 1000 then 
             writeOut <| OptimisationEvent { Iteration = iteration; Likelihood = lAccepted; Theta = thetaAccepted }
-            metropolisHastings' writeOut endCondition propose tune f thetaAccepted lAccepted ((lAccepted,thetaAccepted)::d) sc
+            metropolisHastings' random writeOut endCondition propose tune f thetaAccepted lAccepted ((lAccepted,thetaAccepted)::d) sc
 
 
     module TuningMode =
@@ -208,7 +164,7 @@ module MonteCarlo =
             [| 1 .. n |]
             |> Array.map(fun _ ->
                 domain
-                |> Array.map (fun (low,high,_) -> draw random 0. ((high - low) / 4.) () ) )
+                |> Array.map (fun (low,high,_) -> Normal.draw random 0. ((high - low) / 4.) () ) )
                 |> samplesToMatrix
                 |> computeCovariance
 
@@ -216,7 +172,7 @@ module MonteCarlo =
             [| 1 .. n |]
             |> Array.map(fun _ ->
                 sigmas
-                |> Array.map (fun s -> draw random 0. (s**2.) () ) )
+                |> Array.map (fun s -> Normal.draw random 0. (s**2.) () ) )
                 |> samplesToMatrix
                 |> computeCovariance
 
@@ -283,11 +239,11 @@ module MonteCarlo =
         | CovarianceWithScaleTotalHistory w -> TuningMode.dualTotalHistory interval w
 
     type Frequency = int
-    type TuneStep = TuneMethod * Frequency * EndCondition
+    type TuneStep<'a> = TuneMethod * Frequency * EndCondition<'a>
 
-    let randomWalk' initialCovariance initialScale theta (tuningSteps:TuneStep seq) random writeOut (endCondition:EndCondition) (domain:Domain) (f:Point->float) =
+    let randomWalk' initialCovariance initialScale theta (tuningSteps:TuneStep<'a> seq) random writeOut (endCondition:EndCondition<'a>) (domain:Domain) (f:Objective<'a>) =
         writeOut <| GeneralEvent (sprintf "[Optimisation] Starting MCMC Random Walk")
-        let sample cov = Distribution.MutlivariateNormal.sample cov random
+        let sample cov = MutlivariateNormal.sample cov random
         let proposeJump (cov:Matrix<float>,scale) (theta:float[]) =
             sample ((2.38 ** 2.) * cov / (float theta.Length)) <| ()
             |> Vector.toArray
@@ -299,12 +255,12 @@ module MonteCarlo =
         tuningSteps
         |> Seq.fold(fun (s,sc) (method,frequency,endCon) -> 
             let l,t = s |> Seq.head
-            metropolisHastings' writeOut endCon proposeJump (toFn method frequency) f t l s sc ) ([f theta, theta], (initialCovariance,initialScale))
+            metropolisHastings' random writeOut endCon proposeJump (toFn method frequency) f t l s sc ) ([f theta, theta], (initialCovariance,initialScale))
         ||> fun r s -> 
             let l,t = r |> Seq.head
-            metropolisHastings' writeOut endCondition proposeJump (TuningMode.none) f t l r s
+            metropolisHastings' random writeOut endCondition proposeJump (TuningMode.none) f t l r s
 
-    let randomWalk (tuningSteps:TuneStep seq) writeOut n domain (f:Point->float) : (float * float[]) list =
+    let randomWalk (tuningSteps:TuneStep<'a> seq) writeOut n domain (f:Objective<float>) : (float * float[]) list =
         let random = MathNet.Numerics.Random.MersenneTwister(true)
         let initialCovariance = TuningMode.covarianceFromBounds 10000 domain random
         let theta = initialise domain random
@@ -313,6 +269,8 @@ module MonteCarlo =
 
 
     module MetropolisWithinGibbs =
+
+        open Bristlecone.Statistics
 
         /// Propose a jump, while leaving all but one parameter value fixed
         let propose (theta:float[]) j lsj domain random =
@@ -340,7 +298,7 @@ module MonteCarlo =
                 |> Array.scan (fun (j,results) (lsj,_) -> 
                     let l,theta = results |> Seq.head
                     let proposeJump = fun _ t -> propose t j lsj domain random
-                    let results = metropolisHastings' ignore (EndConditions.afterIteration batchLength) proposeJump TuningMode.none f theta l [] () |> fst
+                    let results = metropolisHastings' random ignore (EndConditions.afterIteration batchLength) proposeJump TuningMode.none f theta l [] () |> fst
                     j+1,results) (0,[f theta, theta])
                 |> Array.tail       // Skip initial state
                 |> Array.map snd    // Discard parameter number
@@ -402,14 +360,14 @@ module MonteCarlo =
                 else batchNumber, fullResults, sigmas
 
 
-    let ``Adaptive-Metropolis-within Gibbs`` writeOut n domain (f:Point->float) : (float * float[]) list =
+    let ``Adaptive-Metropolis-within Gibbs`` writeOut endCon domain (f:Objective<float>) : (float * float[]) list =
         let random = MathNet.Numerics.Random.MersenneTwister(true)
         let theta = initialise domain random
         let sigmas = theta |> Array.map(fun _ -> 0.)
         let _,result,_ = MetropolisWithinGibbs.core true writeOut random domain f [] 100 1 (theta:float[]) sigmas
         result
 
-    let ``Metropolis-within Gibbs`` writeOut n domain (f:Point->float) : (float * float[]) list =
+    let ``Metropolis-within Gibbs`` writeOut endCon domain (f:Objective<float>) : (float * float[]) list =
         let random = MathNet.Numerics.Random.MersenneTwister(true)
         let theta = initialise domain random
         let sigmas = theta |> Array.map(fun _ -> 0.)
@@ -418,7 +376,7 @@ module MonteCarlo =
 
     /// Implementation similar to that proposed by Yang and Rosenthal: "Automatically Tuned General-Purpose MCMC via New Adaptive Diagnostics"
     /// Reference: http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.70.7198&rep=rep1&type=pdf
-    let ``Automatic MCMC (Adaptive Diagnostics)`` writeOut n domain (f:Point->float) : (float * float[]) list =
+    let ``Automatic MCMC (Adaptive Diagnostics)`` writeOut n domain (f:Objective<float>) : (float * float[]) list =
 
         // Starting condition
         let random = MathNet.Numerics.Random.MersenneTwister(true)
@@ -466,14 +424,10 @@ module MonteCarlo =
 // Modified from https://github.com/mathias-brandewinder/Amoeba
 module Amoeba =
 
-    type Point = float []
-    type Solution = float * Point
-    type Objective = Point -> float
-
     module Solver = 
 
-        type Amoeba = 
-            { Dim:int; Solutions:Solution [] } // assumed to be sorted by fst value
+        type Amoeba<'a> = 
+            { Dim:int; Solutions:Solution<'a> [] } // assumed to be sorted by fst value
             member this.Size = this.Solutions.Length
             member this.Best = this.Solutions.[0]
             member this.Worst = this.Solutions.[this.Size - 1]
@@ -482,26 +436,26 @@ module Amoeba =
 
         let Default = { Alpha=1.0; Sigma=0.5; Gamma=2.0; Rho=(-0.5); Size=3 }
 
-        let print logger (a:Amoeba) = 
+        let print logger a = 
             logger <| GeneralEvent "Amoeba state"
             a.Solutions 
             |> Seq.iter (fun (v,x) -> 
                 logger <| GeneralEvent (sprintf "  %.2f, %s" v (x |> Seq.map string |> String.concat ",")))
 
-        let evaluate (f:Objective) (x:Point) = f x, x
-        let valueOf (s:Solution) = fst s
+        let evaluate (f:Objective<'a>) (x:Point<'a>) = f x, x
+        let valueOf (s:Solution<'a>) = fst s
 
-        let replace (a:Amoeba) (s:Solution) = 
+        let replace (a:Amoeba<'a>) (s:Solution<'a>) = 
             let last = a.Size - 1
             let a' = Array.copy a.Solutions
             a'.[last] <- s
             { a with Solutions = a' |> Array.sortBy fst }
 
-        let centroid (a:Amoeba) = 
+        let centroid (a:Amoeba<'a>) = 
             [| for d in 0 .. (a.Dim - 1) -> 
                 (a.Solutions.[0..a.Size - 2] |> Seq.averageBy(fun (_,x) -> x.[d])) |]
 
-        let stretch ((X,Y):Point*Point) (s:float) =
+        let stretch ((X,Y):Point<'a>*Point<'a>) (s:float) =
             Array.map2 (fun x y -> x + s * (x - y)) X Y
 
         let reflected v s = stretch v s.Alpha
@@ -510,14 +464,14 @@ module Amoeba =
 
         let contracted v s = stretch v s.Rho
 
-        let shrink (a:Amoeba) (f:Objective) s =
+        let shrink (a:Amoeba<'a>) (f:Objective<'a>) s =
             let best = snd a.Best
             { a with Solutions =         
                         a.Solutions 
                         |> Array.map (fun p -> stretch (best,snd p) -s.Sigma)
                         |> Array.map (evaluate f) } 
 
-        let update (a:Amoeba) (f:Objective) (s:Settings) =
+        let update (a:Amoeba<'a>) (f:Objective<'a>) (s:Settings) =
             let cen = centroid a
             let rv,r = reflected (cen, (snd a.Worst)) s |> evaluate f
             if ((valueOf (a.Best) <= rv) && (rv < (valueOf (a.Solutions.[a.Size - 2])))) then
@@ -539,7 +493,22 @@ module Amoeba =
         let initialize (d:Domain) (rng:System.Random) =
             [| for (min,max,_) in d -> min + (max-min) * rng.NextDouble() |]
 
-        let solve settings logger (iter:EndCondition) domain f =
+
+        /// **Description**
+        ///
+        /// **Parameters**
+        ///   * `settings` - parameter of type `Settings`
+        ///   * `logger` - parameter of type `LogEvent -> unit`
+        ///   * `endWhen` - parameter of type `EndCondition<float>`
+        ///   * `domain` - parameter of type `(float * float * Parameter.Constraint) []`
+        ///   * `f` - parameter of type `Objective<float>`
+        ///
+        /// **Output Type**
+        ///   * `Solution<float>`
+        ///
+        /// **Exceptions**
+        ///
+        let solveSingle settings logger (endWhen:EndCondition<'a>) domain f =
             let dim = Array.length domain
             let rng = System.Random()
             let start =             
@@ -548,35 +517,10 @@ module Amoeba =
                 |> Array.sortBy fst
             let amoeba = { Dim = dim; Solutions = start }
 
-            let rec search (a:Amoeba) =
-                if iter (a.Solutions |> Array.toList) then search (update a f settings) // TODO unify array vs list
+            let rec search (a:Amoeba<'a>) =
+                if endWhen (a.Solutions |> Array.toList) then search (update a f settings) // TODO unify array vs list
                 else 
                     logger <| GeneralEvent (sprintf "Solution: -L = %f" (fst a.Solutions.[0]))
-                    a.Solutions.[0]
+                    a.Solutions |> Array.toList
 
             search amoeba
-
-        let solveTrace settings log iter domain f =
-            [ solve settings log iter domain f ]
-
-
-module RootFinding =
-
-    /// Secant method for finding root of non-linear equations. This method is faster than bisection, but may not converge on a root.
-    let rec secant n N f x0 x1 x2 : float =
-        if n >= N then x0
-        else
-            let x = x1 - (f(x1))*((x1 - x0)/(f(x1) - f(x0)))
-            secant (n + 1) N f x x0 x2
-
-    /// Bisect method for finding root of non-linear equations. A "strong and stable" algorithm.
-    let rec bisect n N f a b t : float =
-        if n >= N then nan
-        else
-            let c = (a + b) / 2.
-            if (f c) = 0.0 || (b - a) / 2. < t 
-                then c
-                else 
-                    if sign(f c) = sign (f a)
-                    then bisect (n + 1) N f c b t
-                    else bisect (n + 1) N f a c t

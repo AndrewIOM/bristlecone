@@ -39,7 +39,7 @@ module EstimationEngine =
     type WriteOut = LogEvent -> unit
 
     type Integrate<'data,'time> = WriteOut -> 'time -> 'time -> 'time -> CodedMap<'data> -> CodedMap<('time*'data)[]> -> CodedMap<ODE> -> CodedMap<'data[]>
-    type Optimise<'data> = WriteOut -> EndCondition -> Domain -> ('data[] -> 'data) -> ('data * 'data []) list
+    type Optimise<'data> = WriteOut -> EndCondition<'data> -> Domain -> ('data[] -> 'data) -> Solution<'data> list
 
     type TimeMode<'data, 'time> =
     | Discrete

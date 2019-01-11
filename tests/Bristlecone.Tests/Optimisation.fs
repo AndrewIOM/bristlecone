@@ -3,9 +3,42 @@ module OptimisationTests
 open Bristlecone.Optimisation
 open Bristlecone
 open Expecto
-open Expecto.ExpectoFsCheck
 
 let config = { FsCheck.Config.Default with MaxTest = 10000 }
+
+module Generate =
+
+    let rand = System.Random().NextDouble
+
+    let resultList dimensions n =
+        [ for _ in 1..n do yield rand(), Array.init dimensions (fun _ -> rand()) ]
+
+
+module ``End Conditions`` =
+
+    open Optimisation.EndConditions
+
+    [<Tests>]
+    let iterationTests =
+        testList "Iteration" [
+
+            testProperty "Ends on iteration" <| fun current ->
+                afterIteration current (Generate.resultList 5 current)
+
+            test "Ends when iteration has already occurred" {
+                let atEnd = afterIteration 45 (Generate.resultList 5 100)
+                Expect.isTrue atEnd "Did not stop at iteration"
+            }
+        ]
+
+    [<Tests>]
+    let jumpDistanceTests =
+
+        testList "Mean Squared Jump Distance (MSJD)" [
+
+            
+        ]
+
 
 // Module adapted from https://github.com/mathias-brandewinder/Amoeba
 module ``Gradient Descent`` = 
@@ -61,7 +94,7 @@ module ``Gradient Descent`` =
 
             test "Shrink validation" {
                 let amoeba = testAmoeba ()
-                let f (p:Point) = 42.
+                let f (p:Point<'a>) = 42.
 
                 let updated = shrink amoeba f Default
 
