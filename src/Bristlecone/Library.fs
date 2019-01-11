@@ -21,12 +21,12 @@ module Objective =
             { Observed = value
               Expected = expected |> Map.find key } )
 
-    let predict (system:ModelSystem) integrate (p:Point<'a>) =
+    let predict (system:ModelSystem) integrate (p:Point<float>) =
         system.Equations
         |> Map.map (fun _ v -> parameteriseModel system.Parameters p v)
         |> integrate
 
-    let create (system:ModelSystem) integrate (observed:CodedMap<float array>) (p:Point<'a>) =
+    let create (system:ModelSystem) integrate (observed:CodedMap<float array>) (p:Point<float>) =
         p
         |> predict system integrate
         |> pairObservationsToExpected observed
@@ -118,7 +118,7 @@ module Bristlecone =
         { engine with OptimiseWith = Optimisation.MonteCarlo.randomWalk tuning }
 
     let withGradientDescent engine =
-        { engine with OptimiseWith = Optimisation.Amoeba.Solver.solveSingle Optimisation.Amoeba.Solver.Default }
+        { engine with OptimiseWith = Optimisation.Amoeba.Solver.solve Optimisation.Amoeba.Solver.Default }
 
     let withCustomOptimisation optim engine =
         { engine with OptimiseWith = optim }
@@ -217,10 +217,10 @@ module Bristlecone =
     ///
     /// **Exceptions**
     ///
-    let bootstrap engine iterations burnin bootstrapCount hypothesis (identifier:ShortCode) series =
+    let bootstrap engine random iterations bootstrapCount hypothesis (identifier:ShortCode) series =
         let rec bootstrap s numberOfTimes solutions =
             if (numberOfTimes > 0) then
-                let subset = Optimisation.Techniques.Bootstrap.removeSingle s
+                let subset = Optimisation.Techniques.Bootstrap.removeSingle random s
                 let result = fit engine iterations subset hypothesis
                 engine.LogTo <| GeneralEvent (sprintf "%s: completed bootstrap %i" identifier.Value numberOfTimes)
                 bootstrap s (numberOfTimes - 1) (solutions |> List.append [result])

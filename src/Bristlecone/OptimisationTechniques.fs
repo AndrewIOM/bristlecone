@@ -4,21 +4,18 @@ open System
 open Bristlecone
 open Bristlecone.Optimisation.Amoeba
 open Solver
-open Time
 
 type OptimisationError =
 | OutOfBounds
 | ModelError
 | LikelihoodError
 
-// Helper Functions
 let containsNan s : bool = s |> Seq.exists (Double.IsNaN)
-let private rnd = Random()
 
 
 module Bootstrap =
 
-    let removeSingle (data:CodedMap<TimeSeries<float<'v>>>) =
+    let removeSingle (random:System.Random) (data:CodedMap<TimeSeries<float<'v>>>) =
         let commonTimeSeries = TimeSeries.commonTimeline (data |> Map.toList |> List.map snd)
         match commonTimeSeries with
         | None -> invalidOp "The time series are not on common time"
@@ -26,7 +23,7 @@ module Bootstrap =
             match ts.Length with
             | 0 -> invalidOp "The time series was empty"
             | _ ->
-                let selection = rnd.Next(0, ts.Length - 1)
+                let selection = random.Next(0, ts.Length - 1)
                 data |> Map.map (fun _ v -> v |> TimeSeries.bootstrapFixedStep (TimeSpan.FromDays(366.)) selection )
 
 
@@ -34,12 +31,12 @@ module HeuristicOptimisation =
 
     open Bristlecone.Logging
 
-    let rec heuristicOptimisation logger numberOfLevels iterationsPerLevel numberOfAomeba (paramBounds:Domain) (f:Objective<'a>) =
+    let rec heuristicOptimisation logger numberOfLevels iterationsPerLevel numberOfAomeba (paramBounds:Domain) (f:Objective<float>) =
 
         let aomebaResults = 
             [|1 .. numberOfAomeba|]
             |> Array.collect (fun _ -> 
-                try [|solveSingle Default logger iterationsPerLevel paramBounds f|]
+                try [|solve Default logger iterationsPerLevel paramBounds f|]
                 with | e -> 
                     logger <| GeneralEvent (sprintf "Warning: Could not generate numercal solution for point (with EXN %s): %A" e.Message paramBounds)
                     [||] )
@@ -78,7 +75,7 @@ module HeuristicOptimisation =
 
 module ParameterPool =
 
-    let toParamList (domainplist:ParameterPool) (p:Point<'a>) : ParameterPool =
+    let toParamList (domainplist:ParameterPool) (p:Point<float>) : ParameterPool =
         let plist = Map.toList domainplist
         [0 .. Array.length p - 1]
         |> List.map (fun i -> (fst plist.[i]), setEstimate (snd plist.[i]) p.[i])
@@ -92,7 +89,7 @@ module ParameterPool =
             |> List.unzip
         List.zip3 x y optimisationConstraints |> List.toArray
 
-    let fromPoint (pool:ParameterPool) (point:Point<'a>) : ParameterPool =
+    let fromPoint (pool:ParameterPool) (point:Point<float>) : ParameterPool =
         if pool.Count = point.Length
         then
             pool 

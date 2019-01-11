@@ -14,7 +14,7 @@ module EndConditions =
     open Bristlecone.Statistics
 
     /// End the optimisation procedure when a minimum number of iterations is exceeded.
-    let afterIteration iteration : EndCondition<'a> =
+    let afterIteration iteration : EndCondition<float> =
         fun results -> 
             results |> Seq.length >= iteration
 
@@ -23,7 +23,7 @@ module EndConditions =
     /// squared jumping distance (MSJD). The significance of the slope coefficient of a linear
     /// regression is assessed to determine if the MSJD is increasing through time for every
     /// parameter sequentially: if all p-values are >0.1, then the `EndCondition` is true.
-    let stationarySquaredJumpDistance : EndCondition<'a> =
+    let stationarySquaredJumpDistance : EndCondition<float> =
         fun results ->
             let fixedBin = 200
             let pointsRequired = 5
@@ -241,7 +241,7 @@ module MonteCarlo =
     type Frequency = int
     type TuneStep<'a> = TuneMethod * Frequency * EndCondition<'a>
 
-    let randomWalk' initialCovariance initialScale theta (tuningSteps:TuneStep<'a> seq) random writeOut (endCondition:EndCondition<'a>) (domain:Domain) (f:Objective<'a>) =
+    let randomWalk' initialCovariance initialScale theta (tuningSteps:TuneStep<float> seq) random writeOut (endCondition:EndCondition<float>) (domain:Domain) (f:Objective<float>) =
         writeOut <| GeneralEvent (sprintf "[Optimisation] Starting MCMC Random Walk")
         let sample cov = MutlivariateNormal.sample cov random
         let proposeJump (cov:Matrix<float>,scale) (theta:float[]) =
@@ -260,7 +260,7 @@ module MonteCarlo =
             let l,t = r |> Seq.head
             metropolisHastings' random writeOut endCondition proposeJump (TuningMode.none) f t l r s
 
-    let randomWalk (tuningSteps:TuneStep<'a> seq) writeOut n domain (f:Objective<float>) : (float * float[]) list =
+    let randomWalk (tuningSteps:TuneStep<float> seq) writeOut n domain (f:Objective<float>) : (float * float[]) list =
         let random = MathNet.Numerics.Random.MersenneTwister(true)
         let initialCovariance = TuningMode.covarianceFromBounds 10000 domain random
         let theta = initialise domain random
@@ -376,7 +376,7 @@ module MonteCarlo =
 
     /// Implementation similar to that proposed by Yang and Rosenthal: "Automatically Tuned General-Purpose MCMC via New Adaptive Diagnostics"
     /// Reference: http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.70.7198&rep=rep1&type=pdf
-    let ``Automatic MCMC (Adaptive Diagnostics)`` writeOut n domain (f:Objective<float>) : (float * float[]) list =
+    let ``Automatic MCMC (Adaptive Diagnostics)`` writeOut n domain (f:Objective<float>) : Solution<float> list =
 
         // Starting condition
         let random = MathNet.Numerics.Random.MersenneTwister(true)
@@ -426,8 +426,8 @@ module Amoeba =
 
     module Solver = 
 
-        type Amoeba<'a> = 
-            { Dim:int; Solutions:Solution<'a> [] } // assumed to be sorted by fst value
+        type Amoeba = 
+            { Dim:int; Solutions:Solution<float> [] } // assumed to be sorted by fst value
             member this.Size = this.Solutions.Length
             member this.Best = this.Solutions.[0]
             member this.Worst = this.Solutions.[this.Size - 1]
@@ -445,17 +445,17 @@ module Amoeba =
         let evaluate (f:Objective<'a>) (x:Point<'a>) = f x, x
         let valueOf (s:Solution<'a>) = fst s
 
-        let replace (a:Amoeba<'a>) (s:Solution<'a>) = 
+        let replace (a:Amoeba) (s:Solution<float>) = 
             let last = a.Size - 1
             let a' = Array.copy a.Solutions
             a'.[last] <- s
             { a with Solutions = a' |> Array.sortBy fst }
 
-        let centroid (a:Amoeba<'a>) = 
+        let centroid (a:Amoeba) = 
             [| for d in 0 .. (a.Dim - 1) -> 
                 (a.Solutions.[0..a.Size - 2] |> Seq.averageBy(fun (_,x) -> x.[d])) |]
 
-        let stretch ((X,Y):Point<'a>*Point<'a>) (s:float) =
+        let stretch ((X,Y):Point<float>*Point<float>) (s:float) =
             Array.map2 (fun x y -> x + s * (x - y)) X Y
 
         let reflected v s = stretch v s.Alpha
@@ -464,14 +464,14 @@ module Amoeba =
 
         let contracted v s = stretch v s.Rho
 
-        let shrink (a:Amoeba<'a>) (f:Objective<'a>) s =
+        let shrink (a:Amoeba) (f:Objective<float>) s =
             let best = snd a.Best
             { a with Solutions =         
                         a.Solutions 
                         |> Array.map (fun p -> stretch (best,snd p) -s.Sigma)
                         |> Array.map (evaluate f) } 
 
-        let update (a:Amoeba<'a>) (f:Objective<'a>) (s:Settings) =
+        let update (a:Amoeba) (f:Objective<float>) (s:Settings) =
             let cen = centroid a
             let rv,r = reflected (cen, (snd a.Worst)) s |> evaluate f
             if ((valueOf (a.Best) <= rv) && (rv < (valueOf (a.Solutions.[a.Size - 2])))) then
@@ -493,22 +493,7 @@ module Amoeba =
         let initialize (d:Domain) (rng:System.Random) =
             [| for (min,max,_) in d -> min + (max-min) * rng.NextDouble() |]
 
-
-        /// **Description**
-        ///
-        /// **Parameters**
-        ///   * `settings` - parameter of type `Settings`
-        ///   * `logger` - parameter of type `LogEvent -> unit`
-        ///   * `endWhen` - parameter of type `EndCondition<float>`
-        ///   * `domain` - parameter of type `(float * float * Parameter.Constraint) []`
-        ///   * `f` - parameter of type `Objective<float>`
-        ///
-        /// **Output Type**
-        ///   * `Solution<float>`
-        ///
-        /// **Exceptions**
-        ///
-        let solveSingle settings logger (endWhen:EndCondition<'a>) domain f =
+        let solve settings logger (endWhen:EndCondition<float>) domain f =
             let dim = Array.length domain
             let rng = System.Random()
             let start =             
@@ -517,7 +502,7 @@ module Amoeba =
                 |> Array.sortBy fst
             let amoeba = { Dim = dim; Solutions = start }
 
-            let rec search (a:Amoeba<'a>) =
+            let rec search (a:Amoeba) =
                 if endWhen (a.Solutions |> Array.toList) then search (update a f settings) // TODO unify array vs list
                 else 
                     logger <| GeneralEvent (sprintf "Solution: -L = %f" (fst a.Solutions.[0]))
