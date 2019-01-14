@@ -16,7 +16,10 @@ module Console =
 
     open System.Threading
 
-    let print threadId (x:LogEvent) = printfn "##%i## %A" threadId x
+    let print threadId (x:LogEvent) = 
+        match x with
+        | OptimisationEvent _ -> ()
+        | _ -> printfn "##%i## %A" threadId x
 
     let logger () =
 

@@ -1,13 +1,5 @@
 namespace Bristlecone
 
-module Distibution =
-
-    open MathNet.Numerics.Distributions
-
-    let normalFromRange min max = Normal((max - min),(max - min) / 6.)
-
-    let normal mean stdev = Normal(mean,stdev)
-
 [<AutoOpen>]
 module Parameter =
 
@@ -87,6 +79,6 @@ module Parameter =
             | None -> invalidOp (sprintf "[Parameter] The parameter %s has not been added to the parameter pool" key)
 
         let getBoundsForEstimation (pool:ParameterPool) key : float * float =
-            pool 
-            |> Map.find key
-            |> bounds
+            match pool  |> Map.tryFind (ShortCode.create key) with
+            | Some p -> p |> bounds
+            | None -> invalidOp (sprintf "[Parameter] The parameter %s has not been added to the parameter pool" key)

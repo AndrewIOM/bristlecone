@@ -18,15 +18,13 @@ module EndConditions =
         fun results -> 
             results |> Seq.length >= iteration
 
-    /// An `EndCondition` that calculates that segregates the most recent 1000 results into
-    /// five bins of 200, and runs a regression to detect a temporal variation in the mean
+    /// An `EndCondition` that calculates that segregates the most recent n results into
+    /// five bins, and runs a regression to detect a temporal variation in the mean
     /// squared jumping distance (MSJD). The significance of the slope coefficient of a linear
     /// regression is assessed to determine if the MSJD is increasing through time for every
     /// parameter sequentially: if all p-values are >0.1, then the `EndCondition` is true.
-    let stationarySquaredJumpDistance : EndCondition<float> =
+    let stationarySquaredJumpDistance' fixedBin pointsRequired : EndCondition<float> =
         fun results ->
-            let fixedBin = 200
-            let pointsRequired = 5
             if (results |> Seq.length) % (fixedBin * pointsRequired) = 0
             then
                 let trendSignificance =
@@ -44,10 +42,68 @@ module EndConditions =
                             |> List.average ) )                     // Mean squared jump
                     |> Bristlecone.List.flip
                     |> List.map(fun msjds -> Regression.pValueForLinearSlopeCoefficient [|1. .. msjds |> Seq.length |> float |] (msjds |> List.toArray) )
+                printfn "MSJD p-values: %A" trendSignificance
                 if trendSignificance |> List.exists(fun p -> p <= 0.1) || trendSignificance.Length = 0
                 then false
                 else true
             else false
+
+    /// True if there is no significant slope in mean squared jumping distances (MSJD),
+    /// binned per 200 iterations and a regression of five bins.
+    let stationarySquaredJumpDistance : EndCondition<float> =
+        stationarySquaredJumpDistance' 200 5
+
+    /// Convergence of results using the Gelman-Rubin Rhat statistic.
+    /// * `thin` - Only test for convergence at multiples of the following intervals (when all chains are ready).
+    /// * `chainCount` - The number of chains to test for convergence. This makes the agent wait until results for all chains are in.
+    let convergence thin chainCount : EndCondition<float> =
+
+        let assess (chains:Map<int,Solution<float> list>) = 
+            printfn "Assessing convergence..."
+            if chains.Count < chainCount 
+            then None
+            else 
+                let shortestChainLength = chains |> Seq.map (fun x -> x.Value.Length) |> Seq.min
+                let chainsEqualLength = chains |> Seq.map (fun x -> x.Value |> Seq.skip (x.Value.Length - shortestChainLength))
+                let parameterValueByChain =
+                    let thetaLength = (chains |> Seq.head).Value |> Seq.head |> snd |> Seq.length
+                    [ 1 .. thetaLength ]
+                    |> Seq.map(fun p ->
+                        chainsEqualLength
+                        |> Seq.map(fun chain ->
+                            chain |> Seq.map(fun v -> v |> snd |> Array.item (p - 1))))
+                printfn "Param values by chain: %A" parameterValueByChain
+                parameterValueByChain
+                |> Seq.map Bristlecone.Statistics.Convergence.GelmanRubin.rHat
+                |> Seq.toList
+                |> Some
+
+        let convergenceAgent = MailboxProcessor.Start(fun inbox -> 
+            let rec messageLoop chainResults = async {
+                let! (chainId,results,repl:AsyncReplyChannel<bool>) = inbox.Receive()
+                let freshResults = chainResults |> Map.add chainId results
+                let rHats = assess freshResults
+                match rHats with
+                | Some r ->
+                    printfn "RHats are %A" r
+                    let converged = (r |> List.where(fun i -> i < 1.1) |> List.length) = (r |> List.length)
+                    printfn "Converged on %i / %i parameters" (r |> List.where(fun i -> i < 1.1) |> List.length) (r |> List.length)
+                    repl.Reply(converged)
+                | None -> repl.Reply(false)
+                return! messageLoop freshResults
+                }
+            messageLoop Map.empty )
+
+        convergenceAgent.Error.Add(fun e -> printfn "Convergence agent reported an error = %s" e.Message)
+
+        fun results -> 
+            if results.Length % thin = 0 && results.Length >= thin
+            then 
+                printfn "Sending message to convergence agent at %i" results.Length
+                let threadId = System.Threading.Thread.CurrentThread.ManagedThreadId
+                convergenceAgent.PostAndReply (fun reply -> threadId, results, reply)
+            else false
+
 
 /// A module containing Monte Carlo Markov Chain (MCMC) methods for optimisation.
 /// 
@@ -267,6 +323,9 @@ module MonteCarlo =
         writeOut <| GeneralEvent (sprintf "[Optimisation] Initial theta is %A" theta)
         randomWalk' initialCovariance 1. theta tuningSteps random writeOut n domain f |> fst
 
+    let adaptiveMetropolis weighting period writeOut n domain (f:Objective<float>) : (float * float[]) list =
+        randomWalk [ TuneMethod.CovarianceWithScale weighting, period, n ] writeOut (EndConditions.afterIteration 0) domain f
+
 
     module MetropolisWithinGibbs =
 
@@ -286,8 +345,8 @@ module MonteCarlo =
         /// The magnitude of tuning reduces as more batches have been run.
         let tune sigma acceptanceRate batchNumber =
             if acceptanceRate < 0.44
-            then sigma - (1./(float batchNumber)) // Lower variance
-            else sigma + (1./(float batchNumber)) // Increase variance
+            then sigma - 0.05//(3./(float batchNumber)) // Lower variance
+            else sigma + 0.05//(3./(float batchNumber)) // Increase variance
 
         /// Adaptive-metropolis-within-Gibbs algorithm, which can work in both adaptive and fixed modes
         let rec core isAdaptive writeOut random domain f results batchLength batchNumber (theta:float[]) sigmas =

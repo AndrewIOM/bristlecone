@@ -54,10 +54,12 @@ module Regression =
     open Accord.Statistics.Analysis
 
     let pValueForLinearSlopeCoefficient (x:float[]) y =
-        let x' = x |> Array.map (fun a -> [|a|])
-        let mlr = MultipleLinearRegressionAnalysis(true)
-        let _ = mlr.Learn(x',y)
-        (mlr.Coefficients |> Seq.head).TTest.PValue
+        try
+            let x' = x |> Array.map (fun a -> [|a|])
+            let mlr = MultipleLinearRegressionAnalysis(true)
+            let _ = mlr.Learn(x',y)
+            (mlr.Coefficients |> Seq.head).TTest.PValue
+        with | _ -> nan
 
 
 module RootFinding =
@@ -80,3 +82,40 @@ module RootFinding =
                     if sign(f c) = sign (f a)
                     then bisect (n + 1) N f c b t
                     else bisect (n + 1) N f a c t
+
+
+module Convergence =
+
+    module GelmanRubin =
+
+        let w m sj2s = 
+            (1. / m) * (Seq.sum sj2s)
+
+        let b n m overallMean chainMeans =
+            (n / (m - 1.)) * (chainMeans |> Seq.sumBy (fun xm -> (xm - overallMean) ** 2.))
+
+        let sjSquared chainMean chainValues =
+            let n = chainValues |> Seq.length |> float
+            (1. / (n - 1.)) * (chainValues |> Seq.sumBy(fun thetai -> (thetai - chainMean) ** 2. ))
+
+        let varianceHat W B n =
+            (1. - (1. / n)) * W + (1. / n) * B
+
+        let rHat' varianceHat w =
+            sqrt (varianceHat / w)
+
+        let rHat (chains:float seq seq) =
+
+            if chains |> Seq.map Seq.length |> Seq.distinct |> Seq.length > 1 
+            then failwith "Chains were different lengths"
+
+            let overallMean = chains |> Seq.concat |> Seq.average   // Mean for all chains when combined
+            let chainMeans = chains |> Seq.map Seq.average          // Per-chain mean
+            let m = chains |> Seq.length |> float                   // Number of chains
+            let n = chains |> Seq.head |> Seq.length |> float       // Iterations per chain
+
+            let b = b n m overallMean chainMeans
+            let sSquared = chainMeans |> Seq.zip chains |> Seq.map(fun (history,mean) -> sjSquared mean history)
+            let w = w m sSquared
+            let varHat = varianceHat w b n
+            rHat' varHat w

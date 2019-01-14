@@ -6,9 +6,11 @@ open Expecto
 
 let config = { FsCheck.Config.Default with MaxTest = 10000 }
 
+let random = System.Random()
+
 module Generate =
 
-    let rand = System.Random().NextDouble
+    let rand = random.NextDouble
 
     let resultList dimensions n =
         [ for _ in 1..n do yield rand(), Array.init dimensions (fun _ -> rand()) ]
@@ -25,10 +27,9 @@ module ``End Conditions`` =
             testProperty "Ends on iteration" <| fun current ->
                 afterIteration current (Generate.resultList 5 current)
 
-            test "Ends when iteration has already occurred" {
-                let atEnd = afterIteration 45 (Generate.resultList 5 100)
-                Expect.isTrue atEnd "Did not stop at iteration"
-            }
+            testProperty "Ends when iteration has already occurred" <| fun n results ->
+                let atEnd = afterIteration n results
+                if results.Length >= n then atEnd else not atEnd
         ]
 
     [<Tests>]
@@ -36,7 +37,21 @@ module ``End Conditions`` =
 
         testList "Mean Squared Jump Distance (MSJD)" [
 
-            
+            // testProperty "Always false when not enough data" <| fun nBin nPoints results ->
+            //     let msjd = stationarySquaredJumpDistance' nBin nPoints results
+            //     if (nBin * nPoints) <= results.Length then msjd else not msjd
+
+            testProperty "MSJD is stationary when theta is fixed through time" <| fun theta ->
+                if theta |> snd |> Array.length = 0
+                then true
+                else
+                    List.init 1000 (fun _ -> theta)
+                    |> stationarySquaredJumpDistance
+
+            // testProperty "MSJD is not stationary when there is a linear trend in the data" <| fun (theta:Solution<float>) addition ->
+            //     List.init 1000 (fun i -> theta |> fst, theta |> snd |> Array.map(fun j -> j + (addition * float i)))
+            //     |> stationarySquaredJumpDistance
+            //     |> not
         ]
 
 
