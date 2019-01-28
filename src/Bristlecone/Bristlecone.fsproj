@@ -1,7 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
-    <PackageVersion>1.0.0-alpha1</PackageVersion>
+    <PackageVersion>1.0.0-alpha2</PackageVersion>
+    <PackageLicenseUrl>https://github.com/AndrewIOM/bristlecone/blob/master/LICENSE</PackageLicenseUrl>
+    <Authors>Andrew Martin</Authors>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Time.fs" />
@@ -16,6 +18,7 @@
     <Compile Include="DataAccess.fs" />
     <Compile Include="Plant.fs" />
     <Compile Include="ModelSelection.fs" />
+    <Compile Include="Workflow.fs" />
     <Compile Include="Library.fs" />
     <Compile Include="Equations.fs" />
   </ItemGroup>
