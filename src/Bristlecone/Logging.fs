@@ -4,6 +4,7 @@ type LogEvent =
     | OptimisationEvent of ModelFitState
     | DifferentiationEvent of string
     | GeneralEvent of string
+    | WorkloadEvent of string
 
 and ModelFitState = {
     Iteration: int
