@@ -41,6 +41,7 @@ module EndConditions =
                             |> List.map(fun (a,b) -> (b - a) ** 2.) // Squared jump
                             |> List.average ) )                     // Mean squared jump
                     |> Bristlecone.List.flip
+                    |> fun x -> printfn "MSJDs: %A" x; x
                     |> List.map(fun msjds -> Regression.pValueForLinearSlopeCoefficient [|1. .. msjds |> Seq.length |> float |] (msjds |> List.toArray) )
                 printfn "MSJD p-values: %A" trendSignificance
                 if trendSignificance |> List.exists(fun p -> p <= 0.1) || trendSignificance.Length = 0
@@ -236,12 +237,15 @@ module MonteCarlo =
         let covariance tuneInterval weighting remaining (history:(float*float[]) seq) scale =
             if remaining % tuneInterval = 0 then
                 if history |> Seq.length >= tuneInterval then
-                    history
-                    |> Seq.map snd
-                    |> Seq.take tuneInterval
-                    |> matrix
-                    |> computeCovariance
-                    |> fun c -> tuneCovariance weighting scale c
+                    let sc =
+                        history
+                        |> Seq.map snd
+                        |> Seq.take tuneInterval
+                        |> matrix
+                        |> computeCovariance
+                        |> fun c -> tuneCovariance weighting scale c
+                    try sc.Cholesky() |> ignore; sc // Ensure the matrix is positive definite
+                    with | _ -> scale
                 else scale
             else scale
 
@@ -261,22 +265,23 @@ module MonteCarlo =
             let tunedCov = covariance tuneInterval weighting remaining history cov
             tunedCov, sc
 
-        /// Tune previously observed covariance based on most recent period
-        let covarianceAllTime tuneInterval weighting remaining (history:(float*float[]) seq) scale =
-            if remaining % tuneInterval = 0 then
-                if history |> Seq.length >= tuneInterval then
+        /// Tune previously observed covariance based on all time
+        let covarianceAllTime weighting (history:(float*float[]) seq) scale =
+            try 
+                let sc =
                     history
                     |> Seq.map snd
                     |> matrix
                     |> computeCovariance
                     |> fun c -> tuneCovariance weighting scale c
-                else scale
-            else scale
+                sc.Cholesky() |> ignore // Ensure the matrix is positive definite
+                sc
+            with | _ -> scale
 
         let dualTotalHistory tuneInterval weighting remaining history tuningFactors =
             let cov,sc = tuningFactors
             let tunedSc = scaleFactor tuneInterval remaining history sc
-            let tunedCov = covarianceAllTime tuneInterval weighting remaining history cov
+            let tunedCov = covarianceAllTime weighting history cov
             tunedCov, tunedSc
 
         let none _ _ factors = factors
@@ -345,8 +350,8 @@ module MonteCarlo =
         /// The magnitude of tuning reduces as more batches have been run.
         let tune sigma acceptanceRate batchNumber =
             if acceptanceRate < 0.44
-            then sigma - 0.05//(3./(float batchNumber)) // Lower variance
-            else sigma + 0.05//(3./(float batchNumber)) // Increase variance
+            then sigma - (1./(float batchNumber)) // Lower variance
+            else sigma + (1./(float batchNumber)) // Increase variance
 
         /// Adaptive-metropolis-within-Gibbs algorithm, which can work in both adaptive and fixed modes
         let rec core isAdaptive writeOut random domain f results batchLength batchNumber (theta:float[]) sigmas =
@@ -479,6 +484,279 @@ module MonteCarlo =
         randomWalk' (finalScale |> fst) (finalScale |> snd) (secondAdaptation |> Seq.head |> snd) [] random writeOut n domain f |> fst
 
 
+    /// A meta-heuristic that approximates a global optimium by
+    /// simulating slow cooling as a slow decrease in the probability
+    /// of temporarily accepting worse solutions.
+    module SimulatedAnnealing =
+
+
+        module GeneralSA =
+
+            let pi = System.Math.PI
+            let gammaFn = MathNet.Numerics.SpecialFunctions.Gamma
+
+
+            /// qV = visiting parameter
+            /// D = dimension of the cost function
+            /// Tqv = visiting temperature
+            let tsallisPDF qV D tqv x =
+                let a = (((qV - 1.) / pi) ** (D / 2.)) * (gammaFn ( (1. / (qV - 1.)) + ((D - 1.) / 2.)) / gammaFn ( (1. - (qV - 1.)) - (1./2.)))
+                let b = (tqv ** (-D / (3. - qV))) / ((1. + (qV - 1.) * ((x ** 2.) / (tqv ** (2. * (3. - qV)))) ** (1. / (qV - 1.) + (D - 1.) / 2.)))
+                a * b
+
+            // Temperature decay
+            let tqv initialT qv t =
+                if qv = 2. 
+                then initialT / (1. + t)
+                else initialT * ((2. ** (qv - 1.) - 1.) / ((1. + t) ** (qv - 1.) - 1.))
+
+            // let annealingScheme t =
+            //     initialT * ((2. ** (qv - 1.) - 1.) / ((1. + t) ** (qv - 1.) - 1.)
+
+            // let acceptanceProbability tqa qa e1 e2 =
+            //     if e2 < e1
+            //     then 1.
+            //     else ((1. + (qa - 1.) * (e2 - e1) / tqa) ** (1. / (qa - 1.))) ** -1.
+
+
+
+
+        module CoolingSchemes =
+
+            /// Commonly set alpha to 0.95.
+            /// Tk is the temperature after k cooling iterations.
+            let exponential alpha tK : float =
+                alpha * tK
+
+            let fastCauchyCoolingSchedule (t0:float) k =
+                t0 / (float k)
+
+
+        module EndConditions =
+
+            let defaultTolerance = 1e-06
+
+            // let tolerance tol : EndCondition<float> =
+            //     fun results ->
+            //         if results.Length > 10
+            //         then 
+                    
+
+
+        /// e = new minus old energy (or -logL)
+        let boltzmannProbability t e =
+            exp <| -e / t
+
+        /// Scale every 500 iterations
+        /// - Randomly modify one, two, or three parameters at a time (when proposed)
+        /// - Calculate the acceptance rate of each during tune
+        /// - 
+
+
+        /// A monte carlo markov chain that 
+        let rec simulatedAnnealing' random writeOut endCondition propose tune f theta1 l1 d scale t =
+            let iteration = d |> Seq.length
+            let sc = scale |> tune iteration d
+            let theta2 = theta1 |> propose sc t
+            let l2 = f theta2
+            let thetaAccepted, lAccepted = 
+                // printfn "L2 = %f; Theta2 = %A" l2 theta2
+                if l2 < l1
+                then theta2, l2
+                else
+                    let rand = ContinuousUniform.draw random 0. 1. ()
+                    let ratio = - (l2 - l1) / t |> exp
+                    //printfn "Rand = %f; Ratio = %f; L2 = %f" rand ratio l2
+                    if rand < ratio
+                        then theta2, l2
+                        else theta1, l1
+            if endCondition d
+            then d, sc
+            else
+                writeOut <| OptimisationEvent { Iteration = iteration; Likelihood = lAccepted; Theta = thetaAccepted }
+                if l2 = nan
+                then simulatedAnnealing' random writeOut endCondition propose tune f thetaAccepted lAccepted d sc t
+                else simulatedAnnealing' random writeOut endCondition propose tune f thetaAccepted lAccepted ((lAccepted,thetaAccepted)::d) sc t
+
+        // Pre    1. Initial temperature based on acceptance rate (for any proposal jumping and start point)
+        
+        // Method 1. Gaussian Simulated Annealing (GSA)
+        // Method 2. Cauchy Simulated Annealing (CSA)
+        // Method 3. Multivariate Cauchy 
+
+        let simulatedAnnealing alpha initialTemperature minT stepSize writeOut n domain (f:Objective<float>) : (float * float[]) list =
+            
+            // 1. Setup univariate Cauchy distribution
+            let random = MathNet.Numerics.Random.MersenneTwister(true)
+            let draw scale = 
+                let c = MathNet.Numerics.Distributions.Cauchy(0.,scale,random)
+                fun () -> c.Sample()
+
+            // 2. Get random start condition
+            let theta1 = initialise domain random
+
+            writeOut <| GeneralEvent (sprintf "Theta 1 = %A" theta1)
+
+            // 3. Proposal changes only one-three parameter on each draw
+            // NB Randomly modify only a subset of the parameters
+            let propose (scale:float[]) temperature (theta:float[]) =
+                theta
+                |> Array.mapi(fun i x -> x, (draw scale.[i] ()), domain.[i])
+                |> Array.map(fun (x,j,(_,_,con)) -> constrainJump x j 1. con)
+
+            let initialScale = 
+                [| 1 .. theta1.Length |] |> Array.map (fun _ -> stepSize)
+
+            // 5. Tune function
+            // NB Runs a mini metropolis within gibbs step to assess per-parameter convergence at the end of every markov chain
+            // NB Scale is tuned depending on the number of WORSE STEPS ONLY accepted vs rejected
+            let rec tuneStep batchLength scales theta timesAboveThreshold = 
+
+                printfn "Starting tuning"
+
+                let tune scale accRate =
+                    match accRate with
+                    | a when a > 0.40   -> scale * 1.20
+                    | a when a < 0.20   -> scale * 0.80
+                    | _ -> scale
+
+                // Propose only a single change at once
+                let propose (theta:float[]) j lsj domain temperature =
+                    theta
+                    |> Array.mapi(fun i e ->
+                        if i = j
+                        then e, draw lsj ()
+                        else e, 0. )
+                    |> Array.zip domain
+                    |> Array.map (fun ((_,_,con), (e,jump)) -> constrainJump e jump temperature con)
+
+                let ds =
+                    theta
+                    |> Array.zip scales
+                    |> Array.scan (fun (j,results) (lsj,_) -> 
+                        let l,theta = results |> Seq.head
+                        let proposeJump = fun scale temperature theta -> propose theta j lsj domain temperature
+                        let results = simulatedAnnealing' random ignore (EndConditions.afterIteration batchLength) proposeJump TuningMode.none f theta l  [] () 1. |> fst
+                        j+1,results) (0,[f theta, theta])
+                    |> Array.tail       // Skip initial state
+                    |> Array.map snd    // Discard parameter number
+
+                let d =
+                    ds
+                    |> Array.rev        // MH results are ordered with most recent at head
+                    |> List.concat      // Results sorted last to first
+
+                // Tune variance according to the per-parameter acceptance rate.
+                // Only end when all acceptance rates are in acceptable range.
+                let acceptanceRates =
+                    ds |> Array.map(fun results ->
+                        let accepted = 
+                            results
+                            |> List.pairwise
+                            |> List.where(fun (x,y) -> x <> y)
+                            |> List.length
+                        (float accepted) / (float batchLength) )
+                let tunedSigmas =
+                    acceptanceRates
+                    |> Array.zip scales
+                    |> Array.map(fun (ls,ar) -> tune ls ar)
+                writeOut <| GeneralEvent (sprintf "[Tuning] Sigmas: %A | Acceptance rates: %A" tunedSigmas acceptanceRates)
+
+                if acceptanceRates |> Array.exists(fun s -> s < 0.20 || s > 0.60)
+                then tuneStep batchLength tunedSigmas (d |> Seq.head |> snd) 0
+                else 
+                    if timesAboveThreshold = 0 // 3
+                    then tunedSigmas, ((d |> Seq.minBy fst) |> snd)
+                    else tuneStep batchLength tunedSigmas (d |> Seq.head |> snd) (timesAboveThreshold + 1)
+
+
+            let noTune iteration results scale = scale
+
+            // HEAT UP HERE (TO MAX TEMPERATUE [WHICH OCCURS AT P-ACC > 0.90])
+            // About 60% of worse moves should be accepted at starting temperature.
+            // Heating up depends on the tuned T=1 scale structure
+            let rec heatUp batchSize theta t scales =
+                let l = f theta
+                writeOut <| GeneralEvent (sprintf "[Tuning] Heating up at temperature: %f (-logL = %f) and scales = %A" t l scales)
+                let tTrace = simulatedAnnealing' random writeOut (EndConditions.afterIteration batchSize) propose noTune f theta l [ l, theta ] scales t |> fst
+
+                // NB Trace is sorted in reverse order!
+
+                // for t in tTrace do
+                //     printf "-> %f" (t |> fst)
+
+                // Get all moves that were worse (all moves that went higher)
+                let badMovesAccepted = 
+                    tTrace
+                    |> List.map fst
+                    |> List.rev // Sort in time order (t = 0 ... n)
+                    |> List.pairwise
+                    |> List.where(fun (a,b) -> a < b) // New point had higher likelihood
+                    |> List.length
+                    |> float
+
+                let badMovesRejected =
+                    tTrace
+                    |> List.map fst
+                    |> List.rev // Sort in time order (t = 0 ... n)
+                    |> List.pairwise
+                    |> List.where(fun (x,y) -> x = y) // No move occurred
+                    |> List.length
+                    |> float
+
+                let goodMoves =
+                    tTrace
+                    |> List.map fst
+                    |> List.rev // Sort in time order (t = 0 ... n)
+                    |> List.pairwise
+                    |> List.where(fun (x,y) -> x > y) // New point had lower likelihood
+                    |> List.length
+                    |> float
+
+                let ar = badMovesAccepted / (badMovesAccepted + badMovesRejected)
+                writeOut <| GeneralEvent (sprintf "[Tuning] Acceptance rate of bad moves was %A (%f:%f, with good moves %f) (overall AR is %f)" ar badMovesAccepted badMovesRejected goodMoves (goodMoves / (badMovesAccepted + badMovesRejected + goodMoves)))
+
+                if ar < 0.85
+                then heatUp batchSize (tTrace |> Seq.minBy (fun l -> l |> fst) |> snd) (t * 1.10) scales
+                else t
+
+            // A. Tune scale structure
+            let tunedScale,tunedTheta = (initialScale, theta1) //tuneStep 100 initialScale theta1 0
+
+            // B. Heat up to max temperature
+            let maxTemperature = heatUp 500 tunedTheta 1. tunedScale
+
+            let endTolerance = 1e-06
+
+            let stoppedImproving chains (minimums:Solution<float> list) =
+                if minimums |> List.length < chains
+                then false
+                else
+                    (minimums
+                    |> List.map fst
+                    |> List.take chains
+                    |> List.pairwise
+                    |> List.sumBy(fun (n,old) -> old - n)
+                    |> (fun x -> printfn "Better by %f" x; x)) <= endTolerance
+
+
+            // Run a homogenous markov chain at each individual temperature level
+            let coolingSchedule = CoolingSchemes.exponential alpha
+            let stoppingCriterion = n
+            let rec runChain k t theta scales minimums =
+                let l = (f theta)
+                writeOut <| GeneralEvent (sprintf "Chain T[%f] (%i): min[-logL] = %f; theta[%A]" t k l theta)
+                let result = simulatedAnnealing' random writeOut stoppingCriterion propose noTune f theta l [ (l, theta) ] scales t |> fst
+                let bestResult = result |> Seq.minBy fst
+                if stoppedImproving 5 (bestResult::minimums)
+                then result
+                else runChain (k+1) (CoolingSchemes.fastCauchyCoolingSchedule maxTemperature (k+1)) (bestResult |> snd) scales (bestResult::minimums)
+
+            // C. Run 
+            let result = runChain 1 maxTemperature theta1 tunedScale []
+            result
+
+
 // Nelder Mead implementation
 // Modified from https://github.com/mathias-brandewinder/Amoeba
 module Amoeba =
@@ -486,7 +764,7 @@ module Amoeba =
     module Solver = 
 
         type Amoeba = 
-            { Dim:int; Solutions:Solution<float> [] } // assumed to be sorted by fst value
+            { Dim:int; Solutions:Solution<float> [] }
             member this.Size = this.Solutions.Length
             member this.Best = this.Solutions.[0]
             member this.Worst = this.Solutions.[this.Size - 1]
@@ -561,10 +839,10 @@ module Amoeba =
                 |> Array.sortBy fst
             let amoeba = { Dim = dim; Solutions = start }
 
-            let rec search (a:Amoeba) =
-                if endWhen (a.Solutions |> Array.toList) then search (update a f settings) // TODO unify array vs list
+            let rec search i (a:Amoeba) =
+                if i > 0 then search (i-1) (update a f settings) // TODO unify array vs list
                 else 
                     logger <| GeneralEvent (sprintf "Solution: -L = %f" (fst a.Solutions.[0]))
                     a.Solutions |> Array.toList
 
-            search amoeba
+            search 50000 amoeba

@@ -161,10 +161,8 @@ module Bristlecone =
         let optimise = engine.OptimiseWith engine.LogTo endCondition (constrainedParameters |> ParameterPool.toDomain optimisationConstraints)
         let result = objective |> optimise
         let lowestLikelihood, bestPoint = result |> List.minBy (fun (_,l) -> l)
-        printfn "Lowest Likelihood = %f (best point = %A)" lowestLikelihood bestPoint
 
         let estimatedSeries = Objective.predict { model with Parameters = constrainedParameters } solver bestPoint
-        printfn "Estimated = %A" estimatedSeries
         let paired = 
             timeSeriesData 
             |> Map.filter(fun key _ -> estimatedSeries |> Map.containsKey key)
@@ -183,11 +181,14 @@ module Bristlecone =
     ///   * `permutations` - number of times to generate random parameters
     ///   * `startingConditions` - a coded map of values at t=0
     ///   * `engine` - an `EstimationEngine`
-    let testModel engine timeSeriesLength startingConditions iterations generationRules (model:ModelSystem) =
+    let testModel engine timeSeriesLength startingConditions iterations generationRules noiseModel (model:ModelSystem) =
 
         let rec generateData attempts =
             let theta = drawParameterSet model.Parameters
-            let trueSeries = theta |> generateFixedSeries engine.LogTo model.Equations engine.TimeHandling timeSeriesLength startingConditions
+            let trueSeries = 
+                theta 
+                |> generateFixedSeries engine.LogTo model.Equations engine.TimeHandling timeSeriesLength startingConditions 
+                |> noiseModel theta
             let brokeTheRules = 
                 generationRules
                 |> List.map(fun (key,ruleFn) -> trueSeries |> Map.find key |> TimeSeries.toSeq |> Seq.map fst |> ruleFn)
