@@ -28,9 +28,9 @@ module RealTimeTrace =
     open RHelper
 
     let decompose state =
-        let likelihood = state.Iteration, state.Likelihood, "-logL", state.Likelihood
+        let likelihood = (state.Iteration, state.Likelihood, "-logL", state.Likelihood)
         state.Theta
-        |> Seq.mapi(fun i v -> state.Iteration, state.Likelihood, sprintf "theta_%i "i, v)
+        |> Seq.mapi(fun i v -> (state.Iteration, state.Likelihood, sprintf "theta_%i "i, v))
         |> Seq.append [likelihood]
 
     let convertToDataFrame d =
@@ -91,4 +91,11 @@ module RealTimeTrace =
 
         member __.Log msg = 
             let chain = Thread.CurrentThread.ManagedThreadId
-            agent.Post (msg,chain)
+            agent.Post (msg, chain)
+
+    let graphWithConsole refreshRate maxData = 
+        let consolePost = Bristlecone.Logging.Console.logger ()
+        let graphLog = TraceGraph(Device.X11, refreshRate, maxData)
+        (fun event -> 
+            consolePost event
+            graphLog.Log event )

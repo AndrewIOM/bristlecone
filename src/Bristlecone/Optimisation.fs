@@ -495,10 +495,10 @@ module MonteCarlo =
 
             /// Commonly set alpha to 0.95.
             /// Tk is the temperature after k cooling iterations.
-            let exponential alpha tK : float =
-                alpha * tK
+            let exponential alpha t0 t k : float =
+                alpha * t
 
-            let fastCauchyCoolingSchedule (t0:float) k =
+            let fastCauchyCoolingSchedule (t0:float) t k =
                 t0 / (float k)
 
 
@@ -524,13 +524,36 @@ module MonteCarlo =
                     |> List.map fst
                     |> List.take chains
                     |> List.pairwise
-                    |> List.sumBy(fun (n,old) -> old - n)
+                    |> List.sumBy(fun (n,old) -> max 0. (old - n)) // Captures backwards jumps
                     |> (fun x -> printfn "Better by %f" x; x)) <= defaultTolerance
 
+            let noImprovement (chain:Solution<float> list) =
+                (chain
+                |> List.map fst
+                |> List.pairwise
+                |> List.averageBy(fun (n,old) -> max 0. (old - n)) // Average jumping distance
+                |> (fun x -> printfn "Average jump is %f" x; x)) <= defaultTolerance
+           
             let improvementCount count : EndCondition<float> =
                 fun results ->
                     (results |> Seq.pairwise |> Seq.where(fun (x,y) -> x < y) |> Seq.length) >= count
 
+        /// Represents configurable settings of an annealing procedure
+        /// that supports (a) heating, followed by (b) annealing.
+        type AnnealSettings<'a> = 
+            { HeatStepLength: EndCondition<'a>
+              HeatRamp: float -> float
+              BoilingAcceptanceRate: float
+              InitialTemperature: float
+              AnnealStepLength: EndCondition<'a> }
+            
+            static member Default = {
+                HeatStepLength = EndConditions.afterIteration 500
+                HeatRamp = fun t -> t * 1.20
+                BoilingAcceptanceRate = 0.85
+                InitialTemperature = 1.00
+                AnnealStepLength = EndConditions.improvementCount 500
+            }
 
         /// Jump based on a proposal function and probability function
         let tryMove propose probability random f (l1,theta1) : Solution<float> =
@@ -559,7 +582,7 @@ module MonteCarlo =
                     else 
                         writeOut <| OptimisationEvent { Iteration = d |> List.length; Likelihood = newPoint |> fst; Theta = newPoint |> snd }
                         run (state |> Seq.head) state
-            run initialPoint []
+            run initialPoint [ initialPoint ]
 
         /// Cool between homoegenous markov chains according to `cool` schedule.
         let rec anneal writeOut chainEnd annealEnd cool markov temperature point previousBests =
@@ -569,11 +592,13 @@ module MonteCarlo =
                 |> List.minBy fst
             let history = bestAtTemperature::previousBests
             if annealEnd history then history
-            else anneal writeOut chainEnd annealEnd cool markov (temperature |> cool) bestAtTemperature history
+            else 
+                writeOut <| GeneralEvent (sprintf "[Annealing] Best point is %f at temperature %f" (bestAtTemperature |> fst) temperature)
+                anneal writeOut chainEnd annealEnd cool markov (cool temperature (history |> List.length)) bestAtTemperature history
 
         /// Heat up temperature intil acceptance rate of bad moves is above the threshold `endAcceptanceRate`.
-        let rec heat batchSize endAcceptanceRate heatingSchedule markov bestTheta temperature =
-            let chain = markov (EndConditions.afterIteration batchSize) temperature bestTheta
+        let rec heat write endCondition endAcceptanceRate heatingSchedule markov bestTheta temperature =
+            let chain = markov endCondition temperature bestTheta
             let min = chain |> List.minBy fst
             let ar =
                 let a,r =
@@ -585,13 +610,13 @@ module MonteCarlo =
                 let badAccepted = a |> List.where id |> List.length |> float
                 let badRejected = r |> List.where id |> List.length |> float
                 badAccepted / (badAccepted + badRejected)
-            printfn "Heating - AR is %f" ar
+            write <| GeneralEvent (sprintf "Heating - AR is %f" ar)
             if ar < endAcceptanceRate
-            then heat batchSize endAcceptanceRate heatingSchedule markov min (temperature |> heatingSchedule)
-            else temperature
+            then heat write endCondition endAcceptanceRate heatingSchedule markov min (temperature |> heatingSchedule)
+            else (temperature, min)
 
         // Given a candidate distribution + machine, run base SA algorithm
-        let simulatedAnnealing scale machine (jump:System.Random->float->unit->float) cool writeOut domain f =
+        let simulatedAnnealing scale settings annealEnd machine (jump:System.Random->float->unit->float) cool writeOut domain f =
 
             // 1. Initial conditions
             let random = MathNet.Numerics.Random.MersenneTwister(true)
@@ -609,30 +634,24 @@ module MonteCarlo =
                 markovChain writeOut e (propose scales) machine random f temperature 
 
             // 3. Heat up
-            let batchSize = 500
-            let endAcceptanceRate = 0.85
-            let heatingSchedule t = t * 1.50
-            let initialT = 1.0
-            let boiled = heat batchSize endAcceptanceRate heatingSchedule (homogenousChain initialScale) (l1, theta1) initialT
+            let boilingPoint,min = heat writeOut settings.HeatStepLength settings.BoilingAcceptanceRate settings.HeatRamp (homogenousChain initialScale) (l1, theta1) settings.InitialTemperature
 
-            // 4. Gradually cool down
-            let chainEnd = EndConditions.improvementCount 500
-            let annealEnd = EndConditions.stoppedImproving 5
-            anneal writeOut chainEnd annealEnd (cool boiled) (homogenousChain initialScale) boiled (l1, theta1) [(l1, theta1)]
+            // 4. Gradually cool down (from best point during heat-up)
+            anneal writeOut settings.AnnealStepLength annealEnd (cool boilingPoint) (homogenousChain initialScale) boilingPoint min []
 
         /// Candidate distribution: Gaussian univariate []
         /// Probability: Boltzmann Machine
-        let classicalSimulatedAnnealing scale writeOut n domain (f:Objective<float>) : Solution<float> list =
+        let classicalSimulatedAnnealing scale settings writeOut n domain (f:Objective<float>) : Solution<float> list =
             let gaussian rnd stdev = Bristlecone.Statistics.Distributions.Normal.draw rnd 0. stdev
-            simulatedAnnealing scale Machines.boltzmann gaussian (fun t0 -> CoolingSchemes.exponential 0.05) writeOut domain f
+            simulatedAnnealing scale settings n Machines.boltzmann gaussian (CoolingSchemes.exponential 0.05) writeOut domain f
 
         // Candidate distribution: Cauchy univariate []
         // Probability: Bottzmann Machine
-        let fastSimulatedAnnealing scale writeOut n domain (f:Objective<float>) : (float * float[]) list =
+        let fastSimulatedAnnealing scale settings writeOut n domain (f:Objective<float>) : (float * float[]) list =
             let cauchy rnd scale = 
                 let c = MathNet.Numerics.Distributions.Cauchy(0., scale, rnd)
                 fun () -> c.Sample()
-            simulatedAnnealing scale Machines.boltzmann cauchy (CoolingSchemes.fastCauchyCoolingSchedule) writeOut domain f
+            simulatedAnnealing scale settings n Machines.boltzmann cauchy (CoolingSchemes.fastCauchyCoolingSchedule) writeOut domain f
 
 
 // Nelder Mead implementation
