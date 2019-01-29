@@ -421,7 +421,7 @@ module MonteCarlo =
 
                 if linearTrendPValues |> List.exists(fun p -> p <= 0.1) || linearTrendPValues.Length = 0
                 then core isAdaptive writeOut random domain f fullResults batchLength (batchNumber+1) (fullResults |> Seq.head |> snd) sigmas
-                else batchNumber, fullResults, sigmas
+                else (batchNumber, fullResults, sigmas)
 
 
     let ``Adaptive-Metropolis-within Gibbs`` writeOut endCon domain (f:Objective<float>) : (float * float[]) list =
@@ -477,7 +477,7 @@ module MonteCarlo =
         // b) Continue the chain using the covariance matrix and last theta
         writeOut <| GeneralEvent "Generalised MCMC: Starting 2nd Adaptive Phase"
         let secondAdaptation, finalScale = 
-            randomWalk' covariance 1. (results |> Seq.head |> snd) [ TuneMethod.CovarianceWithScaleTotalHistory 0.750, 200, EndConditions.stationarySquaredJumpDistance ] random writeOut (EndConditions.afterIteration 0) domain f
+            randomWalk' covariance 1. (results |> Seq.head |> snd) [ (TuneMethod.CovarianceWithScaleTotalHistory 0.750, 200, EndConditions.stationarySquaredJumpDistance) ] random writeOut (EndConditions.afterIteration 0) domain f
 
         // 3. Burn-in and sampling
         writeOut <| GeneralEvent "Generalised MCMC: Starting Sampling Phase (random walk MCMC, with burnin and clean trace)"
@@ -526,6 +526,10 @@ module MonteCarlo =
                     |> List.pairwise
                     |> List.sumBy(fun (n,old) -> old - n)
                     |> (fun x -> printfn "Better by %f" x; x)) <= defaultTolerance
+
+            let improvementCount count : EndCondition<float> =
+                fun results ->
+                    (results |> Seq.pairwise |> Seq.where(fun (x,y) -> x < y) |> Seq.length) >= count
 
 
         /// Jump based on a proposal function and probability function
@@ -587,7 +591,7 @@ module MonteCarlo =
             else temperature
 
         // Given a candidate distribution + machine, run base SA algorithm
-        let simulatedAnnealing scale machine (jump:System.Random->float->unit->float) writeOut domain f =
+        let simulatedAnnealing scale machine (jump:System.Random->float->unit->float) cool writeOut domain f =
 
             // 1. Initial conditions
             let random = MathNet.Numerics.Random.MersenneTwister(true)
@@ -612,16 +616,15 @@ module MonteCarlo =
             let boiled = heat batchSize endAcceptanceRate heatingSchedule (homogenousChain initialScale) (l1, theta1) initialT
 
             // 4. Gradually cool down
-            let cool = CoolingSchemes.exponential 0.05
-            let chainEnd = EndConditions.afterIteration 1000
-            let annealEnd = EndConditions.afterIteration 1000
-            anneal writeOut chainEnd annealEnd cool (homogenousChain initialScale) boiled (l1, theta1) [(l1, theta1)]
+            let chainEnd = EndConditions.improvementCount 500
+            let annealEnd = EndConditions.stoppedImproving 5
+            anneal writeOut chainEnd annealEnd (cool boiled) (homogenousChain initialScale) boiled (l1, theta1) [(l1, theta1)]
 
         /// Candidate distribution: Gaussian univariate []
         /// Probability: Boltzmann Machine
         let classicalSimulatedAnnealing scale writeOut n domain (f:Objective<float>) : Solution<float> list =
             let gaussian rnd stdev = Bristlecone.Statistics.Distributions.Normal.draw rnd 0. stdev
-            simulatedAnnealing scale Machines.boltzmann gaussian writeOut domain f
+            simulatedAnnealing scale Machines.boltzmann gaussian (fun t0 -> CoolingSchemes.exponential 0.05) writeOut domain f
 
         // Candidate distribution: Cauchy univariate []
         // Probability: Bottzmann Machine
@@ -629,7 +632,7 @@ module MonteCarlo =
             let cauchy rnd scale = 
                 let c = MathNet.Numerics.Distributions.Cauchy(0., scale, rnd)
                 fun () -> c.Sample()
-            simulatedAnnealing scale Machines.boltzmann cauchy writeOut domain f
+            simulatedAnnealing scale Machines.boltzmann cauchy (CoolingSchemes.fastCauchyCoolingSchedule) writeOut domain f
 
 
 // Nelder Mead implementation
@@ -641,7 +644,9 @@ module Amoeba =
         type Amoeba = 
             { Dim:int; Solutions:Solution<float> [] }
             member this.Size = this.Solutions.Length
+
             member this.Best = this.Solutions.[0]
+
             member this.Worst = this.Solutions.[this.Size - 1]
 
         type Settings = { Alpha:float; Sigma:float; Gamma:float; Rho:float; Size:int }
@@ -654,7 +659,7 @@ module Amoeba =
             |> Seq.iter (fun (v,x) -> 
                 logger <| GeneralEvent (sprintf "  %.2f, %s" v (x |> Seq.map string |> String.concat ",")))
 
-        let evaluate (f:Objective<'a>) (x:Point<'a>) = f x, x
+        let evaluate (f:Objective<'a>) (x:Point<'a>) = (f x, x)
         let valueOf (s:Solution<'a>) = fst s
 
         let replace (a:Amoeba) (s:Solution<float>) = 
@@ -687,18 +692,18 @@ module Amoeba =
             let cen = centroid a
             let rv,r = reflected (cen, (snd a.Worst)) s |> evaluate f
             if ((valueOf (a.Best) <= rv) && (rv < (valueOf (a.Solutions.[a.Size - 2])))) then
-                replace a (rv,r)
+                replace a (rv, r)
             else
                 if (rv < valueOf (a.Best)) then
                     let ev,e = expanded (cen, r) s |> evaluate f
                     if (ev < rv) then
-                        replace a (ev,e)
+                        replace a (ev, e)
                     else
-                        replace a (rv,r)
+                        replace a (rv, r)
                 else
                     let (cv,c) = contracted (cen, (snd a.Worst)) s |> evaluate f
                     if (cv < valueOf (a.Worst)) then
-                        replace a (cv,c)
+                        replace a (cv, c)
                     else
                         shrink a f s
 
