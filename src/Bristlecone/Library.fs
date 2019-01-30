@@ -21,16 +21,48 @@ module Objective =
             { Observed = value
               Expected = expected |> Map.find key } )
 
+    /// The system's `Measures` are computed from the product of the solver.
+    let measure (system:ModelSystem) solveDiscrete (expected:CodedMap<float[]>) : CodedMap<float[]> =
+        system.Measures
+        |> Map.map (fun key measure -> solveDiscrete key measure expected)
+        |> Map.fold (fun acc key value -> Map.add key value acc) expected
+
     let predict (system:ModelSystem) integrate (p:Point<float>) =
         system.Equations
         |> Map.map (fun _ v -> parameteriseModel system.Parameters p v)
         |> integrate
 
-    let create (system:ModelSystem) integrate (observed:CodedMap<float array>) (p:Point<float>) =
+    /// Computes measurement variables and appends to expected data
+    let create (system:ModelSystem) integrate solveDiscrete (observed:CodedMap<float array>) (p:Point<float>) =
         p
         |> predict system integrate
+        |> measure system solveDiscrete
         |> pairObservationsToExpected observed
         |> system.Likelihood (p |> ParameterPool.toParamList system.Parameters)
+
+module Discrete =
+
+    /// A continuation representing a transform of pre-computed data
+    /// float = previous state
+    type Measurement = float -> Bristlecone.ModelSystem.Environment -> Bristlecone.ModelSystem.Environment -> float
+
+    let solve conditioning series : ShortCode -> Measurement -> CodedMap<float[]> -> float[] =
+        let startEnvironment =
+            match conditioning with
+            | Custom c -> c
+            | _ -> (series |> Map.map (fun _ value -> value |> Array.map snd |> Array.head))
+        fun (c:ShortCode) (m:Measurement) (expected:CodedMap<float[]>) ->
+            expected
+            |> Map.toList
+            |> List.map(fun (c,d) -> d |> Array.map(fun x -> (c, x)) |> Seq.toList) // Add shortcode to each time point's value
+            |> Bristlecone.List.flip // Flip list so that it is primarily timepoint-indexed
+            |> List.map Map.ofList // Make environment at each time into a CodedMap<float>
+            // Scan through the environments, outputting the measure at each time
+            |> List.scan(fun (previousEnv,previousX) currentEnv -> 
+                (currentEnv, m previousX previousEnv currentEnv) ) (startEnvironment, startEnvironment.Item c)
+            |> List.tail    // Remove conditioned point (time zero)
+            |> List.map snd
+            |> List.toArray
 
 
 module Bristlecone =
@@ -45,11 +77,11 @@ module Bristlecone =
         | NoConditioning -> series
         | RepeatFirstDataPoint ->
             let first = series |> Array.head
-            series |> Array.append [|(fst first - 1.),(snd first)|] 
+            series |> Array.append [|((fst first - 1.), (snd first))|] 
         | Custom precomputed -> 
             let custom = precomputed |> Map.find key
             let first = series |> Array.head
-            series |> Array.append [| (fst first - 1.), custom |] 
+            series |> Array.append [| ((fst first - 1.), custom) |] 
 
     let makeSolverWithData timeMode conditioning logger series =
         let data = (series |> Map.map (fun _ value -> value |> Array.map snd))
@@ -66,10 +98,10 @@ module Bristlecone =
                 // The solver discards the conditioned time point (t0), and only returns data for t1..tn
                 i logger (cumulativeTime.Head - timeStep) (cumulativeTime |> List.last) timeStep t0 series x
                 |> Map.map(fun _ v -> v |> Array.tail)
-            solver, data
+            (solver, data)
 
     let generateFixedSeries writeOut equations timeMode seriesLength startPoint theta =
-        let applyFakeTime s = TimeSeries.create (DateTime(DateTime.Now.Year,01,01)) Annual s
+        let applyFakeTime s = TimeSeries.create (DateTime(DateTime.Now.Year, 01, 01)) Annual s
         let eqs = equations |> Map.map (fun _ v -> v theta)
         match timeMode with
         | Discrete -> invalidOp "Not supported yet"
@@ -77,7 +109,7 @@ module Bristlecone =
             i writeOut 0. (seriesLength |> float) 1. startPoint Map.empty eqs // TODO allow testing to incorporate environmental forcings
             |> Map.map (fun _ v -> applyFakeTime v)
 
-    let drawNormal min max = MathNet.Numerics.Distributions.Normal((max - min),(max - min) / 4.)
+    let drawNormal min max = MathNet.Numerics.Distributions.Normal((max - min), (max - min) / 4.)
 
     let drawParameterSet parameters =
         parameters
@@ -141,22 +173,27 @@ module Bristlecone =
 
         let constrainedParameters, optimisationConstraints = 
             match engine.Constrain with
-            | Transform -> model.Parameters, [1 .. model.Parameters.Count] |> List.map(fun _ -> Unconstrained)
+            | Transform -> (model.Parameters, [1 .. model.Parameters.Count] |> List.map(fun _ -> Unconstrained))
             | Detached -> 
                 let par,con = 
                     model.Parameters 
                     |> Map.map (fun k v -> detatchConstraint v) 
                     |> Map.toList 
-                    |> List.map (fun (k,(x,y)) -> (k,x),y)
+                    |> List.map (fun (k,(x,y)) -> ((k,x),y))
                     |> List.unzip
-                par |> Map.ofList, con
+                (par |> Map.ofList, con)
 
         let solver,data =
             timeSeriesData
             |> TimeSeries.validateCommonTimeline
             |> Map.map (fun _ v -> Resolution.scaleTimeSeriesToResolution Annual v)
             |> makeSolverWithData engine.TimeHandling engine.Conditioning engine.LogTo
-        let objective = Objective.create { model with Parameters = constrainedParameters } solver data
+        let discreteSolve = // TODO make DRY
+            timeSeriesData
+            |> TimeSeries.validateCommonTimeline
+            |> Map.map (fun _ v -> Resolution.scaleTimeSeriesToResolution Annual v)
+            |> Discrete.solve engine.Conditioning
+        let objective = Objective.create { model with Parameters = constrainedParameters } solver discreteSolve data
         
         let optimise = engine.OptimiseWith engine.LogTo endCondition (constrainedParameters |> ParameterPool.toDomain optimisationConstraints)
         let result = objective |> optimise

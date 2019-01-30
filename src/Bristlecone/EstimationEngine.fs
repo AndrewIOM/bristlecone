@@ -8,6 +8,9 @@ module ModelSystem =
     type Time = float
     type ModelEquation = ParameterPool -> Time -> Response -> Environment -> float
 
+    // Measures
+    // Given previous times, and starting conditions, generate the next time step
+
     // Likelihood
     type PredictedSeries = {
         Expected: float[]
@@ -16,14 +19,15 @@ module ModelSystem =
 
     type ModelSystem = {
         Parameters: ParameterPool
-        Equations: CodedMap<ModelEquation>
+        Equations:  CodedMap<ModelEquation>
+        Measures:   CodedMap<float -> Environment -> Environment -> float> //Environment(t-1) -> Environment(t) -> float
         Likelihood: Likelihood }
 
     type EstimationResult = {
         Likelihood: float
         Parameters: ParameterPool
-        Series: CodedMap<PredictedSeries>
-        Trace: (float * float []) list }
+        Series:     CodedMap<PredictedSeries>
+        Trace:      (float * float []) list }
 
 
 module EstimationEngine =
