@@ -49,12 +49,12 @@ module Akaike =
     ///
     /// **Exceptions**
     ///   * `ArgumentException` - occurs when there are no observations within an estimation result.
-    let akaikeWeights (models:EstimationResult seq) =
+    let akaikeWeights (models:seq<EstimationResult>) =
         match models |> Seq.tryHead with
         | None -> seq[]
         | Some m ->
             let n = (m.Series |> Seq.head).Value.Observed.Length
             models
-            |> Seq.map(fun m -> m.Likelihood, m.Parameters.Count)
+            |> Seq.map(fun m -> (m.Likelihood, m.Parameters.Count))
             |> akaikeWeights' n 
             |> Seq.zip models

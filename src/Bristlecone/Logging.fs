@@ -9,7 +9,7 @@ type LogEvent =
 and ModelFitState = {
     Iteration: int
     Likelihood: float
-    Theta: float seq
+    Theta: seq<float>
 }
 
 

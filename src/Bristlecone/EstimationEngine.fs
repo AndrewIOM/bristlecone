@@ -46,8 +46,8 @@ module EstimationEngine =
     type Optimise<'data> = WriteOut -> EndCondition<'data> -> Domain -> ('data[] -> 'data) -> Solution<'data> list
 
     type TimeMode<'data, 'time> =
-    | Discrete
-    | Continuous of Integrate<'data, 'time>
+        | Discrete
+        | Continuous of Integrate<'data, 'time>
 
     // type EndCondition =
     // | Iterations of int

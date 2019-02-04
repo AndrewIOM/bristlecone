@@ -13,7 +13,7 @@ module Base =
             let count = (tEnd - tInitial + 1.) / tStep |> int
             [ 1 .. count ] |> List.map (fun _ -> nan ) |> List.toArray
         variables
-        |> Array.map (fun k -> k,fakeSeries )
+        |> Array.map (fun k -> (k, fakeSeries) )
         |> Map.ofArray 
 
     let applyDynamicVariables newValues newValueKeys environment =
@@ -39,7 +39,7 @@ module Base =
         let vectorKeys, initialVector =
             modelMap
             |> Map.toArray
-            |> Array.map(fun (k,_) -> k, initialConditions |> Map.find k )
+            |> Array.map(fun (k,_) -> (k, initialConditions |> Map.find k) )
             |> Array.unzip
 
         // B. Setup composite function to integrate
@@ -63,7 +63,7 @@ module Base =
 
         // D. Match produced data back to keys
         modelKeys
-        |> Seq.mapi(fun i k -> k, result |> Array.map(fun x -> x.[i]))
+        |> Seq.mapi(fun i k -> (k, result |> Array.map(fun x -> x.[i])))
         |> Map.ofSeq
 
 
@@ -133,7 +133,7 @@ module Simple =
     /// Fourth order runge-kutta solver
     let rec rungekutta4 x y h n f xx yy = 
         let y' = rungekutta4' x y h f
-        if (x >= n) then (xx,yy)
+        if (x >= n) then (xx, yy)
         else rungekutta4 (x+h) y' h n f (List.append xx [x+h]) (List.append yy [y'])
 
     /// Fourth order runge-kutta algorithm for a 2 equation, 1st order system. 
@@ -154,12 +154,12 @@ module Simple =
     /// Fourth order runge-kutta solver for a 2 equation, 1st order system
     let rec rungekutta4dual t x y h n f g tt xx yy =
         let y' = rungekutta4dual' t x y h f g
-        if (t >= n) then (tt,xx,yy)
+        if (t >= n) then (tt, xx, yy)
         else rungekutta4dual (t+h) (fst y') (snd y') h n f g (List.append tt [t+h]) (List.append xx [(fst y')]) (List.append yy [(snd y')])
 
     /// 4th order runge-kutta solver that can handle (in very basic form) variable time, for example when using sedimentary age-depth models.
     /// It is for a single-equation, 1st order system.
     let rec rungeKutta4Variable currentStep (steps:float list) t x f tt xx =
         let x' = rungekutta4' t x currentStep f
-        if (steps.Length = 0) then ((List.append tt [t+currentStep]),(List.append xx [x']))
+        if (steps.Length = 0) then ((List.append tt [t+currentStep]), (List.append xx [x']))
         else rungeKutta4Variable steps.Head steps.Tail (t+currentStep) x' f (List.append tt [t+currentStep]) (List.append xx [x'])

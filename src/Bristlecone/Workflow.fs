@@ -37,6 +37,7 @@ module Orchestration =
                     | Finished r -> 
                         print writeOut "A work parcel has finished"
                         inProgress - 1
+                    | StartDependentWorkPackages work -> invalidOp "Not implemented"
 
                 let postProcess =
                     if preProcess < maxSimultaneous && queue.Count > 0

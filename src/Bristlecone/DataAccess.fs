@@ -24,7 +24,7 @@ module Cache =
 
     module Row =
 
-        let fromTuple = fun (a,b,c,d,e,f,g) -> BristleconeResult.Row(a,b,c,d,e,f,g)
+        let fromTuple = fun (a,b,c,d,e,f,g) -> BristleconeResult.Row(a, b, c, d, e, f, g)
 
         let fromEstimate subject hypothesisId analysisId (result:Bristlecone.ModelSystem.EstimationResult) : seq<BristleconeResult.Row> =
             result.Trace
