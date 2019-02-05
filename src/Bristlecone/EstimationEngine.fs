@@ -1,5 +1,11 @@
 namespace Bristlecone
 
+module EnvironmentalVariables =
+
+    type RegionalEnvironment = CodedMap<TimeSeries<float>>
+    type LocalEnvironment = CodedMap<TimeSeries<float>>
+
+
 module ModelSystem =
 
     // Models 

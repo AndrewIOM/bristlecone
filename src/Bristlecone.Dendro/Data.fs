@@ -18,8 +18,8 @@ module PlantIndividual =
             let growth = 
                 rows
                 |> Seq.sortBy (fun i -> i.Date)
-                |> Seq.map (fun i -> i.Date, float i.``Increment (mm)`` * 1.<mm>)
-                |> TimeSeries.createVarying
+                |> Seq.map (fun i -> (float i.``Increment (mm)`` * 1.<mm>, i.Date))
+                |> TimeSeries.fromObservations
                 |> Absolute
                 |> RingWidth
             { Identifier = code |> ShortCode.create
@@ -34,6 +34,6 @@ module PlantIndividual =
         |> Seq.groupBy(fun row -> row.``Plant Code``)
         |> Seq.map (fun (code,rows) ->
             code, rows 
-              |> Seq.map (fun i -> i.Date, float i.Predictor)
-              |> TimeSeries.createVarying )
+              |> Seq.map (fun i -> float i.Predictor, i.Date)
+              |> TimeSeries.fromObservations )
         |> Seq.toList

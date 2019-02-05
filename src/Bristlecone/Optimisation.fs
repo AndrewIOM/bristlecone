@@ -548,11 +548,11 @@ module MonteCarlo =
               AnnealStepLength: EndCondition<'a> }
             
             static member Default = {
-                HeatStepLength = EndConditions.afterIteration 500
-                HeatRamp = fun t -> t * 1.20
+                HeatStepLength = EndConditions.afterIteration 250
+                HeatRamp = fun t -> t * 1.10
                 BoilingAcceptanceRate = 0.85
                 InitialTemperature = 1.00
-                AnnealStepLength = EndConditions.improvementCount 500
+                AnnealStepLength = EndConditions.improvementCount 250
             }
 
         /// Jump based on a proposal function and probability function
@@ -591,7 +591,7 @@ module MonteCarlo =
                 |> markov chainEnd temperature
                 |> List.minBy fst
             let history = bestAtTemperature::previousBests
-            if annealEnd history then history
+            if (*annealEnd history*) temperature < 0.75 then history
             else 
                 writeOut <| GeneralEvent (sprintf "[Annealing] Best point is %f at temperature %f" (bestAtTemperature |> fst) temperature)
                 anneal writeOut chainEnd annealEnd cool markov (cool temperature (history |> List.length)) bestAtTemperature history

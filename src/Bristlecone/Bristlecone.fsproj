@@ -6,8 +6,8 @@
     <Authors>Andrew Martin</Authors>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="Time.fs" />
     <Compile Include="Types.fs" />
+    <Compile Include="Time.fs" />
     <Compile Include="Logging.fs" />
     <Compile Include="Statistics.fs" />
     <Compile Include="Integration.fs" />

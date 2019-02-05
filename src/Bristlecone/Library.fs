@@ -101,7 +101,7 @@ module Bristlecone =
             (solver, data)
 
     let generateFixedSeries writeOut equations timeMode seriesLength startPoint theta =
-        let applyFakeTime s = TimeSeries.create (DateTime(DateTime.Now.Year, 01, 01)) Annual s
+        let applyFakeTime s = TimeSeries.fromSeq (DateTime(DateTime.Now.Year, 01, 01)) (Years 1) s
         let eqs = equations |> Map.map (fun _ v -> v theta)
         match timeMode with
         | Discrete -> invalidOp "Not supported yet"
@@ -186,12 +186,12 @@ module Bristlecone =
         let solver,data =
             timeSeriesData
             |> TimeSeries.validateCommonTimeline
-            |> Map.map (fun _ v -> Resolution.scaleTimeSeriesToResolution Annual v)
+            |> Map.map (fun _ v -> Resolution.scaleTimeSeriesToResolution (Years 1) v)
             |> makeSolverWithData engine.TimeHandling engine.Conditioning engine.LogTo
         let discreteSolve = // TODO make DRY
             timeSeriesData
             |> TimeSeries.validateCommonTimeline
-            |> Map.map (fun _ v -> Resolution.scaleTimeSeriesToResolution Annual v)
+            |> Map.map (fun _ v -> Resolution.scaleTimeSeriesToResolution (Years 1) v)
             |> Discrete.solve engine.Conditioning
         let objective = Objective.create { model with Parameters = constrainedParameters } solver discreteSolve data
         
@@ -203,7 +203,7 @@ module Bristlecone =
         let paired = 
             timeSeriesData 
             |> Map.filter(fun key _ -> estimatedSeries |> Map.containsKey key)
-            |> Map.map (fun k v -> { Observed = v |> TimeSeries.toSeq |> Seq.map fst |> Seq.toArray; Expected = estimatedSeries |> Map.find k })
+            |> Map.map (fun k v -> { Observed = v |> TimeSeries.toObservations |> Seq.map fst |> Seq.toArray; Expected = estimatedSeries |> Map.find k })
 
         { Likelihood = lowestLikelihood
           Parameters = bestPoint |> ParameterPool.fromPoint constrainedParameters
@@ -228,15 +228,15 @@ module Bristlecone =
                 |> noiseModel theta
             let brokeTheRules = 
                 generationRules
-                |> List.map(fun (key,ruleFn) -> trueSeries |> Map.find key |> TimeSeries.toSeq |> Seq.map fst |> ruleFn)
+                |> List.map(fun (key,ruleFn) -> trueSeries |> Map.find key |> TimeSeries.toObservations |> Seq.map fst |> ruleFn)
                 |> List.contains false
             match brokeTheRules with
             | true -> if attempts = 0 then invalidOp "Could not generate given rules" else generateData (attempts - 1)
-            | false -> theta, trueSeries
+            | false -> (theta, trueSeries)
 
         let theta, trueSeries = generateData 100000
         let estimated = fit engine iterations trueSeries model
-        estimated, trueSeries, theta
+        (estimated, trueSeries, theta)
 
 
     /// **Description**

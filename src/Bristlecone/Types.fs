@@ -1,8 +1,5 @@
 namespace Bristlecone
 
-open Time.TimeSeries
-open Time
-
 [<AutoOpen>]
 module Result =
 
@@ -42,7 +39,7 @@ module Result =
         either (successFunc >> succeed) (failureFunc >> fail)
 
     let plus addSuccess addFailure switch1 switch2 x = 
-        match (switch1 x),(switch2 x) with
+        match ((switch1 x), (switch2 x)) with
         | Ok s1,Ok s2 -> Ok (addSuccess s1 s2)
         | Error f1,Ok _  -> Error f1
         | Ok _ ,Error f2 -> Error f2
@@ -55,7 +52,7 @@ module Result =
         | Ok c -> Ok c
 
     let apply f result =
-        match f,result with
+        match (f, result) with
         | Ok f, Ok x -> 
             f x |> Ok 
         | Error e, Ok _ 
@@ -82,27 +79,6 @@ module Result =
             retn cons <*> (f head) <*> (mapResult f tail)
 
 
-// Year
-[<Measure>] type year
-
-// Millimetre
-[<Measure>] type mm
-
-[<AutoOpen>]
-module GrowthSeries =
-
-    type GrowthSeries<[<Measure>] 'u> =
-    | Cumulative of TimeSeries<float<'u>>
-    | Absolute of TimeSeries<float<'u>>
-    | Relative of TimeSeries<float<'u>>
-
-    let growthToTime growth =
-        match growth with
-        | Absolute g -> g
-        | Cumulative g -> g
-        | Relative g -> g
-
-
 [<AutoOpen>]
 module ShortCode =
 
@@ -115,26 +91,23 @@ module ShortCode =
 
 type CodedMap<'T> = Map<ShortCode,'T>
 
-
-module EnvironmentalVariables =
-
-    type RegionalEnvironment = CodedMap<TimeSeries<float>>
-    type LocalEnvironment = CodedMap<TimeSeries<float>>
-
-
 type Conditioning =
-| NoConditioning
-| RepeatFirstDataPoint
-| Custom of CodedMap<float>
+    | NoConditioning
+    | RepeatFirstDataPoint
+    | Custom of CodedMap<float>
 
 module Seq =
+
+    open System.Linq
+
+    let intersect (xs:'a seq) (ys: 'a seq) = xs.Intersect(ys)
 
     ///Groups two sequences together by key
     let align a b = 
 
         let simplifyEntry (key, values) =
             let matches = [for value in values -> snd value]
-            key, matches
+            (key, matches)
 
         a 
         |> Seq.append b
@@ -155,7 +128,7 @@ module Seq =
         |> Seq.choose (fun (s,x) -> 
             b 
             |> Seq.tryFind(fun (s2,_) -> s2 = s)
-            |> Option.bind (fun f -> Some (s,x,snd f)))
+            |> Option.bind (fun f -> Some (s, x, snd f)))
 
     let private sqr x = x * x
 
@@ -168,12 +141,21 @@ module Seq =
 module Map =
 
     let merge group1 group2 appender = 
-        group1 |> Seq.fold(fun (acc:Map<'a,'b>) (KeyValue(key, values)) -> 
-                          match acc.TryFind key with
-                                            | Some items -> Map.add key (appender values items) acc
-                                            | None -> Map.add key values acc) group2
+        group1 
+        |> Seq.fold(
+            fun (acc:Map<'a,'b>) (KeyValue(key, values)) -> 
+                match acc.TryFind key with
+                | Some items -> Map.add key (appender values items) acc
+                | None -> Map.add key values acc) group2
 
 module List =
+
+    /// Remove a single element from a list l at index i.
+    let rec remove i l =
+        match (i, l) with
+        | 0, x::xs -> xs
+        | i, x::xs -> x::remove (i - 1) xs
+        | i, [] -> failwith "index out of range"
 
     let combine6 xs ys zs bs cs ds = [
         for x in xs do
@@ -182,7 +164,7 @@ module List =
         for b in bs do
         for c in cs do
         for d in ds do
-        yield x, y, z, b, c, d ]
+        yield (x, y, z, b, c, d) ]
 
     let combine5 xs ys zs bs cs = [
         for x in xs do
@@ -190,31 +172,32 @@ module List =
         for z in zs do
         for b in bs do
         for c in cs do
-        yield x, y, z, b, c ]
+        yield (x, y, z, b, c) ]
         
     let combine4 xs ys zs bs = [
         for x in xs do
         for y in ys do
         for z in zs do
         for b in bs do
-        yield x, y, z, b ]
+        yield (x, y, z, b) ]
 
     let combine3 xs ys zs = [
         for x in xs do
         for y in ys do
         for z in zs do
-        yield x, y, z ]
+        yield (x, y, z) ]
 
     // See: https://stackoverflow.com/questions/32891307/matrix-transposition-in-f
     let flip matrix = 
       match matrix with
       | [] -> []
       | x::xs ->
-        let rec loop matrix partial = 
-          match matrix with
-          | [] -> partial
-          | y::ys ->let newPartial = (y, partial) ||> List.map2(fun x y->x::y)
+            let rec loop matrix partial = 
+                match matrix with
+                | [] -> partial
+                | y::ys ->
+                    let newPartial = (y, partial) ||> List.map2(fun x y->x::y)
                     loop ys newPartial
-        let length = List.length x
-        loop matrix (List.init length (fun _ -> [] ))
-        |> List.map(fun x->x |> List.rev)
+
+            let length = List.length x
+            loop matrix (List.init length (fun _ -> [] )) |> List.map (fun x -> x |> List.rev)
