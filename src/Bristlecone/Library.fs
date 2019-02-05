@@ -27,16 +27,16 @@ module Objective =
         |> Map.map (fun key measure -> solveDiscrete key measure expected)
         |> Map.fold (fun acc key value -> Map.add key value acc) expected
 
-    let predict (system:ModelSystem) integrate (p:Point<float>) =
+    let predict (system:ModelSystem) integrate solveDiscrete (p:Point<float>) =
         system.Equations
         |> Map.map (fun _ v -> parameteriseModel system.Parameters p v)
         |> integrate
+        |> measure system solveDiscrete
 
     /// Computes measurement variables and appends to expected data
-    let create (system:ModelSystem) integrate solveDiscrete (observed:CodedMap<float array>) (p:Point<float>) =
+    let create (system:ModelSystem) integrate solveDiscrete (observed:CodedMap<float[]>) (p:Point<float>) =
         p
-        |> predict system integrate
-        |> measure system solveDiscrete
+        |> predict system integrate solveDiscrete
         |> pairObservationsToExpected observed
         |> system.Likelihood (p |> ParameterPool.toParamList system.Parameters)
 
@@ -179,7 +179,7 @@ module Bristlecone =
                     model.Parameters 
                     |> Map.map (fun k v -> detatchConstraint v) 
                     |> Map.toList 
-                    |> List.map (fun (k,(x,y)) -> ((k,x),y))
+                    |> List.map (fun (k,(x,y)) -> ((k, x), y))
                     |> List.unzip
                 (par |> Map.ofList, con)
 
@@ -199,7 +199,7 @@ module Bristlecone =
         let result = objective |> optimise
         let lowestLikelihood, bestPoint = result |> List.minBy (fun (_,l) -> l)
 
-        let estimatedSeries = Objective.predict { model with Parameters = constrainedParameters } solver bestPoint
+        let estimatedSeries = Objective.predict { model with Parameters = constrainedParameters } solver discreteSolve bestPoint
         let paired = 
             timeSeriesData 
             |> Map.filter(fun key _ -> estimatedSeries |> Map.containsKey key)
