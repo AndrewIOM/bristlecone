@@ -248,39 +248,57 @@ module Time =
                     this |> resolution
 
 
-module Resolution =
+    module TimeIndex =
 
-    let scaleTimeSeriesToResolution resolution (series:TimeSeries<'a>) =
-        match resolution with
-        | Years i ->  
-            let steps =
-                series.TimeSteps 
-                |> Array.scan (+) TimeSpan.Zero
-                |> Array.map (fun t -> float ((series.StartDate |> snd) + t).Year)
-                |> Array.tail
-            series.Values
-            |> Array.zip steps
-        | Months i -> invalidOp "not implemented"
-        | Days i -> invalidOp "not implemented"
-        | CustomEpoch _ -> invalidOp "not implemented"
+            /// Calculates the fractional number of years elapsed between two dates.
+            let totalYearsElapsed (d1:DateTime) (d2:DateTime) =
+                let yf1 = float d1.DayOfYear / (if DateTime.IsLeapYear d1.Year then 366. else 365.)
+                let yf2 = float d2.DayOfYear / (if DateTime.IsLeapYear d2.Year then 366. else 365.)
+                let wholeYears =
+                    let rec addYear (d:DateTime) i =
+                        let x = d.AddYears(1)
+                        if x > d2 then i else addYear x (i + 1)
+                    addYear d1 0
+                yf2 - yf1 + float wholeYears
+
+            let totalMonthsElapsed d1 d2 : float =
+                invalidOp "Not implemented"
+
+            /// Indexes the time series in accordance with a `baselineTime` and fixed `resolution`.
+            /// Where the time series is of a lower resolution 
+            let indexSeries (t0:DateTime) targetResolution (series:TimeSeries<'a>) : seq<float*'a> =
+                let obs = series |> toObservations
+                match targetResolution with
+                | Years y -> obs |> Seq.map(fun (v,tn) -> (((totalYearsElapsed t0 tn) / float y), v))
+                | Months m -> obs |> Seq.map(fun (v,tn) -> (((totalMonthsElapsed t0 tn) / float m), v))
+                | Days d -> obs |> Seq.map(fun (v,tn) -> (((tn - t0).TotalDays / float d), v))
+                | CustomEpoch t -> obs |> Seq.map(fun (v,tn) -> ((((tn - t0).Ticks / t.Ticks) |> float), v))
 
 
-// Year
-[<Measure>] type year
+            /// A representation of temporal data as fractions of a common fixed temporal resolution,
+            /// from a given baseline. The baseline must be greater than or equal to the baseline
+            /// of the time series.
+            type TimeIndex<'a>(baseDate,resolution,series:TimeSeries<'a>) =
+                let table = series |> indexSeries baseDate resolution |> Map.ofSeq
+                member __.Item
+                    /// Get a measurement at the exact 
+                    with get(key1) : 'a = table.[(key1)]
 
-// Millimetre
-[<Measure>] type mm
+                member __.Baseline = baseDate
 
-[<AutoOpen>]
-module GrowthSeries =
+                member __.Values = table |> Map.toSeq
 
-    type GrowthSeries<[<Measure>] 'u> =
-        | Cumulative of TimeSeries<float<'u>>
-        | Absolute of TimeSeries<float<'u>>
-        | Relative of TimeSeries<float<'u>>
 
-    let growthToTime growth =
-        match growth with
-        | Absolute g -> g
-        | Cumulative g -> g
-        | Relative g -> g
+    [<AutoOpen>]
+    module GrowthSeries =
+
+        type GrowthSeries<[<Measure>] 'u> =
+            | Cumulative of TimeSeries<float<'u>>
+            | Absolute of TimeSeries<float<'u>>
+            | Relative of TimeSeries<float<'u>>
+
+        let growthToTime growth =
+            match growth with
+            | Absolute g -> g
+            | Cumulative g -> g
+            | Relative g -> g

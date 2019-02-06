@@ -5,6 +5,12 @@ module PlantIndividual =
     open EnvironmentalVariables
     open Time
 
+    // Year
+    [<Measure>] type year
+
+    // Millimetre
+    [<Measure>] type mm
+
     type PlantGrowth =
         | RingWidth of GrowthSeries<mm>
         | BasalArea of GrowthSeries<mm^2>
