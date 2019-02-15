@@ -6,9 +6,9 @@ open Bristlecone.Optimisation.Amoeba
 open Solver
 
 type OptimisationError =
-| OutOfBounds
-| ModelError
-| LikelihoodError
+    | OutOfBounds
+    | ModelError
+    | LikelihoodError
 
 let containsNan s : bool = s |> Seq.exists (Double.IsNaN)
 

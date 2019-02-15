@@ -191,14 +191,14 @@ module Time =
                 | _ -> invalidArg "desiredResolution" "Not implemented"
 
         ///**Description**  
-        /// Determines if multiple time series have the same temporal extent and time steps.  
+        /// Determines if multiple time series have the same temporal extent and time steps.
         ///**Output Type**  
         ///  * A `TimeSpan [] option` containing the common timeline, or `None` if there is no common timeline.
         let commonTimeline (series:TimeSeries<'a> list) =
-            let timeSteps = series |> List.map epochs
+            let timeSteps = series |> List.map (toObservations >> Seq.map snd >> Seq.toList)
             match timeSteps with
             | Single
-            | AllIdentical -> Some timeSteps.Head
+            | AllIdentical -> Some (series |> List.head |> epochs)
             | Empty
             | Neither -> None
 
@@ -210,7 +210,7 @@ module Time =
                 |> commonTimeline
             match commonTimeline with
             | Some _ -> series
-            | None -> invalidOp "Timelines must match exactly for all time series"
+            | None -> invalidOp (sprintf "These series do not share a common timeline: %A" series)
 
         /// Removing a step takes account of leap years.
         /// NB Never removes the original start point.
@@ -242,13 +242,17 @@ module Time =
                     this |> innerSeries |> Array.map snd
 
                 member this.Values =
-                    this |> innerSeries |> Array.map fst
+                    this |> toObservations |> Seq.map fst
 
                 member this.Resolution = 
                     this |> resolution
 
 
     module TimeIndex =
+
+            type IndexMode<'a> =
+                | Interpolate of ((float*'a) -> (float*'a) -> float -> 'a)
+                | Exact
 
             /// Calculates the fractional number of years elapsed between two dates.
             let totalYearsElapsed (d1:DateTime) (d2:DateTime) =
@@ -278,11 +282,20 @@ module Time =
             /// A representation of temporal data as fractions of a common fixed temporal resolution,
             /// from a given baseline. The baseline must be greater than or equal to the baseline
             /// of the time series.
-            type TimeIndex<'a>(baseDate,resolution,series:TimeSeries<'a>) =
+            type TimeIndex<'a>(baseDate,resolution,mode,series:TimeSeries<'a>) =
                 let table = series |> indexSeries baseDate resolution |> Map.ofSeq
                 member __.Item
-                    /// Get a measurement at the exact 
-                    with get(key1) : 'a = table.[(key1)]
+
+                    with get(t) : 'a = 
+                        match mode with
+                        | Exact -> table.[t]
+                        | Interpolate i ->
+                            if table.ContainsKey t then table.[t]
+                            else
+                                // Find the closest points in the index before and after t
+                                match table |> Seq.pairwise |> Seq.tryFind(fun (k1,k2) -> (t - k1.Key) > 0. && (t - k2.Key ) < 0.) with
+                                | Some (p1,p2) -> i (p1.Key, p1.Value) (p2.Key, p2.Value) t
+                                | None -> invalidOp <| sprintf "Could not interpolate to time %f because it falls outside the range of the temporal index" t
 
                 member __.Baseline = baseDate
 

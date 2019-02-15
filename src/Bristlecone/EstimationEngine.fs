@@ -41,6 +41,7 @@ module EstimationEngine =
     open ModelSystem
     open Bristlecone.Optimisation
     open Bristlecone.Logging
+    open Bristlecone.Time.TimeIndex
 
     type Time = float
     type State = float
@@ -48,7 +49,7 @@ module EstimationEngine =
 
     type WriteOut = LogEvent -> unit
 
-    type Integrate<'data,'time> = WriteOut -> 'time -> 'time -> 'time -> CodedMap<'data> -> CodedMap<('time*'data)[]> -> CodedMap<ODE> -> CodedMap<'data[]>
+    type Integrate<'data,'time> = WriteOut -> 'time -> 'time -> 'time -> CodedMap<'data> -> CodedMap<TimeIndex<'data>> -> CodedMap<ODE> -> CodedMap<'data[]>
     type Optimise<'data> = WriteOut -> EndCondition<'data> -> Domain -> ('data[] -> 'data) -> Solution<'data> list
 
     type TimeMode<'data, 'time> =
@@ -61,7 +62,7 @@ module EstimationEngine =
     type EstimationEngine<'data, 'time> = {
         TimeHandling: TimeMode<'data,'time>
         OptimiseWith: Optimise<'data>
-        Conditioning: Conditioning
+        Conditioning: Conditioning<'data>
         Constrain: ConstraintMode
         LogTo: WriteOut
     }

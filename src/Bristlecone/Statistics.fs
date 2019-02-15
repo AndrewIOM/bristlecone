@@ -7,13 +7,13 @@ module Distributions =
     module ContinuousUniform =
 
         let draw random min max =
-            let distribution = MathNet.Numerics.Distributions.ContinuousUniform(min,max,random)
+            let distribution = MathNet.Numerics.Distributions.ContinuousUniform(min, max, random)
             fun () -> distribution.Sample()
 
     module Normal =
 
         let draw random mean stdev =
-            let distribution = MathNet.Numerics.Distributions.Normal(mean,stdev,random)
+            let distribution = MathNet.Numerics.Distributions.Normal(mean, stdev, random)
             fun () -> distribution.Sample()
 
 
@@ -48,6 +48,13 @@ module Distributions =
                 let v = vector ( sample' rnd () |> Seq.take cov.ColumnCount |> List.ofSeq )
                 R * v
 
+module Interpolate =
+
+    /// Interpolates between two data points, for a given time `t`.
+    let bilinear ((t1,v1):float*float) ((t2,v2):float*float) t =
+        v1 + (t - t1) * ((v2 - v1) / (t2 - t1))
+
+
 
 module Regression =
 
@@ -57,7 +64,7 @@ module Regression =
         try
             let x' = x |> Array.map (fun a -> [|a|])
             let mlr = MultipleLinearRegressionAnalysis(true)
-            let _ = mlr.Learn(x',y)
+            let _ = mlr.Learn(x', y)
             (mlr.Coefficients |> Seq.head).TTest.PValue
         with | _ -> nan
 

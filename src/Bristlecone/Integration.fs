@@ -2,6 +2,7 @@ namespace Bristlecone.Integration
 
 module Base =
 
+    open Bristlecone
     open Bristlecone.Logging
 
     // Module provides functions that 'wrap' a raw integration
@@ -25,11 +26,11 @@ module Base =
             | Some u -> snd u
             | None -> value )
 
-    let applyExternalEnvironment (time:float) (externalEnv:Map<'a,(float*float)[]>) (currentEnv:Map<'a,float>) =
+    let applyExternalEnvironment (time:float) (externalEnv:Map<'a,TimeIndex.TimeIndex<'b>>) (currentEnv:Map<'a,'b>) =
         currentEnv |> Map.map(fun k v ->
             let updated = externalEnv |> Map.tryFind k
             match updated with
-            | Some ts -> ts |> Array.find (fun (t,_) -> t = (System.Math.Floor time)) |> snd
+            | Some index -> index.[time]
             | None -> v )
 
     let solve log integrate tInitial tEnd tStep initialConditions externalEnvironment modelMap : Map<'a, float[]> =

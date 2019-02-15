@@ -91,10 +91,10 @@ module ShortCode =
 
 type CodedMap<'T> = Map<ShortCode,'T>
 
-type Conditioning =
+type Conditioning<'a> =
     | NoConditioning
     | RepeatFirstDataPoint
-    | Custom of CodedMap<float>
+    | Custom of CodedMap<'a>
 
 module Seq =
 

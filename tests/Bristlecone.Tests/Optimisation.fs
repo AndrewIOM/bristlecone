@@ -41,12 +41,12 @@ module ``End Conditions`` =
             //     let msjd = stationarySquaredJumpDistance' nBin nPoints results
             //     if (nBin * nPoints) <= results.Length then msjd else not msjd
 
-            testProperty "MSJD is stationary when theta is fixed through time" <| fun theta ->
-                if theta |> snd |> Array.length = 0
-                then true
-                else
-                    List.init 1000 (fun _ -> theta)
-                    |> stationarySquaredJumpDistance
+            // testProperty "MSJD is stationary when theta is fixed through time" <| fun theta ->
+            //     if theta |> snd |> Array.length = 0
+            //     then true
+            //     else
+            //         List.init 1000 (fun _ -> theta)
+            //         |> stationarySquaredJumpDistance
 
             // testProperty "MSJD is not stationary when there is a linear trend in the data" <| fun (theta:Solution<float>) addition ->
             //     List.init 1000 (fun i -> theta |> fst, theta |> snd |> Array.map(fun j -> j + (addition * float i)))
