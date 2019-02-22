@@ -38,15 +38,10 @@ module EndConditions =
                         |> List.map(fun p -> 
                             p 
                             |> List.pairwise
-                            |> List.map(fun (a,b) -> (b - a) ** 2.) // Squared jump
-                            |> List.average ) )                     // Mean squared jump
+                            |> List.averageBy(fun (a,b) -> (b - a) ** 2.)))
                     |> Bristlecone.List.flip
-                    |> fun x -> printfn "MSJDs: %A" x; x
-                    |> List.map(fun msjds -> Regression.pValueForLinearSlopeCoefficient [|1. .. msjds |> Seq.length |> float |] (msjds |> List.toArray) )
-                printfn "MSJD p-values: %A" trendSignificance
-                if trendSignificance |> List.exists(fun p -> p <= 0.1) || trendSignificance.Length = 0
-                then false
-                else true
+                    |> List.map(fun msjds -> Regression.pValueForLinearSlopeCoefficient [|1. .. msjds |> Seq.length |> float |] (msjds |> List.toArray))
+                not (trendSignificance |> List.exists(fun p -> p <= 0.1) || trendSignificance.Length = 0)
             else false
 
     /// True if there is no significant slope in mean squared jumping distances (MSJD),
@@ -102,7 +97,7 @@ module EndConditions =
             then 
                 printfn "Sending message to convergence agent at %i" results.Length
                 let threadId = System.Threading.Thread.CurrentThread.ManagedThreadId
-                convergenceAgent.PostAndReply (fun reply -> threadId, results, reply)
+                convergenceAgent.PostAndReply (fun reply -> (threadId, results, reply))
             else false
 
 
@@ -157,15 +152,15 @@ module MonteCarlo =
         let thetaAccepted, lAccepted = 
             let l2 = f theta2
             if l2 < l1
-            then theta2, l2
+            then (theta2, l2)
             else
                 let rand = ContinuousUniform.draw random 0. 1. ()
                 let ratio = - (l2 - l1) |> exp
                 if rand < ratio && l2 <> infinity && l2 <> -infinity && l2 <> nan
-                    then theta2, l2
-                    else theta1, l1
+                    then (theta2, l2)
+                    else (theta1, l1)
         if endCondition d
-        then d, sc
+        then (d, sc)
         else
             writeOut <| OptimisationEvent { Iteration = iteration; Likelihood = lAccepted; Theta = thetaAccepted }
             metropolisHastings' random writeOut endCondition propose tune f thetaAccepted lAccepted ((lAccepted,thetaAccepted)::d) sc
@@ -253,17 +248,17 @@ module MonteCarlo =
             let cov,sc = tuningFactors
             let tunedSc = scaleFactor tuneInterval remaining history sc
             let tunedCov = covariance tuneInterval weighting remaining history cov
-            tunedCov, tunedSc
+            (tunedCov, tunedSc)
 
         let scaleOnly tuneInterval remaining history tuningFactors =
             let cov,sc = tuningFactors
             let tunedSc = scaleFactor tuneInterval remaining history sc
-            cov, tunedSc
+            (cov, tunedSc)
 
         let covarianceOnly tuneInterval weighting remaining history tuningFactors =
             let cov,sc = tuningFactors
             let tunedCov = covariance tuneInterval weighting remaining history cov
-            tunedCov, sc
+            (tunedCov, sc)
 
         /// Tune previously observed covariance based on all time
         let covarianceAllTime weighting (history:(float*float[]) seq) scale =
@@ -282,7 +277,7 @@ module MonteCarlo =
             let cov,sc = tuningFactors
             let tunedSc = scaleFactor tuneInterval remaining history sc
             let tunedCov = covarianceAllTime weighting history cov
-            tunedCov, tunedSc
+            (tunedCov, tunedSc)
 
         let none _ _ factors = factors
 
@@ -302,14 +297,14 @@ module MonteCarlo =
     type Frequency = int
     type TuneStep<'a> = TuneMethod * Frequency * EndCondition<'a>
 
-    let randomWalk' initialCovariance initialScale theta (tuningSteps:TuneStep<float> seq) random writeOut (endCondition:EndCondition<float>) (domain:Domain) (f:Objective<float>) =
+    let randomWalk' initialCovariance initialScale theta (tuningSteps:seq<TuneStep<float>>) random writeOut (endCondition:EndCondition<float>) (domain:Domain) (f:Objective<float>) =
         writeOut <| GeneralEvent (sprintf "[Optimisation] Starting MCMC Random Walk")
         let sample cov = MutlivariateNormal.sample cov random
         let proposeJump (cov:Matrix<float>,scale) (theta:float[]) =
             sample ((2.38 ** 2.) * cov / (float theta.Length)) <| ()
             |> Vector.toArray
             |> Array.map (fun i -> i * scale)
-            |> Array.mapi (fun i x -> x, domain.[i] )
+            |> Array.mapi (fun i x -> (x, domain.[i]) )
             |> Array.zip theta
             |> Array.map (fun (thetai,(zi,(_,_,con))) -> constrainJump thetai zi scale con)
 
@@ -321,7 +316,7 @@ module MonteCarlo =
             let l,t = r |> Seq.head
             metropolisHastings' random writeOut endCondition proposeJump (TuningMode.none) f t l r s
 
-    let randomWalk (tuningSteps:TuneStep<float> seq) writeOut n domain (f:Objective<float>) : (float * float[]) list =
+    let randomWalk (tuningSteps:seq<TuneStep<float>>) writeOut n domain (f:Objective<float>) : (float * float[]) list =
         let random = MathNet.Numerics.Random.MersenneTwister(true)
         let initialCovariance = TuningMode.covarianceFromBounds 10000 domain random
         let theta = initialise domain random
@@ -329,7 +324,7 @@ module MonteCarlo =
         randomWalk' initialCovariance 1. theta tuningSteps random writeOut n domain f |> fst
 
     let adaptiveMetropolis weighting period writeOut n domain (f:Objective<float>) : (float * float[]) list =
-        randomWalk [ TuneMethod.CovarianceWithScale weighting, period, n ] writeOut (EndConditions.afterIteration 0) domain f
+        randomWalk [ (TuneMethod.CovarianceWithScale weighting, period, n) ] writeOut (EndConditions.afterIteration 0) domain f
 
 
     module MetropolisWithinGibbs =
@@ -341,8 +336,8 @@ module MonteCarlo =
             theta
             |> Array.mapi(fun i e ->
                 if i = j
-                then e, MathNet.Numerics.Distributions.Normal(0.,(exp lsj)**2.,random).Sample()
-                else e, 0. )
+                then (e, MathNet.Numerics.Distributions.Normal(0.,(exp lsj)**2.,random).Sample())
+                else (e, 0.) )
             |> Array.zip domain
             |> Array.map (fun ((_,_,con), (e,jump)) -> constrainJump e jump 1. con)
 
@@ -363,7 +358,7 @@ module MonteCarlo =
                     let l,theta = results |> Seq.head
                     let proposeJump = fun _ t -> propose t j lsj domain random
                     let results = metropolisHastings' random ignore (EndConditions.afterIteration batchLength) proposeJump TuningMode.none f theta l [] () |> fst
-                    j+1,results) (0,[f theta, theta])
+                    (j+1, results)) (0, [ (f theta, theta) ])
                 |> Array.tail       // Skip initial state
                 |> Array.map snd    // Discard parameter number
 
@@ -394,7 +389,7 @@ module MonteCarlo =
                 writeOut <| GeneralEvent (sprintf "[Tuning] Sigmas: %A | Acceptance rates: %A" tunedSigmas acceptanceRates)
                 if acceptanceRates |> Array.exists(fun s -> s < 0.28 || s > 0.60)
                 then core isAdaptive writeOut random domain f fullResults batchLength (batchNumber+1) (fullResults |> Seq.head |> snd) tunedSigmas
-                else batchNumber, fullResults, tunedSigmas
+                else (batchNumber, fullResults, tunedSigmas)
 
             else 
                 // Stop only when there is no linear trend
@@ -402,8 +397,8 @@ module MonteCarlo =
                     fullResults |> List.chunkBySize batchLength  // So we now have each individual 'fixed' run listed out
                     |> List.mapi(fun i batch ->      // Get unfixed values and their parameter index number
                         let paramNumber = i % theta.Length
-                        let paramValues = batch |> List.map snd |> List.map(fun x -> x.[paramNumber]) |> List.average
-                        paramNumber, paramValues )
+                        let paramValues = batch |> List.map snd |> List.averageBy(fun x -> x.[paramNumber])
+                        (paramNumber, paramValues) )
                     |> List.groupBy fst
                     |> List.where(fun (_,g) -> g.Length >= 5)   // Only calculate regression when 5 or more points
                     |> List.map (fun (i,p) -> 
@@ -411,7 +406,7 @@ module MonteCarlo =
                             p
                             |> List.take 5                      // Use only 5 most recent batches
                             |> List.map snd
-                            |> List.mapi (fun i v -> float i,v )
+                            |> List.mapi (fun i v -> (float i, v) )
                             |> List.toArray
                             |> Array.unzip
                         let pValue = Regression.pValueForLinearSlopeCoefficient x y
@@ -534,15 +529,18 @@ module MonteCarlo =
                 |> List.averageBy(fun (n,old) -> if n > old then n - old else old - n ) // Mean change in objective value
                 |> (fun x -> printfn "Average jump is %f" x; x)) <= defaultTolerance
 
-            let improvementCount count : EndCondition<float> =
+            let improvementCount count interval : EndCondition<float> =
                 fun results ->
-                    (results |> List.pairwise |> List.where(fun (x,y) -> x < y) |> List.length) >= count
+                    if (results |> List.length) % interval = 0 
+                    then (results |> List.pairwise |> List.where(fun (x,y) -> x < y) |> List.length) >= count
+                    else false
 
         /// Represents configurable settings of an annealing procedure
         /// that supports (a) heating, followed by (b) annealing.
         type AnnealSettings<'a> = 
             { HeatStepLength: EndCondition<'a>
               HeatRamp: float -> float
+              TemperatureCeiling: float option
               BoilingAcceptanceRate: float
               InitialTemperature: float
               AnnealStepLength: EndCondition<'a> }
@@ -551,8 +549,9 @@ module MonteCarlo =
                 HeatStepLength = EndConditions.afterIteration 250
                 HeatRamp = fun t -> t * 1.10
                 BoilingAcceptanceRate = 0.85
+                TemperatureCeiling = Some 200.
                 InitialTemperature = 1.00
-                AnnealStepLength = EndConditions.improvementCount 250
+                AnnealStepLength = EndConditions.improvementCount 250 250
             }
 
         /// Jump based on a proposal function and probability function
@@ -567,7 +566,7 @@ module MonteCarlo =
             else
                 let rand = ContinuousUniform.draw random 0. 1. ()
                 let ratio = probability (l2 - l1)
-                // printfn "Random = %f Ratio = %f (L1=%f L2=%f)" rand ratio l1 l2
+                //printfn "Random = %f Ratio = %f (L1=%f L2=%f)" rand ratio l1 l2
                 if rand < ratio
                     then (l2, theta2)
                     else (l1, theta1)
@@ -589,6 +588,7 @@ module MonteCarlo =
             run initialPoint [ initialPoint ]
 
         /// Cool between homoegenous markov chains according to `cool` schedule.
+        /// Each anneal recursion begins from the end of the previous markov chain.
         let rec anneal writeOut chainEnd annealEnd cool markov temperature point previousBests =
             let results = point |> markov chainEnd temperature
             let bestAtTemperature = results |> List.minBy fst
@@ -596,10 +596,10 @@ module MonteCarlo =
             if (* annealEnd history *)temperature < 0.75 then history
             else 
                 writeOut <| GeneralEvent (sprintf "[Annealing] Best point is %f at temperature %f" (bestAtTemperature |> fst) temperature)
-                anneal writeOut chainEnd annealEnd cool markov (cool temperature (history |> List.length)) bestAtTemperature history
+                anneal writeOut chainEnd annealEnd cool markov (cool temperature (history |> List.length)) bestAtTemperature (*(results |> List.head)*) history
 
         /// Heat up temperature intil acceptance rate of bad moves is above the threshold `endAcceptanceRate`.
-        let rec heat write endCondition endAcceptanceRate heatingSchedule markov bestTheta temperature =
+        let rec heat write endCondition ceiling endAcceptanceRate heatingSchedule markov bestTheta temperature =
             let chain = markov endCondition temperature bestTheta
             let min = chain |> List.minBy fst
             let ar =
@@ -611,12 +611,12 @@ module MonteCarlo =
                     |> List.unzip
                 let badAccepted = a |> List.where id |> List.length |> float
                 let badRejected = r |> List.where id |> List.length |> float
-                printfn "Bad accepted = %f, bad rejected = %f" badAccepted badRejected
                 badAccepted / (badAccepted + badRejected)
             write <| GeneralEvent (sprintf "Heating - Jump average is %f" (chain |> List.map fst |> List.pairwise |> List.averageBy (fun (a,b) -> b - a)))
-            write <| GeneralEvent (sprintf "Heating (T=%f) - AR is %f" temperature ar)
-            if ar < endAcceptanceRate
-            then heat write endCondition endAcceptanceRate heatingSchedule markov min (temperature |> heatingSchedule)
+            write <| GeneralEvent (sprintf "Heating (T=%f) - AR of bad moves is %f" temperature ar)
+            let aboveCeiling = if Option.isSome ceiling then (temperature >= ceiling.Value) else false
+            if ar < endAcceptanceRate && not aboveCeiling
+            then heat write endCondition ceiling endAcceptanceRate heatingSchedule markov min (temperature |> heatingSchedule)
             else (temperature, min)
 
         // Given a candidate distribution + machine, run base SA algorithm
@@ -627,8 +627,6 @@ module MonteCarlo =
             let draw' = jump random
             let theta1 = initialise domain random
             let l1 = f theta1
-            let initialScale = 
-                [| 1 .. theta1.Length |] |> Array.map (fun _ -> scale)
 
             // 2. Chain generator
             let homogenousChain scales e temperature = 
@@ -637,11 +635,57 @@ module MonteCarlo =
                     |> Array.map(fun (x,sc,(_,_,con)) -> constrainJump x (draw' sc temperature ()) 1. con )
                 markovChain writeOut e (propose scales) machine random f temperature 
 
-            // 3. Heat up
-            let boilingPoint,min = heat writeOut settings.HeatStepLength settings.BoilingAcceptanceRate settings.HeatRamp (homogenousChain initialScale) (l1, theta1) settings.InitialTemperature
+            // 3. Tune individual step size based on acceptance rate
+            let initialScale = 
+                [| 1 .. theta1.Length |] |> Array.map (fun _ -> scale)
 
-            // 4. Gradually cool down (from best point during heat-up)
-            anneal writeOut settings.AnnealStepLength annealEnd (cool boilingPoint) (homogenousChain initialScale) boilingPoint min []
+            let kMax = 100000
+            let rec tune (p:(float*float[])[]) k (l1, theta1) =
+                let chance = (float k) / (float kMax)
+                let parameterToChange = random.Next(0, (p |> Array.length) - 1)
+                let scalesToChange = p |> Array.mapi (fun i x -> (x, random.NextDouble() < chance || i = parameterToChange))
+                let propose theta =
+                    Array.zip3 theta scalesToChange domain
+                    |> Array.map(fun (x,((ti,n),shouldChange),(_,_,con)) -> 
+                        if shouldChange
+                        then constrainJump x (draw' ti 1. ()) 1. con
+                        else x )
+                let result = tryMove propose (machine 1.) random f (l1, theta1)
+                let tuneN = 50
+                let newScaleInfo = 
+                    scalesToChange 
+                    |> Array.zip (result |> snd)
+                    |> Array.map(fun (v, ((ti,previous),changed)) ->
+                        if changed then (ti, (previous |> Array.append [|v|]))  // Append new parameter values to previous ones
+                        else (ti, previous) )
+                    |> Array.map(fun (ti,previous) ->
+                        if previous |> Array.length = tuneN
+                        then
+                            let changes = previous |> Array.pairwise |> Array.where(fun (a,b) -> a <> b) |> Array.length
+                            match (float changes) / (float tuneN) with
+                            | ar when ar < 0.35 -> (ti * 0.80, Array.empty)
+                            | ar when ar > 0.50 -> (ti * 1.20, Array.empty)
+                            | _ -> (ti, Array.empty)
+                        else (ti, previous) )
+
+                if k % 1000 = 0 then
+                    writeOut <| GeneralEvent (sprintf "Tuning is at %A (k=%i/%i)" (newScaleInfo |> Array.map fst) k kMax)
+
+                if k < kMax
+                then tune newScaleInfo (k + 1) result
+                else newScaleInfo |> Array.map fst
+
+            let tunedScale = 
+                homogenousChain initialScale (EndConditions.afterIteration 5000) 1. (l1, theta1)
+                |> List.head
+                |> tune (initialScale |> Array.map(fun t -> (t, Array.empty))) 1
+            writeOut <| GeneralEvent (sprintf "Tuned = %A" tunedScale)
+
+            // 4. Heat up
+            let boilingPoint,min = heat writeOut settings.HeatStepLength settings.TemperatureCeiling settings.BoilingAcceptanceRate settings.HeatRamp (homogenousChain tunedScale) (l1, theta1) settings.InitialTemperature
+
+            // 5. Gradually cool down (from best point during heat-up)
+            anneal writeOut settings.AnnealStepLength annealEnd (cool boilingPoint) (homogenousChain tunedScale) boilingPoint min []
 
         /// Candidate distribution: Gaussian univariate []
         /// Probability: Boltzmann Machine
@@ -649,11 +693,11 @@ module MonteCarlo =
             let gaussian rnd scale t = Bristlecone.Statistics.Distributions.Normal.draw rnd 0. (scale * sqrt (1.))
             simulatedAnnealing scale settings n Machines.boltzmann gaussian (CoolingSchemes.exponential 0.05) writeOut domain f
 
-        // Candidate distribution: Cauchy univariate []
-        // Probability: Bottzmann Machine
+        /// Candidate distribution: Cauchy univariate []
+        /// Probability: Bottzmann Machine
         let fastSimulatedAnnealing scale settings writeOut n domain (f:Objective<float>) : (float * float[]) list =
             let cauchy rnd scale t = 
-                let c = MathNet.Numerics.Distributions.Cauchy(0., scale * (sqrt 1.), rnd)
+                let c = MathNet.Numerics.Distributions.Cauchy(0., scale * (sqrt t), rnd)
                 fun () -> c.Sample()
             simulatedAnnealing scale settings n Machines.boltzmann cauchy (CoolingSchemes.fastCauchyCoolingSchedule) writeOut domain f
 
