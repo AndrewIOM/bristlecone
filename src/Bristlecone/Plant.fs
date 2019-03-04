@@ -101,11 +101,9 @@ module PlantIndividual =
             |> List.groupBy id
             |> List.where(fun x -> x |> snd |> Seq.length = allSeries.Length)
             |> List.map fst
-        printfn "Common dates are %A" commonDates
         let mapts f = TimeSeries.map f
         let makeCommonTime y = 
             let common = commonDates |> List.map (fun t -> ((y |> TimeSeries.findExact t)))
-            printfn "Common = %A (transformed = %A)" common (common |> TimeSeries.fromObservations)
             common |> TimeSeries.fromObservations
         { plant with Environment = plant.Environment |> Map.toList |> List.map (fun (x,y) -> (x, makeCommonTime y)) |> Map.ofList
                      Growth = plant.Growth |> growthSeries |> growthToTime |> makeCommonTime |> mapts (fun (x,t) -> x * 1.<mm>) |> Absolute |> RingWidth }

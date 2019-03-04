@@ -193,7 +193,7 @@ module Bristlecone =
             let data =
                 timeSeriesData
                 |> Map.filter(fun k _ -> dynamicVariableKeys |> Seq.contains k)
-            printfn "Dynamic data = %A" data
+            // printfn "Dynamic data = %A" data
             let resolutions =
                 data
                 |> TimeSeries.validateCommonTimeline
@@ -207,7 +207,7 @@ module Bristlecone =
         let measureKeys = model.Measures |> Seq.map (fun k -> k.Key)
         let eData =
             let eData = timeSeriesData |> Map.filter(fun k _ -> dynamicVariableKeys |> Seq.append measureKeys |> Seq.contains k |> not)
-            printfn "Environment data = %A" eData
+            // printfn "Environment data = %A" eData
             if eData.Count = 0 then None
             else
                 let resolutions =
