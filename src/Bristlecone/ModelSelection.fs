@@ -3,6 +3,7 @@ namespace Bristlecone.ModelSelection
 module Akaike =
 
     open Bristlecone.ModelSystem
+    open Bristlecone.Time
 
     ///**Description**
     /// The Akaike information criterion, a standardised index of model fit quality for models that have different numbers of parameters.
@@ -41,7 +42,7 @@ module Akaike =
         |> Seq.map (fun relative -> relative / totalLikelihood)
 
     /// **Description**
-    /// Akaike weights for a set of models.
+    /// Akaike weights for a set of model results.
     /// The weights can be directly interpreted as conditional probabilities for each model.
     /// 
     /// **Output Type**
@@ -53,8 +54,32 @@ module Akaike =
         match models |> Seq.tryHead with
         | None -> seq[]
         | Some m ->
-            let n = (m.Series |> Seq.head).Value.Observed.Length
+            let n = (m.Series |> Seq.head).Value.Length
             models
             |> Seq.map(fun m -> (m.Likelihood, m.Parameters.Count))
             |> akaikeWeights' n 
             |> Seq.zip models
+
+
+module Select =
+
+    open Bristlecone.ModelSystem
+
+    type Result = {
+        AnalysisId: System.Guid
+        Subject: string
+        ModelId: string
+        Estimate: EstimationResult
+    }
+
+    /// Given a list of model predictions, find the best MLE for each
+    /// model * subject combination, calculate the weights for this set.
+    let calculate (results:seq<Result>) =
+        results
+        |> Seq.groupBy(fun r -> (r.Subject, r.ModelId))
+        |> Seq.map(fun (_,r) -> r |> Seq.minBy(fun x -> x.Estimate.Likelihood))
+        |> Seq.groupBy(fun r -> r.Subject)
+        |> Seq.collect(fun (_,r) ->
+            let weights = r |> Seq.map(fun r -> r.Estimate) |> Akaike.akaikeWeights |> Seq.map snd
+            weights
+            |> Seq.zip r )

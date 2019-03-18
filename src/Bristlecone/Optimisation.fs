@@ -639,7 +639,7 @@ module MonteCarlo =
             let initialScale = 
                 [| 1 .. theta1.Length |] |> Array.map (fun _ -> scale)
 
-            let kMax = 100000
+            let kMax = 10000 //100000
             let rec tune (p:(float*float[])[]) k (l1, theta1) =
                 let chance = (float k) / (float kMax)
                 let parameterToChange = random.Next(0, (p |> Array.length) - 1)
@@ -740,7 +740,7 @@ module MonteCarlo =
                                 else false))
                     else
                         // Probability of change:
-                        let pChange = exp(4.0 * scaleRnd() - 0.50)
+                        let pChange = exp(4.0 * (scaleRnd() - 0.50))
                         // Try and allocate random changes to array
                         let rec changeRandom p =
                             let r = p |> Array.mapi(fun i x -> (x, scaleRnd() < pChange)) 

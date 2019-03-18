@@ -14,9 +14,6 @@ module ModelSystem =
     type Time = float
     type ModelEquation = ParameterPool -> Time -> Response -> Environment -> float
 
-    // Measures
-    // Given previous times, and starting conditions, generate the next time step
-
     // Likelihood
     type PredictedSeries = {
         Expected: float[]
@@ -29,10 +26,13 @@ module ModelSystem =
         Measures:   CodedMap<float -> Environment -> Environment -> float> //Environment(t-1) -> Environment(t) -> float
         Likelihood: Likelihood }
 
+    type FitValue = { Fit: float; Obs: float }
+    type FitSeries = TimeSeries<FitValue>
     type EstimationResult = {
+        ResultId:   System.Guid
         Likelihood: float
         Parameters: ParameterPool
-        Series:     CodedMap<PredictedSeries>
+        Series:     CodedMap<FitSeries>
         Trace:      (float * float []) list }
 
 
@@ -55,9 +55,6 @@ module EstimationEngine =
     type TimeMode<'data, 'time> =
         | Discrete
         | Continuous of Integrate<'data, 'time>
-
-    // type EndCondition =
-    // | Iterations of int
 
     type EstimationEngine<'data, 'time> = {
         TimeHandling: TimeMode<'data,'time>

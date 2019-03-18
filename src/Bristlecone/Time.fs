@@ -265,8 +265,9 @@ module Time =
                     addYear d1 0
                 yf2 - yf1 + float wholeYears
 
-            let totalMonthsElapsed d1 d2 : float =
-                invalidOp "Not implemented"
+            // TODO Take account of day of month. Currently does not handle varying month lengths
+            let totalMonthsElapsed (d1:DateTime) (d2:DateTime) : float =
+                (d2.Month - d1.Month) + (d2.Year - d1.Year) * 12 |> float
 
             /// Indexes the time series in accordance with a `baselineTime` and fixed `resolution`.
             /// Where the time series is of a lower resolution 

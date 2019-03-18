@@ -72,12 +72,18 @@ module Solver =
     /// Step the solver using high resolution, and output at low resolution.
     /// External steps are of a fixed width. This is more efficient than running
     /// with variable steps.
-    let fixedExternalStep engine tStart tEnd (internalStep:int) initialState forcings =
+    let fixedStep engine tStart tEnd initialState forcings =
         match engine.TimeHandling with
         | Discrete -> invalidOp "Not configured"
         | Continuous i -> fun eqs -> 
-            i engine.LogTo tStart tEnd (float internalStep) initialState forcings eqs
-            |> Map.map(fun _ v -> v |> Seq.everyNth internalStep |> Seq.toArray ) // Return only the external step values
+            // printfn "Start time is %f and end time is %f" tStart tEnd
+            // printfn "Initial state is %A" initialState
+            i engine.LogTo tStart tEnd 1. initialState forcings eqs
+            // Skip the start point (conditioned point)
+            // Return only the external step values
+            |> Map.map (fun _ v -> 
+                // printfn "Prediction is %i long" v.Length
+                v |> Array.tail |> Seq.toArray)
 
 
     module Discrete =
@@ -237,23 +243,6 @@ module Bristlecone =
         // for the dynamic variable resolution
         let solver =
 
-            /// Solve ODEs on a variable time-step
-            // let solveVariable = invalidOp "Bristlecone does not currently support variable-time data."
-
-            // let solveMultiResolution = invalidOp "Cool"
-
-            // let solveFixed = invalidOp "Cool"
-
-            /// Route the solver mechanism depending on the temporal nature of the problem.
-            // let create observationResolution forcingResolution =
-            //     match observationResolution with
-            //     | Fixed lowResolution ->
-            //         match forcingResolution with
-            //         | Some res -> solveMultiResolution
-            //         | None -> solveFixed
-            //     | Variable -> solveVariable
-
-
             /// Use variable or fixed stepping depending on data
             match dRes with
             | Fixed fRes ->
@@ -276,23 +265,30 @@ module Bristlecone =
                         let timeline = (dData |> Seq.head).Value |> TimeIndex.indexSeries dStart fRes |> Seq.map fst
                         (timeline, Map.empty)
 
+                // printfn "Timeline is %A" (timeline |> Seq.toList)
+                // printfn "Forcings are %A" (forcings |> Map.map(fun x t -> t.Values |> Seq.toList))
+
                 /// Parameters for the integration routine
                 let startIndex = timeline |> Seq.head
                 let endIndex = timeline |> Seq.last
-                let step = 1 // Step size is 1, given that the time-index is scaled to the steps of the high-resolution external data
-
+                // Internal step size is 1, given that the time-index is scaled to the steps of the high-resolution external data
+                let externalStep = (timeline |> Seq.tail |> Seq.head) - (timeline |> Seq.head) //TODO Figure out how to do this properly
+                // printfn "External step size is %f" externalStep
                 /// Condition data by setting a 'conditioned' starting state. 
                 /// This is -1 position on the common timeline
                 /// NB. The environmental data must span the conditioning period - how to ensure this?
 
                 /// Run the integration as one operation from conditioned t0 to tn
-                let solve = Solver.fixedExternalStep engine (startIndex - 1.) endIndex step conditionedPoint forcings
-                fun ode -> 
-                    let r = solve ode |> Map.map (fun _ v -> v |> Array.tail) // Skip the start point (conditioned point)
-                    // printfn "Result is %A" r
-                    r
-
                 /// Filter the results so that only results that match low-res data in time are included
+                let solve = Solver.fixedStep engine (startIndex - externalStep) endIndex conditionedPoint forcings
+                fun ode -> 
+                    let r = solve ode
+                    // printfn "Result is %A" r
+                    let rExternal = r |> Map.map (fun _ v -> v |> Seq.everyNth (int externalStep) |> Seq.toArray) //TODO proper lookup
+                    // printfn "External result is %A" rExternal
+                    // for x in r do
+                        // printfn "Length of %s is %i" x.Key.Value x.Value.Length
+                    rExternal
 
             | Variable ->
                 // Run time as individual steps, to allow length to vary (slower)
@@ -306,18 +302,25 @@ module Bristlecone =
 
         let optimise = engine.OptimiseWith engine.LogTo endCondition (constrainedParameters |> ParameterPool.toDomain optimisationConstraints)
         let result = objective |> optimise
-        let lowestLikelihood, bestPoint = result |> List.minBy (fun (_,l) -> l)
+        let lowestLikelihood, bestPoint = result |> List.minBy (fun (l,_) -> l)
 
         let estimatedSeries = Objective.predict { model with Parameters = constrainedParameters } solver discreteSolve bestPoint
         let paired = 
             timeSeriesData 
             |> Map.filter(fun key _ -> estimatedSeries |> Map.containsKey key)
-            |> Map.map (fun k v -> { Observed = v |> TimeSeries.toObservations |> Seq.map fst |> Seq.toArray; Expected = estimatedSeries |> Map.find k })
+            |> Map.map (fun k observedSeries ->
+                let expected = estimatedSeries |> Map.find k
+                observedSeries
+                |> TimeSeries.toObservations
+                |> Seq.zip expected
+                |> Seq.map(fun (e,(o,d)) -> ({ Obs = o; Fit = e }, d))
+                |> TimeSeries.fromObservations )
 
-        { Likelihood = lowestLikelihood
+        { ResultId   = System.Guid.NewGuid()
+          Likelihood = lowestLikelihood
           Parameters = bestPoint |> ParameterPool.fromPoint constrainedParameters
-          Series = paired
-          Trace = result }
+          Series     = paired
+          Trace      = result }
 
 
     let drawUniform min max = MathNet.Numerics.Distributions.ContinuousUniform(min, max)

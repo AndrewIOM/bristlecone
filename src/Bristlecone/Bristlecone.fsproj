@@ -13,6 +13,7 @@
     <Compile Include="Integration.fs" />
     <Compile Include="Parameter.fs" />
     <Compile Include="Optimisation.fs" />
+    <Compile Include="ConfidenceInterval.fs" />
     <Compile Include="EstimationEngine.fs" />
     <Compile Include="OptimisationTechniques.fs" />
     <Compile Include="DataAccess.fs" />
