@@ -117,7 +117,7 @@ module Bristlecone =
     open EstimationEngine
 
     let generateFixedSeries writeOut equations timeMode seriesLength startPoint startDate theta =
-        let applyFakeTime s = TimeSeries.fromSeq startDate (Years 1) s
+        let applyFakeTime s = TimeSeries.fromSeq startDate (Days 1) s
         let eqs = equations |> Map.map (fun _ v -> v theta)
         match timeMode with
         | Discrete -> invalidOp "Not supported yet"
