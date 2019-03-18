@@ -1,7 +1,8 @@
 source https://www.nuget.org/api/v2
 
-nuget Bristlecone
+nuget Bristlecone 1.0.0-alpha3
 nuget Bristlecone.Dendro
 
 nuget NETStandard.Library.NETFramework
 nuget FSharp.Data
+nuget FSharp.Core 4.5.4

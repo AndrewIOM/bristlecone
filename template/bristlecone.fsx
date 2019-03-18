@@ -1,6 +1,0 @@
-#r "packages/NETStandard.Library.NETFramework/build/net461/lib/netstandard.dll"
-#r "packages/MathNet.Numerics/lib/net40/MathNet.Numerics.dll"
-#r "packages/FSharp.Data/lib/net45/FSharp.Data.dll"
-#r "lib/Microsoft.Research.Oslo.dll"
-#r "packages/Bristlecone/lib/netstandard2.0/bristlecone.dll"
-#r "packages/Bristlecone.Dendro/lib/netstandard2.0/bristlecone.Dendro.dll"
