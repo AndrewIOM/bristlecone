@@ -1,4 +1,6 @@
 #### 1.0.0-alpha3 - 2019-03-18
+* BUGFIX: Fixed divide by zero error when running `testModel`
+#### 1.0.0-alpha3 - 2019-03-18
 * FEATURE: Simulated Annealing optimisation
 * FEATURE: Filzbach-style optimisation
 * FEATURE: Run models using higher-resolution forcing data with lower-resolution observations

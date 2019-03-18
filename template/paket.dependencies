@@ -1,6 +1,6 @@
 source https://www.nuget.org/api/v2
 
-nuget Bristlecone 1.0.0-alpha3
+nuget Bristlecone 1.0.0-alpha4
 nuget Bristlecone.Dendro
 
 nuget NETStandard.Library.NETFramework
