@@ -35,7 +35,7 @@ module Trace =
 
     module Row =
 
-        let fromEstimate subject modelId (result:EstimationResult) : seq<BristleconeTrace.Row> =
+        let fromEstimate thinBy subject modelId (result:EstimationResult) : seq<BristleconeTrace.Row> =
             result.Trace
             |> Seq.rev
             |> Seq.mapi (fun iterationNumber (likelihood,values) ->
@@ -49,11 +49,12 @@ module Trace =
                      name.Value,
                      likelihood,
                      values.[i]) |> BristleconeTrace.Row ))
+            |> Seq.everyNth thinBy
             |> Seq.concat
 
 
-    let save directory subject modelId result =
-        let csv = new BristleconeTrace(result |> Row.fromEstimate subject modelId)
+    let save directory subject modelId thinBy result =
+        let csv = new BristleconeTrace(result |> Row.fromEstimate thinBy subject modelId)
         let filePath = Config.filePath directory subject modelId result.ResultId Config.DataType.Trace
         csv.Save(filePath)
 
@@ -117,8 +118,8 @@ module EstimationResult =
 
     /// Save the Maximum Likelihood Estimate, trace of the optimisation
     /// procedure, and time-series.
-    let saveAll directory subject modelId result =
-        Trace.save directory subject modelId result
+    let saveAll directory subject modelId thinTraceBy result =
+        Trace.save directory subject modelId thinTraceBy result
         MLE.save directory subject modelId result
         Series.save directory subject modelId result
 
