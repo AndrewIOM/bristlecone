@@ -543,6 +543,7 @@ module MonteCarlo =
               TemperatureCeiling: float option
               BoilingAcceptanceRate: float
               InitialTemperature: float
+              TuneLength: int
               AnnealStepLength: EndCondition<'a> }
             
             static member Default = {
@@ -551,6 +552,7 @@ module MonteCarlo =
                 BoilingAcceptanceRate = 0.85
                 TemperatureCeiling = Some 200.
                 InitialTemperature = 1.00
+                TuneLength = 100000
                 AnnealStepLength = EndConditions.improvementCount 250 250
             }
 
@@ -639,7 +641,7 @@ module MonteCarlo =
             let initialScale = 
                 [| 1 .. theta1.Length |] |> Array.map (fun _ -> scale)
 
-            let kMax = 10000 //100000
+            let kMax = settings.TuneLength
             let rec tune (p:(float*float[])[]) k (l1, theta1) =
                 let chance = (float k) / (float kMax)
                 let parameterToChange = random.Next(0, (p |> Array.length) - 1)
