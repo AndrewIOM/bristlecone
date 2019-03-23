@@ -1,19 +1,11 @@
-version: '1.0.{build}'
-configuration:
-- Debug
-platform: Any CPU
-environment:
-  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+image: Visual Studio 2017
+
 init:
-- ps: $Env:LABEL = "CI" + $Env:APPVEYOR_BUILD_NUMBER.PadLeft(5, "0")
-before_build:
-- appveyor-retry dotnet restore "src\Bristlecone\Bristlecone.fsproj" -v Minimal
-- appveyor-retry dotnet restore "tests\Bristlecone.Tests\Bristlecone.Tests.fsproj" -v Minimal
+  - git config --global core.autocrlf input
 build_script:
-- dotnet build "src\Bristlecone\Bristlecone.fsproj" -c %CONFIGURATION% --version-suffix %LABEL%
-test_script:
-- dotnet test "tests\Bristlecone.Tests\Bristlecone.Tests.fsproj" -c %CONFIGURATION%
+  - cmd: build.cmd All
+test: off
+version: 0.0.1.{build}
 artifacts:
-- path: artifacts\**\*.*
-cache:
-- '%USERPROFILE%\.nuget\packages'
+  - path: bin
+    name: bin

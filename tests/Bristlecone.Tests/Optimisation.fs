@@ -32,27 +32,27 @@ module ``End Conditions`` =
                 if results.Length >= n then atEnd else not atEnd
         ]
 
-    [<Tests>]
-    let jumpDistanceTests =
+    // [<Tests>]
+    // let jumpDistanceTests =
 
-        testList "Mean Squared Jump Distance (MSJD)" [
+    //     testList "Mean Squared Jump Distance (MSJD)" [
 
-            // testProperty "Always false when not enough data" <| fun nBin nPoints results ->
-            //     let msjd = stationarySquaredJumpDistance' nBin nPoints results
-            //     if (nBin * nPoints) <= results.Length then msjd else not msjd
+    //         // testProperty "Always false when not enough data" <| fun nBin nPoints results ->
+    //         //     let msjd = stationarySquaredJumpDistance' nBin nPoints results
+    //         //     if (nBin * nPoints) <= results.Length then msjd else not msjd
 
-            // testProperty "MSJD is stationary when theta is fixed through time" <| fun theta ->
-            //     if theta |> snd |> Array.length = 0
-            //     then true
-            //     else
-            //         List.init 1000 (fun _ -> theta)
-            //         |> stationarySquaredJumpDistance
+    //         // testProperty "MSJD is stationary when theta is fixed through time" <| fun theta ->
+    //         //     if theta |> snd |> Array.length = 0
+    //         //     then true
+    //         //     else
+    //         //         List.init 1000 (fun _ -> theta)
+    //         //         |> stationarySquaredJumpDistance
 
-            // testProperty "MSJD is not stationary when there is a linear trend in the data" <| fun (theta:Solution<float>) addition ->
-            //     List.init 1000 (fun i -> theta |> fst, theta |> snd |> Array.map(fun j -> j + (addition * float i)))
-            //     |> stationarySquaredJumpDistance
-            //     |> not
-        ]
+    //         // testProperty "MSJD is not stationary when there is a linear trend in the data" <| fun (theta:Solution<float>) addition ->
+    //         //     List.init 1000 (fun i -> theta |> fst, theta |> snd |> Array.map(fun j -> j + (addition * float i)))
+    //         //     |> stationarySquaredJumpDistance
+    //         //     |> not
+    //     ]
 
 
 // Module adapted from https://github.com/mathias-brandewinder/Amoeba
