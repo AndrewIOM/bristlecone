@@ -1,3 +1,6 @@
+#### 1.0.0-alpha5 - 2019-03-23
+* Release net47 and netstandard2.0 versions
+* Automatic documentation (based on ProjectScaffold)
 #### 1.0.0-alpha4 - 2019-03-18
 * BUGFIX: Fixed divide by zero error when running `testModel`
 #### 1.0.0-alpha3 - 2019-03-18

@@ -2,6 +2,7 @@
 // This block of code is omitted in the generated HTML documentation. Use 
 // it to define helpers that you do not want to show in the documentation.
 #I "../../bin"
+#I "../../bin/Bristlecone/netstandard2.0"
 
 (**
 Bristlecone
@@ -29,7 +30,9 @@ This example demonstrates using a function defined in this sample library.
 #r "Bristlecone.dll"
 open Bristlecone
 
-printfn "hello = %i" <| Library.hello 0
+let engine =
+  Bristlecone.mkContinuous
+  |> Bristlecone.withTunedMCMC []
 
 (**
 Some more info
@@ -59,9 +62,9 @@ The library is available under Public Domain license, which allows modification 
 redistribution for both commercial and non-commercial purposes. For more information see the 
 [License file][license] in the GitHub repository. 
 
-  [content]: https://github.com/fsprojects/Bristlecone/tree/master/docs/content
-  [gh]: https://github.com/fsprojects/Bristlecone
-  [issues]: https://github.com/fsprojects/Bristlecone/issues
-  [readme]: https://github.com/fsprojects/Bristlecone/blob/master/README.md
-  [license]: https://github.com/fsprojects/Bristlecone/blob/master/LICENSE.txt
+  [content]: https://github.com/Bristlecone/tree/master/docs/content
+  [gh]: https://github.com/Bristlecone
+  [issues]: https://github.com/Bristlecone/issues
+  [readme]: https://github.com/Bristlecone/blob/master/README.md
+  [license]: https://github.com/Bristlecone/blob/master/LICENSE.txt
 *)

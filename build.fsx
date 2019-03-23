@@ -228,8 +228,24 @@ Target.create "ReferenceDocs" (fun _ ->
         let manuallyAdded =
             referenceBinaries
             |> List.map (fun b -> bin @@ b)
-        let conventionBased = []
+        let conventionBased = 
+            DirectoryInfo.getSubDirectories <| DirectoryInfo bin
+            |> Array.collect (fun d ->
+                let name, dInfo =
+                    let net47Bin =
+                        DirectoryInfo.getSubDirectories d |> Array.filter(fun x -> x.FullName.ToLower().Contains("net47"))
+                    d.Name, net47Bin.[0]
+
+                dInfo.GetFiles()
+                |> Array.filter (fun x -> 
+                    x.Name.ToLower() = (sprintf "%s.dll" name).ToLower())
+                |> Array.map (fun x -> x.FullName) 
+                )
+            |> List.ofArray
+        Trace.logfn "Binaries are: %A" (conventionBased)
         conventionBased @ manuallyAdded
+
+    Trace.logfn "Binaries are: %A" (binaries())
 
     binaries()
     |> FSFormatting.createDocsForDlls (fun args ->
@@ -364,7 +380,7 @@ Target.create "All" ignore
 
 "CleanDocs"
   ==>"Docs"
-  //==> "ReferenceDocs"
+  ==> "ReferenceDocs"
   ==> "GenerateDocs"
 
 "Clean"
