@@ -25,7 +25,7 @@ open Fake.Api
 //  - for version and project name in generated AssemblyInfo file
 //  - by the generated NuGet package
 //  - to run tests and to publish documentation on GitHub gh-pages
-//  - for documentation, you also need to edit info in "docsrc/tools/generate.fsx"
+//  - for documentation, you also need to edit info in "docs/tools/generate.fsx"
 
 // The name of the project
 // (used by attributes in AssemblyInfo, name of a NuGet package and directory in 'src')
@@ -132,7 +132,7 @@ Target.create "Clean" (fun _ ->
 )
 
 Target.create "CleanDocs" (fun _ ->
-    Shell.cleanDirs ["docs"]
+    Shell.cleanDirs ["docs/output"]
 )
 
 // --------------------------------------------------------------------------------------
@@ -194,10 +194,10 @@ Target.create "PublishNuget" (fun _ ->
 
 // Paths with template/source/output locations
 let bin        = __SOURCE_DIRECTORY__ @@ "bin"
-let content    = __SOURCE_DIRECTORY__ @@ "docsrc/content"
-let output     = __SOURCE_DIRECTORY__ @@ "docs"
-let files      = __SOURCE_DIRECTORY__ @@ "docsrc/files"
-let templates  = __SOURCE_DIRECTORY__ @@ "docsrc/tools/templates"
+let content    = __SOURCE_DIRECTORY__ @@ "docs/content"
+let output     = __SOURCE_DIRECTORY__ @@ "docs/output"
+let files      = __SOURCE_DIRECTORY__ @@ "docs/files"
+let templates  = __SOURCE_DIRECTORY__ @@ "docs/tools/templates"
 let formatting = __SOURCE_DIRECTORY__ @@ "packages/formatting/FSharp.Formatting"
 let docTemplate = "docpage.cshtml"
 
@@ -249,14 +249,15 @@ let copyFiles () =
     |> Trace.logItems "Copying styles and scripts: "
 
 Target.create "Docs" (fun _ ->
-    File.delete "docsrc/content/release-notes.md"
-    Shell.copyFile "docsrc/content/" "RELEASE_NOTES.md"
-    Shell.rename "docsrc/content/release-notes.md" "docsrc/content/RELEASE_NOTES.md"
+    Directory.ensure output
 
-    File.delete "docsrc/content/license.md"
-    Shell.copyFile "docsrc/content/" "LICENSE"
-    Shell.rename "docsrc/content/license.md" "docsrc/content/LICENSE"
+    File.delete "docs/content/release-notes.md"
+    Shell.copyFile "docs/content/" "RELEASE_NOTES.md"
+    Shell.rename "docs/content/release-notes.md" "docs/content/RELEASE_NOTES.md"
 
+    File.delete "docs/content/license.md"
+    Shell.copyFile "docs/content/" "LICENSE"
+    Shell.rename "docs/content/license.md" "docs/content/LICENSE"
 
     DirectoryInfo.getSubDirectories (DirectoryInfo.ofPath templates)
     |> Seq.iter (fun d ->

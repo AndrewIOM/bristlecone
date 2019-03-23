@@ -5,8 +5,8 @@ open System.Reflection
 [<assembly: AssemblyTitleAttribute("Bristlecone.Dendro")>]
 [<assembly: AssemblyProductAttribute("Bristlecone")>]
 [<assembly: AssemblyDescriptionAttribute("Time-series modelling in F#")>]
-[<assembly: AssemblyVersionAttribute("0.0.1")>]
-[<assembly: AssemblyFileVersionAttribute("0.0.1")>]
+[<assembly: AssemblyVersionAttribute("1.0.0")>]
+[<assembly: AssemblyFileVersionAttribute("1.0.0")>]
 [<assembly: AssemblyConfigurationAttribute("Release")>]
 do ()
 
@@ -14,6 +14,6 @@ module internal AssemblyVersionInformation =
     let [<Literal>] AssemblyTitle = "Bristlecone.Dendro"
     let [<Literal>] AssemblyProduct = "Bristlecone"
     let [<Literal>] AssemblyDescription = "Time-series modelling in F#"
-    let [<Literal>] AssemblyVersion = "0.0.1"
-    let [<Literal>] AssemblyFileVersion = "0.0.1"
+    let [<Literal>] AssemblyVersion = "1.0.0"
+    let [<Literal>] AssemblyFileVersion = "1.0.0"
     let [<Literal>] AssemblyConfiguration = "Release"

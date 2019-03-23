@@ -179,7 +179,8 @@ release.sh
 localpackages/
 paket-files
 *.orig
-docsrc/content/license.md
-docsrc/content/release-notes.md
+docs/content/license.md
+docs/content/release-notes.md
 .fake
-docsrc/tools/FSharp.Formatting.svclog
+docs/tools/FSharp.Formatting.svclog
+docs/output/
