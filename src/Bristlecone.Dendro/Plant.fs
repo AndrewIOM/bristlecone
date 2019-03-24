@@ -1,9 +1,9 @@
-namespace Bristlecone
+namespace Bristlecone.Dendro
 
 module PlantIndividual =
 
+    open Bristlecone
     open EnvironmentalVariables
-    open Time
 
     // Year
     [<Measure>] type year

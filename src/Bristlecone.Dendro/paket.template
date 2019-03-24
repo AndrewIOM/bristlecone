@@ -1,0 +1,29 @@
+type file
+id Bristlecone.Dendro
+title
+    Bristlecone.Dendro
+owners
+    Andrew Martin
+authors 
+    Andrew Martin
+projectUrl
+    https://github.com/AndrewIOM/bristlecone
+iconUrl
+    https://github.com/AndrewIOM/bristlecone/master/docs/files/img/logo.png
+licenseUrl
+    https://github.com/AndrewIOM/bristlecone/blob/master/LICENSE
+requireLicenseAcceptance
+    false
+language
+    F#
+copyright
+    Copyright 2019
+tags
+    modelling time-series F# data-science ecology
+summary
+    Tree ring time-series modelling in F#
+description
+    Extension for Bristlecone for modelling plant individuals. An F# library for model-fitting model-selection (MFMS) of ecological models to observational data. The library was developed for individual-based plant modelling using tree ring time-series, but can be used for any ecological models.
+
+files
+	../../bin/Bristlecone.Dendro ==> lib

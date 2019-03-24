@@ -1,17 +1,12 @@
-module Bristlecone.Optimisation.Techniques
+namespace Bristlecone.Optimisation
 
 open System
 open Bristlecone
-open Bristlecone.Optimisation.Amoeba
-open Solver
 
 type OptimisationError =
     | OutOfBounds
     | ModelError
     | LikelihoodError
-
-let containsNan s : bool = s |> Seq.exists (Double.IsNaN)
-
 
 module Bootstrap =
 
@@ -25,52 +20,6 @@ module Bootstrap =
             | _ ->
                 let selection = random.Next(0, ts.Length - 1)
                 data |> Map.map (fun _ v -> v |> TimeSeries.bootstrapFixedStep (TimeSpan.FromDays(366.)) selection )
-
-
-module HeuristicOptimisation =
-
-    open Bristlecone.Logging
-
-    let rec heuristicOptimisation logger numberOfLevels iterationsPerLevel numberOfAomeba (paramBounds:Domain) (f:Objective<float>) =
-
-        let aomebaResults = 
-            [|1 .. numberOfAomeba|]
-            |> Array.collect (fun _ -> 
-                try [|solve Default logger iterationsPerLevel paramBounds f|]
-                with | e -> 
-                    logger <| GeneralEvent (sprintf "Warning: Could not generate numercal solution for point (with EXN %s): %A" e.Message paramBounds)
-                    [||] )
-
-        let mostLikely = aomebaResults |> Array.map List.head |> Array.minBy fst
-
-        // Drop worst 20% of likelihoods
-        let percentile80thRank = int (Math.Floor (float (80. / 100. * (float aomebaResults.Length + 1.))))
-        let percentile80thValue = fst aomebaResults.[0].[percentile80thRank - 1]
-        logger <| GeneralEvent (sprintf "80th percentile = %f" percentile80thValue)
-        let ranked = aomebaResults |> Array.map List.head |> Array.filter (fun x -> (fst x) <= percentile80thValue)
-
-        let dims = Array.length paramBounds
-
-        let boundsList = ranked |> Array.map snd
-
-        let getBounds (dim:int) (points:Point<'a> array) =
-            let max = points |> Array.maxBy (fun p -> p.[dim])
-            let min = points |> Array.minBy (fun p -> p.[dim])
-            logger <| GeneralEvent (sprintf "Min %A Max %A" min.[dim] max.[dim])
-            min.[dim],max.[dim],Unconstrained
-
-        let bounds =
-            [|0 .. dims - 1|]
-            |> Array.map (fun dim -> (boundsList |> getBounds dim))
-
-        let boundWidth =
-            bounds
-            |> Array.sumBy (fun (l,h,_) -> h - l)
-        logger <| GeneralEvent (sprintf "Bound width: %f" boundWidth)
-        
-        if (numberOfLevels > 1 && boundWidth > 0.01) 
-            then heuristicOptimisation logger (numberOfLevels-1) iterationsPerLevel numberOfAomeba bounds f
-            else mostLikely
 
 
 module ParameterPool =

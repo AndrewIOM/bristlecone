@@ -8,7 +8,6 @@ open Bristlecone.Logging
 module Objective =
 
     open Bristlecone.Optimisation
-    open Bristlecone.Optimisation.Techniques
     open ModelSystem
 
     let parameteriseModel parameterPool point (model:ModelEquation) =
@@ -112,9 +111,9 @@ module Solver =
 module Bristlecone =
 
     open Time
-    open Optimisation.Techniques
     open ModelSystem
     open EstimationEngine
+    open Bristlecone.Optimisation
 
     let generateFixedSeries writeOut equations timeMode seriesLength startPoint startDate theta =
         let applyFakeTime s = TimeSeries.fromSeq startDate (Days 1) s
@@ -403,26 +402,12 @@ module Bristlecone =
     let bootstrap engine random iterations bootstrapCount hypothesis (identifier:ShortCode) series =
         let rec bootstrap s numberOfTimes solutions =
             if (numberOfTimes > 0) then
-                let subset = Optimisation.Techniques.Bootstrap.removeSingle random s
+                let subset = Optimisation.Bootstrap.removeSingle random s
                 let result = fit engine iterations subset hypothesis
                 engine.LogTo <| GeneralEvent (sprintf "%s: completed bootstrap %i" identifier.Value numberOfTimes)
                 bootstrap s (numberOfTimes - 1) (solutions |> List.append [result])
             else solutions
         bootstrap series bootstrapCount []
-
-
-    module PlantIndividual =
-
-        open PlantIndividual
-
-        let fit engine iterations system (plant:PlantIndividual) =
-            let g =
-                match plant.Growth |> growthSeries with
-                | Absolute g -> g
-                | Cumulative g -> g
-                | Relative g -> g
-            let predictors = plant.Environment |> Map.add (ShortCode.create "x") g
-            fit engine iterations predictors system
 
 
     module Parallel =
