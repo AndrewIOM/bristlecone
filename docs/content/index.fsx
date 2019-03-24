@@ -15,7 +15,7 @@ Documentation
   <div class="span6">
     <div class="well well-small" id="nuget">
       The Bristlecone library can be <a href="https://nuget.org/packages/Bristlecone">installed from NuGet</a>:
-      <pre>PM> Install-Package Bristlecone</pre>
+      <pre>$ dotnet add package Bristlecone</pre>
     </div>
   </div>
   <div class="span1"></div>
@@ -62,9 +62,9 @@ The library is available under Public Domain license, which allows modification 
 redistribution for both commercial and non-commercial purposes. For more information see the 
 [License file][license] in the GitHub repository. 
 
-  [content]: https://github.com/Bristlecone/tree/master/docs/content
-  [gh]: https://github.com/Bristlecone
-  [issues]: https://github.com/Bristlecone/issues
-  [readme]: https://github.com/Bristlecone/blob/master/README.md
-  [license]: https://github.com/Bristlecone/blob/master/LICENSE.txt
+  [content]: https://github.com/AndrewIOM/Bristlecone/tree/master/docs/content
+  [gh]: https://github.com/AndrewIOM/Bristlecone
+  [issues]: https://github.com/AndrewIOM/Bristlecone/issues
+  [readme]: https://github.com/AndrewIOM/Bristlecone/blob/master/README.md
+  [license]: https://github.com/AndrewIOM/Bristlecone/blob/master/LICENSE.txt
 *)
