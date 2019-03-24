@@ -1,4 +1,4 @@
-<img style="max-width:27.5em;width:100%" src="docs/files/img/logo-wide.png" alt="RProvider logo" />
+<img style="width:27em" src="docs/files/img/logo-wide.png" alt="RProvider logo" />
 
 An F# library for model-fitting model-selection (MFMS) of ecological models to observational data. The library was developed for tree ring analysis, but can be used for other time-series modelling problems.
 
