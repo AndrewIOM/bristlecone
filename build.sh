@@ -12,4 +12,4 @@ if [ ! -f build.fsx ]; then
     dotnet fake run init.fsx
 fi
 
-dotnet fake build $@
+dotnet fake build -t $@
