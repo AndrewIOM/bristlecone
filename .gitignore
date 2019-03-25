@@ -184,3 +184,6 @@ docs/content/release-notes.md
 .fake
 docs/tools/FSharp.Formatting.svclog
 docs/output/
+
+# gh-pages docs
+temp/gh-pages/*

@@ -102,10 +102,8 @@ module EndConditions =
 
 
 /// A module containing Monte Carlo Markov Chain (MCMC) methods for optimisation.
-/// 
-/// **Reference** An introduction to MCMC approaches is provided by Reali, Priami, and Marchetti (2017): 
-/// https://doi.org/10.3389/fams.2017.00006.
-/// 
+/// An introduction to MCMC approaches is provided by 
+/// [Reali, Priami, and Marchetti (2017)](https://doi.org/10.3389/fams.2017.00006)
 module MonteCarlo =
 
     open Bristlecone.Statistics.Distributions
@@ -125,7 +123,7 @@ module MonteCarlo =
                 then (a - (b * scaleFactor)) 
                 else (a + (b * scaleFactor))
 
-    
+
     /// A recursive metropolis hastings algirhtm, when ends when `endCondition` returns true.
     /// 
     /// **Parameters**
@@ -691,19 +689,23 @@ module MonteCarlo =
 
         /// Candidate distribution: Gaussian univariate []
         /// Probability: Boltzmann Machine
-        let classicalSimulatedAnnealing scale settings writeOut n domain (f:Objective<float>) : Solution<float> list =
-            let gaussian rnd scale t = Bristlecone.Statistics.Distributions.Normal.draw rnd 0. (scale * sqrt (1.))
+        let classicalSimulatedAnnealing scale tDependentProposal settings writeOut n domain (f:Objective<float>) : Solution<float> list =
+            let gaussian rnd scale t = 
+                let s = if tDependentProposal then scale * (sqrt t) else scale
+                Bristlecone.Statistics.Distributions.Normal.draw rnd 0. s
             simulatedAnnealing scale settings n Machines.boltzmann gaussian (CoolingSchemes.exponential 0.05) writeOut domain f
 
         /// Candidate distribution: Cauchy univariate []
         /// Probability: Bottzmann Machine
-        let fastSimulatedAnnealing scale settings writeOut n domain (f:Objective<float>) : (float * float[]) list =
+        let fastSimulatedAnnealing scale tDependentProposal settings writeOut n domain (f:Objective<float>) : (float * float[]) list =
             let cauchy rnd scale t = 
-                let c = MathNet.Numerics.Distributions.Cauchy(0., scale * (sqrt t), rnd)
+                let s = if tDependentProposal then scale * (sqrt t) else scale
+                let c = MathNet.Numerics.Distributions.Cauchy(0., s, rnd)
                 fun () -> c.Sample()
             simulatedAnnealing scale settings n Machines.boltzmann cauchy (CoolingSchemes.fastCauchyCoolingSchedule) writeOut domain f
 
-    /// An adaptation of the *Filzbach* method by Drew Purves
+
+    /// An adaptation of the Filzbach method (originally by Drew Purves)
     module Filzbach =
     
         // Implementation details:
