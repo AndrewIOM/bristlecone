@@ -16,6 +16,7 @@ module Config =
         | MLE
         | Trace
         | Series
+        | Intervals
 
     let filePath directory subject modelId (resultId:System.Guid) dataType =
         let path = System.IO.DirectoryInfo(directory)
@@ -25,6 +26,7 @@ module Config =
                 | MLE -> "mle"
                 | Trace -> "trace"
                 | Series -> "series"
+                | Intervals -> "ci"
             sprintf "%sbristlecone-%s-%i-%s-%s.csv" path.FullName subject modelId t (resultId.ToString())
         else invalidArg "directory" "The specified directory does not exist"
 
@@ -40,13 +42,14 @@ module Config =
                 | MLE -> "mle"
                 | Trace -> "trace"
                 | Series -> "series"
+                | Intervals -> "ci"
             let files = path.GetFiles(sprintf "bristlecone-%s-%i-%s-*.csv" subject modelId t)
-            let regex = sprintf "bristlecone-%s-%i-%s-%s.csv" subject modelId t regexGuid
+            let regex = sprintf "bristlecone-%s-%i-%s-(%s).csv" subject modelId t regexGuid
             files |> Seq.choose(fun f -> 
                 let m = System.Text.RegularExpressions.Regex.Match(f.Name, regex)
                 if m.Success
                 then 
-                    let guid = m.Captures.[0].Value |> System.Guid.Parse
+                    let guid = m.Groups.[1].Value |> System.Guid.Parse
                     (guid, f) |> Some
                 else None )
         else invalidArg "directory" "The specified directory does not exist"
@@ -177,8 +180,8 @@ module Series =
         csv.Save(filePath)
 
     let load directory subject modelId =
-        let traceFiles = Config.fileMatch directory subject modelId Config.DataType.Trace
-        traceFiles
+        let seriesFiles = Config.fileMatch directory subject modelId Config.DataType.Series
+        seriesFiles
         |> Seq.choose(fun (i,f) ->
             let data = IndividualSeries.Load f.FullName
             match data.Rows |> Seq.length with
@@ -212,6 +215,29 @@ module EstimationResult =
               Parameters = modelSystem.Parameters |> Map.map(fun k v -> Parameter.setEstimate v (p |> Map.find k))
               Series = s 
               Trace = t })
+
+
+module Confidence =
+
+    open Bristlecone.Optimisation.ConfidenceInterval
+
+    type IndividualCI = CsvProvider<"templates/individual-mle-ci.csv">
+
+    module Row =
+
+        let fromResult subject hypothesisId runId (result:CodedMap<ConfidenceInterval>) =
+            result
+            |> Map.toList
+            |> Seq.collect(fun (name,ci) ->
+                [ 68., ci.``68%``; 95., ci.``95%`` ]
+                |> Seq.map(fun (i,iv) ->
+                    (subject, hypothesisId, runId,
+                     name.Value, i, iv.Lower, iv.Upper) |> IndividualCI.Row ))
+
+    let save directory subject modelId runId result =
+        let csv = new IndividualCI (result |> Row.fromResult subject modelId runId)
+        let filePath = Config.filePath directory subject modelId runId Config.DataType.Intervals
+        csv.Save(filePath)
 
 
 module ModelSelection =

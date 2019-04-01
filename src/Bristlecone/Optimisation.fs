@@ -669,20 +669,20 @@ module MonteCarlo =
                         else (ti, previous) )
 
                 if k % 1000 = 0 then
-                    writeOut <| GeneralEvent (sprintf "Tuning is at %A (k=%i/%i)" (newScaleInfo |> Array.map fst) k kMax)
+                    writeOut <| GeneralEvent (sprintf "Tuning is at %A (k=%i/%i) [-logL %f]" (newScaleInfo |> Array.map fst) k kMax (result |> fst))
 
                 if k < kMax
                 then tune newScaleInfo (k + 1) result
-                else newScaleInfo |> Array.map fst
+                else (newScaleInfo |> Array.map fst, l1, theta1)
 
-            let tunedScale = 
+            let tunedScale,l2,theta2 = 
                 homogenousChain initialScale (EndConditions.afterIteration 5000) 1. (l1, theta1)
                 |> List.head
                 |> tune (initialScale |> Array.map(fun t -> (t, Array.empty))) 1
             writeOut <| GeneralEvent (sprintf "Tuned = %A" tunedScale)
 
             // 4. Heat up
-            let boilingPoint,min = heat writeOut settings.HeatStepLength settings.TemperatureCeiling settings.BoilingAcceptanceRate settings.HeatRamp (homogenousChain tunedScale) (l1, theta1) settings.InitialTemperature
+            let boilingPoint,min = heat writeOut settings.HeatStepLength settings.TemperatureCeiling settings.BoilingAcceptanceRate settings.HeatRamp (homogenousChain tunedScale) (l2, theta2) settings.InitialTemperature
 
             // 5. Gradually cool down (from best point during heat-up)
             anneal writeOut settings.AnnealStepLength annealEnd (cool boilingPoint) (homogenousChain tunedScale) boilingPoint min []
