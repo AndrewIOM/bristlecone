@@ -30,6 +30,11 @@ module Config =
             sprintf "%sbristlecone-%s-%i-%s-%s.csv" path.FullName subject modelId t (resultId.ToString())
         else invalidArg "directory" "The specified directory does not exist"
 
+    let filePathEnsemble directory =
+        let path = System.IO.DirectoryInfo(directory)
+        if path.Exists then sprintf "%sbristlecone-ensemble-weights.csv" path.FullName
+        else invalidArg "directory" "The specified directory does not exist"
+
     let regexGuid = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
 
     /// Find files in a directory that match the standard bristlecone
@@ -242,10 +247,22 @@ module Confidence =
 
 module ModelSelection =
 
-    open Bristlecone.ModelSystem
+    open Bristlecone.ModelSelection.Akaike
 
-    let save x =
-        invalidOp "Not finished"
+    type EnsembleAIC = CsvProvider<"templates/ensemble-model-selection.csv">
+
+    module Row = 
+
+        let fromResult (result:seq<string * int * EstimationResult * AkaikeWeight>) =
+            result
+            |> Seq.map(fun (subject,hypothesisId,r,aic) ->
+                (subject, hypothesisId, r.ResultId,
+                 aic.Likelihood, aic.AIC, aic.AICc, aic.Weight) |> EnsembleAIC.Row )
+
+    let save directory result =
+        let csv = new EnsembleAIC (result |> Row.fromResult)
+        let filePath = Config.filePathEnsemble directory
+        csv.Save(filePath)
 
 
 module Cache =

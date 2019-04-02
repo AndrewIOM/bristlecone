@@ -5,6 +5,13 @@ module Akaike =
     open Bristlecone.ModelSystem
     open Bristlecone.Time
 
+    type AkaikeWeight = {
+        Likelihood: float
+        AIC: float
+        AICc: float
+        Weight: float
+    }
+
     ///**Description**
     /// The Akaike information criterion, a standardised index of model fit quality for models that have different numbers of parameters.
     ///**Parameters**
@@ -31,15 +38,19 @@ module Akaike =
         let correction = (2. * ((float k) ** 2.) + 2. * (float k)) / ((float n) - (float k) - 1.)
         aic + correction
     
-    
-    let akaikeWeights' n modelResults =
+    let akaikeWeights' n modelResults : seq<AkaikeWeight> =
         let aiccs = modelResults |> Seq.map(fun (l,p) -> aicc n p l)
         let relativeLikelihoods =
             aiccs
             |> Seq.map(fun aicc -> exp ( - (1. / 2.) * (aicc - (aiccs |> Seq.min))))
         let totalLikelihood = relativeLikelihoods |> Seq.sum
         relativeLikelihoods
-        |> Seq.map (fun relative -> relative / totalLikelihood)
+        |> Seq.zip modelResults
+        |> Seq.map (fun ((l,p),relative) -> 
+            { Likelihood = l
+              AIC = aic p l
+              AICc = aicc n p l
+              Weight = relative / totalLikelihood })
 
     /// **Description**
     /// Akaike weights for a set of model results.
