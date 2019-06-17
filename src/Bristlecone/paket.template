@@ -1,5 +1,6 @@
 type file
 id Bristlecone
+include-referenced-projects true
 title
     Bristlecone
 owners
@@ -26,4 +27,6 @@ description
     An F# library for model-fitting model-selection (MFMS) of ecological models to observational data. The library was developed for individual-based plant modelling using tree ring time-series, but can be used for any ecological models.
 
 files
-	../../bin/Bristlecone ==> lib
+	../../bin/Bristlecone ==> lib	
+    bristlecone.fsx ==> .
+    ../Bristlecone.Charts.R/charts.fsx ==> .

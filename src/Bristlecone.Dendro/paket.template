@@ -1,5 +1,6 @@
 type file
 id Bristlecone.Dendro
+include-referenced-projects true
 title
     Bristlecone.Dendro
 owners

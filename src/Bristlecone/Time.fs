@@ -178,7 +178,7 @@ module Time =
             let resolution = series |> resolution
             let obs = series |> toObservations
             match resolution with
-            | Variable -> invalidArg "desiredResolution" "Cannot generalise a variable-resolution time series"
+            | TemporalResolution.Variable -> invalidArg "desiredResolution" "Cannot generalise a variable-resolution time series"
             | Fixed res ->
                 match res with
                 | Years oldYears ->
@@ -188,7 +188,38 @@ module Time =
                         then obs |> Seq.chunkBySize (newYears / oldYears) |> Seq.map (fun bin -> (bin |> upscaleFunction, bin |> Seq.head |> snd)) |> fromObservations
                         else invalidArg "desiredResolution" "The upscaled resolution was not a whole multiple of the old resolution"
                     | _ -> invalidArg "desiredResolution" "Cannot generalise an annual time series to a lower resolution"
+                | Days oldDays ->
+                    match desiredResolution with
+                    | Months newMonths ->
+                        obs
+                        |> Seq.groupBy(fun (_,t) -> (t.Year, t.Month))
+                        |> Seq.map(fun ((y,m),g) -> (g |> upscaleFunction, g |> Seq.map snd |> Seq.max))
+                        |> fromObservations
+                    | _ -> invalidOp "Not implemented"
                 | _ -> invalidArg "desiredResolution" "Not implemented"
+
+        /// Interpolates missing values in a time series, where missing values
+        /// are represented as an `Option` type. 
+        let interpolate (series:TimeSeries<float option>) : TimeSeries<float> =
+            let observations = series |> toObservations |> Seq.toArray
+            observations
+            |> Seq.mapi(fun i obs ->
+                match fst obs with
+                | Some _ -> Some (obs, i, i, i)
+                | None ->
+                    let lastIndex = observations |> Seq.take i |> Seq.tryFindIndexBack(fun (o,_) -> o.IsSome)
+                    let nextIndex = observations |> Seq.skip i |> Seq.tryFindIndex(fun (o,_) -> o.IsSome)
+                    if lastIndex.IsSome && nextIndex.IsSome
+                    then Some (obs, i, lastIndex.Value, nextIndex.Value + i)
+                    else None )
+            |> Seq.choose id
+            |> Seq.map(fun (obs,i,last,next) ->
+                if (next - last) = 0 then (observations.[i] |> fst).Value, observations.[i] |> snd
+                else
+                    let lastValue = (observations.[last] |> fst).Value
+                    let nextValue = (observations.[next] |> fst).Value
+                    (lastValue + ((nextValue - lastValue) / (float next - float last)) * (float i - float last)), (obs |> snd))
+            |> fromObservations
 
         ///**Description**  
         /// Determines if multiple time series have the same temporal extent and time steps.

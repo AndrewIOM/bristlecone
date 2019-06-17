@@ -16,8 +16,8 @@
     <Compile Include="EstimationEngine.fs" />
     <Compile Include="OptimisationTechniques.fs" />
     <Compile Include="ConfidenceInterval.fs" />
-    <Compile Include="DataAccess.fs" />
     <Compile Include="ModelSelection.fs" />
+    <Compile Include="DataAccess.fs" />
     <Compile Include="Workflow.fs" />
     <Compile Include="Library.fs" />
     <Compile Include="Equations.fs" />

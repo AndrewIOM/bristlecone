@@ -1,4 +1,4 @@
-#I "../Bristlecone/bin/Debug/netstandard2.0"
+#I "../Bristlecone/bin/Release/netstandard2.0"
 #I "../../packages/RProvider"
 
 #r "Bristlecone.dll"

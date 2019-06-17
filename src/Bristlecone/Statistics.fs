@@ -54,6 +54,9 @@ module Interpolate =
     let bilinear ((t1,v1):float*float) ((t2,v2):float*float) t =
         v1 + (t - t1) * ((v2 - v1) / (t2 - t1))
 
+    /// Use the previous point
+    let lower ((t1,v1):float*float) ((t2,v2):float*float) t =
+        v1
 
 
 module Regression =
@@ -67,6 +70,43 @@ module Regression =
             let _ = mlr.Learn(x', y)
             (mlr.Coefficients |> Seq.head).TTest.PValue
         with | _ -> nan
+
+
+module TrendAnalysis =
+
+    open Bristlecone.Time
+
+    let theilSen (timeDiff:System.TimeSpan->'a) (ts:TimeSeries<'a>) =
+        let allPoints = ts |> TimeSeries.toObservations
+        let allSlopes = 
+            allPoints
+            |> Seq.allPairs allPoints // Calculate the product of points
+            |> Seq.filter(fun ((_,t1),(_,t2)) -> t1 <> t2) // Sen (1968): remove duplicate ts 
+            |> Seq.map(fun ((y1,x1),(y2,x2)) -> (y2 - y1) / (timeDiff (x2 - x1))) // Calculate slope (x = t)
+        let medianSlope =
+            allSlopes
+            |> Seq.sortBy id
+            |> Seq.skip ((allSlopes |> Seq.length) / 2)
+            |> Seq.head
+
+        // Determine line by setting y-intercept b to median of values yi - mxi
+
+
+
+        medianSlope
+
+
+
+
+        // Median of the slopes determined by all pairs of sample points.
+
+        // For every point
+        // Calculate slope to every other point (only at other times)
+        // 
+
+        //Take the median of the slopes defined from pairs of points that have distinct x coordinates.
+        //x = 
+
 
 
 module RootFinding =

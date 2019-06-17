@@ -542,6 +542,7 @@ module MonteCarlo =
               BoilingAcceptanceRate: float
               InitialTemperature: float
               TuneLength: int
+              TuneN: int
               AnnealStepLength: EndCondition<'a> }
             
             static member Default = {
@@ -551,6 +552,7 @@ module MonteCarlo =
                 TemperatureCeiling = Some 200.
                 InitialTemperature = 1.00
                 TuneLength = 100000
+                TuneN = 50
                 AnnealStepLength = EndConditions.improvementCount 250 250
             }
 
@@ -651,18 +653,17 @@ module MonteCarlo =
                         then constrainJump x (draw' ti 1. ()) 1. con
                         else x )
                 let result = tryMove propose (machine 1.) random f (l1, theta1)
-                let tuneN = 50
                 let newScaleInfo = 
                     scalesToChange 
                     |> Array.zip (result |> snd)
                     |> Array.map(fun (v, ((ti,previous),changed)) ->
-                        if changed then (ti, (previous |> Array.append [|v|]))  // Append new parameter values to previous ones
-                        else (ti, previous) )
-                    |> Array.map(fun (ti,previous) ->
-                        if previous |> Array.length = tuneN
+                        let ti, previous = 
+                            if changed then (ti, (previous |> Array.append [|v|]))  // Append new parameter values to previous ones
+                            else (ti, previous)
+                        if previous |> Array.length = settings.TuneN
                         then
                             let changes = previous |> Array.pairwise |> Array.where(fun (a,b) -> a <> b) |> Array.length
-                            match (float changes) / (float tuneN) with
+                            match (float changes) / (float settings.TuneN) with
                             | ar when ar < 0.35 -> (ti * 0.80, Array.empty)
                             | ar when ar > 0.50 -> (ti * 1.20, Array.empty)
                             | _ -> (ti, Array.empty)
@@ -722,12 +723,20 @@ module MonteCarlo =
         // Parameters jumped is recorded
         // Tuning happens given the jumping information            
 
+        type FilzbachSettings<'a> = {
+            TuneAfterChanges: int
+            MaxScaleChange: float
+            MinScaleChange: float
+            BurnLength: EndCondition<'a>
+        }
 
-        let filzbach' initialScale (theta:float[]) (burnEnd:EndCondition<float>) random writeOut (sampleEnd:EndCondition<float>) (domain:Domain) (f:Objective<float>) =
+        let filzbach' settings (theta:float[]) random writeOut (sampleEnd:EndCondition<float>) (domain:Domain) (f:Objective<float>) =
             writeOut <| GeneralEvent (sprintf "[Optimisation] Starting Filzbach-style MCMC optimisation")
             let sample sd = Normal.draw random 0. sd
+            // let sample sd = fun () -> MathNet.Numerics.Distributions.Cauchy.Sample(random, 0., sd)
             let scaleRnd = Bristlecone.Statistics.Distributions.ContinuousUniform.draw random 0. 1.
             let paramRnd = MathNet.Numerics.Distributions.DiscreteUniform(0, theta.Length - 1, random)
+            let initialScale = domain |> Array.map(fun (l,u,_) -> (u - l) / 6.)
 
             let rec step burning (p:(float*float[])[]) endWhen (l1, theta1) d =
                 // Change one to many parameter at once (Filzbach-style)
@@ -752,7 +761,7 @@ module MonteCarlo =
                             then changeRandom p
                             else r
                         changeRandom p
-                
+
                 let propose theta =
                     Array.zip3 theta scalesToChange domain
                     |> Array.map(fun (x,((ti,n),shouldChange),(_,_,con)) -> 
@@ -765,22 +774,27 @@ module MonteCarlo =
                 // End metropolis step
                 
                 // Tune Scales (burnin only)
-                let tuneN = 20
                 let newScaleInfo = 
                     if not burning then p
                     else 
                         scalesToChange 
                         |> Array.zip (result |> snd)
-                        |> Array.map(fun (v, ((ti,previous),changed)) ->
-                            if changed then (ti, (previous |> Array.append [|v|]))  // Append new parameter values to previous ones
-                            else (ti, previous) )
-                        |> Array.map(fun (ti,previous) ->
-                            if previous |> Array.length = tuneN
+                        |> Array.mapi(fun parameteri (v, ((ti,previous),changed)) ->
+                            let ti, previous = 
+                                if changed then (ti, (previous |> Array.append [|v|]))  // Append new parameter values to previous ones
+                                else (ti, previous)
+                            if previous |> Array.length = settings.TuneAfterChanges
                             then
                                 let changes = previous |> Array.pairwise |> Array.where(fun (a,b) -> a <> b) |> Array.length
-                                match (float changes) / (float tuneN) with
-                                | ar when ar < 0.25 -> (ti * 0.80, Array.empty)
-                                | ar when ar > 0.25 -> (ti * 1.20, Array.empty)
+                                match (float changes) / (float settings.TuneAfterChanges) with
+                                | ar when ar < 0.25 -> 
+                                    if (ti * 0.80) < (initialScale.[parameteri] * settings.MinScaleChange)
+                                    then (initialScale.[parameteri] * settings.MinScaleChange, Array.empty)
+                                    else (ti * 0.80, Array.empty)
+                                | ar when ar > 0.25 -> 
+                                    if (ti * 1.20) > (initialScale.[parameteri] * settings.MaxScaleChange)
+                                    then (initialScale.[parameteri] * settings.MaxScaleChange, Array.empty)
+                                    else (ti * 1.20, Array.empty)
                                 | _ -> (ti, Array.empty)
                             else (ti, previous) )
                 // End Tune Scales (burnin only)
@@ -794,16 +808,15 @@ module MonteCarlo =
 
             let l1 = f theta
             
-            let burnResults,burnScales = step true (initialScale |> Array.map(fun t -> (t, Array.empty))) burnEnd (l1, theta) []
+            let burnResults,burnScales = step true (initialScale |> Array.map(fun x -> x, Array.empty)) settings.BurnLength (l1, theta) []
             let results,_ = step false (burnScales |> Array.map(fun t -> (t, Array.empty))) sampleEnd (burnResults |> Seq.head) burnResults
             results
 
-        let filzbach initialScale burnEnd writeOut n domain (f:Objective<float>) : (float * float[]) list =
+        let filzbach settings writeOut n domain (f:Objective<float>) : (float * float[]) list =
             let random = MathNet.Numerics.Random.MersenneTwister(true)
             let theta = initialise domain random
-            let scale = [| 1 .. theta.Length |] |> Array.map (fun _ -> initialScale)
             writeOut <| GeneralEvent (sprintf "[Optimisation] Initial theta is %A" theta)
-            filzbach' scale theta burnEnd random writeOut n domain f
+            filzbach' settings theta random writeOut n domain f
 
 
 // Nelder Mead implementation

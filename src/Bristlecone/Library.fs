@@ -53,11 +53,17 @@ module Conditioning =
         | Custom precomputed -> precomputed |> Some
 
 
-/// Helper functions for the creation of `Solvers`, which can apply time-series models
+/// Helper functions for the creation of `Solver` functions, which apply time-series models
 /// to time-series data (when using Bristlecone time-series types).
 module Solver =
 
     open Bristlecone.EstimationEngine
+
+    type Solver<'a> = CodedMap<ODE> -> CodedMap<'a[]>
+
+    type StepType =
+        | Internal
+        | External
 
     /// Step the solver using the high resolution, and output at low resolution.
     /// External steps can be variable in size.
@@ -69,20 +75,70 @@ module Solver =
                 i engine.LogTo t0 t1 (t1-t0) state forcings eqs
 
     /// Step the solver using high resolution, and output at low resolution.
-    /// External steps are of a fixed width. This is more efficient than running
-    /// with variable steps.
+    /// External steps are of a fixed width.
     let fixedStep engine tStart tEnd initialState forcings =
         match engine.TimeHandling with
         | Discrete -> invalidOp "Not configured"
         | Continuous i -> fun eqs -> 
-            // printfn "Start time is %f and end time is %f" tStart tEnd
-            // printfn "Initial state is %A" initialState
             i engine.LogTo tStart tEnd 1. initialState forcings eqs
-            // Skip the start point (conditioned point)
-            // Return only the external step values
-            |> Map.map (fun _ v -> 
-                // printfn "Prediction is %i long" v.Length
-                v |> Array.tail |> Seq.toArray)
+            |> Map.map (fun _ v -> v |> Array.tail |> Seq.toArray)
+
+    let solver stepType dStart dRes (dData:CodedMap<TimeSeries<'a>>) eData engine t0 : Solver<'a> =
+
+        /// Use variable or fixed stepping depending on data
+        match dRes with
+        | Fixed fRes ->
+
+            /// Integration runs on time centered on dynamic data start time.
+            /// Integration runs on environmental data resolution.
+            let timeline,forcings =
+                match eData with
+                | Some (e,_,eRes) -> 
+
+                    /// Environmental data may be variable or fixed
+                    /// We don't support variable environmental data, so fail
+                    match eRes with
+                    | Variable -> failwith "Variable-time environmental forcing data is not supported"
+                    | Fixed efRes ->
+                        let timeline = (dData |> Seq.head).Value |> TimeIndex.indexSeries dStart efRes |> Seq.map fst
+                        let envIndex = e |> Map.map(fun k v -> TimeIndex.TimeIndex(dStart, efRes, TimeIndex.IndexMode.Interpolate Statistics.Interpolate.lower, v)) //TimeIndex.IndexMode.Interpolate Statistics.Interpolate.bilinear, v))
+                        (timeline, envIndex)
+                | None -> 
+                    let timeline = (dData |> Seq.head).Value |> TimeIndex.indexSeries dStart fRes |> Seq.map fst
+                    (timeline, Map.empty)
+
+            engine.LogTo <| GeneralEvent (sprintf "Applying a fixed-resolution solver (%A)." fRes) 
+            engine.LogTo <| GeneralEvent (sprintf "Data falls on a common timeline: %A" (timeline |> Seq.toList))
+            engine.LogTo <| GeneralEvent (sprintf "Dynamic data is: %A" dData)
+            engine.LogTo <| GeneralEvent (sprintf "Original E data was %A" eData)
+            engine.LogTo <| GeneralEvent (sprintf "Forcings are %A" (forcings |> Map.map(fun k v -> v.Values)))
+
+            /// Parameters for the integration routine
+            let startIndex = timeline |> Seq.head
+            let endIndex = timeline |> Seq.last
+            // Internal step size is 1, given that the time-index is scaled to the steps of the high-resolution external data
+            let externalStep = (timeline |> Seq.tail |> Seq.head) - (timeline |> Seq.head) //TODO Figure out how to do this properly
+            engine.LogTo <| GeneralEvent (sprintf "External step size is %f" externalStep)
+            /// Condition data by setting a 'conditioned' starting state. 
+            /// This is -1 position on the common timeline
+            /// NB. The environmental data must span the conditioning period - how to ensure this?
+
+            /// Run the integration as one operation from conditioned t0 to tn
+            /// Filter the results so that only results that match low-res data in time are included
+            let solve = fixedStep engine (startIndex - externalStep) endIndex t0 forcings
+            fun ode -> 
+                match stepType with
+                | Internal -> solve ode
+                | External ->
+                    solve ode
+                    |> Map.map (fun _ v -> v |> Seq.everyNth (int externalStep) |> Seq.toArray) //TODO proper lookup
+
+        | Variable ->
+            // Run time as individual steps, to allow length to vary (slower)
+            // Allow environmental data when on same temporal profile
+            match eData with
+            | Some (e,eDate,eRes) -> invalidOp "Variable time solver with environmental data has not been implemented yet."
+            | None -> invalidOp "I've yet to finish the variable-time solver"
 
 
     module Discrete =
@@ -114,15 +170,6 @@ module Bristlecone =
     open ModelSystem
     open EstimationEngine
     open Bristlecone.Optimisation
-
-    let generateFixedSeries writeOut equations timeMode seriesLength startPoint startDate theta =
-        let applyFakeTime s = TimeSeries.fromSeq startDate (Days 1) s
-        let eqs = equations |> Map.map (fun _ v -> v theta)
-        match timeMode with
-        | Discrete -> invalidOp "Not supported yet"
-        | Continuous i -> 
-            i writeOut 0. (seriesLength |> float) 1. startPoint Map.empty eqs // TODO allow testing to incorporate environmental forcings
-            |> Map.map (fun _ v -> applyFakeTime v)
 
     /// A standard estimation engine using a random-walk monte carlo optimiser.
     let mkDiscrete : EstimationEngine<float,float> = {
@@ -161,6 +208,11 @@ module Bristlecone =
     let withCustomOptimisation optim engine =
         { engine with OptimiseWith = optim }
 
+    type TimeSeriesNature =
+        | Measure
+        | Dynamic
+        | Forcing
+
     /// **Description**
     /// Fit a mathematical model to data. 
     /// **Parameters**
@@ -177,28 +229,19 @@ module Bristlecone =
     ///
     let fit engine endCondition timeSeriesData (model:ModelSystem) =
 
-        // A. Setup constraints on parameters, depending on optimisation requirements
-        let constrainedParameters, optimisationConstraints = 
-            match engine.Constrain with
-            | Transform -> (model.Parameters, [1 .. model.Parameters.Count] |> List.map(fun _ -> Unconstrained))
-            | Detached -> 
-                let par,con = 
-                    model.Parameters 
-                    |> Map.map (fun k v -> detatchConstraint v) 
-                    |> Map.toList 
-                    |> List.map (fun (k,(x,y)) -> ((k, x), y))
-                    |> List.unzip
-                (par |> Map.ofList, con)
+        // 1. Parse model to setup time series data and resolution
+        // Determine if each series is (a) measure, (b) dynamic, or (c) forcing
+        // Determine dynamic data time resolution
+        // Determine forcing data time resolution
+        // Fail if time resolutions are not subsets
 
-        // B. Find minimum and maximum temporal resolution
-
-        // Ensure that dynamic variables are all running on a common temporal resolution
+        // Temporal Resolution
         let dynamicVariableKeys = model.Equations |> Seq.map (fun k -> k.Key)
         let dData,dStart,dRes =
             let data =
                 timeSeriesData
                 |> Map.filter(fun k _ -> dynamicVariableKeys |> Seq.contains k)
-            // printfn "Dynamic data = %A" data
+            printfn "Dynamic data = %A" data
             let resolutions =
                 data
                 |> TimeSeries.validateCommonTimeline
@@ -212,7 +255,7 @@ module Bristlecone =
         let measureKeys = model.Measures |> Seq.map (fun k -> k.Key)
         let eData =
             let eData = timeSeriesData |> Map.filter(fun k _ -> dynamicVariableKeys |> Seq.append measureKeys |> Seq.contains k |> not)
-            // printfn "Environment data = %A" eData
+            printfn "Environment data = %A" eData
             if eData.Count = 0 then None
             else
                 let resolutions =
@@ -240,70 +283,29 @@ module Bristlecone =
 
         // B. Create a solver that outputs float[] containing only the values
         // for the dynamic variable resolution
-        let solver =
-
-            /// Use variable or fixed stepping depending on data
-            match dRes with
-            | Fixed fRes ->
-
-                /// Integration runs on time centered on dynamic data start time.
-                /// Integration runs on environmental data resolution.
-                let timeline,forcings =
-                    match eData with
-                    | Some (e,_,eRes) -> 
-
-                        /// Environmental data may be variable or fixed
-                        /// We don't support variable environmental data, so fail
-                        match eRes with
-                        | Variable -> failwith "Variable-time environmental forcing data is not supported"
-                        | Fixed efRes ->
-                            let timeline = (dData |> Seq.head).Value |> TimeIndex.indexSeries dStart efRes |> Seq.map fst
-                            let envIndex = e |> Map.map(fun k v -> TimeIndex.TimeIndex(dStart, efRes, TimeIndex.IndexMode.Interpolate Statistics.Interpolate.bilinear, v))
-                            (timeline, envIndex)
-                    | None -> 
-                        let timeline = (dData |> Seq.head).Value |> TimeIndex.indexSeries dStart fRes |> Seq.map fst
-                        (timeline, Map.empty)
-
-                // printfn "Timeline is %A" (timeline |> Seq.toList)
-                // printfn "Forcings are %A" (forcings |> Map.map(fun x t -> t.Values |> Seq.toList))
-
-                /// Parameters for the integration routine
-                let startIndex = timeline |> Seq.head
-                let endIndex = timeline |> Seq.last
-                // Internal step size is 1, given that the time-index is scaled to the steps of the high-resolution external data
-                let externalStep = (timeline |> Seq.tail |> Seq.head) - (timeline |> Seq.head) //TODO Figure out how to do this properly
-                // printfn "External step size is %f" externalStep
-                /// Condition data by setting a 'conditioned' starting state. 
-                /// This is -1 position on the common timeline
-                /// NB. The environmental data must span the conditioning period - how to ensure this?
-
-                /// Run the integration as one operation from conditioned t0 to tn
-                /// Filter the results so that only results that match low-res data in time are included
-                let solve = Solver.fixedStep engine (startIndex - externalStep) endIndex conditionedPoint forcings
-                fun ode -> 
-                    let r = solve ode
-                    // printfn "Result is %A" r
-                    let rExternal = r |> Map.map (fun _ v -> v |> Seq.everyNth (int externalStep) |> Seq.toArray) //TODO proper lookup
-                    // printfn "External result is %A" rExternal
-                    // for x in r do
-                        // printfn "Length of %s is %i" x.Key.Value x.Value.Length
-                    rExternal
-
-            | Variable ->
-                // Run time as individual steps, to allow length to vary (slower)
-                // Allow environmental data when on same temporal profile
-                match eData with
-                | Some (e,eDate,eRes) -> invalidOp "Variable time solver with environmental data has not been implemented yet."
-                | None -> invalidOp "I've yet to finish the variable-time solver"
-
+        let solver outputStep = Solver.solver outputStep dStart dRes dData eData engine conditionedPoint
         let discreteSolve = Solver.Discrete.solve conditionedPoint
-        let objective = Objective.create { model with Parameters = constrainedParameters } solver discreteSolve data
+
+        // A. Setup constraints on parameters, depending on optimisation requirements
+        let constrainedParameters, optimisationConstraints = 
+            match engine.Constrain with
+            | Transform -> (model.Parameters, [1 .. model.Parameters.Count] |> List.map(fun _ -> Unconstrained))
+            | Detached -> 
+                let par,con = 
+                    model.Parameters 
+                    |> Map.map (fun k v -> detatchConstraint v) 
+                    |> Map.toList 
+                    |> List.map (fun (k,(x,y)) -> ((k, x), y))
+                    |> List.unzip
+                (par |> Map.ofList, con)
+
+        let objective = Objective.create { model with Parameters = constrainedParameters } (solver Solver.StepType.External) discreteSolve data
 
         let optimise = engine.OptimiseWith engine.LogTo endCondition (constrainedParameters |> ParameterPool.toDomain optimisationConstraints)
         let result = objective |> optimise
         let lowestLikelihood, bestPoint = result |> List.minBy (fun (l,_) -> l)
 
-        let estimatedSeries = Objective.predict { model with Parameters = constrainedParameters } solver discreteSolve bestPoint
+        let estimatedSeries = Objective.predict { model with Parameters = constrainedParameters } (solver Solver.StepType.External) discreteSolve bestPoint
         let paired = 
             timeSeriesData 
             |> Map.filter(fun key _ -> estimatedSeries |> Map.containsKey key)
@@ -315,73 +317,96 @@ module Bristlecone =
                 |> Seq.map(fun (e,(o,d)) -> ({ Obs = o; Fit = e }, d))
                 |> TimeSeries.fromObservations )
 
+        let estimatedHighRes = Objective.predict { model with Parameters = constrainedParameters } (solver Solver.StepType.Internal) discreteSolve bestPoint
+
         { ResultId   = System.Guid.NewGuid()
           Likelihood = lowestLikelihood
           Parameters = bestPoint |> ParameterPool.fromPoint constrainedParameters
           Series     = paired
-          Trace      = result }
+          Trace      = result }, estimatedHighRes
 
 
-    let drawUniform min max = MathNet.Numerics.Distributions.ContinuousUniform(min, max)
+    module Test =
 
-    let drawParameterSet parameters =
-        parameters
-        |> Map.map (fun _ v -> 
-            let lower,upper = Parameter.bounds v
-            let trueValue = (drawUniform lower upper).Sample()
-            printfn "Bounds are %f - %f (true = %f)" lower upper trueValue
-            Parameter.setEstimate v trueValue )
+        type GenerationRule = (ShortCode * (seq<float> -> bool))
+
+        type TestSettings<'a> = {
+            TimeSeriesLength: int
+            StartValues: CodedMap<'a>
+            EndCondition: EndCondition<'a>
+            GenerationRules: GenerationRule list
+            NoiseGeneration: ParameterPool -> CodedMap<TimeSeries<'a>> -> CodedMap<TimeSeries<'a>>
+            EnvironmentalData: CodedMap<TimeSeries<'a>>
+            Resolution: FixedTemporalResolution
+            Random: System.Random
+            StartDate: DateTime
+            Attempts: int
+        }
+
+        /// Draw a random set of parameters
+        /// TODO Correct handling of constrained parameter values (when drawing parameter sets)
+
+        let drawParameterSet rnd parameters =
+            parameters
+            |> Map.map (fun _ v -> 
+                let lower,upper = Parameter.bounds v
+                let trueValue = Statistics.Distributions.ContinuousUniform.draw rnd lower upper ()
+                Parameter.setEstimate v trueValue )
+
+        /// Generate a fixed-resolution time-series for testing model fits
+        let generateFixedSeries writeOut equations timeMode seriesLength startPoint startDate resolution env theta =
+            let applyFakeTime s = TimeSeries.fromSeq startDate resolution s
+            let eqs = equations |> Map.map (fun _ v -> v theta)
+            match timeMode with
+            | Discrete -> invalidOp "Not supported at this time"
+            | Continuous i -> 
+                i writeOut 0. (seriesLength |> float) 1. startPoint env eqs
+                |> Map.map (fun _ v -> applyFakeTime v)
+
+        /// A test procedure for computing measures given time series data.
+        let generateMeasures measures startValues (expected:CodedMap<TimeSeries<'a>>) : CodedMap<TimeSeries<'a>> =
+            let time = (expected |> Seq.head).Value |> TimeSeries.toObservations |> Seq.map snd
+            measures
+            |> Map.map (fun key measure -> Solver.Discrete.solve startValues key measure (expected |> Map.map(fun _ t -> t.Values |> Seq.toArray)))
+            |> Map.fold (fun acc key value -> Map.add key (time |> Seq.zip value |> TimeSeries.fromObservations) acc) expected
+
+        /// Generate data
+        let generateData engine model testSettings theta =
+            let envIndex = testSettings.EnvironmentalData |> Map.map(fun k v -> TimeIndex.TimeIndex(testSettings.StartDate, testSettings.Resolution, TimeIndex.IndexMode.Interpolate Statistics.Interpolate.bilinear, v))
+            theta
+            |> generateFixedSeries engine.LogTo model.Equations engine.TimeHandling testSettings.TimeSeriesLength testSettings.StartValues testSettings.StartDate testSettings.Resolution envIndex
+            |> testSettings.NoiseGeneration theta
+            |> generateMeasures model.Measures testSettings.StartValues
+
+        /// Check rule conditions
+        let rec ruleCheck rules attempts series = 
+            let brokeTheRules = 
+                rules
+                |> List.map(fun (key,ruleFn) -> series |> Map.find key |> TimeSeries.toObservations |> Seq.map fst |> ruleFn)
+                |> List.contains false
+            if brokeTheRules then
+                if attempts = 0 
+                then Error "Could not generate data that complies with the given ruleset" 
+                else ruleCheck rules (attempts - 1) series
+            else Ok series
 
     /// **Description**
     /// Test that the specified estimation engine can correctly estimate known parameters. Random parameter sets are generated from the given model system.
     /// **Parameters**
     ///   * `model` - a `ModelSystem` of equations and parameters
-    ///   * `permutations` - number of times to generate random parameters
-    ///   * `startingConditions` - a coded map of values at t=0
+    ///   * `testSettings` - settings
     ///   * `engine` - an `EstimationEngine`
-    let testModel engine timeSeriesLength startingConditions iterations generationRules addNoise (model:ModelSystem) =
-
-        // TODO Sort out parameters
-        let rawParameters = 
-            let par = 
-                model.Parameters 
-                |> Map.map (fun k v -> detatchConstraint v) 
-                |> Map.toList 
-                |> List.map (fun (k,(x,y)) -> ((k, x)))
-            (par |> Map.ofList)
-
-        // TODO use other measure method?
-        // TODO avoid unwrap and rewrap of timeseries map
-        let computeMeasures measures (expected:CodedMap<TimeSeries<float>>) : CodedMap<TimeSeries<float>> =
-            let time = (expected |> Seq.head).Value |> TimeSeries.toObservations |> Seq.map snd
-            measures
-            |> Map.map (fun key measure -> 
-                Solver.Discrete.solve startingConditions key measure (expected |> Map.map(fun _ t -> t.Values |> Seq.toArray)))
-            |> Map.fold (fun acc key value -> Map.add key (time |> Seq.zip value |> TimeSeries.fromObservations) acc) expected
-
-        let startDate = (DateTime(DateTime.Now.Year, 01, 01))
-
-        let rec generateData attempts =
-            let theta = drawParameterSet rawParameters //TODO Investigate constraint functions: breaks if PositiveOnly?
-            printfn "Theta proposed: %A" theta
-            for t in theta do printfn "Value is %f for %s" (Parameter.getEstimate t.Value) t.Key.Value
-            let trueSeries = 
-                theta 
-                |> generateFixedSeries engine.LogTo model.Equations engine.TimeHandling timeSeriesLength startingConditions startDate
-                |> addNoise theta
-                |> computeMeasures model.Measures
-            let brokeTheRules = 
-                generationRules
-                |> List.map(fun (key,ruleFn) -> trueSeries |> Map.find key |> TimeSeries.toObservations |> Seq.map fst |> ruleFn)
-                |> List.contains false
-            match brokeTheRules with
-            | true -> if attempts = 0 then invalidOp "Could not generate given rules" else generateData (attempts - 1)
-            | false -> (theta, trueSeries)
-
-        let theta, trueSeries = generateData 100000
-        let estimated = fit engine iterations trueSeries model
-        (estimated, trueSeries, theta)
-
+    let testModel engine (settings:Test.TestSettings<float>) (model:ModelSystem) =
+        let theta = Test.drawParameterSet settings.Random model.Parameters
+        engine.LogTo <| GeneralEvent (sprintf "The true parameters are: %A" theta)
+        let trueData = 
+            Test.generateData engine model settings theta 
+            |> Test.ruleCheck settings.GenerationRules settings.Attempts
+        match trueData with
+        | Ok d -> 
+            let estimated = fit engine settings.EndCondition (Map.merge d settings.EnvironmentalData (fun x y -> x)) model
+            (estimated, trueData, theta) |> Ok
+        | Error e -> Error e
 
     /// **Description**
     /// Repeat a model fit many times, removing a single data point at random each time.

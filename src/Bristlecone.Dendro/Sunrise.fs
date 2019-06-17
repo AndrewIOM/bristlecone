@@ -17,19 +17,14 @@ module JulianDate =
         let b = 2. - a + floor (a / 4.)
         let jDay = floor(365.25 * (year + 4716.)) + floor(30.6001 * (month + 1.)) + (float gDate.Day) + b - 1524.5
         let jTime = (((float gDate.Hour) * (60. * 60.)) + ((float gDate.Minute) * 60.) + (float gDate.Second)) / (float secondsInDay)
-        printfn "A = %f" a
-        printfn "B = %f" b
-        printfn "jDay = %f" jDay
-        printfn "jTime = %f" jTime
         jDay + jTime - timeZoneOffsetHours / 24.
 
     let toDate (timeZone:TimeZoneInfo) (gDate:DateTime) (time:float) =
-        let additionalDays = int <| floor time
+        let additionalDays = floor time
         let hours = int <| floor (time * 24.) % 24.
         let minutes = int <| floor ((time * 24. * 60.) % 60.)
         let seconds = int <| floor ((time * 24. * 60. * 60.) % 60.)
-        printfn "H %i M %i S %i" hours minutes seconds
-        DateTimeOffset(gDate.Year, gDate.Month, gDate.Day + additionalDays, hours, minutes, seconds, timeZone.GetUtcOffset(gDate))
+        (DateTimeOffset(gDate.Year, gDate.Month, gDate.Day, hours, minutes, seconds, timeZone.GetUtcOffset(gDate))).AddDays(additionalDays)
 
     let julianCentury jDate =
         let daysInCentury = 36525.
@@ -141,14 +136,10 @@ module Sunrise =
         if cosHa > 1. then CompleteDark
         else if cosHa < -1. then CompleteLight
         else
-            printfn "CosH is %f" cosHa
             let ha = hourAngleSunrise lat d
-            printfn "H is %f" ha
             let sn = solarNoon lng eot tzOffHr
             let sunrise = sunrise sn ha
             let sunset = sunset sn ha
             let sunriseOffset = JulianDate.toDate timeZone gDate sunrise
-            printfn "Sunrise is %A" sunriseOffset
             let sunsetOffset = JulianDate.toDate timeZone gDate sunset
-            printfn "Sunset is %A" sunsetOffset
             (sunriseOffset, sunsetOffset) |> PartialLight
