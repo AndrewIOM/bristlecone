@@ -9,6 +9,16 @@ type Objective<'a> = Point<'a> -> float
 type EndCondition<'a> = Solution<'a> list -> bool
 type Domain = (float*float*Bristlecone.Parameter.Constraint) []
 
+module None =
+
+    /// An optimisation function that calculates the value of `f` using
+    /// the given bounds. Use when optimisation of the objective is not required.
+    let passThrough writeOut n (d:Domain) (f:Objective<float>) : (float * float[]) list =
+        writeOut <| GeneralEvent "Skipping optimisation: only the result of the given parameters will be computed"
+        let point = [| for (min,_,_) in d -> min |]
+        [ f point, point ]
+
+
 module EndConditions =
 
     open Bristlecone.Statistics
@@ -114,6 +124,14 @@ module MonteCarlo =
     /// the bounds represent the 99th percentiles of the distribution.
     let initialise (d:Domain) (rng:System.Random) =
         [| for (min,max,_) in d -> (Normal.draw rng (min + (max-min) / 2.) ((max - min) / 6.))() |]
+
+    let rec tryGenerateTheta f domain random n =
+        if n < 0 then Error "Could not generate a starting point given the domain"
+        else 
+            let t = initialise domain random
+            if System.Double.IsNaN(f t) || System.Double.IsInfinity(f t) 
+            then tryGenerateTheta f domain random (n - 1) 
+            else Ok t
 
     let constrainJump a b (scaleFactor:float) c =
         match c with
@@ -317,9 +335,11 @@ module MonteCarlo =
     let randomWalk (tuningSteps:seq<TuneStep<float>>) writeOut n domain (f:Objective<float>) : (float * float[]) list =
         let random = MathNet.Numerics.Random.MersenneTwister(true)
         let initialCovariance = TuningMode.covarianceFromBounds 10000 domain random
-        let theta = initialise domain random
-        writeOut <| GeneralEvent (sprintf "[Optimisation] Initial theta is %A" theta)
-        randomWalk' initialCovariance 1. theta tuningSteps random writeOut n domain f |> fst
+        match tryGenerateTheta f domain random 10000 with
+        | Ok theta ->
+            writeOut <| GeneralEvent (sprintf "[Optimisation] Initial theta is %A" theta)
+            randomWalk' initialCovariance 1. theta tuningSteps random writeOut n domain f |> fst
+        | Error _ -> invalidOp "Could not generate theta"
 
     let adaptiveMetropolis weighting period writeOut n domain (f:Objective<float>) : (float * float[]) list =
         randomWalk [ (TuneMethod.CovarianceWithScale weighting, period, n) ] writeOut (EndConditions.afterIteration 0) domain f
@@ -419,10 +439,13 @@ module MonteCarlo =
 
     let ``Adaptive-Metropolis-within Gibbs`` writeOut endCon domain (f:Objective<float>) : (float * float[]) list =
         let random = MathNet.Numerics.Random.MersenneTwister(true)
-        let theta = initialise domain random
-        let sigmas = theta |> Array.map(fun _ -> 0.)
-        let _,result,_ = MetropolisWithinGibbs.core true writeOut random domain f [] 100 1 (theta:float[]) sigmas
-        result
+        match tryGenerateTheta f domain random 10000 with
+        | Ok theta ->
+            writeOut <| GeneralEvent (sprintf "[Optimisation] Initial theta is %A" theta)
+            let sigmas = theta |> Array.map(fun _ -> 0.)
+            let _,result,_ = MetropolisWithinGibbs.core true writeOut random domain f [] 100 1 (theta:float[]) sigmas
+            result
+        | Error _ -> invalidOp "Could not generate theta"
 
     let ``Metropolis-within Gibbs`` writeOut endCon domain (f:Objective<float>) : (float * float[]) list =
         let random = MathNet.Numerics.Random.MersenneTwister(true)
@@ -541,6 +564,7 @@ module MonteCarlo =
               TemperatureCeiling: float option
               BoilingAcceptanceRate: float
               InitialTemperature: float
+              PretuneLength: int
               TuneLength: int
               TuneN: int
               AnnealStepLength: EndCondition<'a> }
@@ -551,6 +575,7 @@ module MonteCarlo =
                 BoilingAcceptanceRate = 0.85
                 TemperatureCeiling = Some 200.
                 InitialTemperature = 1.00
+                PretuneLength = 5000
                 TuneLength = 100000
                 TuneN = 50
                 AnnealStepLength = EndConditions.improvementCount 250 250
@@ -558,11 +583,15 @@ module MonteCarlo =
 
         /// Jump based on a proposal function and probability function
         let tryMove propose probability random f (l1,theta1) : Solution<float> =
-            let rec catchNan () =
+            let rec catchNan tries =
                 let theta2 = theta1 |> propose
                 let l2 = f theta2
-                if System.Double.IsNaN l2 then catchNan () else (theta2, l2)
-            let theta2,l2 = catchNan()
+                if System.Double.IsNaN l2 
+                then
+                    if tries <= 1 then failwith "Could not move after 100 tries. Are you using suitable parameter bounds?"
+                    catchNan (tries - 1) 
+                else (theta2, l2)
+            let theta2,l2 = catchNan 100
             if l2 < l1
             then (l2, theta2)
             else
@@ -677,8 +706,8 @@ module MonteCarlo =
                 else (newScaleInfo |> Array.map fst, l1, theta1)
 
             let tunedScale,l2,theta2 = 
-                homogenousChain initialScale (EndConditions.afterIteration 5000) 1. (l1, theta1)
-                |> List.head
+                homogenousChain initialScale (EndConditions.afterIteration settings.PretuneLength) 1. (l1, theta1)
+                |> List.minBy fst
                 |> tune (initialScale |> Array.map(fun t -> (t, Array.empty))) 1
             writeOut <| GeneralEvent (sprintf "Tuned = %A" tunedScale)
 
@@ -708,20 +737,6 @@ module MonteCarlo =
 
     /// An adaptation of the Filzbach method (originally by Drew Purves)
     module Filzbach =
-    
-        // Implementation details:
-        // - Sample from one, three, or many parameters at once
-        // - During burnin, tune these:
-        //      - AFTER 20 changes (for a single parameter)
-        //      - IF ACCEPTANCE < 5
-        //      - THEN Delta (Temperature) *= 0.80
-        //      - ELSE Delta (Temperature) *= 1.20
-        // - Cap deltas at 0.010 and 10.00
-        
-        // In summary:
-        // Parameters jumped is random
-        // Parameters jumped is recorded
-        // Tuning happens given the jumping information            
 
         type FilzbachSettings<'a> = {
             TuneAfterChanges: int
@@ -737,6 +752,7 @@ module MonteCarlo =
             let scaleRnd = Bristlecone.Statistics.Distributions.ContinuousUniform.draw random 0. 1.
             let paramRnd = MathNet.Numerics.Distributions.DiscreteUniform(0, theta.Length - 1, random)
             let initialScale = domain |> Array.map(fun (l,u,_) -> (u - l) / 6.)
+            let l1 = f theta
 
             let rec step burning (p:(float*float[])[]) endWhen (l1, theta1) d =
                 // Change one to many parameter at once (Filzbach-style)
@@ -806,21 +822,23 @@ module MonteCarlo =
                     writeOut <| OptimisationEvent { Iteration = newResult |> List.length; Likelihood = result |> fst; Theta = result |> snd }
                     step burning newScaleInfo endWhen result newResult
 
-            let l1 = f theta
-            
+            writeOut <| GeneralEvent (sprintf "[Filzbach] Starting burn-in at point %A (L = %f)" theta l1)
             let burnResults,burnScales = step true (initialScale |> Array.map(fun x -> x, Array.empty)) settings.BurnLength (l1, theta) []
-            let results,_ = step false (burnScales |> Array.map(fun t -> (t, Array.empty))) sampleEnd (burnResults |> Seq.head) burnResults
-            results
+            writeOut <| GeneralEvent (sprintf "[Filzbach] Burn-in complete. Starting sampling at point %A" (burnResults |> Seq.head))
+            let results,_ = step false (burnScales |> Array.map(fun t -> (t, Array.empty))) sampleEnd (burnResults |> Seq.head) []
+            [ results; burnResults ] |> List.concat
 
         let filzbach settings writeOut n domain (f:Objective<float>) : (float * float[]) list =
             let random = MathNet.Numerics.Random.MersenneTwister(true)
-            let theta = initialise domain random
-            writeOut <| GeneralEvent (sprintf "[Optimisation] Initial theta is %A" theta)
-            filzbach' settings theta random writeOut n domain f
+            match tryGenerateTheta f domain random 10000 with
+            | Ok theta ->
+                writeOut <| GeneralEvent (sprintf "[Optimisation] Initial theta is %A" theta)
+                filzbach' settings theta random writeOut n domain f
+            | Error _ -> invalidOp "Could not generate theta"
 
 
-// Nelder Mead implementation
-// Modified from https://github.com/mathias-brandewinder/Amoeba
+/// Nelder Mead implementation
+/// Adapted from original at: https://github.com/mathias-brandewinder/Amoeba
 module Amoeba =
 
     module Solver = 

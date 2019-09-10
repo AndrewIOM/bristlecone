@@ -30,3 +30,9 @@ files
 	../../bin/Bristlecone ==> lib	
     bristlecone.fsx ==> .
     ../Bristlecone.Charts.R/charts.fsx ==> .
+
+dependencies
+    FSharp.Data >= 3.0.0
+    MathNet.Numerics >= 4.7
+    MathNet.Numerics.FSharp >= 4.7
+    Accord.Statistics >= 3.8

@@ -28,3 +28,6 @@ description
 
 files
 	../../bin/Bristlecone.Dendro ==> lib
+
+dependencies
+    Bristlecone ~> CURRENTVERSION

@@ -143,3 +143,15 @@ module Sunrise =
             let sunriseOffset = JulianDate.toDate timeZone gDate sunrise
             let sunsetOffset = JulianDate.toDate timeZone gDate sunset
             (sunriseOffset, sunsetOffset) |> PartialLight
+
+    type DayLengthCache(latitude, longitude, timeZone) =
+
+        let mutable (lightData:Map<DateTime,DayLength>) = [] |> Map.ofList
+        with
+            member __.GetLight(date) =
+                match lightData |> Map.tryFind date with
+                | Some l -> l
+                | None -> 
+                    let l = calculate date.Year date.Month date.Day latitude longitude timeZone
+                    lightData <- lightData |> Map.add date l
+                    l

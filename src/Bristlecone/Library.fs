@@ -175,7 +175,7 @@ module Bristlecone =
     let mkDiscrete : EstimationEngine<float,float> = {
         TimeHandling = Discrete
         OptimiseWith = Optimisation.MonteCarlo.randomWalk []
-        LogTo = Bristlecone.Logging.Console.logger()
+        LogTo = Bristlecone.Logging.Console.logger(1000)
         Constrain = ConstraintMode.Detached
         Conditioning = NoConditioning }
 
@@ -183,7 +183,7 @@ module Bristlecone =
     let mkContinuous = {
         TimeHandling = Continuous <| Integration.MathNet.integrate
         OptimiseWith = Optimisation.MonteCarlo.randomWalk []
-        LogTo = Bristlecone.Logging.Console.logger()
+        LogTo = Bristlecone.Logging.Console.logger(1000)
         Constrain = ConstraintMode.Detached
         Conditioning = RepeatFirstDataPoint }
 
@@ -241,7 +241,7 @@ module Bristlecone =
             let data =
                 timeSeriesData
                 |> Map.filter(fun k _ -> dynamicVariableKeys |> Seq.contains k)
-            printfn "Dynamic data = %A" data
+            // printfn "Dynamic data = %A" data
             let resolutions =
                 data
                 |> TimeSeries.validateCommonTimeline
@@ -255,7 +255,7 @@ module Bristlecone =
         let measureKeys = model.Measures |> Seq.map (fun k -> k.Key)
         let eData =
             let eData = timeSeriesData |> Map.filter(fun k _ -> dynamicVariableKeys |> Seq.append measureKeys |> Seq.contains k |> not)
-            printfn "Environment data = %A" eData
+            // printfn "Environment data = %A" eData
             if eData.Count = 0 then None
             else
                 let resolutions =
@@ -433,6 +433,32 @@ module Bristlecone =
                 bootstrap s (numberOfTimes - 1) (solutions |> List.append [result])
             else solutions
         bootstrap series bootstrapCount []
+
+    /// "How good am I at predicting the next data point"?
+    /// 
+    let oneStepAhead engine hypothesis (preTransform:CodedMap<TimeSeries<float>>->CodedMap<TimeSeries<float>>) (timeSeries) (estimatedTheta:ParameterPool) =
+        let mleToBounds mlePool = mlePool |> Map.map(fun k v -> Parameter.create (Parameter.detatchConstraint v |> snd) (v |> Parameter.getEstimate) (v |> Parameter.getEstimate))
+        let hypothesisMle : ModelSystem =  { hypothesis with Parameters = mleToBounds estimatedTheta }
+        let pairedDataFrames =
+            timeSeries
+            |> Map.map(fun _ fitSeries -> 
+                fitSeries 
+                |> TimeSeries.toObservations 
+                |> Seq.pairwise 
+                |> Seq.map (fun (t1,t2) -> TimeSeries.fromObservations [t1; t2] |> TimeSeries.map(fun (x,y) -> x )))
+        // printfn "Paired data frames = %A" pairedDataFrames
+        let timeParcelCount = (pairedDataFrames |> Seq.head).Value |> Seq.length
+        // printfn "Time parcels: %i" timeParcelCount
+        let data =
+            seq { 1 .. timeParcelCount }
+            |> Seq.map(fun i -> pairedDataFrames |> Map.map(fun _ v -> v |> Seq.item (i-1)) |> preTransform)
+        // printfn "Data: %A" data
+
+        // TODO Remove this hack:
+        // First data point is repeated, then skipped when returned
+        data
+        |> Seq.map (fun d -> fit (engine |> withCustomOptimisation Optimisation.None.passThrough |> withConditioning RepeatFirstDataPoint) (EndConditions.afterIteration 0) d hypothesisMle)
+        |> Seq.toList
 
 
     module Parallel =

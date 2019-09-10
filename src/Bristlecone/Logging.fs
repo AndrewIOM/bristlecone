@@ -17,17 +17,22 @@ module Console =
 
     open System.Threading
 
-    let print threadId (x:LogEvent) = 
+    let print nIteration threadId (x:LogEvent) = 
         match x with
-        | OptimisationEvent _ -> ()
+        | OptimisationEvent e ->
+            if e.Iteration % nIteration = 0
+            then printfn "##%i## At iteration %i (-logL = %f) %A" threadId e.Iteration e.Likelihood e.Theta
         | _ -> printfn "##%i## %A" threadId x
 
-    let logger () =
+    /// A simple console logger.
+    /// `nIteration` specifies the number of iterations after which to log
+    /// the current likelihood and parameter values.
+    let logger (nIteration) =
 
         let agent = MailboxProcessor.Start(fun inbox -> 
             let rec messageLoop () = async {
                 let! threadId,msg = inbox.Receive()
-                print threadId msg
+                print nIteration threadId msg
                 return! messageLoop ()
                 }
             messageLoop () )

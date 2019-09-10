@@ -6,5 +6,3 @@
 #r "../src/Bristlecone/bin/Release/netstandard2.0/Microsoft.Research.Oslo.dll"
 #r "../src/Bristlecone/bin/Release/netstandard2.0/Bristlecone.dll"
 #r "../src/Bristlecone.Dendro/bin/Release/netstandard2.0/Bristlecone.Dendro.dll"
-
-#load "../src/Bristlecone.Charts.R/charts.fsx"

@@ -17,6 +17,7 @@
     <Compile Include="OptimisationTechniques.fs" />
     <Compile Include="ConfidenceInterval.fs" />
     <Compile Include="ModelSelection.fs" />
+    <Compile Include="Diagnostics.fs" />
     <Compile Include="DataAccess.fs" />
     <Compile Include="Workflow.fs" />
     <Compile Include="Library.fs" />

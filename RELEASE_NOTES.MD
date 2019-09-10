@@ -1,3 +1,12 @@
+#### 1.0.0 - 2019-09-10
+* FEATURE: Basic component logging of internal model processes.
+* FEATURE: Calculate and save convergence statistics between MCMC chains.
+* FEATURE: Sunlight cache to precompute day length calculations for faster analyses.
+#### 1.0.0-alpha6 - 2019-06-17
+* FEATURE: Configuration options for Filzbach and SA optimisation.
+* FEATURE: Calculations for day length (sunrise and sunset) built-in to Bristlecone.Dendro.
+* FEATURE: Calculate confidence intervals using likelihood interval technique.
+* FEATURE: Standardised formats for loading and saving model-selection results. 
 #### 1.0.0-alpha5 - 2019-03-23
 * Release net47 and netstandard2.0 versions
 * Automatic documentation (based on ProjectScaffold)

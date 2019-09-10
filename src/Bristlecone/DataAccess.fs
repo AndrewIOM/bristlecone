@@ -17,22 +17,36 @@ module Config =
         | Trace
         | Series
         | Intervals
+        | Components
+
+    type EnsembleType =
+        | Weights
+        | Convergence
+
+    let typeAsLabel dataType =
+        match dataType with
+        | MLE -> "mle"
+        | Trace -> "trace"
+        | Series -> "series"
+        | Intervals -> "ci"
+        | Components -> "components"
+
+    let ensembleAsLabel dataType =
+        match dataType with
+        | Weights -> "ensemble-weights"
+        | Convergence -> "ensemble-convergence"
 
     let filePath directory subject modelId (resultId:System.Guid) dataType =
         let path = System.IO.DirectoryInfo(directory)
         if path.Exists then
-            let t = 
-                match dataType with
-                | MLE -> "mle"
-                | Trace -> "trace"
-                | Series -> "series"
-                | Intervals -> "ci"
+            let t = typeAsLabel dataType
             sprintf "%sbristlecone-%s-%i-%s-%s.csv" path.FullName subject modelId t (resultId.ToString())
         else invalidArg "directory" "The specified directory does not exist"
 
-    let filePathEnsemble directory =
+    let filePathEnsemble directory dataType =
         let path = System.IO.DirectoryInfo(directory)
-        if path.Exists then sprintf "%sbristlecone-ensemble-weights.csv" path.FullName
+        let t = ensembleAsLabel dataType
+        if path.Exists then sprintf "%sbristlecone-%s.csv" path.FullName t
         else invalidArg "directory" "The specified directory does not exist"
 
     let regexGuid = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
@@ -48,6 +62,7 @@ module Config =
                 | Trace -> "trace"
                 | Series -> "series"
                 | Intervals -> "ci"
+                | Components -> "components"
             let files = path.GetFiles(sprintf "bristlecone-%s-%i-%s-*.csv" subject modelId t)
             let regex = sprintf "bristlecone-%s-%i-%s-(%s).csv" subject modelId t regexGuid
             files |> Seq.choose(fun f -> 
@@ -87,8 +102,11 @@ module Trace =
             data.Rows
             |> Seq.groupBy(fun r -> r.Iteration)
             |> Seq.map(fun (i,r) -> 
+                i,
                 (r |> Seq.head).NegativeLogLikelihood, 
                 r |> Seq.map(fun r -> r.ParameterValue) |> Seq.toArray)
+            |> Seq.sortByDescending(fun (i,_,_) -> i)
+            |> Seq.map(fun (_,x,y) -> x,y)
             |> Seq.toList
 
     let save directory subject modelId thinBy result =
@@ -261,7 +279,22 @@ module ModelSelection =
 
     let save directory result =
         let csv = new EnsembleAIC (result |> Row.fromResult)
-        let filePath = Config.filePathEnsemble directory
+        let filePath = Config.filePathEnsemble directory Config.EnsembleType.Weights
+        csv.Save(filePath)
+
+
+module Convergence =
+
+    type ConvergenceStats = CsvProvider<"templates/ensemble-convergence.csv">
+
+    let toCsvRows (result:seq<Diagnostics.Convergence.ConvergenceStatistic seq>) =
+        result 
+        |> Seq.concat 
+        |> Seq.map (fun r -> ConvergenceStats.Row(r.Subject, r.HypothesisId, r.Parameter.Value, r.StatisticName, r.StatisticValue))
+
+    let save directory result =
+        let csv = new ConvergenceStats (result |> toCsvRows)
+        let filePath = Config.filePathEnsemble directory Config.EnsembleType.Convergence
         csv.Save(filePath)
 
 
