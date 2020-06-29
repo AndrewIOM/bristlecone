@@ -1,0 +1,7 @@
+group Test
+    FSharp.Core
+    Expecto
+    Expecto.BenchmarkDotNet
+    Expecto.FsCheck
+    Expecto.Hopac
+    Logary.Adapters.Facade
