@@ -66,10 +66,9 @@ module ProfileLikelihood =
 
         // This algorithm only differs from SA because it outputs all iterations
         // in the tunedSearch as optimisation events.
-        let tunedSearch settings machine (jump:System.Random->float->unit->float) writeOut domain f =
+        let tunedSearch random settings machine (jump:System.Random->float->unit->float) writeOut domain f =
 
             // 1. Initial conditions
-            let random = MathNet.Numerics.Random.MersenneTwister(true)
             let draw' = jump random
             let theta1 = Bristlecone.Optimisation.MonteCarlo.initialise domain random
             let l1 = f theta1
@@ -119,9 +118,9 @@ module ProfileLikelihood =
             [(l1, theta1)]
 
         let classic settings : Optimise<float> =
-            fun writeOut n domain f ->
+            fun random writeOut n domain f ->
                 let gaussian rnd scale = Bristlecone.Statistics.Distributions.Normal.draw rnd 0. scale
-                tunedSearch settings Optimisation.MonteCarlo.SimulatedAnnealing.Machines.boltzmann gaussian writeOut domain f
+                tunedSearch random settings Optimisation.MonteCarlo.SimulatedAnnealing.Machines.boltzmann gaussian writeOut domain f
 
     let interval nParam mle limit trace =
         trace

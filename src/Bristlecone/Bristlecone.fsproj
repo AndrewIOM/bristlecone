@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFrameworks>netstandard2.0;net47</TargetFrameworks>
+    <TargetFramework>netstandard2.0</TargetFramework>
     <PackageLicenseUrl>https://github.com/AndrewIOM/bristlecone/blob/master/LICENSE</PackageLicenseUrl>
     <Authors>Andrew Martin</Authors>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
@@ -12,8 +12,8 @@
     <Compile Include="Statistics.fs" />
     <Compile Include="Integration.fs" />
     <Compile Include="Parameter.fs" />
-    <Compile Include="Optimisation.fs" />
     <Compile Include="EstimationEngine.fs" />
+    <Compile Include="Optimisation.fs" />
     <Compile Include="OptimisationTechniques.fs" />
     <Compile Include="ConfidenceInterval.fs" />
     <Compile Include="ModelSelection.fs" />

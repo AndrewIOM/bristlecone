@@ -35,11 +35,17 @@ module ModelSystem =
         Series:     CodedMap<FitSeries>
         Trace:      (float * float []) list }
 
+/// Point is generic to allow choice of number precision
+type Point<'a> = 'a []
+type Solution<'a> = float * Point<'a>
+type Objective<'a> = Point<'a> -> float
+type EndCondition<'a> = Solution<'a> list -> bool
+type Domain = (float*float*Parameter.Constraint) []
 
 module EstimationEngine =
 
+    open System
     open ModelSystem
-    open Bristlecone.Optimisation
     open Bristlecone.Logging
     open Bristlecone.Time.TimeIndex
 
@@ -50,7 +56,7 @@ module EstimationEngine =
     type WriteOut = LogEvent -> unit
 
     type Integrate<'data,'time> = WriteOut -> 'time -> 'time -> 'time -> CodedMap<'data> -> CodedMap<TimeIndex<'data>> -> CodedMap<ODE> -> CodedMap<'data[]>
-    type Optimise<'data> = WriteOut -> EndCondition<'data> -> Domain -> ('data[] -> 'data) -> Solution<'data> list
+    type Optimise<'data> = Random -> WriteOut -> EndCondition<'data> -> Domain -> ('data[] -> 'data) -> Solution<'data> list
 
     type TimeMode<'data, 'time> =
         | Discrete
@@ -62,4 +68,5 @@ module EstimationEngine =
         Conditioning: Conditioning<'data>
         Constrain: ConstraintMode
         LogTo: WriteOut
+        Random: Random
     }

@@ -177,6 +177,7 @@ module Bristlecone =
         OptimiseWith = Optimisation.MonteCarlo.randomWalk []
         LogTo = Bristlecone.Logging.Console.logger(1000)
         Constrain = ConstraintMode.Detached
+        Random = MathNet.Numerics.Random.MersenneTwister(true)
         Conditioning = NoConditioning }
 
     /// A standard `EstimationEngine` for ordinary differential equation models.
@@ -185,6 +186,7 @@ module Bristlecone =
         OptimiseWith = Optimisation.MonteCarlo.randomWalk []
         LogTo = Bristlecone.Logging.Console.logger(1000)
         Constrain = ConstraintMode.Detached
+        Random = MathNet.Numerics.Random.MersenneTwister(true)
         Conditioning = RepeatFirstDataPoint }
 
     /// Add a writer
@@ -301,7 +303,7 @@ module Bristlecone =
 
         let objective = Objective.create { model with Parameters = constrainedParameters } (solver Solver.StepType.External) discreteSolve data
 
-        let optimise = engine.OptimiseWith engine.LogTo endCondition (constrainedParameters |> ParameterPool.toDomain optimisationConstraints)
+        let optimise = engine.OptimiseWith engine.Random engine.LogTo endCondition (constrainedParameters |> ParameterPool.toDomain optimisationConstraints)
         let result = objective |> optimise
         let lowestLikelihood, bestPoint = result |> List.minBy (fun (l,_) -> l)
 
@@ -324,6 +326,23 @@ module Bristlecone =
           Parameters = bestPoint |> ParameterPool.fromPoint constrainedParameters
           Series     = paired
           Trace      = result }, estimatedHighRes
+
+    /// Functions for fitting models that do not include a temporal dimension.
+    module Invariant =
+
+        /// Fit a time-invariant model.
+        let fitWithoutTime optimise constrain log endCondition random (data:CodedMap<float>) (model:ModelSystem) =
+            let engine = {
+                TimeHandling = Discrete
+                OptimiseWith = optimise
+                Conditioning = NoConditioning
+                Constrain = constrain
+                Random = random
+                LogTo = log
+            }
+            invalidOp "Not implemented"
+            //let ts = data |> Map.map(fun _ v -> TimeSeries.fromSeq (v, DateTime.Now))
+            //fit engine endCondition ts model
 
 
     module Test =
