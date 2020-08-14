@@ -1,8 +1,13 @@
 namespace Bristlecone.Optimisation
 
-open Bristlecone
+open Bristlecone.Solver
 open Bristlecone.Logging
 open Bristlecone.EstimationEngine
+
+type OptimisationError =
+    | OutOfBounds
+    | ModelError
+    | LikelihoodError
 
 module None =
 

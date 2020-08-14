@@ -1,6 +1,6 @@
 namespace Bristlecone
 
-[<AutoOpen>]
+[<RequireQualifiedAccess>]
 module Parameter =
 
     type ConstraintMode =
@@ -11,6 +11,7 @@ module Parameter =
         | Unconstrained
         | PositiveOnly
 
+    // TODO Change starting bounds to draw from a distribution.
     type EstimationStartingBounds = float * float
 
     type Estimation =
@@ -67,18 +68,48 @@ module Parameter =
         | Detached -> Parameter (c, m, Estimated value)
         | Transform -> Parameter (c, m, value |> transformIn c |> Estimated)
 
-
-    [<AutoOpen>]
+    /// Contains the `ParameterPool` type, which represents the set of parameters
+    /// to be estimated within an analysis. 
+    [<RequireQualifiedAccess>]
     module Pool =
 
-        type ParameterPool = CodedMap<Parameter>
+        type ParameterPool = Pool of CodedMap<Parameter>
+
+        let private unwrap (Pool p) = p
 
         let getEstimate key (pool:ParameterPool) : float =
-            match pool  |> Map.tryFind (ShortCode.create key) with
+            match pool |> unwrap |> Map.tryFind (ShortCode.create key) with
             | Some p -> p |> getEstimate
             | None -> invalidOp (sprintf "[Parameter] The parameter %s has not been added to the parameter pool" key)
 
         let getBoundsForEstimation (pool:ParameterPool) key : float * float =
-            match pool  |> Map.tryFind (ShortCode.create key) with
+            match pool |> unwrap |> Map.tryFind (ShortCode.create key) with
             | Some p -> p |> bounds
             | None -> invalidOp (sprintf "[Parameter] The parameter %s has not been added to the parameter pool" key)
+
+        let count pool = (pool |> unwrap).Count
+
+        let asList pool = (pool |> unwrap) |> Map.toList
+
+        let fromList list = list |> Map.ofList |> Pool
+
+        let toDomain (optimisationConstraints:Constraint list) pool =
+            let x,y = 
+                pool
+                |> asList
+                |> List.map (snd >> bounds)
+                |> List.unzip
+            List.zip3 x y optimisationConstraints |> List.toArray
+
+        let fromPoint pool point : ParameterPool =
+            if count pool = (point |> Array.length)
+            then
+                pool 
+                |> asList
+                |> List.mapi (fun i (sc,p) -> sc, setEstimate p point.[i] )
+                |> fromList
+            else
+                invalidOp "The number of parameters estimated differs from those in the parameter pool"
+
+
+    type Pool = Pool.ParameterPool

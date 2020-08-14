@@ -20,12 +20,12 @@ module Likelihood =
 
     /// Negative log likelihood for a bivariate normal distribution.
     /// For two random variables with bivariate normal N(u1,u2,sigma1,sigma2,rho).
-    let bivariateGaussian' (p:ParameterPool) obsx obsy expx expy = 
+    let bivariateGaussian' (p:Parameter.Pool) obsx obsy expx expy = 
         let diffx = obsx - expx
         let diffy = obsy - expy
-        let sigmax = p |> Pool.getEstimate "sigma[x]"
-        let sigmay = p |> Pool.getEstimate "sigma[y]"
-        let rho = p |> Pool.getEstimate "rho"
+        let sigmax = p |> Parameter.Pool.getEstimate "sigma[x]"
+        let sigmay = p |> Parameter.Pool.getEstimate "sigma[y]"
+        let rho = p |> Parameter.Pool.getEstimate "rho"
         let zta1 = (diffx / sigmax) ** 2.
         let zta2 = 2. * rho * ((diffx / sigmax) ** 1.) * ((diffy / sigmay) ** 1.)
         let zta3 = (diffy / sigmay) ** 2.

@@ -4,19 +4,21 @@ module Distributions =
 
     open MathNet.Numerics.LinearAlgebra
 
+    [<RequireQualifiedAccess>]
     module ContinuousUniform =
 
         let draw random min max =
             let distribution = MathNet.Numerics.Distributions.ContinuousUniform(min, max, random)
             fun () -> distribution.Sample()
 
+    [<RequireQualifiedAccess>]
     module Normal =
 
         let draw random mean stdev =
             let distribution = MathNet.Numerics.Distributions.Normal(mean, stdev, random)
             fun () -> distribution.Sample()
 
-
+    [<RequireQualifiedAccess>]
     module MutlivariateNormal =
 
         let mapply (m:Matrix<float>) f = 
@@ -36,17 +38,17 @@ module Distributions =
                 randomNormal ()
 
         let sample (cov:Matrix<float>) rnd = 
-            let R = 
+            let r = 
                 if cov.Determinant() = 0. 
                 then
                     let t = cov.Svd true
                     let u,d = t.U, t.W
-                    let A = (mapply d sqrt) * u.Transpose()
-                    let qr = A.QR() in qr.R.Transpose()
+                    let a = (mapply d sqrt) * u.Transpose()
+                    let qr = a.QR() in qr.R.Transpose()
                 else cov.Cholesky().Factor
             fun () -> 
                 let v = vector ( sample' rnd () |> Seq.take cov.ColumnCount |> List.ofSeq )
-                R * v
+                r * v
 
 module Interpolate =
 
@@ -58,6 +60,10 @@ module Interpolate =
     let lower ((t1,v1):float*float) ((t2,v2):float*float) t =
         v1
 
+    /// Use the next point
+    let upper ((t1,v1):float*float) ((t2,v2):float*float) t =
+        v2
+
 
 module Regression =
 
@@ -67,15 +73,17 @@ module Regression =
         try
             let x' = x |> Array.map (fun a -> [|a|])
             let mlr = MultipleLinearRegressionAnalysis(true)
-            let _ = mlr.Learn(x', y)
+            mlr.Learn(x', y) |> ignore
             (mlr.Coefficients |> Seq.head).TTest.PValue
         with | _ -> nan
 
 
+/// Statistics to determine whether there are trends within series.
 module TrendAnalysis =
 
     open Bristlecone.Time
 
+    /// TODO Finish implementation
     let theilSen (timeDiff:System.TimeSpan->'a) (ts:TimeSeries<'a>) =
         let allPoints = ts |> TimeSeries.toObservations
         let allSlopes = 
@@ -91,12 +99,7 @@ module TrendAnalysis =
 
         // Determine line by setting y-intercept b to median of values yi - mxi
 
-
-
         medianSlope
-
-
-
 
         // Median of the slopes determined by all pairs of sample points.
 
@@ -107,8 +110,7 @@ module TrendAnalysis =
         //Take the median of the slopes defined from pairs of points that have distinct x coordinates.
         //x = 
 
-
-
+/// Statistics for determining the root of non-linear equations. 
 module RootFinding =
 
     /// Secant method for finding root of non-linear equations. This method is faster than bisection, but may not converge on a root.
@@ -118,7 +120,7 @@ module RootFinding =
             let x = x1 - (f(x1))*((x1 - x0)/(f(x1) - f(x0)))
             secant (n + 1) N f x x0 x2
 
-    /// Bisect method for finding root of non-linear equations. A "strong and stable" algorithm.
+    /// Bisect method for finding root of non-linear equations.
     let rec bisect n N f a b t : float =
         if n >= N then nan
         else
@@ -130,37 +132,38 @@ module RootFinding =
                     then bisect (n + 1) N f c b t
                     else bisect (n + 1) N f a c t
 
-
+/// Statistics to measure the convergence of multiple trajectories,
+/// for example for chains in a Monte Carlo analysis.
 module Convergence =
 
     module GelmanRubin =
 
-        let w m sj2s = 
+        let internal w m sj2s = 
             (1. / m) * (Seq.sum sj2s)
 
-        let b n m overallMean chainMeans =
+        let internal b n m overallMean chainMeans =
             (n / (m - 1.)) * (chainMeans |> Seq.sumBy (fun xm -> (xm - overallMean) ** 2.))
 
-        let sjSquared chainMean chainValues =
+        let internal sjSquared chainMean chainValues =
             let n = chainValues |> Seq.length |> float
             (1. / (n - 1.)) * (chainValues |> Seq.sumBy(fun thetai -> (thetai - chainMean) ** 2. ))
 
-        let varianceHat W B n =
+        let internal varianceHat W B n =
             (1. - (1. / n)) * W + (1. / n) * B
 
-        let rHat' varianceHat w =
+        let internal rHat' varianceHat w =
             sqrt (varianceHat / w)
 
+        /// R-hat tends downwards to one as convergence increases. It is often
+        /// accepted that a value below 1.1 indicates convergence for chains
+        /// within a Monte Carlo Markov Chain analysis.
         let rHat (chains:float seq seq) =
-
             if chains |> Seq.map Seq.length |> Seq.distinct |> Seq.length > 1 
             then failwith "Chains were different lengths"
-
             let overallMean = chains |> Seq.concat |> Seq.average   // Mean for all chains when combined
             let chainMeans = chains |> Seq.map Seq.average          // Per-chain mean
             let m = chains |> Seq.length |> float                   // Number of chains
             let n = chains |> Seq.head |> Seq.length |> float       // Iterations per chain
-
             let b = b n m overallMean chainMeans
             let sSquared = chainMeans |> Seq.zip chains |> Seq.map(fun (history,mean) -> sjSquared mean history)
             let w = w m sSquared

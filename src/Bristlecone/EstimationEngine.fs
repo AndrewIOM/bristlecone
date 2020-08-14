@@ -1,29 +1,44 @@
 namespace Bristlecone
 
+open Bristlecone.Time
+
 module EnvironmentalVariables =
 
     type RegionalEnvironment = CodedMap<TimeSeries<float>>
     type LocalEnvironment = CodedMap<TimeSeries<float>>
 
 
+/// Represents an ordinary differential equation model system and
+/// its likelihood as as objective function that may be optimised.
 module ModelSystem =
 
     // Models 
     type Response = float
     type Environment = CodedMap<float>
     type Time = float
-    type ModelEquation = ParameterPool -> Time -> Response -> Environment -> float
 
-    // Likelihood
+    /// An ordinary differential equation that may require fixed or free parameters,
+    /// the current time t, the current response value, and / or external environmental time series.
+    type ModelEquation = Parameter.Pool -> Time -> Response -> Environment -> float
+
+    /// Paired time-series representing the true and modelled time-series.
     type PredictedSeries = {
         Expected: float[]
-        Observed: float[] }
-    type Likelihood = ParameterPool -> CodedMap<PredictedSeries> -> float
+        Observed: float[]
+    }
 
+    /// A function that computes the likelihood of a set of parameters.
+    type Likelihood = Parameter.Pool -> CodedMap<PredictedSeries> -> float
+
+    /// A function that computes a measured system property given a
+    /// current (time t) and previous (time t-1) system state.
+    type MeasureEquation = float -> Environment -> Environment -> float
+
+    /// TODO Constrain model system so that codes cannot be duplicated
     type ModelSystem = {
-        Parameters: ParameterPool
+        Parameters: Parameter.Pool
         Equations:  CodedMap<ModelEquation>
-        Measures:   CodedMap<float -> Environment -> Environment -> float> //Environment(t-1) -> Environment(t) -> float
+        Measures:   CodedMap<MeasureEquation>
         Likelihood: Likelihood }
 
     type FitValue = { Fit: float; Obs: float }
@@ -31,23 +46,27 @@ module ModelSystem =
     type EstimationResult = {
         ResultId:   System.Guid
         Likelihood: float
-        Parameters: ParameterPool
+        Parameters: Parameter.Pool
         Series:     CodedMap<FitSeries>
-        Trace:      (float * float []) list }
+        Trace:      (float * float []) list
+        InternalDynamics: CodedMap<float[]> option }
 
-/// Point is generic to allow choice of number precision
-type Point<'a> = 'a []
-type Solution<'a> = float * Point<'a>
-type Objective<'a> = Point<'a> -> float
-type EndCondition<'a> = Solution<'a> list -> bool
-type Domain = (float*float*Parameter.Constraint) []
+module Solver =
+
+    /// Point is generic to allow choice of number precision
+    type Point<'a> = 'a []
+    type Solution<'a> = float * Point<'a>
+    type Objective<'a> = Point<'a> -> float
+    type EndCondition<'a> = Solution<'a> list -> bool
+    type Domain = (float*float*Parameter.Constraint) []
 
 module EstimationEngine =
 
     open System
-    open ModelSystem
     open Bristlecone.Logging
-    open Bristlecone.Time.TimeIndex
+    open Bristlecone.Conditioning
+    open ModelSystem
+    open Solver
 
     type Time = float
     type State = float
@@ -55,7 +74,7 @@ module EstimationEngine =
 
     type WriteOut = LogEvent -> unit
 
-    type Integrate<'data,'time> = WriteOut -> 'time -> 'time -> 'time -> CodedMap<'data> -> CodedMap<TimeIndex<'data>> -> CodedMap<ODE> -> CodedMap<'data[]>
+    type Integrate<'data,'time> = WriteOut -> 'time -> 'time -> 'time -> CodedMap<'data> -> CodedMap<TimeIndex.TimeIndex<'data>> -> CodedMap<ODE> -> CodedMap<'data[]>
     type Optimise<'data> = Random -> WriteOut -> EndCondition<'data> -> Domain -> ('data[] -> 'data) -> Solution<'data> list
 
     type TimeMode<'data, 'time> =
@@ -66,7 +85,7 @@ module EstimationEngine =
         TimeHandling: TimeMode<'data,'time>
         OptimiseWith: Optimise<'data>
         Conditioning: Conditioning<'data>
-        Constrain: ConstraintMode
+        Constrain: Parameter.ConstraintMode
         LogTo: WriteOut
         Random: Random
     }

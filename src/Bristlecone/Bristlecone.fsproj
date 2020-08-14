@@ -14,12 +14,13 @@
     <Compile Include="Parameter.fs" />
     <Compile Include="EstimationEngine.fs" />
     <Compile Include="Optimisation.fs" />
-    <Compile Include="OptimisationTechniques.fs" />
     <Compile Include="ConfidenceInterval.fs" />
     <Compile Include="ModelSelection.fs" />
     <Compile Include="Diagnostics.fs" />
     <Compile Include="DataAccess.fs" />
     <Compile Include="Workflow.fs" />
+    <Compile Include="Objective.fs" />
+    <Compile Include="Solver.fs" />
     <Compile Include="Library.fs" />
     <Compile Include="Equations.fs" />
   </ItemGroup>
