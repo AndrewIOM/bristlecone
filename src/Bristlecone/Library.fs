@@ -318,22 +318,3 @@ module Bristlecone =
 
         let fit engine endCondition model growth =
             growth |> Array.Parallel.map (fun g -> fit engine endCondition g model)
-
-
-/// An F# Domain Specific Language (DSL) for scripting with
-/// Bristlecone.
-[<AutoOpen>]
-module Language =
-
-    let parameter = Parameter.create
-
-    let code = ShortCode.create
-
-    let lookup (map:CodedMap<float>) name = 
-        match map.TryFind (code name) with
-        | Some k -> k
-        | None -> invalidOp (sprintf "Could not find %s in the map" name)
-
-    // TODO...
-    // > Model constructed using symbols (e.g. quotations)
-    // > "Compile" symbols into proper function and check they are complete.

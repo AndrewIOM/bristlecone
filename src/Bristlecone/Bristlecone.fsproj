@@ -23,6 +23,7 @@
     <Compile Include="Solver.fs" />
     <Compile Include="Library.fs" />
     <Compile Include="Equations.fs" />
+    <Compile Include="Language.fs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="../Bristlecone.Charts.R/charts.fsx" Pack="true" PackagePath=".">
