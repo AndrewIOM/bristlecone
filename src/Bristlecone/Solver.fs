@@ -1,18 +1,5 @@
 namespace Bristlecone
 
-/// Conditioning of time-series data, which allows for maximum use of observed time-series data.
-module Conditioning =
-
-    open Bristlecone.Time
-
-    /// Strategy for assigning a start time - `t0` - to a time series.  
-    let startPoint conditioning (series:CodedMap<TimeSeries<'a>>) =
-        match conditioning with
-        | Conditioning.NoConditioning -> None
-        | Conditioning.RepeatFirstDataPoint -> series |> Map.map(fun _ v -> v.Values |> Seq.head) |> Some
-        | Conditioning.Custom precomputed -> precomputed |> Some
-
-
 /// Helper functions for the creation of `Solver` functions, which apply time-series models
 /// to time-series data (when using Bristlecone time-series types).
 module Solver =
@@ -135,3 +122,15 @@ module Solver =
                 |> List.tail    // Remove conditioned point (time zero)
                 |> List.map snd
                 |> List.toArray
+
+    /// Conditioning of time-series data, which allows for maximum use of observed time-series data.
+    module Conditioning =
+
+        open Bristlecone.Time
+
+        /// Strategy for assigning a start time - `t0` - to a time series.  
+        let startPoint conditioning (series:CodedMap<TimeSeries<'a>>) =
+            match conditioning with
+            | Conditioning.NoConditioning -> None
+            | Conditioning.RepeatFirstDataPoint -> series |> Map.map(fun _ v -> v.Values |> Seq.head) |> Some
+            | Conditioning.Custom precomputed -> precomputed |> Some

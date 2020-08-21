@@ -32,10 +32,17 @@ module Parameter =
 
     let private unwrap (Parameter (c,m,e)) = c,m,e
 
+    let internal isValidBound num =
+        num <> infinity && num <> -infinity &&
+        not (System.Double.IsNaN num)
+
     let create con bound1 bound2 =
-        let min = [bound1; bound2] |> Seq.min
-        let max = [bound1; bound2] |> Seq.max
-        Parameter (con, Transform, (NotEstimated (min, max)))
+        if isValidBound bound1 && isValidBound bound2
+        then
+            let min = [bound1; bound2] |> Seq.min
+            let max = [bound1; bound2] |> Seq.max
+            Parameter (con, Transform, (NotEstimated (min, max))) |> Some
+        else None
 
     /// Bounds are always stored in a parameter in raw form.
     let bounds (p:Parameter) : float * float =
@@ -77,19 +84,21 @@ module Parameter =
 
         let private unwrap (Pool p) = p
 
-        let getEstimate key (pool:ParameterPool) : float =
-            match pool |> unwrap |> Map.tryFind (ShortCode.create key) with
-            | Some p -> p |> getEstimate
-            | None -> invalidOp (sprintf "[Parameter] The parameter %s has not been added to the parameter pool" key)
+        let asList pool = (pool |> unwrap) |> Map.toList
 
-        let getBoundsForEstimation (pool:ParameterPool) key : float * float =
-            match pool |> unwrap |> Map.tryFind (ShortCode.create key) with
+        let tryGetEstimate key (pool:ParameterPool) : float option =
+            pool |> asList |> List.tryFind (fun (x,_) -> x.Value = key) |> Option.map snd |> Option.map getEstimate
+            // TODO Make more efficient
+            // match pool |> unwrap |> Map.tryFind (ShortCode.create key) with
+            // | Some p -> p |> getEstimate
+            // | None -> invalidOp (sprintf "[Parameter] The parameter %s has not been added to the parameter pool" key)
+
+        let tryGetBoundsForEstimation (pool:ParameterPool) key : float * float =
+            match pool |> unwrap |> Map.tryFindBy (fun k -> k.Value = key) with
             | Some p -> p |> bounds
             | None -> invalidOp (sprintf "[Parameter] The parameter %s has not been added to the parameter pool" key)
 
         let count pool = (pool |> unwrap).Count
-
-        let asList pool = (pool |> unwrap) |> Map.toList
 
         let fromList list = list |> Map.ofList |> Pool
 
@@ -110,6 +119,17 @@ module Parameter =
                 |> fromList
             else
                 invalidOp "The number of parameters estimated differs from those in the parameter pool"
+
+        let fromEstimated pool =
+            let result =
+                pool
+                |> asList 
+                |> List.choose(fun (k,v) -> create (detatchConstraint v |> snd) (v |> getEstimate) (v |> getEstimate) |> Option.map (fun v -> k,v))
+                |> fromList
+            if count result <> count pool 
+            then failwith "Parameter pools were of different lengths"
+            else result
+
 
 
     type Pool = Pool.ParameterPool

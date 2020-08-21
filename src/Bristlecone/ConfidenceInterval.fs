@@ -136,8 +136,7 @@ module ProfileLikelihood =
     let profile fit engine subject (hypothesis:ModelSystem) n (result:EstimationResult) =
 
         // 1. Set estimation bounds to the MLE
-        let mleToBounds mlePool = mlePool |> Parameter.Pool.asList |> List.map(fun (k,v) -> k, Parameter.create (Parameter.detatchConstraint v |> snd) (v |> Parameter.getEstimate) (v |> Parameter.getEstimate)) |> Parameter.Pool.fromList
-        let hypothesisMle =  { hypothesis with Parameters = mleToBounds result.Parameters }
+        let hypothesisMle =  { hypothesis with Parameters = Parameter.Pool.fromEstimated result.Parameters }
 
         // 2. Generate a trace of at least n samples that deviate in L less than 2.0
         let results = OptimisationEventStash()

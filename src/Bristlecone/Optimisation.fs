@@ -1,6 +1,5 @@
 namespace Bristlecone.Optimisation
 
-open Bristlecone.Solver
 open Bristlecone.Logging
 open Bristlecone.EstimationEngine
 

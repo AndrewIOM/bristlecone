@@ -95,7 +95,7 @@ module Bristlecone =
 
         /// Condition initial time point
         let conditionedPoint = 
-            let x = Conditioning.startPoint engine.Conditioning timeSeriesData
+            let x = Solver.Conditioning.startPoint engine.Conditioning timeSeriesData
             match x with
             | Some y -> y
             | None ->
@@ -187,7 +187,7 @@ module Bristlecone =
         type TestSettings<'a> = {
             TimeSeriesLength: int
             StartValues: CodedMap<'a>
-            EndCondition: Solver.EndCondition<'a>
+            EndCondition: EndCondition<'a>
             GenerationRules: GenerationRule list
             NoiseGeneration: Parameter.Pool -> CodedMap<TimeSeries<'a>> -> CodedMap<TimeSeries<'a>>
             EnvironmentalData: CodedMap<TimeSeries<'a>>
@@ -293,8 +293,7 @@ module Bristlecone =
     /// "How good am I at predicting the next data point"?
     /// 
     let oneStepAhead engine hypothesis (preTransform:CodedMap<TimeSeries<float>>->CodedMap<TimeSeries<float>>) (timeSeries) (estimatedTheta:Parameter.Pool) =
-        let mleToBounds mlePool = mlePool |> Parameter.Pool.asList |> List.map(fun (k,v) -> k, Parameter.create (Parameter.detatchConstraint v |> snd) (v |> Parameter.getEstimate) (v |> Parameter.getEstimate)) |> Parameter.Pool.fromList
-        let hypothesisMle : ModelSystem =  { hypothesis with Parameters = mleToBounds estimatedTheta }
+        let hypothesisMle : ModelSystem =  { hypothesis with Parameters = Parameter.Pool.fromEstimated estimatedTheta }
         let pairedDataFrames =
             timeSeries
             |> Map.map(fun _ fitSeries -> 

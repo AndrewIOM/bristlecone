@@ -99,7 +99,7 @@ module ModelComponents =
             let p = 
                 mle.Parameters 
                 |> Parameter.Pool.asList
-                |> List.map(fun (k,v) -> k, Parameter.create Parameter.Constraint.Unconstrained (v |> Parameter.getEstimate) (v |> Parameter.getEstimate))
+                |> List.choose(fun (k,v) -> Parameter.create Parameter.Constraint.Unconstrained (v |> Parameter.getEstimate) (v |> Parameter.getEstimate) |> Option.map (fun v -> k,v))
                 |> Parameter.Pool.fromList
             let mleHypothesis = { hypothesis cLog with Parameters = p }
             fitFn subject mleHypothesis eng |> ignore

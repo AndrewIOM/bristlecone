@@ -51,7 +51,12 @@ module ModelSystem =
         Trace:      (float * float []) list
         InternalDynamics: CodedMap<float[]> option }
 
-module Solver =
+module EstimationEngine =
+
+    open System
+    open Bristlecone.Logging
+    open Bristlecone.Conditioning
+    open ModelSystem
 
     /// Point is generic to allow choice of number precision
     type Point<'a> = 'a []
@@ -59,14 +64,6 @@ module Solver =
     type Objective<'a> = Point<'a> -> float
     type EndCondition<'a> = Solution<'a> list -> bool
     type Domain = (float*float*Parameter.Constraint) []
-
-module EstimationEngine =
-
-    open System
-    open Bristlecone.Logging
-    open Bristlecone.Conditioning
-    open ModelSystem
-    open Solver
 
     type Time = float
     type State = float

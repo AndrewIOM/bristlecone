@@ -2,7 +2,6 @@ namespace Bristlecone
 
 /// An F# Domain Specific Language (DSL) for scripting with
 /// Bristlecone.
-[<AutoOpen>]
 module Language =
 
     /// Define an estimatable parameter for a Bristlecone model.
@@ -12,8 +11,8 @@ module Language =
     /// model equation, or other model component.
     let code = ShortCode.create
 
-    let lookup (map:CodedMap<float>) name = 
-        match map.TryFind (code name) with
+    let lookup name (map:CodedMap<float>) = 
+        match map |> Map.tryFindBy (fun k -> k.Value = name) with
         | Some k -> k
         | None -> invalidOp (sprintf "Could not find %s in the map" name)
 
@@ -47,17 +46,17 @@ module Language =
 
     /// Computes a `ModelExpression` given the current time, value,
     /// environment, and parameter pool.
-    let rec internal compute x t (pool:Parameter.Pool) environment ex : float =
+    let rec compute x t (pool:Parameter.Pool) (environment:CodedMap<float>) ex : float =
         match ex with
         | This -> x
         | Time -> t
         | Environment name ->
-            match environment |> Map.tryFind (code name) with
+            match environment |> Map.tryFindBy (fun n -> n.Value = name) with
             | Some i -> i
             | None -> failwithf "The equation could not be calculated. The environmental data '%s' has not been configured." name
         | Parameter name ->
-            match pool |> Parameter.Pool.asList |> List.tryFind (fun (x,_) -> x = code name) with
-            | Some (_,i) -> i |> Parameter.getEstimate
+            match pool |> Parameter.Pool.tryGetEstimate name with
+            | Some est -> est
             | None -> failwithf "The equation could not be calculated. The parameter '%s' has not been set up." name
         | Constant n -> n
         | Add list ->
@@ -74,14 +73,7 @@ module Language =
         | Mod (e, m) -> (compute x t pool environment e) % m
         | Exponent (e, m) -> (compute x t pool environment e) ** m
 
-    // Things to identify:
-    // 1. Parameters required.
-    // 2. Environment required.
-    // 3. Time required.
-    // 4. Mass required.
-    // Compile down to a [float -> float -> Pool -> Env -> float] function, with a list of requirements.
-
-    module internal Writer =
+    module Writer =
 
         type Writer<'a, 'L> = AWriter of 'a * List<'L>
 
@@ -98,6 +90,7 @@ module Language =
             | AWriter(a, log) ->
                 let (v, newLog) = fx a |> run
                 AWriter (v, List.append log newLog)
+            
 
     module ExpressionParser =
 
@@ -111,17 +104,16 @@ module Language =
             | Environment name -> bind((), "environment: " + name)
             | Parameter name -> bind((), "parameter: " + name)
             | Constant _ -> bind((),"nothing")
-            | Add list -> list |> bind describe
+            | Add list -> bind((), "add") // TODO
             | Subtract (l,r) -> describe l |> flatMap (fun () -> describe r)
             | Multiply list ->
                 match list with
-                | NotEmptyList l -> l |> List.map (describe) |> List.fold (*) 1.
+                | NotEmptyList l -> bind((), "multiply") // TODO
                 | _ -> failwith "List was empty"
             | Divide (l,r) -> describe l |> flatMap (fun () -> describe r)
             | Arbitrary fn -> bind((), "custom component - TODO may use additional parameters?")
             | Mod (e, _) -> describe e
             | Exponent (e, _) -> describe e
-
 
     /// Allows common F# functions to use Bristlecone model expressions.
     module ComputableFragment =
@@ -138,6 +130,7 @@ module Language =
         let applyAgain b (fn:float -> float -> Parameter.Pool -> CodedMap<float> ->(float -> 'b)) =
             fun x t p e -> fn x t p e (compute x t p e b)
 
+        let asBristleconeFunction = Arbitrary
 
     /// Scaffolds a `ModelSystem` for fitting with Bristlecone.
     module ModelBuilder =
@@ -156,9 +149,12 @@ module Language =
 
         let add name comp builder = 
             let map = builder |> unwrap
-            match map |> Map.tryFind (code name) with
+            match map |> Map.tryFindBy (fun n -> n.Value = name) with
             | Some _ -> failwithf "You specified a duplicate code [%s] in your model system." name
-            | None -> map |> Map.add (code name) comp |> ModelBuilder
+            | None -> 
+                match code name with
+                | Some c -> map |> Map.add c comp |> ModelBuilder
+                | None -> failwithf "The text '%s' cannot be used to make a short code identifier." name
 
         let compile builder : ModelSystem.ModelSystem =
             // Ensure only single likelihood function
@@ -167,6 +163,9 @@ module Language =
             // Check each dynamic function that it has needed parameters.
             // Check each measure has needed parameters.
             // Check if any parameters are unused.
+
+            // 2. Environment required.
+            // Compile down to a [float -> float -> Pool -> Env -> float] function, with a list of requirements.
 
             let map = builder |> unwrap
             let likelihoods = 
@@ -188,6 +187,18 @@ module Language =
                 |> Seq.map(fun (c,f) -> match f with | EquationFragment e -> Some (c,e) | _ -> None )
                 |> Seq.choose id |> Map.ofSeq
 
+            let requirements =
+                equations
+                |> Map.map (fun k v -> ExpressionParser.describe v |> Writer.run |> snd)
+
+            // 1. Check all requirements are met (equations, measures, likelihood fn)
+
+            // 2. Check that all estimatable parameters are used.
+
+
+            // 3. Summarise each equation:
+            // > Print if mass / time is required.
+
             { Likelihood = likelihoods |> Seq.head; 
               Parameters = parameters
               Equations = equations |> Map.map(fun _ v -> (fun pool t x env -> compute x t pool env v))
@@ -199,7 +210,10 @@ module Language =
 
         let empty = ModelBuilder.create
         let addEquation name eq builder = ModelBuilder.add name (ModelBuilder.EquationFragment eq) builder
-        let estimateParameter name constraintMode lower upper builder = ModelBuilder.add name (ModelBuilder.ParameterFragment <| Parameter.create constraintMode lower upper) builder
+        let estimateParameter name constraintMode lower upper builder = 
+            match Parameter.create constraintMode lower upper with
+            | Some p -> ModelBuilder.add name (ModelBuilder.ParameterFragment p) builder
+            | None -> failwithf "The bounds %f - %f cannot be used to estimate a parameter. See docs." lower upper
         let includeMeasure name measure builder = ModelBuilder.add name (ModelBuilder.MeasureFragment measure) builder
         let useLikelihoodFunction likelihoodFn builder = ModelBuilder.add "likelihood" (ModelBuilder.LikelihoodFragment likelihoodFn) builder
         let compile = ModelBuilder.compile
@@ -207,8 +221,6 @@ module Language =
     let noConstraints = Parameter.Constraint.Unconstrained
     let notNegative = Parameter.Constraint.PositiveOnly
     
-    let sumOfSquares a b = nan
-
     type PluggableComponent<'a> = {
         Parameters: CodedMap<Parameter.Parameter>
         Expression: 'a -> ModelExpression
@@ -217,7 +229,13 @@ module Language =
     /// Creates a nested component that can be inserted into a base model.
     let subComponent name expression = name, { Parameters = Map.empty; Expression = expression }
     let modelComponent name list = name, list
-    let estimateParameter name constraintMode lower upper comp = fst comp, { snd comp with Parameters = (snd comp).Parameters |> Map.add (code name) (Parameter.create constraintMode lower upper) }
+    let estimateParameter name constraintMode lower upper comp = 
+        match Parameter.create constraintMode lower upper with
+        | None -> failwithf "The bounds %f - %f cannot be used to estimate a parameter. See docs." lower upper
+        | Some p ->
+            match code name with
+            | Some c -> fst comp, { snd comp with Parameters = (snd comp).Parameters |> Map.add c p }
+            | None -> failwithf "The code '%s' cannot be used as an identifier. See docs." name
 
     module Hypotheses =
 
@@ -232,6 +250,7 @@ module Language =
         /// a part of a model that may be varied, for example between competing
         /// hypotheses.
         let createFromComponent comp x =
+            if snd comp |> List.isEmpty then failwithf "You must specify at least one implementation for the '%s' component" (fst comp)
             let name i = { Component = fst comp; Implementation = i }
             comp |> snd |> List.map(fun (n,c) -> bind(x c.Expression, name n))
 
@@ -255,6 +274,7 @@ module Language =
         /// The compilation includes only the required parameters in each model hypothesis, 
         /// and combines all labels into a single model identifier.
         let compile (x:Writer<ModelBuilder.ModelBuilder, ComponentName> list) =
+            if x |> List.isEmpty then failwith "No hypotheses specified"
             x |> List.map (map Model.compile >> run)
 
 
@@ -270,7 +290,7 @@ module Language =
         |> Model.estimateParameter "β"      noConstraints 0.10 0.60    // Death rate per encounter of hares due to predation
         |> Model.estimateParameter "Δ"      noConstraints 0.10 0.60    // Efficiency of turning predated hares into lynx
         |> Model.estimateParameter "γ"      noConstraints 0.10 0.60    // Natural death rate of lynx in the absence of food
-        |> Model.useLikelihoodFunction sumOfSquares
+        |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ "hare"; "lynx" ])
         |> Model.compile
 
 
@@ -297,15 +317,12 @@ module Language =
 
         /// Measurement (Size) variable: stem radius
         let stemRadius lastRadius lastEnv env =
-            let oldCumulativeMass = lookup lastEnv "bs"
-            let newCumulativeMass = lookup env "bs"
+            let oldCumulativeMass = lastEnv |> lookup "bs"
+            let newCumulativeMass = env |> lookup "bs"
             if (newCumulativeMass - oldCumulativeMass) > 0.
             then newCumulativeMass |> toRadiusMM
             else lastRadius
 
-        /// TODO:
-        /// - Set limit to 1 when no limit specified?
-        /// - Refactor measures to be cleanly specified.
         let baseModel geom feedback (nLimitMode,nLimitation) =
             Model.empty
             |> Model.addEquation        "bs"    (biomass geom nLimitation)
@@ -314,7 +331,7 @@ module Language =
             |> Model.estimateParameter  "λ"     notNegative 0.001 0.500
             |> Model.estimateParameter  "γ[N]"  notNegative 0.001 0.200
             |> Model.estimateParameter  "γ[b]"  notNegative 0.001 0.200
-            |> Model.useLikelihoodFunction sumOfSquares // (bivariateGaussian "x" "N")
+            |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.bivariateGaussian "x" "N")
             |> Model.estimateParameter  "ρ"     noConstraints -0.500 0.500
             |> Model.estimateParameter  "σ[x]"  notNegative 0.001 0.100
             |> Model.estimateParameter  "σ[y]"  notNegative 0.001 0.100
@@ -335,7 +352,7 @@ module Language =
             |> ComputableFragment.applyAgain (Parameter "h")
             |> ComputableFragment.applyAgain (Parameter "min")
             |> ComputableFragment.applyAgain n
-            |> Arbitrary
+            |> ComputableFragment.asBristleconeFunction
 
         let linear' (a:float) min =
             fun r -> if a * min < 1e-12 then nan else a * r
@@ -344,7 +361,7 @@ module Language =
             |> ComputableFragment.apply (Parameter "a")
             |> ComputableFragment.applyAgain (Parameter "min")
             |> ComputableFragment.applyAgain n
-            |> Arbitrary
+            |> ComputableFragment.asBristleconeFunction
 
         let geometricModes = modelComponent "Geometric constraint" [
             subComponent "None" (Constant 1. |> (*))

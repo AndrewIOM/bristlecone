@@ -6,7 +6,7 @@ namespace Bristlecone
 module Objective =
 
     open ModelSystem
-    open Bristlecone.Solver
+    open Bristlecone.EstimationEngine
 
     let parameteriseModel parameterPool point (model:ModelEquation) =
         model (point |> Parameter.Pool.fromPoint parameterPool)

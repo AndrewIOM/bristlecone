@@ -5,7 +5,10 @@ module ShortCode =
 
     type ShortCode = private ShortCode of string
     let unwrap (ShortCode n) = n
-    let create str = str |> ShortCode
+    let create str = 
+        if System.String.IsNullOrEmpty(str) then None
+        else if str.Length > 10 then None
+        else str |> ShortCode |> Some
 
     type ShortCode with
         member this.Value = unwrap this
@@ -71,6 +74,12 @@ module Map =
                 match acc.TryFind key with
                 | Some items -> Map.add key (appender values items) acc
                 | None -> Map.add key values acc) group2
+
+    let tryFindBy (f:'key->bool) map =
+        map 
+        |> Map.toSeq 
+        |> Seq.tryFind (fun (k,_) -> f k) 
+        |> Option.map snd
 
 [<RequireQualifiedAccess>]
 module List =

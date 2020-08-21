@@ -149,7 +149,7 @@ module MLE =
                 let mle = (data.Rows |> Seq.head).NegativeLogLikelihood
                 let pool = 
                     data.Rows
-                    |> Seq.map(fun r -> (ShortCode.create r.ParameterCode, r.ParameterValue))
+                    |> Seq.choose(fun r -> ShortCode.create r.ParameterCode |> Option.map (fun o -> o,r.ParameterValue))
                     |> Map.ofSeq
                 (mle, pool) |> Ok
 
@@ -191,12 +191,12 @@ module Series =
         let toSeries (data:IndividualSeries) : CodedMap<FitSeries> =
             data.Rows
             |> Seq.groupBy(fun r -> r.Variable)
-            |> Seq.map(fun (g,r) -> 
+            |> Seq.choose(fun (g,r) -> 
                 let ts = 
                     r 
                     |> Seq.map(fun r -> ({ Fit = r.Expected; Obs = r.Observed}, r.Time))
                     |> TimeSeries.fromObservations
-                (ShortCode.create g, ts))
+                ShortCode.create g |> Option.map(fun c -> c,ts))
             |> Map.ofSeq
 
     let save directory subject modelId result =
