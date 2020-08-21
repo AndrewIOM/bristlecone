@@ -85,7 +85,7 @@ module Trace =
             |> Seq.rev
             |> Seq.mapi (fun iterationNumber (likelihood,values) ->
                 result.Parameters
-                |> Parameter.Pool.asList
+                |> Parameter.Pool.toList
                 |> Seq.mapi(fun i (name,_) ->
                     (subject,
                      modelId,
@@ -133,14 +133,14 @@ module MLE =
 
         let fromResult subject hypothesisId (result:EstimationResult) =
             result.Parameters
-            |> Parameter.Pool.asList
+            |> Parameter.Pool.toList
             |> Seq.map(fun (name,v) ->
                 (subject,
                  hypothesisId,
                  result.ResultId,
                  name.Value,
                  result.Likelihood,
-                 v |> Parameter.getEstimate) |> IndividualMLE.Row )
+                 v |> Parameter.getTransformedValue) |> IndividualMLE.Row )
 
         let toResult (data:IndividualMLE) =
             if data.Rows |> Seq.isEmpty
@@ -239,8 +239,9 @@ module EstimationResult =
               Likelihood = l
               Parameters = 
                 modelSystem.Parameters 
-                |> Parameter.Pool.asList
-                |> List.map (fun (k,v) -> k, Parameter.setEstimate v (p |> Map.find k))
+                |> Parameter.Pool.toList
+                |> List.map (fun (k,v) -> k, Parameter.setTransformedValue v (p |> Map.find k))
+                |> List.choose(fun (c,r) -> match r with | Ok x -> Some (c,x) | Error _ -> None)
                 |> Parameter.Pool.fromList
               Series = s 
               InternalDynamics = None

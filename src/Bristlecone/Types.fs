@@ -1,5 +1,10 @@
 namespace Bristlecone
 
+open System.Runtime.CompilerServices
+
+[<assembly: InternalsVisibleTo("Bristlecone.Tests")>]
+do()
+
 [<RequireQualifiedAccess>]
 module ShortCode =
 

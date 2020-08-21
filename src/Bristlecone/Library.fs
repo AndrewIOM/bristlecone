@@ -128,7 +128,7 @@ module Bristlecone =
             | Parameter.Detached -> 
                 let par,con = 
                     model.Parameters
-                    |> Parameter.Pool.asList
+                    |> Parameter.Pool.toList
                     |> List.map (fun (k,v) ->
                         let x,y = Parameter.detatchConstraint v
                         (k, x), y )
@@ -202,11 +202,16 @@ module Bristlecone =
 
         let drawParameterSet rnd pool =
             pool
-            |> Parameter.Pool.asList
+            |> Parameter.Pool.toList
             |> List.map (fun (k,v) -> 
-                let lower,upper = Parameter.bounds v
+                let lower,upper = 
+                    match Parameter.bounds v with
+                    | Some b -> b
+                    | None -> failwith "Parameters already estimated"
                 let trueValue = Statistics.Distributions.ContinuousUniform.draw rnd lower upper ()
-                k, Parameter.setEstimate v trueValue )
+                match Parameter.setTransformedValue v trueValue with
+                | Ok p -> k,p
+                | Error e -> failwith e )
             |> Parameter.Pool.fromList
 
         /// Generate a fixed-resolution time-series for testing model fits

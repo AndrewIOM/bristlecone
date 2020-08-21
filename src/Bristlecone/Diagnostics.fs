@@ -36,7 +36,7 @@ module Convergence =
             else
                 let chains' = chains |> Seq.map(fun c -> c |> Seq.take minChainLength)
                 mle.Parameters
-                |> Parameter.Pool.asList
+                |> Parameter.Pool.toList
                 |> Seq.mapi(fun i (code,p) -> 
                     { Subject = subjectId
                       HypothesisId = hi
@@ -98,8 +98,8 @@ module ModelComponents =
             let cLog = ComponentLogger<'data>() :> IComponentLogger<'data>
             let p = 
                 mle.Parameters 
-                |> Parameter.Pool.asList
-                |> List.choose(fun (k,v) -> Parameter.create Parameter.Constraint.Unconstrained (v |> Parameter.getEstimate) (v |> Parameter.getEstimate) |> Option.map (fun v -> k,v))
+                |> Parameter.Pool.toList
+                |> List.choose(fun (k,v) -> Parameter.create Parameter.Constraint.Unconstrained (v |> Parameter.getTransformedValue) (v |> Parameter.getTransformedValue) |> Option.map (fun v -> k,v))
                 |> Parameter.Pool.fromList
             let mleHypothesis = { hypothesis cLog with Parameters = p }
             fitFn subject mleHypothesis eng |> ignore

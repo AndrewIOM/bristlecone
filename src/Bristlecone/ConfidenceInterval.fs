@@ -160,11 +160,14 @@ module ProfileLikelihood =
         let upperInterval = trace |> interval (Parameter.Pool.count hypothesisMle.Parameters) mle Bounds.upperBound
 
         result.Parameters
-        |> Parameter.Pool.asList
+        |> Parameter.Pool.toList
         |> Seq.zip3 lowerInterval upperInterval
         |> Seq.map(fun ((l1,l2),(u1,u2),(k,v)) -> 
-            k, {
-                Estimate = v |> Parameter.getEstimate
-                ``68%`` = { Lower = l1; Upper = l2 }
-                ``95%`` = { Lower = u1; Upper = u2 }})
+            match v |> Parameter.getEstimate with
+            | Error e -> failwith e
+            | Ok v ->
+                k, {
+                    Estimate = v
+                    ``68%`` = { Lower = l1; Upper = l2 }
+                    ``95%`` = { Lower = u1; Upper = u2 }})
         |> Map.ofSeq
