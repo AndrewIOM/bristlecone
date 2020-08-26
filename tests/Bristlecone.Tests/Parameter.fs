@@ -20,7 +20,7 @@ let shortCode =
     ]
 
 [<Tests>]
-let test =
+let parameters =
     testList "Parameters" [
 
         testList "Creation" [
@@ -112,3 +112,35 @@ let test =
                     | None -> failtestf "Bounds were not accessible when they should be"
         ]
 ]
+
+// [<Tests>]
+// let pool =
+//     testList "Parameter pool" [
+
+//         testProperty "Transformed values retrieved by key" <| fun key pars ->
+//             let pool = pars |> Parameter.Pool.fromList
+//             let code = ShortCode.create key
+//             if code.IsNone then ()
+//             let fn () = Parameter.Pool.tryGetTransformedValue key pool
+//             if pars |> Seq.map fst |> Seq.contains code.Value
+//             then 
+//                 match fn() with
+//                 | Some x ->
+//                     let m = pars |> Seq.find(fun (k,_) -> k = code.Value) |> snd
+//                     Expect.equal (m |> Parameter.getTransformedValue) x "Parameter values differed"
+//                 | None -> failtest "Expected Some but got None"
+//             else Expect.isNone (fn()) "Did not get value when parameter should have been present"
+
+//         testProperty "Bounds are returned for un-estimated parameters" fail
+
+//         testProperty "Domain formation requires list of constraints and un-estimated pool" fail
+
+//         testProperty "Creation from `Point` fails without the same dimensions" fail
+
+//         testProperty "Creation from `Point` has original point's values" id
+
+//         testProperty "Creation from previous estimate has same constraints" id
+
+//         testProperty "Creation from previous estimate are unestimated with same bounds" id
+
+//     ]

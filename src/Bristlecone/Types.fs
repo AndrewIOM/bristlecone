@@ -6,6 +6,43 @@ open System.Runtime.CompilerServices
 do()
 
 [<RequireQualifiedAccess>]
+module PositiveInt =
+
+    type PositiveInt = private PositiveInt of int
+
+    let private (|Positive|Negative|Zero|) num = 
+        if num > 0 then Positive 
+        elif num < 0 then Negative
+        else Zero
+
+    let create i =
+        match i with
+        | Positive -> i |> PositiveInt |> Some
+        | _ -> None
+
+    let private unwrap (PositiveInt p) = p
+
+    type PositiveInt with
+        member this.Value = unwrap this
+
+[<RequireQualifiedAccess>]
+module RealTimeSpan =
+
+    open System
+
+    type RealTimeSpan = private RealTimeSpan of TimeSpan
+
+    let create t =
+        if t = TimeSpan.Zero then None
+        else t |> RealTimeSpan |> Some
+
+    let private unwrap (RealTimeSpan t) = t
+
+    type RealTimeSpan with
+        member this.Value = unwrap this
+
+
+[<RequireQualifiedAccess>]
 module ShortCode =
 
     type ShortCode = private ShortCode of string
@@ -18,6 +55,9 @@ module ShortCode =
     type ShortCode with
         member this.Value = unwrap this
 
+
+type RealTimeSpan = RealTimeSpan.RealTimeSpan
+type PositiveInt = PositiveInt.PositiveInt
 type CodedMap<'T> = Map<ShortCode.ShortCode,'T>
 
 module Conditioning =

@@ -9,7 +9,7 @@ module Objective =
     open Bristlecone.EstimationEngine
 
     let parameteriseModel parameterPool point (model:ModelEquation) =
-        model (point |> Parameter.Pool.fromPoint parameterPool)
+        model (point |> Parameter.Pool.fromPointInTransformedSpace parameterPool)
 
     /// Pairs observed time series to predicted series for dynamic variables only.
     /// Environmental forcings and hidden variables are removed.
@@ -38,4 +38,4 @@ module Objective =
             point
             |> predict system integrate solveDiscrete
             |> pairObservationsToExpected observed
-            |> system.Likelihood (point |> Parameter.Pool.fromPoint system.Parameters)
+            |> system.Likelihood (point |> Parameter.Pool.fromPointInTransformedSpace system.Parameters)

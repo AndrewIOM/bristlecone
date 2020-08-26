@@ -7,6 +7,22 @@ open Bristlecone
 open Bristlecone.Language
 open FsCheck
 
+let genStrings minLength maxLength = 
+    gen {
+        let! length = Gen.choose (minLength, maxLength)
+        let! chars = Gen.arrayOfLength length Arb.generate<char>
+        return string chars
+    }
+
+type ShortCodeGen() =
+    static member ShortCode() : Arbitrary<ShortCode.ShortCode> =
+        let createCode code = ShortCode.create code |> Option.get
+        genStrings 1 10 |> Gen.map createCode |> Arb.fromGen
+
+
+let config = { FsCheckConfig.defaultConfig with arbitrary = [typeof<ShortCodeGen>] }
+
+
 [<Tests>]
 let modelExpressionOperators =
     testList "Model expression - operators" [
@@ -26,6 +42,9 @@ let modelExpressionOperators =
         testProperty "Modulus operator finds mod of constant" <| fun (a:NormalFloat) (b:NormalFloat) x t pool env ->
             if b.Get = 0. then true // Can't do mod of 0
             else Constant a.Get % b.Get |> compute x t pool env = a.Get % b.Get
+    
+        testProperty "Negative sign negates value" <| fun (a:NormalFloat) x t pool env ->
+            - Constant a.Get |> compute x t pool env = - a.Get
     ]
 
 [<Tests>]
@@ -67,40 +86,41 @@ let modelExpressions =
 //             Environment c |> compute x t pool e = value
     ]
 
-// [<Tests>]
-// let modelBuilder =
-//     testList "Model builder" [
+[<Tests>]
+let modelBuilder =
+    testList "Model builder" [
 
-//         testProperty "Does not compile when more than one likelihood function" <| fun (likelihoodFns:ModelSystem.Likelihood list) ->
-//             let mb = likelihoodFns |> Seq.fold (fun mb l -> mb |> Model.useLikelihoodFunction l) Model.empty
-//             let fn () = mb |> Model.addEquation "x" (Constant 1.) |> Model.compile
-//             if likelihoodFns |> Seq.length <> 1
-//             then Expect.throws (fun () -> fn() |> ignore) "Allowed more than one likelihood function"
+        testProperty "Does not compile when more than one likelihood function" <| fun (likelihoodFns:ModelSystem.Likelihood list) ->
+            let mb = likelihoodFns |> Seq.fold (fun mb l -> mb |> Model.useLikelihoodFunction l) Model.empty
+            let fn () = mb |> Model.addEquation "x" (Constant 1.) |> Model.compile
+            if likelihoodFns |> Seq.length <> 1
+            then Expect.throws (fun () -> fn() |> ignore) "Allowed more than one likelihood function"
 
-//         testProperty "Does not compile when no equations are specified" <| fun eqs ->
-//             let mb = eqs |> Seq.fold (fun mb (n,eq) -> mb |> Model.addEquation n eq) Model.empty
-//             let fn () = mb |> Model.compile
-//             if eqs |> Seq.length <> 1
-//             then Expect.throws (fun () -> fn() |> ignore) "Allowed more than one likelihood function"
+        testProperty "Does not compile when no equations are specified" <| fun eqs ->
+            let mb = eqs |> Seq.fold (fun mb (n,eq) -> mb |> Model.addEquation n eq) Model.empty
+            let fn () = mb |> Model.compile
+            if eqs |> Seq.length <> 1
+            then Expect.throws (fun () -> fn() |> ignore) "Allowed more than one likelihood function"
 
-//         testProperty "Compiles with one likelihood function and one or more equations" <| fun l eqs ->
-//             let mb = eqs |> Seq.fold (fun mb (n,eq) -> mb |> Model.addEquation n eq) (Model.empty |> Model.useLikelihoodFunction l)
-//             mb |> Model.compile
-//             fail
+        testPropertyWithConfig config "Compiles with one likelihood function and one or more equations" <| fun l eqs ->
+            let mb = eqs |> Seq.fold (fun mb (n,eq) -> mb |> Model.addEquation n eq) (Model.empty |> Model.useLikelihoodFunction l)
+            if eqs |> Seq.isEmpty
+            then Expect.throws (fun () -> mb |> Model.compile |> ignore) "Did not error when no equations specified"
+            else mb |> Model.compile |> ignore
 
-//         testProperty "Compiles whether measures are present or not" <| fun likelihood eq1 measures ->
-//             let model =
-//                 Model.empty 
-//                 |> Model.useLikelihoodFunction likelihood 
-//                 |> Model.addEquation "eq1" eq1
-//             measures |> Seq.fold (fun mb (n,m) -> mb |> Model.includeMeasure n m) model |> Model.compile
+        testProperty "Compiles whether measures are present or not" <| fun likelihood eq1 measures ->
+            let model =
+                Model.empty 
+                |> Model.useLikelihoodFunction likelihood 
+                |> Model.addEquation "eq1" eq1
+            measures |> Seq.fold (fun mb (n,m) -> mb |> Model.includeMeasure n m) model |> Model.compile
 
-//         testProperty "Doesn't compile if duplicate keys exist" <| fun likelihood eqs measures ->
-//             let model = eqs |> Seq.fold (fun mb (n,eq) -> mb |> Model.addEquation n eq) (Model.empty |> Model.useLikelihoodFunction likelihood)
-//             let keys = [(eqs |> List.map fst); (measures |> List.map fst)] |> List.concat
-//             if keys.Length = (keys |> List.distinct |> List.length)
-//             then Model.compile model |> ignore
-//             else Expect.throws (fun () -> Model.compile model |> ignore) "Duplicate keys existed"
+        testProperty "Doesn't compile if duplicate keys exist" <| fun likelihood eqs measures ->
+            let model = eqs |> Seq.fold (fun mb (n,eq) -> mb |> Model.addEquation n eq) (Model.empty |> Model.useLikelihoodFunction likelihood)
+            let keys = [(eqs |> List.map fst); (measures |> List.map fst)] |> List.concat
+            if keys.Length = (keys |> List.distinct |> List.length)
+            then Model.compile model |> ignore
+            else Expect.throws (fun () -> Model.compile model |> ignore) "Duplicate keys existed"
 
 //         testProperty "Only compiles when all required parameters are specified" <| fail
 
@@ -108,7 +128,7 @@ let modelExpressions =
 
 //         testProperty "Equations in the built model have the correct result" <| fail
 
-//     ]
+   ]
 
 // [<Tests>]
 // let computableFragments =

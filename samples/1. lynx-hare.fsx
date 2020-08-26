@@ -11,6 +11,7 @@
 
 open Bristlecone            // Opens Bristlecone core library and estimation engine
 open Bristlecone.Language   // Open the language for writing Bristlecone models
+open Bristlecone.Time
 
 // 0. Configure Options
 // ----------------------------
@@ -50,7 +51,7 @@ let engine =
     Bristlecone.mkContinuous
     |> Bristlecone.withGradientDescent
     |> Bristlecone.withContinuousTime Integration.MathNet.integrate
-    |> Bristlecone.withConditioning RepeatFirstDataPoint
+    |> Bristlecone.withConditioning Conditioning.RepeatFirstDataPoint
 
 
 // 3. Test Engine and Model
@@ -60,6 +61,8 @@ let engine =
 // issue with either your model, or the Bristlecone configuration.
 
 let startValues = [ ShortCode.create "lynx", 30.09; ShortCode.create "hare", 19.58 ] |> Map.ofList
+
+// TODO Test settings new format
 
 ``predator-prey`` |> Bristlecone.testModel engine Options.testSeriesLength startValues Options.iterations []
 
@@ -71,10 +74,10 @@ let startValues = [ ShortCode.create "lynx", 30.09; ShortCode.create "hare", 19.
 type PopulationData = FSharp.Data.CsvProvider<"../samples/data/lynx-hare.csv">
 let data = 
     let csv = PopulationData.Load "../samples/data/lynx-hare.csv"
-    [ ShortCode.create "hare", TimeSeries.createVarying (csv.Rows |> Seq.map(fun r -> r.Year, float r.Hare))
-      ShortCode.create "lynx", TimeSeries.createVarying (csv.Rows |> Seq.map(fun r -> r.Year, float r.Lynx)) ] |> Map.ofList
+    [ ShortCode.create "hare", TimeSeries.fromObservations (csv.Rows |> Seq.map(fun r -> float r.Hare, r.Year))
+      ShortCode.create "lynx", TimeSeries.fromObservations (csv.Rows |> Seq.map(fun r -> float r.Lynx, r.Year)) ] |> Map.ofList
 
 
 // 4. Fit Model to Real Data
 // -----------------------------------
-let result = ``predator-prey`` |> Bristlecone.fit engine Options.iterations data
+let result = ``predator-prey`` |> Bristlecone.fit engine (EndConditions.afterIteration Options.iterations) data

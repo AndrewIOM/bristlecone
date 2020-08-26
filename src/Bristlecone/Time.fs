@@ -21,10 +21,10 @@ module Resolution =
 
     /// Represents the width of equally-spaced steps in time.
     type FixedTemporalResolution =
-        | Years of int
-        | Months of int
-        | Days of int
-        | CustomEpoch of TimeSpan
+        | Years of PositiveInt
+        | Months of PositiveInt
+        | Days of PositiveInt
+        | CustomEpoch of RealTimeSpan
 
     /// Represents the maximum resolution of the time series
     type TemporalResolution =
@@ -34,10 +34,11 @@ module Resolution =
     /// Increment time by an increment defined as a fixed temporal resolution.
     let increment res (t:DateTime) =
         match res with
-        | Years i -> t.AddYears i
-        | Months i -> t.AddMonths i
-        | Days i -> t.AddDays(float i)
-        | CustomEpoch ticks -> t + ticks
+        | Years i -> t.AddYears i.Value
+        | Months i -> t.AddMonths i.Value
+        | Days i -> t.AddDays(float i.Value)
+        | CustomEpoch ticks -> t + ticks.Value
+
 
 type FixedTemporalResolution = Resolution.FixedTemporalResolution
 
@@ -108,18 +109,29 @@ module TimeSeries =
     let epochs series =
         series |> innerSeries |> Array.map snd
 
+    let checkMoreThanEqualTo n seq =
+        if seq |> Seq.length >= n
+        then Some seq
+        else None
+
     /// Remove all time points that occur before the desired start date.
     let trimStart startDate series =
         let obs = series |> toObservations
         let startIndex = obs |> Seq.findIndex (fun (_,t) -> t >= startDate)
-        obs |> Seq.toArray |> Array.splitAt startIndex |> snd |> fromObservations
+        obs
+        |> Seq.toArray
+        |> Array.splitAt startIndex
+        |> snd
+        |> checkMoreThanEqualTo 2
+        |> Option.map fromObservations
 
     /// Remove all time points that occur after the desired end date.
     let trimEnd endDate series =
         series 
         |> toObservations
         |> Seq.takeWhile (fun (_,t) -> t <= endDate)
-        |> fromObservations
+        |> checkMoreThanEqualTo 2
+        |> Option.map fromObservations
 
     /// Bound a time series inclusively 
     let bound startDate endDate series =
@@ -127,7 +139,8 @@ module TimeSeries =
         |> toObservations
         |> Seq.skipWhile (fun (_,t) -> t < startDate)
         |> Seq.takeWhile (fun (_,t) -> t <= endDate)
-        |> fromObservations
+        |> checkMoreThanEqualTo 2
+        |> Option.map fromObservations
 
     /// Date of the last observation within the time series.
     let endDate (series:TimeSeries<'a>) =
@@ -147,9 +160,10 @@ module TimeSeries =
         if epochs |> Seq.distinct |> Seq.length = 1
         then // There is a fixed time period.
             let fixedEpoch = epochs |> Seq.head
+            if fixedEpoch = TimeSpan.Zero then failwith "Cannot have a resolution of zero"
             if fixedEpoch.TotalDays % 1. = 0.
-            then Resolution.Fixed <| FixedTemporalResolution.Days (int (fixedEpoch.TotalDays))
-            else Resolution.Fixed <| FixedTemporalResolution.CustomEpoch fixedEpoch
+            then Resolution.Fixed <| FixedTemporalResolution.Days (PositiveInt.create (int fixedEpoch.TotalDays) |> Option.get)
+            else Resolution.Fixed <| FixedTemporalResolution.CustomEpoch (RealTimeSpan.create fixedEpoch |> Option.get)
         else // A variable time interval exists. This could be months, years, or some other unit.
             let observations = series |> toObservations
             let startDate = observations |> Seq.head |> snd
@@ -165,8 +179,8 @@ module TimeSeries =
             then // There is a fixed monthly stepping
                 let fixedMonths = monthDifferences |> Seq.head
                 if fixedMonths % 12 = 0
-                then Resolution.Fixed <| FixedTemporalResolution.Years (fixedMonths / 12)
-                else Resolution.Fixed <| FixedTemporalResolution.Months fixedMonths
+                then Resolution.Fixed <| FixedTemporalResolution.Years (PositiveInt.create (fixedMonths / 12) |> Option.get)
+                else Resolution.Fixed <| FixedTemporalResolution.Months (PositiveInt.create fixedMonths |> Option.get)
             else // The time series has variable increments not on day or month cycle
                 Resolution.Variable
 
@@ -183,8 +197,8 @@ module TimeSeries =
             | FixedTemporalResolution.Years oldYears ->
                 match desiredResolution with
                 | FixedTemporalResolution.Years newYears ->
-                    if newYears > oldYears && ((float newYears) % (float oldYears) = 0.) && ((obs |> Seq.length |> float) % (float newYears) = 0.)
-                    then obs |> Seq.chunkBySize (newYears / oldYears) |> Seq.map (fun bin -> (bin |> upscaleFunction, bin |> Seq.head |> snd)) |> fromObservations
+                    if newYears > oldYears && ((float newYears.Value) % (float oldYears.Value) = 0.) && ((obs |> Seq.length |> float) % (float newYears.Value) = 0.)
+                    then obs |> Seq.chunkBySize (newYears.Value / oldYears.Value) |> Seq.map (fun bin -> (bin |> upscaleFunction, bin |> Seq.head |> snd)) |> fromObservations
                     else invalidArg "desiredResolution" "The upscaled resolution was not a whole multiple of the old resolution"
                 | _ -> invalidArg "desiredResolution" "Cannot generalise an annual time series to a lower resolution"
             | FixedTemporalResolution.Days oldDays ->
@@ -307,10 +321,10 @@ module TimeIndex =
     let indexSeries (t0:DateTime) targetResolution (series:TimeSeries<'a>) : seq<float*'a> =
         let obs = series |> TimeSeries.toObservations
         match targetResolution with
-        | FixedTemporalResolution.Years y -> obs |> Seq.map(fun (v,tn) -> (((totalYearsElapsed t0 tn) / float y), v))
-        | FixedTemporalResolution.Months m -> obs |> Seq.map(fun (v,tn) -> (((totalMonthsElapsed t0 tn) / float m), v))
-        | FixedTemporalResolution.Days d -> obs |> Seq.map(fun (v,tn) -> (((tn - t0).TotalDays / float d), v))
-        | FixedTemporalResolution.CustomEpoch t -> obs |> Seq.map(fun (v,tn) -> ((((tn - t0).Ticks / t.Ticks) |> float), v))
+        | FixedTemporalResolution.Years y -> obs |> Seq.map(fun (v,tn) -> (((totalYearsElapsed t0 tn) / float y.Value), v))
+        | FixedTemporalResolution.Months m -> obs |> Seq.map(fun (v,tn) -> (((totalMonthsElapsed t0 tn) / float m.Value), v))
+        | FixedTemporalResolution.Days d -> obs |> Seq.map(fun (v,tn) -> (((tn - t0).TotalDays / float d.Value), v))
+        | FixedTemporalResolution.CustomEpoch t -> obs |> Seq.map(fun (v,tn) -> ((((tn - t0).Ticks / t.Value.Ticks) |> float), v))
 
     /// A representation of temporal data as fractions of a common fixed temporal resolution,
     /// from a given baseline. The baseline must be greater than or equal to the baseline

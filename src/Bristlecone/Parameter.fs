@@ -58,7 +58,7 @@ module Parameter =
     /// Retrieve the estimated parameter value for further analysis.
     /// Will only be `Ok` if parameter has been estimated.
     let getEstimate parameter =
-        let c,m,estimate = parameter |> unwrap
+        let _,_,estimate = parameter |> unwrap
         match estimate with
         | NotEstimated _ -> Error "Has not been estimated yet"
         | Estimated v -> Ok v
@@ -112,23 +112,28 @@ module Parameter =
 
         let toList pool = (pool |> unwrap) |> Map.toList
 
-        let tryGetEstimate key (pool:ParameterPool) : float option =
+        /// Returns Some value if a parameter with the `key`
+        /// exists in the Pool. 
+        let internal tryGetTransformedValue key (pool:ParameterPool) : float option =
             pool |> toList |> List.tryFind (fun (x,_) -> x.Value = key) |> Option.map snd |> Option.map getTransformedValue
-            // TODO Make more efficient
-            // match pool |> unwrap |> Map.tryFind (ShortCode.create key) with
-            // | Some p -> p |> getEstimate
-            // | None -> invalidOp (sprintf "[Parameter] The parameter %s has not been added to the parameter pool" key)
 
+        /// Returns the starting bounds in transformed parameter space if
+        /// the parameter has not been estimated. If the parameter has already
+        /// been estimated, returns None.
         let tryGetBoundsForEstimation (pool:ParameterPool) key : (float * float) option =
             match pool |> unwrap |> Map.tryFindBy (fun k -> k.Value = key) with
             | Some p -> p |> bounds
             | None -> None
 
+        /// The number of parameters in the Pool.
         let count pool = (pool |> unwrap).Count
 
         let fromList list = list |> Map.ofList |> Pool
 
-        let toDomain (optimisationConstraints:Constraint list) pool =
+        /// Retrieves the bounds for un-estimated parameters in the `Pool`
+        /// in the form required by optimisation functions. If one or more
+        /// of the parameters have been estimated, an expection will be thrown.
+        let internal toDomain (optimisationConstraints:Constraint list) pool =
             let x,y = 
                 pool
                 |> toList
@@ -141,7 +146,9 @@ module Parameter =
             if count x = count y then y
             else failwith "Cannot set parameters as infinite or NaN values"
 
-        let fromPoint pool point : ParameterPool =
+        /// Creates a `Pool` from a point in the transformed parameter
+        /// space, for example from optimisation. 
+        let internal fromPointInTransformedSpace pool point : ParameterPool =
             if count pool = (point |> Array.length)
             then
                 pool 
@@ -153,6 +160,8 @@ module Parameter =
             else
                 invalidOp "The number of parameters estimated differs from those in the parameter pool"
 
+        /// Create a Pool where all parameters are not estimated. The upper and
+        /// lower bounds are set as the estimate from `pool`.
         let fromEstimated pool =
             let result =
                 pool

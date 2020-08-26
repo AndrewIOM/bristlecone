@@ -157,7 +157,7 @@ module Bristlecone =
 
         { ResultId   = Guid.NewGuid()
           Likelihood = lowestLikelihood
-          Parameters = bestPoint |> Parameter.Pool.fromPoint constrainedParameters
+          Parameters = bestPoint |> Parameter.Pool.fromPointInTransformedSpace constrainedParameters
           Series     = paired
           Trace      = result
           InternalDynamics = Some estimatedHighRes }

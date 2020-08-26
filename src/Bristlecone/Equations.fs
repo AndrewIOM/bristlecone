@@ -26,12 +26,9 @@ module Likelihood =
 
     /// Negative log likelihood for a bivariate normal distribution.
     /// For two random variables with bivariate normal N(u1,u2,sigma1,sigma2,rho).
-    let internal bivariateGaussian' (p:Parameter.Pool) obsx obsy expx expy = 
+    let internal bivariateGaussian' sigmax sigmay rho obsx obsy expx expy = 
         let diffx = obsx - expx
         let diffy = obsy - expy
-        let sigmax = p |> Parameter.Pool.tryGetEstimate "σ[x]" |> Option.get
-        let sigmay = p |> Parameter.Pool.tryGetEstimate "σ[y]" |> Option.get
-        let rho = p |> Parameter.Pool.tryGetEstimate "ρ" |> Option.get
         let zta1 = (diffx / sigmax) ** 2.
         let zta2 = 2. * rho * ((diffx / sigmax) ** 1.) * ((diffy / sigmay) ** 1.)
         let zta3 = (diffy / sigmay) ** 2.
@@ -42,11 +39,16 @@ module Likelihood =
     /// <summary>
     /// Log likelihood function for dual simultaneous system, assuming Gaussian error for both x and y.
     /// </summary> 
-    let bivariateGaussian key1 key2 p data = 
+    let bivariateGaussian key1 key2 pool data = 
         let x = data |> getData key1
         let y = data |> getData key2
+        let sigmax = pool |> Parameter.Pool.tryGetTransformedValue "σ[x]" |> Option.get
+        let sigmay = pool |> Parameter.Pool.tryGetTransformedValue "σ[y]" |> Option.get
+        let rho = pool |> Parameter.Pool.tryGetTransformedValue "ρ" |> Option.get
         [1 .. (Array.length x.Observed) - 1] 
-        |> List.sumBy (fun i -> (bivariateGaussian' p x.Observed.[i] y.Observed.[i] x.Expected.[i] y.Expected.[i])) 
+        |> List.sumBy (fun i -> (bivariateGaussian' sigmax sigmay rho x.Observed.[i] y.Observed.[i] x.Expected.[i] y.Expected.[i])) 
+
+    
 
 
     // How to refactor likelihood functions?
