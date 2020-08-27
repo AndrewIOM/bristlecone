@@ -4,10 +4,9 @@ framework: auto-detect
 
 source https://nuget.org/api/v2
 
-nuget FSharp.Core 4.3.4
+nuget FSharp.Core 4.5.0
 nuget FSharp.Data
 nuget NETStandard.Library.NETFramework
-nuget RProvider
 nuget MathNet.Numerics
 nuget MathNet.Numerics.FSharp
 nuget Accord.Statistics

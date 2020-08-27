@@ -1,19 +1,19 @@
 namespace Bristlecone.Integration
 
+/// Module provides functions that 'wrap' a raw integration
+/// routine into a form that can be used within Bristlecone.
 module Base =
 
-    open Bristlecone
     open Bristlecone.Logging
+    open Bristlecone.Time
 
-    // Module provides functions that 'wrap' a raw integration
-    // routine into a form that can be used for Bristlecone types
-
+    /// Generates a coded map of time-series where all values are NaN.
     let nanResult tInitial tEnd tStep modelMap =
-        let variables = modelMap |> Map.toArray |> Array.unzip |> fst
+        let variableCodes = modelMap |> Map.toArray |> Array.unzip |> fst
         let fakeSeries =
             let count = (tEnd - tInitial + 1.) / tStep |> int
             [ 1 .. count ] |> List.map (fun _ -> nan ) |> List.toArray
-        variables
+        variableCodes
         |> Array.map (fun k -> (k, fakeSeries) )
         |> Map.ofArray 
 
@@ -68,7 +68,8 @@ module Base =
         |> Map.ofSeq
 
 
-module MsftOslo =
+/// Oslo is an integration library provided by Microsoft Research Cambridge.
+module Oslo =
 
     open Microsoft.Research.Oslo
 

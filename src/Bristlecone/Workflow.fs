@@ -1,6 +1,8 @@
 namespace Bristlecone.Workflow
 
-/// Orchestration module inspired by Tom Petricek: http://fssnip.net/nX
+/// Queue functions to manage many work packages in parallel.
+/// [ Inspired by Tom Petricek: http://fssnip.net/nX ]
+[<RequireQualifiedAccess>]
 module Orchestration =
 
     open Bristlecone.Logging
@@ -17,6 +19,8 @@ module Orchestration =
     let print writeOut s =
         s |> WorkloadEvent |> writeOut
 
+    /// The `OrchestrationAgent` queues work items of the type `Async<EstimationResult>`, which
+    /// are run in parallel up to a total of `maxSimultaneous` at one time.
     type OrchestrationAgent(writeOut, maxSimultaneous, retainResults) = 
 
         let queue = Queue<_>()
