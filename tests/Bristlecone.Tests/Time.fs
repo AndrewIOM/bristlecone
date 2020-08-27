@@ -64,7 +64,7 @@ let timeSeries =
                 "Values were not ordered forwards in time"
 
         testPropertyWithConfig config "Transforming observations to time series and back again has the same 
-            observations, but not necessarily in the same order" <| fun observations ->
+            observations, but not necessarily in the same order" <| fun (observations:TimeSeries.Observation<float> list) ->
             let transformed = observations |> TimeSeries.fromObservations |> TimeSeries.toObservations
             Expect.sequenceEqual (transformed |> Seq.sort) (observations |> Seq.sort) "Observations were transformed by TimeSeries functions"
 
