@@ -60,7 +60,7 @@ let timeSeries =
 
         testPropertyWithConfig config "Create from observations orders data by time" <| fun (data:TimeSeries.Observation<float> list) ->
             let ts = TimeSeries.fromObservations data
-            Expect.equal ts.Values (data |> Seq.map fst |> Seq.sort) 
+            Expect.sequenceEqual ts.Values (data |> Seq.sortBy snd |> Seq.map fst) 
                 "Values were not ordered forwards in time"
 
         testPropertyWithConfig config "Transforming observations to time series and back again has the same 
@@ -121,17 +121,17 @@ let timeIndex =
         testProperty "Years elapsed are whole numbers when same day is used" <| fun (date:DateTime) (yearDiff:NormalFloat) ->
             let date2 = date.AddYears (int yearDiff.Get)
             let diff = TimeIndex.totalYearsElapsed date date2
-            Expect.equal (diff % 0.) 0. "The year difference was not an integer"
+            Expect.equal (diff % 1.) 0. "The year difference was not an integer"
 
         testProperty "Months elapsed are whole numbers when same day of year" <| fun (date:DateTime) (monthDiff:NormalFloat) ->
             let date2 = date.AddMonths (int monthDiff.Get)
             let diff = TimeIndex.totalMonthsElapsed date date2
-            Expect.equal (diff % 0.) 0. "The month difference was not an integer"
+            Expect.equal (diff % 1.) 0. "The month difference was not an integer"
 
-        testProperty "Time series created at a resolution index to whole numbers" <| fun startDate (data:float list) resolution ->
+        testPropertyWithConfig config "Time series created at a specific resolution indexes as whole numbers" <| fun startDate (data:float list) resolution ->
             let ts = TimeSeries.fromSeq startDate resolution data
             let index = TimeIndex.TimeIndex(startDate,resolution,TimeIndex.IndexMode.Exact,ts)
             let timeSteps = index.Values |> Seq.map fst
-            Expect.all timeSteps (fun s -> s % 0. = 0.) "The timesteps contained decimal places"
+            Expect.all timeSteps (fun s -> s % 1. = 0.) "The time steps contained decimal places"
 
     ]

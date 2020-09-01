@@ -117,13 +117,15 @@ module TimeSeries =
     /// Remove all time points that occur before the desired start date.
     let trimStart startDate series =
         let obs = series |> toObservations
-        let startIndex = obs |> Seq.findIndex (fun (_,t) -> t >= startDate)
-        obs
-        |> Seq.toArray
-        |> Array.splitAt startIndex
-        |> snd
-        |> checkMoreThanEqualTo 2
-        |> Option.map fromObservations
+        match obs |> Seq.tryFindIndex (fun (_,t) -> t >= startDate) with
+        | Some startIndex ->
+            obs
+            |> Seq.toArray
+            |> Array.splitAt startIndex
+            |> snd
+            |> checkMoreThanEqualTo 2
+            |> Option.map fromObservations
+        | None -> None
 
     /// Remove all time points that occur after the desired end date.
     let trimEnd endDate series =
@@ -302,7 +304,8 @@ module TimeIndex =
         | Exact
 
     /// Calculates the fractional number of years elapsed between two dates.
-    let totalYearsElapsed (d1:DateTime) (d2:DateTime) =
+    /// The basis used is actual/actual.
+    let totalYearsElapsedFraction (d1:DateTime) (d2:DateTime) =
         let yf1 = float d1.DayOfYear / (if DateTime.IsLeapYear d1.Year then 366. else 365.)
         let yf2 = float d2.DayOfYear / (if DateTime.IsLeapYear d2.Year then 366. else 365.)
         let wholeYears =
@@ -311,6 +314,39 @@ module TimeIndex =
                 if x > d2 then i else addYear x (i + 1)
             addYear d1 0
         yf2 - yf1 + float wholeYears
+
+    /// Algorithm that ignores leap year days.
+    /// Truncation occurs for 29th Feburary.
+    /// Actual days count basis.
+    let totalYearsElapsed' (d1:DateTime) (d2:DateTime) =
+        let feb29th = 60
+        let nonLeapDay (d1:DateTime) = 
+            if d1.DayOfYear > feb29th && DateTime.IsLeapYear d1.Year
+            then d1.DayOfYear
+            else d1.DayOfYear - 1
+        let wholeYears, latestWholeYear =
+            let rec addYear (d:DateTime) i =
+                let x = d.AddYears 1 // DateTime method truncates leap year
+                if x > d2 then (i,d) else addYear x (i + 1)
+            addYear d1 0
+        let yearFraction =
+            let day2 = nonLeapDay d2
+            if latestWholeYear.Year < d2.Year
+            then
+                if DateTime.IsLeapYear d2.Year && day2 > feb29th
+                then float (abs (day2 - latestWholeYear.DayOfYear)) / 366.
+                else float (abs (day2 - latestWholeYear.DayOfYear)) / 365.
+            else
+                let dayDiff = d2.DayOfYear - latestWholeYear.DayOfYear
+                let daysInYear = if DateTime.IsLeapYear d2.Year then 366 else 365
+                if latestWholeYear.DayOfYear < feb29th && d2.DayOfYear > feb29th
+                then float (dayDiff - 1) / float daysInYear
+                else float dayDiff / float daysInYear
+        float wholeYears + yearFraction
+
+    let totalYearsElapsed d1 d2 =
+        if d2 > d1 then totalYearsElapsed' d1 d2
+        else totalYearsElapsed' d2 d1
 
     // TODO Take account of day of month. Currently does not handle varying month lengths
     let totalMonthsElapsed (d1:DateTime) (d2:DateTime) : float =
