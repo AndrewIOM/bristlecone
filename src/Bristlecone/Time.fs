@@ -367,6 +367,7 @@ module TimeIndex =
     /// of the time series.
     type TimeIndex<'a>(baseDate,resolution,mode,series:TimeSeries<'a>) =
         let table = series |> indexSeries baseDate resolution |> Map.ofSeq
+        let tablePairwise = table |> Map.toArray |> Array.pairwise // Ordered in time
         member __.Item
 
             with get(t) : 'a = 
@@ -376,8 +377,8 @@ module TimeIndex =
                     if table.ContainsKey t then table.[t]
                     else
                         // Find the closest points in the index before and after t
-                        match table |> Seq.pairwise |> Seq.tryFind(fun (k1,k2) -> (t - k1.Key) > 0. && (t - k2.Key ) < 0.) with
-                        | Some (p1,p2) -> i (p1.Key, p1.Value) (p2.Key, p2.Value) t
+                        match tablePairwise |> Array.tryFind(fun ((k1,_),(k2,_)) -> (t - k1) > 0. && (t - k2 ) < 0.) with
+                        | Some ((k1,v1),(k2,v2)) -> i (k1, v1) (k2, v2) t
                         | None -> invalidOp <| sprintf "Could not interpolate to time %f because it falls outside the range of the temporal index" t
 
         member __.Baseline = baseDate
