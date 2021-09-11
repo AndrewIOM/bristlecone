@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2018 Andrew Martin
+Copyright (c) [year] [fullname]
 OSLO Integrator Copyright (c) Microsoft Research
 Amoeba Module Copyright (c) 2014 Mathias Brandewinder
 

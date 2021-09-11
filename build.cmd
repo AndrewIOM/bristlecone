@@ -1,9 +1,4 @@
-@echo off
-cls
+echo Restoring dotnet tools...
+dotnet tool restore
 
-dotnet restore build.proj
-
-IF NOT EXIST build.fsx (
-  dotnet fake run init.fsx
-)
 dotnet fake build -t %*

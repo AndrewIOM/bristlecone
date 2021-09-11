@@ -1,24 +1,36 @@
-#### 1.0.0 - 2019-09-10
+# Changelog
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+Unreleased features
+
+### Added
+- A new feature
+
+## 1.0.0 - 2019-09-10
 * FEATURE: Basic component logging of internal model processes.
 * FEATURE: Calculate and save convergence statistics between MCMC chains.
 * FEATURE: Sunlight cache to precompute day length calculations for faster analyses.
-#### 1.0.0-alpha6 - 2019-06-17
+## 1.0.0-alpha6 - 2019-06-17
 * FEATURE: Configuration options for Filzbach and SA optimisation.
 * FEATURE: Calculations for day length (sunrise and sunset) built-in to Bristlecone.Dendro.
 * FEATURE: Calculate confidence intervals using likelihood interval technique.
 * FEATURE: Standardised formats for loading and saving model-selection results. 
-#### 1.0.0-alpha5 - 2019-03-23
+## 1.0.0-alpha5 - 2019-03-23
 * Release net47 and netstandard2.0 versions
 * Automatic documentation (based on ProjectScaffold)
-#### 1.0.0-alpha4 - 2019-03-18
+## 1.0.0-alpha4 - 2019-03-18
 * BUGFIX: Fixed divide by zero error when running `testModel`
-#### 1.0.0-alpha3 - 2019-03-18
+## 1.0.0-alpha3 - 2019-03-18
 * FEATURE: Simulated Annealing optimisation
 * FEATURE: Filzbach-style optimisation
 * FEATURE: Run models using higher-resolution forcing data with lower-resolution observations
 * FEATURE: Measurement variables
-#### 1.0.0-alpha2 - 2019-01-10
+## 1.0.0-alpha2 - 2019-01-10
 * FEATURE: More optimisation algorithms, including: automatic generalised MCMC; Metropolis-within-Gibbs; and Adaptive Metropolis-within-Gibbs
 * FEATURE: Support for 'EndConditions' on optimisation algorithms. The library includes a) number of iterations, and b) linear trends in square jumping distances, as two possibilities.
-#### 1.0.0-alpha1 - 2018-12-20
+## 1.0.0-alpha1 - 2018-12-20
 * FEATURE: Initial release

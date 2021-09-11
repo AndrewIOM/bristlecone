@@ -1,5 +1,6 @@
+Accord.Statistics
 FSharp.Core
 FSharp.Data
 MathNet.Numerics
 MathNet.Numerics.FSharp
-Accord.Statistics
+Microsoft.SourceLink.GitHub

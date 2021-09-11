@@ -1,9 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
-    <PackageLicenseUrl>https://github.com/AndrewIOM/bristlecone/blob/master/LICENSE</PackageLicenseUrl>
-    <Authors>Andrew Martin</Authors>
-    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <TargetFrameworks>net5.0</TargetFrameworks>
+  </PropertyGroup>
+  <PropertyGroup>
+    <Title>Bristlecone</Title>
+    <Description>TODO</Description>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Release'">
+    <Optimize>true</Optimize>
+    <Tailcalls>true</Tailcalls>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Types.fs" />
@@ -23,15 +29,7 @@
     <Compile Include="Solver.fs" />
     <Compile Include="Library.fs" />
     <Compile Include="Equations.fs" />
-    <Compile Include="Language.fs" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="../Bristlecone.Charts.R/charts.fsx" Pack="true" PackagePath=".">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Include="bristlecone.fsx" Pack="true" PackagePath=".">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
+    <Compile Include="Language.fs" />  
   </ItemGroup>
   <ItemGroup>
     <Reference Include="Microsoft.Research.Oslo">
