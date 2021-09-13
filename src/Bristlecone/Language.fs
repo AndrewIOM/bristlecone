@@ -34,6 +34,7 @@ module Language =
     | Arbitrary of (float -> float -> Parameter.Pool -> CodedMap<float> -> float)
     | Mod of ModelExpression * float
     | Exponent of ModelExpression * float
+    | Conditional of ((ModelExpression -> float) -> ModelExpression)
 
     with
         static member (*) (e1, e2) = Multiply[e1; e2]
@@ -72,6 +73,7 @@ module Language =
         | Arbitrary fn -> fn x t pool environment
         | Mod (e, m) -> (compute x t pool environment e) % m
         | Exponent (e, m) -> (compute x t pool environment e) ** m
+        | Conditional m -> m (compute x t pool environment) |> compute x t pool environment
 
     module Writer =
 
@@ -276,124 +278,3 @@ module Language =
         let compile (x:Writer<ModelBuilder.ModelBuilder, ComponentName> list) =
             if x |> List.isEmpty then failwith "No hypotheses specified"
             x |> List.map (map Model.compile >> run)
-
-
-    // let ``predator-prey`` =
-
-    //     let ``dh/dt`` = Parameter "α" * This - Parameter "β" * This * Environment "lynx"
-    //     let ``dl/dt`` = - Parameter "γ" * This + Parameter "Δ" * Environment "hare" * This
-
-    //     Model.empty
-    //     |> Model.addEquation       "hare"   ``dh/dt``
-    //     |> Model.addEquation       "lynx"   ``dl/dt``
-    //     |> Model.estimateParameter "α"      noConstraints 0.10 0.60    // Natural growth rate of hares in absence of predation
-    //     |> Model.estimateParameter "β"      noConstraints 0.10 0.60    // Death rate per encounter of hares due to predation
-    //     |> Model.estimateParameter "Δ"      noConstraints 0.10 0.60    // Efficiency of turning predated hares into lynx
-    //     |> Model.estimateParameter "γ"      noConstraints 0.10 0.60    // Natural death rate of lynx in the absence of food
-    //     |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ "hare"; "lynx" ])
-    //     |> Model.compile
-
-
-    // // An example shrub model using new setup
-    // module TreeRing =
-
-    //     /// Transform δ15N to N availability.
-    //     let nAvailability =
-    //         (Constant 100. * Environment "N" + Constant 309.) / Constant 359.
-
-    //     /// Plant uptake of N from soil, which may be turned on or off
-    //     let uptake f geom =
-    //         (geom This) * This * (f nAvailability)
-
-    //     /// Cumulative stem biomass
-    //     let biomass geom nLimitation =
-    //         Parameter "r" * (uptake nLimitation geom) - Parameter "γ[b]" * This
-
-    //     let soilNitrogen geom feedback limitationName nLimitation =          
-    //         let dndt = Parameter "λ" - Parameter "γ[N]" * nAvailability + feedback This
-    //         if limitationName = "None" then dndt else dndt - (uptake nLimitation geom)
-        
-    //     let toRadiusMM = invalidOp "Cool" // TODO
-
-    //     /// Measurement (Size) variable: stem radius
-    //     let stemRadius lastRadius lastEnv env =
-    //         let oldCumulativeMass = lastEnv |> lookup "bs"
-    //         let newCumulativeMass = env |> lookup "bs"
-    //         if (newCumulativeMass - oldCumulativeMass) > 0.
-    //         then newCumulativeMass |> toRadiusMM
-    //         else lastRadius
-
-    //     let baseModel geom feedback (nLimitMode,nLimitation) =
-    //         Model.empty
-    //         |> Model.addEquation        "bs"    (biomass geom nLimitation)
-    //         |> Model.addEquation        "N"     (soilNitrogen geom feedback nLimitMode nLimitation)
-    //         |> Model.includeMeasure     "x"     stemRadius
-    //         |> Model.estimateParameter  "λ"     notNegative 0.001 0.500
-    //         |> Model.estimateParameter  "γ[N]"  notNegative 0.001 0.200
-    //         |> Model.estimateParameter  "γ[b]"  notNegative 0.001 0.200
-    //         |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.bivariateGaussian "x" "N")
-    //         |> Model.estimateParameter  "ρ"     noConstraints -0.500 0.500
-    //         |> Model.estimateParameter  "σ[x]"  notNegative 0.001 0.100
-    //         |> Model.estimateParameter  "σ[y]"  notNegative 0.001 0.100
-
-
-    //     // Our components:
-
-    //     let chapmanRichards mass = Constant 1. - (mass / (Parameter "k" * Constant 1000.))
-    //     let biomassLoss biomass = (Parameter "ɑ" / Constant 100.) * biomass * Parameter "γ[b]"
-    //     let hollingDiscModelDual' a b h min =
-    //         fun r -> 
-    //             if (a * min) / (1. + (a * b * h * min)) < 1e-12 then nan
-    //             else (a * r) / (1. + (a * b * h * r))
-    //     let hollingDiscModelDual n =
-    //         hollingDiscModelDual'
-    //         |> ComputableFragment.apply (Parameter "a")
-    //         |> ComputableFragment.applyAgain (Parameter "b")
-    //         |> ComputableFragment.applyAgain (Parameter "h")
-    //         |> ComputableFragment.applyAgain (Parameter "min")
-    //         |> ComputableFragment.applyAgain n
-    //         |> ComputableFragment.asBristleconeFunction
-
-    //     let linear' (a:float) min =
-    //         fun r -> if a * min < 1e-12 then nan else a * r
-    //     let linear n =
-    //         linear'
-    //         |> ComputableFragment.apply (Parameter "a")
-    //         |> ComputableFragment.applyAgain (Parameter "min")
-    //         |> ComputableFragment.applyAgain n
-    //         |> ComputableFragment.asBristleconeFunction
-
-    //     let geometricModes = modelComponent "Geometric constraint" [
-    //         subComponent "None" (Constant 1. |> (*))
-    //         subComponent "Chapman-Richards" chapmanRichards
-    //         |> estimateParameter "k" notNegative 3.00 5.00  // Asymptotic biomass (in kilograms)
-    //     ]
-
-    //     let feedbackModes = modelComponent "Plant-Soil Feedback" [
-    //         subComponent "None" (Constant 1. |> (*))
-    //         subComponent "Biomass Loss" biomassLoss
-    //         |> estimateParameter "ɑ" notNegative 0.01 1.00  // N-recycling efficiency
-    //     ]
-
-    //     let limitationModes = modelComponent "N-limitation" [
-    //         subComponent "Saturating" hollingDiscModelDual
-    //         |> estimateParameter "a" notNegative 0.100 0.400
-    //         |> estimateParameter "h" notNegative 0.100 0.400
-    //         |> estimateParameter "r" notNegative 0.500 1.000
-    //         subComponent "Linear" linear
-    //         |> estimateParameter "a" notNegative 0.100 0.400
-    //         |> estimateParameter "r" notNegative 0.500 1.000
-    //         subComponent "None" (Constant 1. |> (*))
-    //         |> estimateParameter "r" notNegative 0.500 1.000
-    //     ]
-
-    //     let hypotheses =
-    //         baseModel
-    //         |> Hypotheses.createFromComponent geometricModes
-    //         |> Hypotheses.useAnother feedbackModes
-    //         |> Hypotheses.useAnotherWithName limitationModes
-    //         |> Hypotheses.compile
-
-    //     // What to do with the model hypotheses once we have them?
-
-        
