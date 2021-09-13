@@ -63,8 +63,7 @@ let engine =
 let startValues = [ ShortCode.create "lynx", 30.09; ShortCode.create "hare", 19.58 ] |> Map.ofList
 
 // TODO Test settings new format
-
-``predator-prey`` |> Bristlecone.testModel engine Options.testSeriesLength startValues Options.iterations []
+//``predator-prey`` |> Bristlecone.testModel engine Options.testSeriesLength startValues Options.iterations []
 
 
 // 3. Load in Real Data
@@ -80,4 +79,4 @@ let data =
 
 // 4. Fit Model to Real Data
 // -----------------------------------
-let result = ``predator-prey`` |> Bristlecone.fit engine (EndConditions.afterIteration Options.iterations) data
+let result = ``predator-prey`` |> Bristlecone.fit engine (Optimisation.EndConditions.afterIteration Options.iterations) data
