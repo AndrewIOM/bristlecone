@@ -35,6 +35,7 @@ module Language =
     | Mod of ModelExpression * float
     | Exponent of ModelExpression * float
     | Conditional of ((ModelExpression -> float) -> ModelExpression)
+    | Invalid
 
     with
         static member (*) (e1, e2) = Multiply[e1; e2]
@@ -74,6 +75,7 @@ module Language =
         | Mod (e, m) -> (compute x t pool environment e) % m
         | Exponent (e, m) -> (compute x t pool environment e) ** m
         | Conditional m -> m (compute x t pool environment) |> compute x t pool environment
+        | Invalid -> nan
 
     module Writer =
 
@@ -116,6 +118,8 @@ module Language =
             | Arbitrary fn -> bind((), "custom component - TODO may use additional parameters?")
             | Mod (e, _) -> describe e
             | Exponent (e, _) -> describe e
+            | Invalid -> bind((), "invalid model")
+            | Conditional _ -> bind((), "conditional element") // TODO
 
     /// Allows common F# functions to use Bristlecone model expressions.
     module ComputableFragment =

@@ -187,3 +187,6 @@ docs/output/
 
 # gh-pages docs
 temp/gh-pages/*
+
+# fsdocs
+output

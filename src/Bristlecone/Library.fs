@@ -184,6 +184,21 @@ module Bristlecone =
 
         type GenerationRule = (ShortCode.ShortCode * (seq<float> -> bool))
 
+        module GenerationRules =
+
+            /// Ensures that all generated values are less than i
+            let alwaysLessThan i variable : GenerationRule =
+                variable, fun data -> data |> Seq.max < i
+
+            /// Ensures that all generated values are greater than i
+            let alwaysMoreThan i variable : GenerationRule =
+                variable, fun data -> data |> Seq.min > i
+
+            /// Ensures that there is always a positive change in values of a variable
+            let monotonicallyIncreasing variable : GenerationRule =
+                variable, fun data -> 
+                    data |> Seq.pairwise |> Seq.map(fun (x1,x2) -> (x2 - x1) > 0.) |> Seq.contains false 
+        
         type TestSettings<'a> = {
             TimeSeriesLength: int
             StartValues: CodedMap<'a>
@@ -195,8 +210,20 @@ module Bristlecone =
             Random: System.Random
             StartDate: DateTime
             Attempts: int
-        }
-
+        } with
+            static member Default = {
+                Resolution = FixedTemporalResolution.Years (PositiveInt.create 1).Value
+                TimeSeriesLength = 30
+                StartValues = Map.empty
+                EndCondition = Optimisation.EndConditions.afterIteration 1000
+                GenerationRules = []
+                NoiseGeneration = fun _ -> id
+                EnvironmentalData = Map.empty
+                Random = MathNet.Numerics.Random.MersenneTwister()
+                StartDate = DateTime(1970,01,01)  
+                Attempts = 50000
+            }
+        
         /// Draw a random set of parameters
         /// TODO Correct handling of constrained parameter values (when drawing parameter sets)
 

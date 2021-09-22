@@ -996,8 +996,7 @@ module Amoeba =
 
     /// Optimise an objective function using a single downhill Nelder Mead simplex.
     let single settings : Optimise<float> =
-        fun rng logger endAt domain f ->
-            Solver.solve settings rng logger endAt domain f
+        Solver.solve settings
 
     /// Optimisation heuristic that creates a swarm of amoeba (Nelder-Mead) solvers.
     /// The swarm proceeds for `numberOfLevels` levels, constraining the starting bounds

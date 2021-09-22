@@ -5,7 +5,8 @@ open Bristlecone
 module PlantIndividual =
 
     open FSharp.Data
-    open Dendro.PlantIndividual
+    open Bristlecone.Dendro.PlantIndividual
+    open Bristlecone.Time
 
     type RingWidthData = CsvProvider<"data-types/ring-width.csv">
     type EnvironmentVariableData = CsvProvider<"data-types/env-variable.csv">

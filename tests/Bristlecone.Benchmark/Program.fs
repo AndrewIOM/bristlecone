@@ -1,9 +1,9 @@
 module Program
 
-open Hopac
-open Logary.Configuration
-open Logary.Adapters.Facade
-open Logary.Targets
+//open Hopac
+//open Logary.Configuration
+//open Logary.Adapters.Facade
+//open Logary.Targets
 open Expecto
 open MathNet.Numerics
 
@@ -19,7 +19,7 @@ type OptimisationProblem = {
 
 module Config =
 
-  // We use a fixed random seed so that the results are reproducable
+  // We use a fixed random seed so that the results are reproducible
   let randomSeed = 20346
   let rng = Random.MersenneTwister(randomSeed, threadSafe = true)
   let startPointCount = 100
@@ -57,7 +57,7 @@ module TestSuite =
     //langermann |> twoDim,   [ 1 .. Config.startPointCount ] |> List.map(fun _ -> twoDimension 0. 10.), -5.1621259, [[2.00299219; 1.006096]]
   ]
 
-  printfn "%A" fixedDimension
+
 
 // 1. Check functions resolve correctly
 [<Tests>]
@@ -131,12 +131,12 @@ let benchmarks = optimTests |> testList "Benchmarks" |> testSequenced
 
 [<EntryPoint>]
 let main argv =
-  let logary =
-    Config.create "Bristlecone.Tests" "localhost"
-    |> Config.targets [ LiterateConsole.create LiterateConsole.empty "console" ]
-    |> Config.processing (Events.events |> Events.sink ["console";])
-    |> Config.build
-    |> run
-  LogaryFacadeAdapter.initialise<Expecto.Logging.Logger> logary
+//  let logary =
+//    Config.create "Bristlecone.Tests" "localhost"
+//    |> Config.targets [ LiterateConsole.create LiterateConsole.empty "console" ]
+//    |> Config.processing (Events.events |> Events.sink ["console";])
+//    |> Config.build
+//    |> run
+//  LogaryFacadeAdapter.initialise<Expecto.Logging.Logger> logary
 
   runTestsInAssemblyWithCLIArgs [] argv
