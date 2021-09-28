@@ -1,3 +1,9 @@
+#### 2.0.0-alpha1 - 2021-09-28
+* FEATURE: Domain Specific Language (DSL) for scaffolding models in the `Bristlecone.Language` namespace.
+* FEATURE: Pass user-defined Random instances to the EstimationEngine to enable working with seeds for reproducing previous results.
+* FEATURE: Automatically generate named hypotheses from nested model systems.
+* BREAKING: We recommend using the DSL to construct models. Underlying F# record type signatures have changed and will break version 1.x scripts.
+
 #### 1.0.0 - 2019-09-10
 * FEATURE: Basic component logging of internal model processes.
 * FEATURE: Calculate and save convergence statistics between MCMC chains.
