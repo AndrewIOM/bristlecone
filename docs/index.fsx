@@ -1,8 +1,23 @@
-(*** hide ***)
-// This block of code is omitted in the generated HTML documentation. Use 
-// it to define helpers that you do not want to show in the documentation.
-#I "../../bin"
-#I "../../bin/Bristlecone/net47"
+(**
+---
+title: Index
+category: Getting Started
+categoryindex: 1
+index: 1
+---
+*)
+
+(*** condition: prepare ***)
+#nowarn "211"
+#r "../src/Bristlecone/bin/Release/netstandard2.0/Bristlecone.dll"
+(*** condition: fsx ***)
+#if FSX
+#r "nuget: Bristlecone,{{package-version}}"
+#endif // FSX
+(*** condition: ipynb ***)
+#if IPYNB
+#r "nuget: Bristlecone,{{package-version}}"
+#endif // IPYNB
 
 (**
 Bristlecone
@@ -27,33 +42,28 @@ Example
 This example demonstrates the layout of a model when defined in Bristlecone.
 
 *)
-#r "Bristlecone.dll"
-open Bristlecone
-open Bristlecone.ModelSystem
+open Bristlecone            // Opens Bristlecone core library and estimation engine
+open Bristlecone.Language   // Open the language for writing Bristlecone models
 
 let hypothesis =
 
-  let vonBertalanffy' eta beta kappa mass =
-      eta * mass ** beta - kappa * mass
+    let vonBertalanffy = 
+        Parameter "η" * This ** Parameter "β" - Parameter "κ" * This
 
-  let vonBertalanffy p t x environment =
-      vonBertalanffy' 
-        (p |> Pool.getEstimate "eta") 
-        (p |> Pool.getEstimate "beta") 
-        (p |> Pool.getEstimate "kappa") x
+    Model.empty
+    |> Model.addEquation       "mass"   vonBertalanffy
+    |> Model.estimateParameter "η"      noConstraints 0.50 1.50 
+    |> Model.estimateParameter "β"      noConstraints 0.01 1.00
+    |> Model.estimateParameter "κ"      noConstraints 0.01 1.00 
+    |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ "mass" ])
+    |> Model.compile
 
-  // B. Define model system
-  { Equations  = [ code "x", vonBertalanffy ] |> Map.ofList
-    Likelihood = ModelLibrary.Likelihood.sumOfSquares ["x"]
-    Measures   = [] |> Map.ofList
-    Parameters = [ code "eta",    parameter Unconstrained   0.001 1.00
-                   code "beta",   parameter Unconstrained   0.001 1.00
-                   code "kappa",  parameter Unconstrained   0.001 1.00 ] |> Map.ofList }
+let engine = 
+    Bristlecone.mkContinuous
+    |> Bristlecone.withTunedMCMC [ ]//Optimisation.MonteCarlo.TuneMethod.CovarianceWithScale 0.750, 200, Optimisation.EndConditions.afterIteration 25000  ]
 
-let engine =
-  Bristlecone.mkContinuous
-  |> Bristlecone.withTunedMCMC []
-  |> Bristlecone.testModel hypothesis
+let testSettings = Bristlecone.Test.TestSettings<float>.Default
+Bristlecone.testModel engine testSettings hypothesis
 
 (**
 In the above snippet, a von Bertalanffy growth model is defined as a hypothesis to test. We then create an `EstimationEngine`, which defines the methodology for model-fitting. In Bristlecone, an `EstimationEngine` is created and customised using the F# forward pipe operator (for R users this may be familiar; this concept was adapted into the dplyr %>% operator). The call to `testModel` generates random test data, and assesses whether the model-fitting method can accurately estimate known parameters.

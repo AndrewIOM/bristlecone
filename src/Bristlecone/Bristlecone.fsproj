@@ -1,8 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
-    <PackageLicenseUrl>https://github.com/AndrewIOM/bristlecone/blob/master/LICENSE</PackageLicenseUrl>
-    <Authors>Andrew Martin</Authors>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
   <ItemGroup>
@@ -26,18 +24,15 @@
     <Compile Include="Language.fs" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="../Bristlecone.Charts.R/charts.fsx" Pack="true" PackagePath=".">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Include="bristlecone.fsx" Pack="true" PackagePath=".">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-  </ItemGroup>
-  <ItemGroup>
     <Reference Include="Microsoft.Research.Oslo">
       <HintPath>Microsoft.Research.Oslo.dll</HintPath>
       <SpecificVersion>False</SpecificVersion>
     </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="../../docs/img/logo.png" Pack="true" PackagePath="/">
+        <PackageCopyToOutput>true</PackageCopyToOutput>
+    </None>
   </ItemGroup>
   <Import Project="..\..\.paket\Paket.Restore.targets" />
 </Project>

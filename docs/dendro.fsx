@@ -1,8 +1,22 @@
-(*** hide ***)
-// This block of code is omitted in the generated HTML documentation. Use 
-// it to define helpers that you do not want to show in the documentation.
-#I "../../bin"
-#I "../../bin/Bristlecone/netstandard2.0"
+(**
+---
+title: Dendroecology
+category: Documentation
+categoryindex: 2
+index: 1
+---
+*)
+(*** condition: prepare ***)
+#nowarn "211"
+#r "../src/Bristlecone/bin/Release/netstandard2.0/Bristlecone.dll"
+(*** condition: fsx ***)
+#if FSX
+#r "nuget: Bristlecone,{{package-version}}"
+#endif // FSX
+(*** condition: ipynb ***)
+#if IPYNB
+#r "nuget: Bristlecone,{{package-version}}"
+#endif // IPYNB
 
 (**
 Bristlecone

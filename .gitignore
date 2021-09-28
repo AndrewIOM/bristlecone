@@ -193,3 +193,4 @@ output
 
 .ionide
 symbolCache.db
+tmp/watch

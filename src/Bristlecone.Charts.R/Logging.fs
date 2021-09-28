@@ -1,9 +1,3 @@
-#I "../Bristlecone/bin/Release/netstandard2.0"
-#I "../../packages/RProvider"
-
-#r "Bristlecone.dll"
-#load "RProvider.fsx"
-
 namespace Bristlecone.Logging
 
 type Device =
@@ -16,7 +10,6 @@ module RHelper =
 
     let (>!>) (plot1:RDotNet.SymbolicExpression) (plot2:RDotNet.SymbolicExpression) = 
         R.``+``(plot1, plot2)
-
 
 module RealTimeTrace =
 
