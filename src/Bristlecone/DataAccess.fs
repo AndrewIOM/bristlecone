@@ -39,7 +39,7 @@ module Config =
         let path = System.IO.DirectoryInfo(directory)
         if path.Exists then
             let t = typeAsLabel dataType
-            sprintf "%sbristlecone-%s-%i-%s-%s.csv" path.FullName subject modelId t (resultId.ToString())
+            sprintf "%sbristlecone-%s-%s-%s-%s.csv" path.FullName subject modelId t (resultId.ToString())
         else invalidArg "directory" "The specified directory does not exist"
 
     let filePathEnsemble directory dataType =
@@ -62,8 +62,8 @@ module Config =
                 | Series -> "series"
                 | Intervals -> "ci"
                 | Components -> "components"
-            let files = path.GetFiles(sprintf "bristlecone-%s-%i-%s-*.csv" subject modelId t)
-            let regex = sprintf "bristlecone-%s-%i-%s-(%s).csv" subject modelId t regexGuid
+            let files = path.GetFiles(sprintf "bristlecone-%s-%s-%s-*.csv" subject modelId t)
+            let regex = sprintf "bristlecone-%s-%s-%s-(%s).csv" subject modelId t regexGuid
             files |> Seq.choose(fun f -> 
                 let m = System.Text.RegularExpressions.Regex.Match(f.Name, regex)
                 if m.Success
@@ -279,7 +279,7 @@ module ModelSelection =
 
     module Row = 
 
-        let fromResult (result:seq<string * int * EstimationResult * AkaikeWeight>) =
+        let fromResult (result:seq<string * string * EstimationResult * AkaikeWeight>) =
             result
             |> Seq.map(fun (subject,hypothesisId,r,aic) ->
                 (subject, hypothesisId, r.ResultId,

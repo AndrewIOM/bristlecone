@@ -224,22 +224,31 @@ module Bristlecone =
                 Attempts = 50000
             }
         
+        type ParameterTestResult = {
+            Identifier: string
+            RealValue: float
+            EstimatedValue: float
+        }
+
+        and TestResult = {
+            Parameters: ParameterTestResult list
+            Series: Map<string,FitSeries>
+            ErrorStructure: Map<string,seq<float>>
+        }
+
         /// Draw a random set of parameters
         /// TODO Correct handling of constrained parameter values (when drawing parameter sets)
-
         let drawParameterSet rnd pool =
             pool
-            |> Parameter.Pool.toList
-            |> List.map (fun (k,v) -> 
+            |> Parameter.Pool.map(fun _ v ->
                 let lower,upper = 
                     match Parameter.bounds v with
                     | Some b -> b
                     | None -> failwith "Parameters already estimated"
                 let trueValue = Statistics.Distributions.ContinuousUniform.draw rnd lower upper ()
                 match Parameter.setTransformedValue v trueValue with
-                | Ok p -> k,p
+                | Ok p -> p
                 | Error e -> failwith e )
-            |> Parameter.Pool.fromList
 
         /// Generate a fixed-resolution time-series for testing model fits
         let generateFixedSeries writeOut equations timeMode seriesLength startPoint startDate resolution env theta =
@@ -266,17 +275,22 @@ module Bristlecone =
             |> testSettings.NoiseGeneration theta
             |> generateMeasures model.Measures testSettings.StartValues
 
-        /// Check rule conditions
-        let rec ruleCheck rules attempts series = 
+        /// Generate data and check that it complies with the
+        /// given ruleset.
+        let rec generateAndCheck (engine:EstimationEngine.EstimationEngine<'a,'b>) settings (model:ModelSystem.ModelSystem) attempts = 
+            let theta = drawParameterSet engine.Random model.Parameters
+            let series = generateData engine model settings theta
             let brokeTheRules = 
-                rules
+                settings.GenerationRules
                 |> List.map(fun (key,ruleFn) -> series |> Map.find key |> TimeSeries.toObservations |> Seq.map fst |> ruleFn)
                 |> List.contains false
             if brokeTheRules then
                 if attempts = 0 
                 then Error "Could not generate data that complies with the given ruleset" 
-                else ruleCheck rules (attempts - 1) series
-            else Ok series
+                else generateAndCheck engine settings model (attempts - 1)
+            else Ok (series, theta)
+
+    open Test
 
     /// **Description**
     /// Test that the specified estimation engine can correctly estimate known parameters. Random parameter sets are generated from the given model system.
@@ -284,16 +298,32 @@ module Bristlecone =
     ///   * `model` - a `ModelSystem` of equations and parameters
     ///   * `testSettings` - settings
     ///   * `engine` - an `EstimationEngine`
-    let testModel engine (settings:Test.TestSettings<float>) (model:ModelSystem) =
-        let theta = Test.drawParameterSet settings.Random model.Parameters
-        engine.LogTo <| GeneralEvent (sprintf "The true parameters are: %A" theta)
-        let trueData = 
-            Test.generateData engine model settings theta 
-            |> Test.ruleCheck settings.GenerationRules settings.Attempts
+    let testModel engine (settings:Test.TestSettings<float>) (model:ModelSystem) : Result<Test.TestResult,string> =
+        engine.LogTo <| GeneralEvent "Attempting to generate parameter set."
+        engine.LogTo <| GeneralEvent (sprintf "The data must comply with %i rules after %i tries." settings.GenerationRules.Length settings.Attempts)
+        let trueData = Test.generateAndCheck engine settings model settings.Attempts
         match trueData with
-        | Ok d -> 
+        | Ok (d,theta) -> 
             let estimated = fit engine settings.EndCondition (Map.merge d settings.EnvironmentalData (fun x y -> x)) model
-            (estimated, trueData, theta) |> Ok
+            let paramDiffs : Test.ParameterTestResult list =
+                estimated.Parameters
+                |> Parameter.Pool.toList
+                |> List.map(fun (k,v) ->
+                    let est = Parameter.getEstimate v
+                    let real = theta |> Parameter.Pool.toList |> List.find (fun (k2,v) -> k2 = k) |> snd |> Parameter.getEstimate
+                    match est with
+                    | Ok e ->
+                        match real with
+                        | Ok r -> {
+                            Identifier = k.Value
+                            RealValue = r
+                            EstimatedValue = e }
+                        | Error _ -> failwith "Error"
+                    | Error _ -> failwith "Error" )
+            let errorStructure = estimated.Series |> Seq.map(fun k -> k.Key.Value, k.Value.Values |> Seq.map(fun t -> (t.Fit - t.Obs) ** 2. )) |> Map.ofSeq
+            { ErrorStructure = errorStructure
+              Parameters = paramDiffs
+              Series = estimated.Series |> Seq.map(fun k -> k.Key.Value, k.Value) |> Map.ofSeq } |> Ok
         | Error e -> Error e
 
     /// **Description**

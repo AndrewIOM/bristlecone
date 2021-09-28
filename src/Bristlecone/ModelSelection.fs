@@ -9,7 +9,7 @@ open Bristlecone.ModelSystem
 module ResultSet =
 
     /// A representation of all results for a particular subject and hypothesis
-    type ResultSet<'subject,'hypothesis> = ('subject * 'hypothesis * int * (EstimationResult seq * EstimationResult) option)
+    type ResultSet<'subject,'hypothesis> = ('subject * 'hypothesis * string * (EstimationResult seq * EstimationResult) option)
 
     /// Arrange estimation results into subject and hypothesis groups.
     let arrangeResultSets subjects hypotheses getResults : ResultSet<'a,'hypothesis> seq =
@@ -17,12 +17,12 @@ module ResultSet =
         |> Seq.map (fun (s,(hi,h)) ->
             let r = getResults s h hi
             if r |> Seq.isEmpty
-            then (s, h, hi, None )
+            then (s, h, hi.ToString(), None )
             else 
                 let r' = r |> Seq.filter(fun x -> not (System.Double.IsNaN(x.Likelihood)))
                 if Seq.isEmpty r'
-                then (s, h, hi, None )
-                else (s, h, hi, (r', r' |> Seq.minBy(fun x -> x.Likelihood)) |> Some))
+                then (s, h, hi.ToString(), None )
+                else (s, h, hi.ToString(), (r', r' |> Seq.minBy(fun x -> x.Likelihood)) |> Some))
 
 /// Functions for conducting Akaike Information Criterion (AIC).
 module Akaike =

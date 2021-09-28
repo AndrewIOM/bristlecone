@@ -12,7 +12,7 @@ module Convergence =
     /// A per-parameter convergence statistic. The statistic used is given in `StatisticName`.
     type ConvergenceStatistic = {
         Subject: string
-        HypothesisId: int
+        HypothesisId: string
         Parameter: ShortCode.ShortCode
         StatisticName: string
         StatisticValue: float
@@ -23,7 +23,7 @@ module Convergence =
     /// perfect convergence between all chains.
     let gelmanRubin n (result:ResultSet.ResultSet<string,ModelSystem>) =
         let subjectId,_,hi,r = result
-        printfn "Calculating Rhat for %s %i" subjectId hi
+        printfn "Calculating Rhat for %s %s" subjectId hi
         match r with
         | Some (results, mle) ->
             let chains = 

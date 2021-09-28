@@ -19,6 +19,10 @@ module Language =
     let (|NotEmptyList|_|) list =
         if list |> List.isEmpty then None else Some list
 
+    type ArbitraryRequirement =
+    | ArbitraryParameter of string
+    | ArbitraryEnvironment of string
+
     /// A model or model fragment that can be interpreted to a mathematical
     /// expression by Bristlecone.
     type ModelExpression =
@@ -31,9 +35,9 @@ module Language =
     | Subtract of ModelExpression * ModelExpression
     | Multiply of ModelExpression list // List must not be an empty list?
     | Divide of ModelExpression * ModelExpression
-    | Arbitrary of (float -> float -> Parameter.Pool -> CodedMap<float> -> float)
-    | Mod of ModelExpression * float
-    | Exponent of ModelExpression * float
+    | Arbitrary of (float -> float -> Parameter.Pool -> CodedMap<float> -> float) * list<ArbitraryRequirement>
+    | Mod of ModelExpression * ModelExpression
+    | Exponent of ModelExpression * ModelExpression
     | Conditional of ((ModelExpression -> float) -> ModelExpression)
     | Invalid
 
@@ -43,7 +47,7 @@ module Language =
         static member (+) (e1, e2) = Add[e1; e2]
         static member (-) (e1, e2) = Subtract(e1, e2)
         static member (%) (e1, remainder) = Mod(e1, remainder)
-        static member ``(**)`` (e1, pow) = Exponent(e1, pow)
+        static member Pow (e1, pow) = Exponent(e1, pow)
         static member (~-) e = Multiply[e; Constant -1.]
 
     /// Computes a `ModelExpression` given the current time, value,
@@ -57,7 +61,7 @@ module Language =
             | Some i -> i
             | None -> failwithf "The equation could not be calculated. The environmental data '%s' has not been configured." name
         | Parameter name ->
-            match pool |> Parameter.Pool.tryGetTransformedValue name with
+            match pool |> Parameter.Pool.tryGetRealValue name with
             | Some est -> est
             | None -> failwithf "The equation could not be calculated. The parameter '%s' has not been set up." name
         | Constant n -> n
@@ -71,9 +75,9 @@ module Language =
             | NotEmptyList l -> l |> List.map (compute x t pool environment) |> List.fold (*) 1.
             | _ -> failwith "List was empty"
         | Divide (l,r) -> compute x t pool environment l / compute x t pool environment r
-        | Arbitrary fn -> fn x t pool environment
-        | Mod (e, m) -> (compute x t pool environment e) % m
-        | Exponent (e, m) -> (compute x t pool environment e) ** m
+        | Arbitrary (fn,_) -> fn x t pool environment
+        | Mod (e, m) -> (compute x t pool environment e) % (compute x t pool environment m)
+        | Exponent (e, m) -> (compute x t pool environment e) ** (compute x t pool environment m)
         | Conditional m -> m (compute x t pool environment) |> compute x t pool environment
         | Invalid -> nan
 
@@ -115,7 +119,7 @@ module Language =
                 | NotEmptyList l -> bind((), "multiply") // TODO
                 | _ -> failwith "List was empty"
             | Divide (l,r) -> describe l |> flatMap (fun () -> describe r)
-            | Arbitrary fn -> bind((), "custom component - TODO may use additional parameters?")
+            | Arbitrary (fn,reqs) -> bind((), "custom component - TODO may use additional parameters?")
             | Mod (e, _) -> describe e
             | Exponent (e, _) -> describe e
             | Invalid -> bind((), "invalid model")
@@ -124,19 +128,26 @@ module Language =
     /// Allows common F# functions to use Bristlecone model expressions.
     module ComputableFragment =
 
+        open Writer
+
         // Takes the standard arguments and computes
         type ComputableFragment = float -> float -> CodedMap<float> -> CodedMap<float> -> ModelExpression
 
         // Represents a compute function for model expressions
         type Compute = float -> float -> CodedMap<float> -> CodedMap<float> -> ModelExpression -> float
 
+        /// Apply a Bristlecone model expression to a custom arbitrary function.
         let apply (ex:ModelExpression) fn =
-            fun x t p e -> fn (compute x t p e ex)
+            bind((fun x t p e -> fn (compute x t p e ex)), ex)
 
-        let applyAgain b (fn:float -> float -> Parameter.Pool -> CodedMap<float> ->(float -> 'b)) =
-            fun x t p e -> fn x t p e (compute x t p e b)
+        /// Apply additional parameters as Bristlecone expressions to an arbitrary function.
+        let applyAgain ex fn =
+            let fx expr = bind((fun x t p e -> expr x t p e (compute x t p e ex)), ex)
+            flatMap fx fn
 
-        let asBristleconeFunction = Arbitrary
+        let asBristleconeFunction fragment = 
+            run fragment |> Arbitrary
+ 
 
     /// Scaffolds a `ModelSystem` for fitting with Bristlecone.
     module ModelBuilder =
@@ -193,9 +204,9 @@ module Language =
                 |> Seq.map(fun (c,f) -> match f with | EquationFragment e -> Some (c,e) | _ -> None )
                 |> Seq.choose id |> Map.ofSeq
 
-            let requirements =
-                equations
-                |> Map.map (fun k v -> ExpressionParser.describe v |> Writer.run |> snd)
+            // let requirements =
+            //     equations
+            //     |> Map.map (fun k v -> ExpressionParser.describe v |> Writer.run |> snd)
 
             // 1. Check all requirements are met (equations, measures, likelihood fn)
 
@@ -247,10 +258,20 @@ module Language =
 
         open Writer
 
+        let internal nFirstLetters n (s:string) =
+            (s.Split(' ')
+            |> Seq.map(fun s -> s |> Seq.truncate n)
+            |> string).ToUpper()
+
         type ComponentName = {
             Component: string
             Implementation: string
         }
+
+        with 
+            member this.Reference =
+                sprintf "%s_%s" (nFirstLetters 2 this.Component)
+                    (nFirstLetters 3 this.Implementation)
 
         /// Implement a component where a model system requires one. A component is
         /// a part of a model that may be varied, for example between competing
@@ -258,27 +279,33 @@ module Language =
         let createFromComponent comp x =
             if snd comp |> List.isEmpty then failwithf "You must specify at least one implementation for the '%s' component" (fst comp)
             let name i = { Component = fst comp; Implementation = i }
-            comp |> snd |> List.map(fun (n,c) -> bind(x c.Expression, name n))
+            comp |> snd |> List.map(fun (n,c) -> bind(x c.Expression, (name n, c.Parameters)))
 
         /// Implement a second or further component on a model system where one is
         /// still required. 
         let useAnother comp x =
             let name i = { Component = fst comp; Implementation = i }
             List.allPairs (snd comp) x
-            |> List.map(fun ((n,c), model) -> model |> flatMap(fun m -> bind(m c.Expression, name n)))
+            |> List.map(fun ((n,c), model) -> model |> flatMap(fun m -> bind(m c.Expression, (name n, c.Parameters))))
 
-        /// with name
-        let useAnotherWithName comp (x:list<Writer<string * (ModelExpression -> ModelExpression) -> ModelBuilder.ModelBuilder,ComponentName>>) =
+        let useAnotherWithName comp x =
             let name i = { Component = fst comp; Implementation = i }
             List.allPairs (snd comp) x
-            |> List.map(fun ((n,c), model) -> model |> flatMap(fun m -> bind(m (n,c.Expression), name n)))
+            |> List.map(fun ((n,c), model) -> model |> flatMap(fun m -> bind(m (n,c.Expression), (name n, c.Parameters))))
 
-        let internal compileNames (names:ComponentName list) =
-            names.ToString()
+        /// Adds parameters from model components into the base model builder.
+        let internal addParameters ((modelBuilder, newParams):ModelBuilder.ModelBuilder * List<ComponentName * CodedMap<Parameter.Parameter>>) =
+            newParams 
+            |> List.collect (snd >> Map.toList)
+            |> List.fold(fun mb (name,p) -> mb |> ModelBuilder.add name.Value (ModelBuilder.ParameterFragment p)) modelBuilder
 
         /// Compiles a suite of competing model hypotheses based on the given components.
         /// The compilation includes only the required parameters in each model hypothesis, 
         /// and combines all labels into a single model identifier.
-        let compile (x:Writer<ModelBuilder.ModelBuilder, ComponentName> list) =
+        let compile (x:Writer<ModelBuilder.ModelBuilder, ComponentName * CodedMap<Parameter.Parameter>> list) =
             if x |> List.isEmpty then failwith "No hypotheses specified"
-            x |> List.map (map Model.compile >> run)
+            //x |> List.map (map Model.compile >> run)
+            x |> List.map (fun h ->
+                let names = run h
+                names |> addParameters |> Model.compile,
+                names |> snd |> List.map fst)

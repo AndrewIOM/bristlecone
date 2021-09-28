@@ -1,4 +1,5 @@
 namespace Bristlecone
+open System
 
 [<RequireQualifiedAccess>]
 module Parameter =
@@ -21,21 +22,22 @@ module Parameter =
 
     type Parameter = private Parameter of Constraint * ConstraintMode * Estimation
 
-    let internal transformOut con value =
+    let internal transformIn con value =
         match con with
         | Unconstrained -> value
         | PositiveOnly -> exp value
 
-    let internal transformIn con value =
+    let internal transformOut con value =
         match con with
         | Unconstrained -> value
         | PositiveOnly -> log value
 
     let private unwrap (Parameter (c,m,e)) = c,m,e
 
-    let internal isValidParamValue num =
+    let internal isValidParamValue con num =
         not (System.Double.IsInfinity num) &&
-        not (System.Double.IsNaN num)
+        not (System.Double.IsNaN num) &&
+        if (con = PositiveOnly) then num > 0. else true
 
     let internal validBounds con bound1 bound2 =
         match con with
@@ -47,7 +49,7 @@ module Parameter =
     /// initial value from the given bounds. To retrieve the estimated
     /// parameter value, use `Parameter.finalise`.
     let create con bound1 bound2 =
-        if isValidParamValue bound1 && isValidParamValue bound2 && 
+        if isValidParamValue con bound1 && isValidParamValue con bound2 && 
             validBounds con bound1 bound2
         then
             let min = [bound1; bound2] |> Seq.min
@@ -86,12 +88,16 @@ module Parameter =
     /// Set the parameter's value, where `value` is in
     /// transformed parameter space.
     let internal setTransformedValue parameter value =
-        if isValidParamValue value then 
-            let c,m,_ = parameter |> unwrap
-            match m with
-            | Detached -> Parameter (c, m, Estimated value) |> Ok
-            | Transform -> Parameter (c, m, value |> transformIn c |> Estimated) |> Ok
-        else Error <| sprintf "Cannot set parameter value as %f" value
+        let con,m,_ = parameter |> unwrap
+        match m with
+        | Detached -> 
+            match isValidParamValue con value with 
+            | true -> Parameter (con, m, Estimated value) |> Ok
+            | false -> Error <| sprintf "Cannot set parameter value as %f" value
+        | Transform -> 
+            match transformIn con value with
+            | v when isValidParamValue con v -> Parameter (con, m, value |> transformIn con |> Estimated) |> Ok
+            | _ -> Error <| sprintf "Cannot set parameter value as %f" value
 
     /// Detaches any constraints such that the parameter's
     /// transformed space equals normal space.
@@ -113,9 +119,20 @@ module Parameter =
         let toList pool = (pool |> unwrap) |> Map.toList
 
         /// Returns Some value if a parameter with the `key`
-        /// exists in the Pool. 
+        /// exists in the Pool. The value returned is transformed
+        /// for an unconstrained parameter space.
         let internal tryGetTransformedValue key (pool:ParameterPool) : float option =
             pool |> toList |> List.tryFind (fun (x,_) -> x.Value = key) |> Option.map snd |> Option.map getTransformedValue
+
+        let private resultToOption r =
+            match r with
+            | Ok x -> Some x
+            | Error _ -> None
+
+        /// Gets the 'real' / non-transformed value for use in model
+        /// calculation.
+        let internal tryGetRealValue key (pool:ParameterPool) : float option =
+            pool |> toList |> List.tryFind (fun (x,_) -> x.Value = key) |> Option.map snd |> Option.bind (getEstimate >> resultToOption)
 
         /// Returns the starting bounds in transformed parameter space if
         /// the parameter has not been estimated. If the parameter has already
@@ -129,6 +146,8 @@ module Parameter =
         let count pool = (pool |> unwrap).Count
 
         let fromList list = list |> Map.ofList |> Pool
+
+        let map f pool = pool |> unwrap |> Map.map f |> Pool
 
         /// Retrieves the bounds for un-estimated parameters in the `Pool`
         /// in the form required by optimisation functions. If one or more

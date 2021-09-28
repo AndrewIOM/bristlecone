@@ -1,12 +1,12 @@
 namespace Bristlecone.Data
 
 open Bristlecone
+open Bristlecone.Time
+open Bristlecone.Dendro
 
 module PlantIndividual =
 
     open FSharp.Data
-    open Bristlecone.Dendro.PlantIndividual
-    open Bristlecone.Time
 
     type RingWidthData = CsvProvider<"data-types/ring-width.csv">
     type EnvironmentVariableData = CsvProvider<"data-types/env-variable.csv">
@@ -21,12 +21,12 @@ module PlantIndividual =
                 |> Seq.sortBy (fun i -> i.Date)
                 |> Seq.map (fun i -> (float i.``Increment (mm)`` * 1.<mm>, i.Date))
                 |> TimeSeries.fromObservations
-                |> Absolute
-                |> RingWidth
-            { Identifier = code |> ShortCode.create
+                |> GrowthSeries.Absolute
+                |> PlantIndividual.RingWidth
+            { Identifier = code |> ShortCode.create |> Option.get
               Growth = growth
               InternalControls = [] |> Map.ofList
-              Environment = [] |> Map.ofList })
+              Environment = [] |> Map.ofList } : PlantIndividual.PlantIndividual)
         |> Seq.toList
 
     let loadLocalEnvironmentVariable (fileName: string) =

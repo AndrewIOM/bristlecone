@@ -1,16 +1,23 @@
 namespace Bristlecone.Dendro
 
+open Bristlecone
+open Bristlecone.Time
+
+[<RequireQualifiedAccess>]
+module EnvironmentalVariables =
+
+    type RegionalEnvironment = CodedMap<TimeSeries<float>>
+    type LocalEnvironment = CodedMap<TimeSeries<float>>
+
+// Year
+[<Measure>] type year
+
+// Millimetre
+[<Measure>] type mm
+
+[<RequireQualifiedAccess>]
 module PlantIndividual =
 
-    open Bristlecone
-    open EnvironmentalVariables
-    open Time
-
-    // Year
-    [<Measure>] type year
-
-    // Millimetre
-    [<Measure>] type mm
 
     type PlantGrowth =
         | RingWidth of GrowthSeries.GrowthSeries<mm>
@@ -25,7 +32,7 @@ module PlantIndividual =
         Identifier: ShortCode.ShortCode
         Growth: PlantGrowth
         InternalControls: Map<ShortCode.ShortCode,Trait>
-        Environment: LocalEnvironment
+        Environment: EnvironmentalVariables.LocalEnvironment
     }
 
     let removeUnit (x:float<_>) =
@@ -88,8 +95,8 @@ module PlantIndividual =
         let startDate = startDates |> List.map snd |> List.max
         let endDate = endDates |> List.min
         let mapts f = TimeSeries.map f
-        { plant with Environment = plant.Environment |> Map.toList |> List.map (fun (x,y) -> x,y |> TimeSeries.bound startDate endDate) |> Map.ofList
-                     Growth = plant.Growth |> growthSeries |> GrowthSeries.growthToTime |> TimeSeries.bound startDate endDate |> mapts (fun (x,t) -> x * 1.<mm>) |> GrowthSeries.Absolute |> RingWidth }
+        { plant with Environment = plant.Environment |> Map.toList |> List.map (fun (x,y) -> x,y |> TimeSeries.bound startDate endDate |> Option.get) |> Map.ofList
+                     Growth = plant.Growth |> growthSeries |> GrowthSeries.growthToTime |> TimeSeries.bound startDate endDate |> Option.get |> TimeSeries.map (fun (x,t) -> x * 1.<mm>) |> GrowthSeries.Absolute |> RingWidth }
 
     let keepCommonYears (plant:PlantIndividual) =
         let allSeries = 

@@ -10,6 +10,7 @@ nuget NETStandard.Library.NETFramework
 nuget MathNet.Numerics
 nuget MathNet.Numerics.FSharp
 nuget Accord.Statistics
+nuget RProvider 2.0.0-beta
 
 nuget Argu
 nuget Expecto

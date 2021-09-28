@@ -1,2 +1,2 @@
-PlantCode (string), Hypothesis (int), Variable (string), Time (date), Expected (float), Observed (float), Likelihood (float)
-YUSl39A,2,xx,2012-01-01,-2.0,-20.,21.2
+PlantCode (string), Hypothesis (string), Variable (string), Time (date), Expected (float), Observed (float), Likelihood (float)
+YUSl39A,some-id,xx,2012-01-01,-2.0,-20.,21.2

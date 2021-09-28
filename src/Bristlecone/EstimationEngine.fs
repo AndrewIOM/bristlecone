@@ -2,12 +2,6 @@ namespace Bristlecone
 
 open Bristlecone.Time
 
-module EnvironmentalVariables =
-
-    type RegionalEnvironment = CodedMap<TimeSeries<float>>
-    type LocalEnvironment = CodedMap<TimeSeries<float>>
-
-
 /// Represents an ordinary differential equation model system and
 /// its likelihood as as objective function that may be optimised.
 module ModelSystem =

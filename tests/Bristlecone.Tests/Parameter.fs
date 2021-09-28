@@ -43,14 +43,14 @@ let parameters =
         ]
 
         testList "Starting bounds" [
-            testProperty "When positively-constrained, bounds are exponentiated" <| fun bound1 bound2 ->
+            testProperty "When positively-constrained, bounds are logged" <| fun bound1 bound2 ->
                 match Parameter.create Parameter.Constraint.PositiveOnly bound1 bound2 with
                 | None -> ()
                 | Some p -> 
                     match p |> Parameter.bounds with
                     | Some (low,up) -> 
-                        Expect.equal ([ bound1; bound2 ] |> Seq.min |> exp) low "Lower bounds were different"
-                        Expect.equal ([ bound1; bound2 ] |> Seq.max |> exp) up "Upper bounds were different"
+                        Expect.equal ([ bound1; bound2 ] |> Seq.min |> log) low "Lower bounds were different"
+                        Expect.equal ([ bound1; bound2 ] |> Seq.max |> log) up "Upper bounds were different"
                     | None -> failtestf "Bounds were not accessible when they should be"
 
             testProperty "When unconstrained, bounds equal creation-time bounds" <| fun bound1 bound2 ->
@@ -64,7 +64,14 @@ let parameters =
                     | None -> failtestf "Bounds were not accessible when they should be"
         ]
 
+
         testList "Internal access (for optimisation)" [
+            testProperty "Internal transform in undoes transform out" <| fun c (value:FsCheck.NormalFloat) ->
+                if c = Parameter.Constraint.PositiveOnly && value.Get <= 0. then ()
+                else 
+                    let transformed = value.Get |> Parameter.transformOut c |> Parameter.transformIn c
+                    Expect.floatClose Accuracy.high transformed value.Get "Transform process modified values"
+
             testProperty "Transformed value cannot be set as infinite or nan" <| fun con bound1 bound2 setAs ->
                 match Parameter.create con bound1 bound2 with
                 | None -> ()
@@ -78,7 +85,7 @@ let parameters =
                 | None -> ()
                 | Some p ->
                     let estimated = Parameter.setTransformedValue p setAs
-                    let internalVal = Parameter.transformOut con setAs
+                    let internalVal = Parameter.transformIn con setAs
                     if Double.IsNaN internalVal || Double.IsInfinity internalVal
                     then Expect.isError estimated "Did not error when internal value was infinity or NaN"
 
@@ -97,7 +104,10 @@ let parameters =
             | None -> ()
             | Some p ->
                 match Parameter.setTransformedValue p (setAs.Get |> Parameter.transformOut con) with
-                | Ok p -> Expect.equal (p |> Parameter.getEstimate) (Ok setAs.Get) "finalise returned a different value to that set"
+                | Ok p -> 
+                    match p |> Parameter.getEstimate with
+                    | Ok e -> Expect.floatClose Accuracy.high e setAs.Get "the estimate was different to that set"
+                    | _ -> failwith "Could not get the parameter estimate"
                 | Error _ -> ()
 
         testList "Detached mode" [

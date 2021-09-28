@@ -65,7 +65,7 @@ let modelExpressionOperators =
 
         testProperty "Modulus operator finds mod of constant" <| fun (a:NormalFloat) (b:NormalFloat) x t pool env ->
             if b.Get = 0. then true // Can't do mod of 0
-            else Constant a.Get % b.Get |> compute x t pool env = a.Get % b.Get
+            else Constant a.Get % Constant b.Get |> compute x t pool env = a.Get % b.Get
     
         testProperty "Negative sign negates value" <| fun (a:NormalFloat) x t pool env ->
             - Constant a.Get |> compute x t pool env = - a.Get
@@ -90,10 +90,10 @@ let modelExpressions =
             | Some p -> Expect.equal (f ()) (p |> snd |> Parameter.getTransformedValue) "Did not fail when parameter was not present"
             | None -> Expect.throws (fun () -> f |> ignore) "Parameter was not present"
 
-        testPropertyWithConfig config "Getting parameter values returns correct value when present" <| fun pool x t e ->
+        testPropertyWithConfig config "Getting parameter values returns real value when present" <| fun pool x t e ->
             let selectedCode = Gen.elements (pool |> Parameter.Pool.toList |> List.map fst) |> Gen.sample 1 1 |> List.head
             let result = Parameter selectedCode.Value |> compute x t pool e
-            let existingValue = pool |> Parameter.Pool.tryGetTransformedValue selectedCode.Value |> Option.get
+            let existingValue = pool |> Parameter.Pool.tryGetRealValue selectedCode.Value |> Option.get
             Expect.equal result existingValue "The parameter value was not correct"
 
         testProperty "Fails when environmental (aka time-varying) data is not present" <| fun code x t pool e ->
@@ -140,9 +140,13 @@ let modelBuilder =
                 Model.empty 
                 |> Model.useLikelihoodFunction likelihood 
                 |> Model.addEquation "eq1" eq1
-            measures |> Seq.fold (fun mb (n,m) -> mb |> Model.includeMeasure n m) model |> Model.compile
+            measures |> Seq.fold (fun mb (n,m) -> mb |> Model.includeMeasure n m) model |> Model.compile |> ignore
 
         testProperty "Doesn't compile if duplicate keys exist" <| fun likelihood eqs measures ->
+            
+            // May fail if strings are null or empty
+            // May fail if same string within group (e.g. equations)
+            
             let model = eqs |> Seq.fold (fun mb (n,eq) -> mb |> Model.addEquation n eq) (Model.empty |> Model.useLikelihoodFunction likelihood)
             let keys = [(eqs |> List.map fst); (measures |> List.map fst)] |> List.concat
             if keys.Length = (keys |> List.distinct |> List.length)
@@ -161,13 +165,43 @@ let modelBuilder =
 // let computableFragments =
 //     testList "Computable fragments" [
 
-//         testProperty "" <| fail
+//         testProperty "" <| fun x ->
+
+//             let someFun x t z =
+//                 x + t * 1.0 - z
+
+//             let fragment = 
+//                 someFun
+//                 |> ComputableFragment.apply This
+//                 |> ComputableFragment.applyAgain Time
+//                 |> ComputableFragment.applyAgain (Environment "z")
+//                 //|> ComputableFragment.asBristleconeFunction
+            
+//             let fragment2 = fragment |> ComputableFragment.asBristleconeFunction
+
+//             // Get something 
+            
+
+//             fragment
 
 //     ]
 
 [<Tests>]
 let hypotheses =
     testList "Hypotheses (nested model systems)" [
+
+        // testProperty "Components must have at least one implementation" <| fun baseModel components ->
+        //     if components |> List.isEmpty
+        //     then Expect.throws (fun () -> Hypotheses.createFromComponent components baseModel |> ignore) ""
+
+        // testProperty "Sub-component parameters are included in final models" <| fun baseModel (name:ShortCode.ShortCode) comp ->
+        //     let h = baseModel |> Hypotheses.createFromComponent (name.Value, comp) |> Hypotheses.compile
+        //     let p = 
+        //         comp
+        //         |> List.map(fun (n,p) -> p.Parameters)
+        //         |> List.zip h
+        //         |> List.map(fun ((h1,_), p2) -> h1.Parameters, p2)
+        //     Expect.all p (fun (pool,p2) -> p2 |> Map.map(fun k _ -> pool |> Parameter.Pool.toList |> Map.containsKey k) |> Map.toList |> List.map snd)
 
 //         testProperty "Sub-components must have unique IDs" <| fun baseModel comp ->
 //             //Expect.throws(baseModel |> Hypotheses.createFromComponent comp) ""
