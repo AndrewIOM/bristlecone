@@ -1,11 +1,15 @@
-namespace Bristlecone.ModelSelection
+module Bristlecone.ModelSelection
 
+open Bristlecone
+open Bristlecone.ModelSystem
+
+/// Organises multiple hypotheses and multiple subjects into
+/// distinct analysis groups.
+[<RequireQualifiedAccess>]
 module ResultSet =
 
-    open Bristlecone.ModelSystem
-
     /// A representation of all results for a particular subject and hypothesis
-    type ResultSet<'subject,'hypothesis> = ('subject * 'hypothesis * int * (EstimationResult seq * EstimationResult) option)
+    type ResultSet<'subject,'hypothesis> = ('subject * 'hypothesis * string * (EstimationResult seq * EstimationResult) option)
 
     /// Arrange estimation results into subject and hypothesis groups.
     let arrangeResultSets subjects hypotheses getResults : ResultSet<'a,'hypothesis> seq =
@@ -13,18 +17,15 @@ module ResultSet =
         |> Seq.map (fun (s,(hi,h)) ->
             let r = getResults s h hi
             if r |> Seq.isEmpty
-            then (s, h, hi, None )
+            then (s, h, hi.ToString(), None )
             else 
                 let r' = r |> Seq.filter(fun x -> not (System.Double.IsNaN(x.Likelihood)))
                 if Seq.isEmpty r'
-                then (s, h, hi, None )
-                else (s, h, hi, (r', r' |> Seq.minBy(fun x -> x.Likelihood)) |> Some))
+                then (s, h, hi.ToString(), None )
+                else (s, h, hi.ToString(), (r', r' |> Seq.minBy(fun x -> x.Likelihood)) |> Some))
 
-
+/// Functions for conducting Akaike Information Criterion (AIC).
 module Akaike =
-
-    open Bristlecone.ModelSystem
-    open Bristlecone.Time
 
     type AkaikeWeight = {
         Likelihood: float
@@ -59,7 +60,7 @@ module Akaike =
         let correction = (2. * ((float k) ** 2.) + 2. * (float k)) / ((float n) - (float k) - 1.)
         aic + correction
     
-    let akaikeWeights' n modelResults : seq<AkaikeWeight> =
+    let internal akaikeWeights' n modelResults : seq<AkaikeWeight> =
         let aiccs = modelResults |> Seq.map(fun (l,p) -> aicc n p l)
         let relativeLikelihoods =
             aiccs
@@ -88,48 +89,44 @@ module Akaike =
         | Some m ->
             let n = (m.Series |> Seq.head).Value.Length
             models
-            |> Seq.map(fun m -> (m.Likelihood, m.Parameters.Count))
+            |> Seq.map(fun m -> (m.Likelihood, Bristlecone.Parameter.Pool.count m.Parameters))
             |> akaikeWeights' n 
             |> Seq.zip models
 
 
-module Select =
+/// A record of an individual maximum likelihood estimate for 
+/// a particular subject and hypothesis.
+type Result<'subject> = {
+    AnalysisId: System.Guid
+    Subject: 'subject
+    ModelId: string
+    Estimate: EstimationResult
+}
 
-    open Bristlecone.ModelSystem
-    open ResultSet
+/// Given a list of model predictions, find the best MLE for each
+/// model * subject combination, calculate the weights for this set.
+let calculate (results:seq<Result<'subject>>) =
+    results
+    |> Seq.groupBy(fun r -> (r.Subject, r.ModelId))
+    |> Seq.map(fun (_,r) -> r |> Seq.minBy(fun x -> x.Estimate.Likelihood))
+    |> Seq.groupBy(fun r -> r.Subject)
+    |> Seq.collect(fun (_,r) ->
+        let weights = r |> Seq.map(fun r -> r.Estimate) |> Akaike.akaikeWeights |> Seq.map snd
+        weights
+        |> Seq.zip r )
 
-    type Result<'subject> = {
-        AnalysisId: System.Guid
-        Subject: 'subject
-        ModelId: string
-        Estimate: EstimationResult
-    }
-
-    /// Given a list of model predictions, find the best MLE for each
-    /// model * subject combination, calculate the weights for this set.
-    let calculate (results:seq<Result<'subject>>) =
-        results
-        |> Seq.groupBy(fun r -> (r.Subject, r.ModelId))
-        |> Seq.map(fun (_,r) -> r |> Seq.minBy(fun x -> x.Estimate.Likelihood))
-        |> Seq.groupBy(fun r -> r.Subject)
-        |> Seq.collect(fun (_,r) ->
-            let weights = r |> Seq.map(fun r -> r.Estimate) |> Akaike.akaikeWeights |> Seq.map snd
-            weights
-            |> Seq.zip r )
-
-    let weights (results:ResultSet<'a,'b> seq) = 
-        results
-        |> Seq.groupBy(fun (identifier,_,_,_) -> identifier)
-        |> Seq.collect(fun (_,r) ->
-            let weights =
-                r 
-                |> Seq.choose(fun (s,h,hi,r) -> r)
-                |> Seq.map(fun (chains,mle) -> mle)
-                |> fun x -> printfn "Seq is %A" x; x
-                |> Akaike.akaikeWeights 
-            r
-            |> Seq.zip weights
-            |> Seq.map (fun (w,(s,h,hi,r)) -> s, hi, fst w, snd w)
-            |> Seq.toList )
-        |> Seq.toList
-
+/// 
+let weights (results:ResultSet.ResultSet<'a,'b> seq) = 
+    results
+    |> Seq.groupBy(fun (identifier,_,_,_) -> identifier)
+    |> Seq.collect(fun (_,r) ->
+        let weights =
+            r 
+            |> Seq.choose(fun (_,_,_,r) -> r)
+            |> Seq.map(fun (_,mle) -> mle)
+            |> Akaike.akaikeWeights 
+        r
+        |> Seq.zip weights
+        |> Seq.map (fun (w,(s,_,hi,_)) -> s, hi, fst w, snd w)
+        |> Seq.toList )
+    |> Seq.toList

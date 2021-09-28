@@ -1,0 +1,53 @@
+name: .NET
+
+on:
+  pull_request:
+    branches: [ master ] 
+
+jobs:
+  build:
+
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest]
+    env:
+      RPROVIDER_LOG: rlog.txt
+
+    steps:
+    - uses: actions/checkout@master
+    - uses: r-lib/actions/setup-r@v1
+      name: Setup R environment
+      with:
+          r-version: '4.0.2'
+    - name: Set R_HOME environment variable
+      run:   |
+         if [ "$RUNNER_OS" == "Linux" ]; then
+              echo "R_HOME=$(R RHOME)" >> "$GITHUB_ENV"
+         elif [ "$RUNNER_OS" == "macOS" ]; then
+              echo "R_HOME=$(R RHOME)" >> "$GITHUB_ENV"
+         elif [ "$RUNNER_OS" == "Windows" ]; then
+              echo "R_HOME=$(R RHOME)" >> "$GITHUB_ENV"
+         else
+              echo "$RUNNER_OS not supported"
+              exit 1
+         fi
+      shell: bash
+    - name: Verify R Home
+      run: |
+        Rscript -e 'R.home()'
+        echo "${{ env.R_HOME }}"
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v1
+      with:
+        dotnet-version: 5.0.x
+    - name: Restore tool dependencies
+      run: dotnet tool restore
+    - name: Restore paket dependencies
+      run: dotnet paket restore
+    - name: Restore dependencies
+      run: dotnet restore bristlecone.sln
+    - name: Build
+      run: dotnet fake build -t All

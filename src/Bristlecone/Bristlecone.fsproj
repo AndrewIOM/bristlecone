@@ -1,8 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFrameworks>netstandard2.0;net47</TargetFrameworks>
-    <PackageLicenseUrl>https://github.com/AndrewIOM/bristlecone/blob/master/LICENSE</PackageLicenseUrl>
-    <Authors>Andrew Martin</Authors>
+    <TargetFramework>netstandard2.0</TargetFramework>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
   <ItemGroup>
@@ -12,30 +10,29 @@
     <Compile Include="Statistics.fs" />
     <Compile Include="Integration.fs" />
     <Compile Include="Parameter.fs" />
-    <Compile Include="Optimisation.fs" />
     <Compile Include="EstimationEngine.fs" />
-    <Compile Include="OptimisationTechniques.fs" />
+    <Compile Include="Optimisation.fs" />
     <Compile Include="ConfidenceInterval.fs" />
     <Compile Include="ModelSelection.fs" />
     <Compile Include="Diagnostics.fs" />
     <Compile Include="DataAccess.fs" />
     <Compile Include="Workflow.fs" />
+    <Compile Include="Objective.fs" />
+    <Compile Include="Solver.fs" />
     <Compile Include="Library.fs" />
     <Compile Include="Equations.fs" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="../Bristlecone.Charts.R/charts.fsx" Pack="true" PackagePath=".">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Include="bristlecone.fsx" Pack="true" PackagePath=".">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
+    <Compile Include="Language.fs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="Microsoft.Research.Oslo">
       <HintPath>Microsoft.Research.Oslo.dll</HintPath>
       <SpecificVersion>False</SpecificVersion>
     </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="../../docs/img/logo.png" Pack="true" PackagePath="/">
+        <PackageCopyToOutput>true</PackageCopyToOutput>
+    </None>
   </ItemGroup>
   <Import Project="..\..\.paket\Paket.Restore.targets" />
 </Project>

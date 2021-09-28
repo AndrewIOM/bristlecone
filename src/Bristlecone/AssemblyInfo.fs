@@ -3,17 +3,10 @@ namespace System
 open System.Reflection
 
 [<assembly: AssemblyTitleAttribute("Bristlecone")>]
+[<assembly: AssemblyCompanyAttribute("")>]
 [<assembly: AssemblyProductAttribute("Bristlecone")>]
 [<assembly: AssemblyDescriptionAttribute("Time-series modelling in F#")>]
 [<assembly: AssemblyVersionAttribute("1.0.0")>]
 [<assembly: AssemblyFileVersionAttribute("1.0.0")>]
-[<assembly: AssemblyConfigurationAttribute("Release")>]
 do ()
 
-module internal AssemblyVersionInformation =
-    let [<Literal>] AssemblyTitle = "Bristlecone"
-    let [<Literal>] AssemblyProduct = "Bristlecone"
-    let [<Literal>] AssemblyDescription = "Time-series modelling in F#"
-    let [<Literal>] AssemblyVersion = "1.0.0"
-    let [<Literal>] AssemblyFileVersion = "1.0.0"
-    let [<Literal>] AssemblyConfiguration = "Release"

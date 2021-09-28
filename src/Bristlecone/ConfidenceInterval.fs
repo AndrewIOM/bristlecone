@@ -2,48 +2,51 @@ namespace Bristlecone.Optimisation.ConfidenceInterval
 
 open Bristlecone.Logging
 
-// Profile Likelihood Method
-// _______________________________
-
-// Given the MLE (i.e. from Simulated Annealing), 
-// run an MCMC algorithm that samples around the MLE
-// Collect any results where the difference in likelihoods is less than 2
-
-type Interval = {
-    Lower: float
-    Upper: float
-}
-
-and ConfidenceInterval = {
+/// The 95% and 68% confidence interval around a point estimate.
+type ConfidenceInterval = {
     ``95%``: Interval
     ``68%``: Interval
     Estimate: float
 }
 
-module Bounds =
+and Interval = {
+    Lower: float
+    Upper: float
+}
 
-    /// The difference in likelihood at 68% confidence
-    let lowerBound = 0.49447324 // qchisq(0.68,1)/2
-    /// The difference in likelihood at 95% confidence
-    let upperBound = 1.92072941 // qchisq(0.95,1)/2
-
-type OptimOutput() =
-    let mutable (events:Bristlecone.Logging.ModelFitState list) = []
+/// Keeps a list of all optimisation events that occur for further analysis.
+type OptimisationEventStash() =
+    let mutable events = []
     with
         member __.SaveEvent(e) =
             match e with
-            | Bristlecone.Logging.LogEvent.OptimisationEvent o -> events <- (events |> List.append [o])
+            | OptimisationEvent o -> events <- (events |> List.append [o])
             | _ -> ()
 
         member __.GetAll() = events
 
 
+/// Differences in likelihood for different confidence intervals
+/// based on a chi squared distribution.
+module Bounds =
 
+    /// The difference in likelihood at 68% confidence
+    let lowerBound = 0.49447324 // qchisq(0.68,1)/2
+
+    /// The difference in likelihood at 95% confidence
+    let upperBound = 1.92072941 // qchisq(0.95,1)/2
+
+
+/// Given a maximum likelihood estimate (MLE), the profile likelihood method
+/// runs a Monte Carlo algorithm that samples around the MLE. The range for
+/// each parameter is discovered at 95% and 68% confidence based on a chi squared
+/// distribution.
 module ProfileLikelihood =
 
     open Bristlecone
     open Bristlecone.EstimationEngine
     open Bristlecone.ModelSystem
+    open Bristlecone.Optimisation
 
     type EstimateFunction<'data,'time,'subject> =
         EstimationEngine<'data,'time> -> ModelSystem -> 'subject -> EstimationResult
@@ -66,10 +69,9 @@ module ProfileLikelihood =
 
         // This algorithm only differs from SA because it outputs all iterations
         // in the tunedSearch as optimisation events.
-        let tunedSearch settings machine (jump:System.Random->float->unit->float) writeOut domain f =
+        let tunedSearch random settings machine (jump:System.Random->float->unit->float) writeOut domain f =
 
             // 1. Initial conditions
-            let random = MathNet.Numerics.Random.MersenneTwister(true)
             let draw' = jump random
             let theta1 = Bristlecone.Optimisation.MonteCarlo.initialise domain random
             let l1 = f theta1
@@ -93,9 +95,9 @@ module ProfileLikelihood =
                     scalesToChange 
                     |> Array.zip (result |> snd)
                     |> Array.map(fun (v, ((ti,previous),changed)) ->
-                        if changed then (ti, (previous |> Array.append [|v|]))  // Append new parameter values to previous ones
-                        else (ti, previous) )
-                    |> Array.map(fun (ti,previous) ->
+                        let ti, previous =
+                            if changed then (ti, (previous |> Array.append [|v|]))  // Append new parameter values to previous ones
+                            else (ti, previous)
                         if previous |> Array.length = settings.TuneN
                         then
                             let changes = previous |> Array.pairwise |> Array.where(fun (a,b) -> a <> b) |> Array.length
@@ -119,9 +121,9 @@ module ProfileLikelihood =
             [(l1, theta1)]
 
         let classic settings : Optimise<float> =
-            fun writeOut n domain f ->
+            fun random writeOut n domain f ->
                 let gaussian rnd scale = Bristlecone.Statistics.Distributions.Normal.draw rnd 0. scale
-                tunedSearch settings Optimisation.MonteCarlo.SimulatedAnnealing.Machines.boltzmann gaussian writeOut domain f
+                tunedSearch random settings MonteCarlo.SimulatedAnnealing.Machines.boltzmann gaussian writeOut domain f
 
     let interval nParam mle limit trace =
         trace
@@ -134,21 +136,17 @@ module ProfileLikelihood =
     let profile fit engine subject (hypothesis:ModelSystem) n (result:EstimationResult) =
 
         // 1. Set estimation bounds to the MLE
-        let mleToBounds mlePool = mlePool |> Map.map(fun k v -> Parameter.create (Parameter.detatchConstraint v |> snd) (v |> Parameter.getEstimate) (v |> Parameter.getEstimate))
-        let hypothesisMle =  { hypothesis with Parameters = mleToBounds result.Parameters }
+        let hypothesisMle =  { hypothesis with Parameters = Parameter.Pool.fromEstimated result.Parameters }
 
         // 2. Generate a trace of at least n samples that deviate in L less than 2.0
-        let results = OptimOutput()
+        let results = OptimisationEventStash()
         let mle = result.Likelihood
 
         let customFit = fit { engine with OptimiseWith = CustomOptimisationMethod.classic CustomOptimisationMethod.TuneSettings.Default; LogTo = fun e -> engine.LogTo e; results.SaveEvent e }
         let rec fit' currentTrace =
-            let a = customFit (Optimisation.EndConditions.afterIteration n) subject hypothesisMle
+            let a = customFit (EndConditions.afterIteration n) subject hypothesisMle
             let validTrace = a.Trace |> List.filter(fun (l,_) -> (l - mle) < 2.00 && (l - mle) > 0.00) |> List.distinct
             engine.LogTo <| GeneralEvent (sprintf "Profiling efficiency: %f/1.0." ((validTrace |> List.length |> float) / (float n)))
-            // if currentTrace |> List.append validTrace |> List.length < n
-            // then currentTrace |> List.append validTrace |> fit'
-            // else 
             currentTrace |> List.append validTrace
         fit' [] |> ignore
 
@@ -158,14 +156,18 @@ module ProfileLikelihood =
         engine.LogTo <| GeneralEvent (sprintf "Actual trace was %A" trace)
 
         // 3. Calculate min and max at the specified limit for each parameter
-        let lowerInterval = trace |> interval hypothesisMle.Parameters.Count mle Bounds.lowerBound
-        let upperInterval = trace |> interval hypothesisMle.Parameters.Count mle Bounds.upperBound
+        let lowerInterval = trace |> interval (Parameter.Pool.count hypothesisMle.Parameters) mle Bounds.lowerBound
+        let upperInterval = trace |> interval (Parameter.Pool.count hypothesisMle.Parameters) mle Bounds.upperBound
 
         result.Parameters
+        |> Parameter.Pool.toList
         |> Seq.zip3 lowerInterval upperInterval
-        |> Seq.map(fun ((l1,l2),(u1,u2),p) -> 
-            p.Key, {
-                Estimate = p.Value |> Parameter.getEstimate
-                ``68%`` = { Lower = l1; Upper = l2 }
-                ``95%`` = { Lower = u1; Upper = u2 }})
+        |> Seq.map(fun ((l1,l2),(u1,u2),(k,v)) -> 
+            match v |> Parameter.getEstimate with
+            | Error e -> failwith e
+            | Ok v ->
+                k, {
+                    Estimate = v
+                    ``68%`` = { Lower = l1; Upper = l2 }
+                    ``95%`` = { Lower = u1; Upper = u2 }})
         |> Map.ofSeq

@@ -1,14 +1,13 @@
+/// Bristlecone loads and saves CSV data in these formats:
+/// 1. [Invididual] MLE: best-fitting parameter steps and their likelihood
+/// 2. [Individual] Trace: record of optimisation steps
+/// 3. [Invididual] Series: best-fitting parameter steps and their likelihood
+/// 4. [Ensemble] Model-selection (weights)
 namespace Bristlecone.Data
 
 open Bristlecone
 open Bristlecone.ModelSystem
 open FSharp.Data
-
-// Bristlecone loads and saves CSV data in these formats:
-// 1. [Invididual] MLE: best-fitting parameter steps and their likelihood
-// 2. [Individual] Trace: record of optimisation steps
-// 3. [Invididual] Series: best-fitting parameter steps and their likelihood
-// 4. [Ensemble] Model-selection (weights)
 
 module Config =
 
@@ -40,7 +39,7 @@ module Config =
         let path = System.IO.DirectoryInfo(directory)
         if path.Exists then
             let t = typeAsLabel dataType
-            sprintf "%sbristlecone-%s-%i-%s-%s.csv" path.FullName subject modelId t (resultId.ToString())
+            sprintf "%sbristlecone-%s-%s-%s-%s.csv" path.FullName subject modelId t (resultId.ToString())
         else invalidArg "directory" "The specified directory does not exist"
 
     let filePathEnsemble directory dataType =
@@ -63,8 +62,8 @@ module Config =
                 | Series -> "series"
                 | Intervals -> "ci"
                 | Components -> "components"
-            let files = path.GetFiles(sprintf "bristlecone-%s-%i-%s-*.csv" subject modelId t)
-            let regex = sprintf "bristlecone-%s-%i-%s-(%s).csv" subject modelId t regexGuid
+            let files = path.GetFiles(sprintf "bristlecone-%s-%s-%s-*.csv" subject modelId t)
+            let regex = sprintf "bristlecone-%s-%s-%s-(%s).csv" subject modelId t regexGuid
             files |> Seq.choose(fun f -> 
                 let m = System.Text.RegularExpressions.Regex.Match(f.Name, regex)
                 if m.Success
@@ -74,19 +73,19 @@ module Config =
                 else None )
         else invalidArg "directory" "The specified directory does not exist"
 
-
+[<RequireQualifiedAccess>]
 module Trace =
 
     type BristleconeTrace = CsvProvider<"templates/individual-trace.csv", IgnoreErrors = true>
 
     module Row =
 
-        let fromEstimate thinBy subject modelId (result:EstimationResult) : seq<BristleconeTrace.Row> =
+        let internal fromEstimate thinBy subject modelId (result:EstimationResult) : seq<BristleconeTrace.Row> =
             result.Trace
             |> Seq.rev
             |> Seq.mapi (fun iterationNumber (likelihood,values) ->
                 result.Parameters
-                |> Map.toList
+                |> Parameter.Pool.toList
                 |> Seq.mapi(fun i (name,_) ->
                     (subject,
                      modelId,
@@ -98,7 +97,7 @@ module Trace =
             |> Seq.everyNth thinBy
             |> Seq.concat
 
-        let toTrace (data:BristleconeTrace) : (float * float []) list =
+        let internal toTrace (data:BristleconeTrace) : (float * float []) list =
             data.Rows
             |> Seq.groupBy(fun r -> r.Iteration)
             |> Seq.map(fun (i,r) -> 
@@ -109,12 +108,13 @@ module Trace =
             |> Seq.map(fun (_,x,y) -> x,y)
             |> Seq.toList
 
+    /// Save the trace of an `EstimationResult` to a CSV file. 
     let save directory subject modelId thinBy result =
         let csv = new BristleconeTrace(result |> Row.fromEstimate thinBy subject modelId)
         let filePath = Config.filePath directory subject modelId result.ResultId Config.DataType.Trace
         csv.Save(filePath)
 
-    /// Load a trace from a file
+    /// Load a trace from a CSV file, as saved by Bristlecone.
     let load directory subject modelId =
         let traceFiles = Config.fileMatch directory subject modelId Config.DataType.Trace
         traceFiles
@@ -124,7 +124,7 @@ module Trace =
             | 0 -> None
             | _ -> (i, data |> Row.toTrace) |> Some )
 
-
+[<RequireQualifiedAccess>]
 module MLE =
 
     type IndividualMLE = CsvProvider<"templates/individual-mle.csv", IgnoreErrors = true>
@@ -133,14 +133,14 @@ module MLE =
 
         let fromResult subject hypothesisId (result:EstimationResult) =
             result.Parameters
-            |> Map.toList
+            |> Parameter.Pool.toList
             |> Seq.map(fun (name,v) ->
                 (subject,
                  hypothesisId,
                  result.ResultId,
                  name.Value,
                  result.Likelihood,
-                 v |> Parameter.getEstimate) |> IndividualMLE.Row )
+                 v |> Parameter.getTransformedValue) |> IndividualMLE.Row )
 
         let toResult (data:IndividualMLE) =
             if data.Rows |> Seq.isEmpty
@@ -149,7 +149,7 @@ module MLE =
                 let mle = (data.Rows |> Seq.head).NegativeLogLikelihood
                 let pool = 
                     data.Rows
-                    |> Seq.map(fun r -> (ShortCode.create r.ParameterCode, r.ParameterValue))
+                    |> Seq.choose(fun r -> ShortCode.create r.ParameterCode |> Option.map (fun o -> o,r.ParameterValue))
                     |> Map.ofSeq
                 (mle, pool) |> Ok
 
@@ -171,8 +171,10 @@ module MLE =
                 | Ok mle -> (i, mle) |> Some
                 | Error _ -> None )
 
-
+[<RequireQualifiedAccess>]
 module Series =
+
+    open Bristlecone.Time
 
     type IndividualSeries = CsvProvider<"templates/individual-series.csv", IgnoreErrors = true>
 
@@ -189,12 +191,12 @@ module Series =
         let toSeries (data:IndividualSeries) : CodedMap<FitSeries> =
             data.Rows
             |> Seq.groupBy(fun r -> r.Variable)
-            |> Seq.map(fun (g,r) -> 
+            |> Seq.choose(fun (g,r) -> 
                 let ts = 
                     r 
                     |> Seq.map(fun r -> ({ Fit = r.Expected; Obs = r.Observed}, r.Time))
                     |> TimeSeries.fromObservations
-                (ShortCode.create g, ts))
+                ShortCode.create g |> Option.map(fun c -> c,ts))
             |> Map.ofSeq
 
     let save directory subject modelId result =
@@ -211,7 +213,7 @@ module Series =
             | 0 -> None
             | _ -> (i, data |> Row.toSeries) |> Some )
 
-
+[<RequireQualifiedAccess>]
 module EstimationResult =
 
     /// Save the Maximum Likelihood Estimate, trace of the optimisation
@@ -235,11 +237,17 @@ module EstimationResult =
         |> Seq.map(fun (k,t,(s,(l,p))) ->
             { ResultId = k |> System.Guid.Parse
               Likelihood = l
-              Parameters = modelSystem.Parameters |> Map.map(fun k v -> Parameter.setEstimate v (p |> Map.find k))
+              Parameters = 
+                modelSystem.Parameters 
+                |> Parameter.Pool.toList
+                |> List.map (fun (k,v) -> k, Parameter.setTransformedValue v (p |> Map.find k))
+                |> List.choose(fun (c,r) -> match r with | Ok x -> Some (c,x) | Error _ -> None)
+                |> Parameter.Pool.fromList
               Series = s 
+              InternalDynamics = None
               Trace = t })
 
-
+[<RequireQualifiedAccess>]
 module Confidence =
 
     open Bristlecone.Optimisation.ConfidenceInterval
@@ -262,7 +270,7 @@ module Confidence =
         let filePath = Config.filePath directory subject modelId runId Config.DataType.Intervals
         csv.Save(filePath)
 
-
+[<RequireQualifiedAccess>]
 module ModelSelection =
 
     open Bristlecone.ModelSelection.Akaike
@@ -271,7 +279,7 @@ module ModelSelection =
 
     module Row = 
 
-        let fromResult (result:seq<string * int * EstimationResult * AkaikeWeight>) =
+        let fromResult (result:seq<string * string * EstimationResult * AkaikeWeight>) =
             result
             |> Seq.map(fun (subject,hypothesisId,r,aic) ->
                 (subject, hypothesisId, r.ResultId,
@@ -282,7 +290,7 @@ module ModelSelection =
         let filePath = Config.filePathEnsemble directory Config.EnsembleType.Weights
         csv.Save(filePath)
 
-
+[<RequireQualifiedAccess>]
 module Convergence =
 
     type ConvergenceStats = CsvProvider<"templates/ensemble-convergence.csv">
@@ -296,20 +304,3 @@ module Convergence =
         let csv = new ConvergenceStats (result |> toCsvRows)
         let filePath = Config.filePathEnsemble directory Config.EnsembleType.Convergence
         csv.Save(filePath)
-
-
-module Cache =
-
-    type Subject = string
-    type ModelSystemId = string
-    type AnalysisId = System.Guid
-    type Data = {
-        Iteration: int
-        Parameters: (string * float) list
-    }
-
-    type CachingMessage = 
-        | Add of Subject * AnalysisId * Data
-        | Clear of Subject * AnalysisId
-
-    type BristleconeCache = MailboxProcessor<CachingMessage>

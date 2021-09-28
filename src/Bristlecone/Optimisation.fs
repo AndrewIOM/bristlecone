@@ -1,22 +1,22 @@
 namespace Bristlecone.Optimisation
 
 open Bristlecone.Logging
+open Bristlecone.EstimationEngine
 
-/// Point is generic to allow choice of number precision
-type Point<'a> = 'a []
-type Solution<'a> = float * Point<'a>
-type Objective<'a> = Point<'a> -> float
-type EndCondition<'a> = Solution<'a> list -> bool
-type Domain = (float*float*Bristlecone.Parameter.Constraint) []
+type OptimisationError =
+    | OutOfBounds
+    | ModelError
+    | LikelihoodError
 
 module None =
 
     /// An optimisation function that calculates the value of `f` using
     /// the given bounds. Use when optimisation of the objective is not required.
-    let passThrough writeOut n (d:Domain) (f:Objective<float>) : (float * float[]) list =
-        writeOut <| GeneralEvent "Skipping optimisation: only the result of the given parameters will be computed"
-        let point = [| for (min,_,_) in d -> min |]
-        [ f point, point ]
+    let passThrough : Optimise<float> =
+        fun _ writeOut n domain f ->
+            writeOut <| GeneralEvent "Skipping optimisation: only the result of the given parameters will be computed"
+            let point = [| for (min,_,_) in domain -> min |]
+            [ f point, point ]
 
 
 module EndConditions =
@@ -123,8 +123,12 @@ module MonteCarlo =
     /// A value for each dimension is drawn from a univariate normal distribution, assuming that
     /// the bounds represent the 99th percentiles of the distribution.
     let initialise (d:Domain) (rng:System.Random) =
-        [| for (min,max,_) in d -> (Normal.draw rng (min + (max-min) / 2.) ((max - min) / 6.))() |]
-
+        [| for (min,max,_) in d -> 
+            if min < max then (Normal.draw rng (min + (max-min) / 2.) ((max - min) / 6.))()
+            elif min = max then min
+            else (Normal.draw rng (max + (min-max) / 2.) ((min - max) / 6.))() |]
+            
+            
     let rec tryGenerateTheta f domain random n =
         if n < 0 then Error "Could not generate a starting point given the domain"
         else 
@@ -133,16 +137,17 @@ module MonteCarlo =
             then tryGenerateTheta f domain random (n - 1) 
             else Ok t
 
-    let constrainJump a b (scaleFactor:float) c =
+    /// Jump in parameter space while reflecting constraints.
+    let constrainJump initial jump (scaleFactor:float) c =
         match c with
-        | Bristlecone.Parameter.Constraint.Unconstrained -> a + (b * scaleFactor)
+        | Bristlecone.Parameter.Constraint.Unconstrained -> initial + (jump * scaleFactor)
         | Bristlecone.Parameter.Constraint.PositiveOnly ->
-            if (a + (b * scaleFactor)) < 0.
-                then (a - (b * scaleFactor)) 
-                else (a + (b * scaleFactor))
+            if (initial + (jump * scaleFactor)) < 0.
+                then (initial - (jump * scaleFactor)) 
+                else (initial + (jump * scaleFactor))
 
 
-    /// A recursive metropolis hastings algirhtm, when ends when `endCondition` returns true.
+    /// A recursive metropolis hastings algorithm that ends when `endCondition` returns true.
     /// 
     /// **Parameters**
     ///   * `random` - `System.Random` to be used for drawing from a uniform distribution.
@@ -162,9 +167,11 @@ module MonteCarlo =
     ///   the proposed theta. 
     /// 
     let rec metropolisHastings' random writeOut endCondition propose tune f theta1 l1 d scale =
+        if theta1 |> Array.isEmpty then invalidOp "Not valid theta"
         let iteration = d |> Seq.length
         let sc = scale |> tune iteration d
         let theta2 = theta1 |> propose sc
+        if (theta2 |> Array.length) <> (theta1 |> Array.length) then invalidOp "Theta different length"
         let thetaAccepted, lAccepted = 
             let l2 = f theta2
             if l2 < l1
@@ -313,38 +320,28 @@ module MonteCarlo =
     type Frequency = int
     type TuneStep<'a> = TuneMethod * Frequency * EndCondition<'a>
 
-    let randomWalk' initialCovariance initialScale theta (tuningSteps:seq<TuneStep<float>>) random writeOut (endCondition:EndCondition<float>) (domain:Domain) (f:Objective<float>) =
-        writeOut <| GeneralEvent (sprintf "[Optimisation] Starting MCMC Random Walk")
-        let sample cov = MutlivariateNormal.sample cov random
-        let proposeJump (cov:Matrix<float>,scale) (theta:float[]) =
-            sample ((2.38 ** 2.) * cov / (float theta.Length)) <| ()
-            |> Vector.toArray
-            |> Array.map (fun i -> i * scale)
-            |> Array.mapi (fun i x -> (x, domain.[i]) )
-            |> Array.zip theta
-            |> Array.map (fun (thetai,(zi,(_,_,con))) -> constrainJump thetai zi scale con)
+    module RandomWalk =
+    
+        let randomWalk' initialCovariance initialScale theta (tuningSteps:seq<TuneStep<float>>) random writeOut (endCondition:EndCondition<float>) (domain:Domain) (f:Objective<float>) =
+            writeOut <| GeneralEvent (sprintf "[Optimisation] Starting MCMC Random Walk")
+            let sample cov = MutlivariateNormal.sample cov random
+            let proposeJump (cov:Matrix<float>,scale) (theta:float[]) =
+                sample ((2.38 ** 2.) * cov / (float theta.Length)) <| ()
+                |> Vector.toArray
+                |> Array.map (fun i -> i * scale)
+                |> Array.mapi (fun i x -> (x, domain.[i]) )
+                |> Array.zip theta
+                |> Array.map (fun (thetai,(zi,(_,_,con))) -> constrainJump thetai zi scale con)
 
-        tuningSteps
-        |> Seq.fold(fun (s,sc) (method,frequency,endCon) -> 
-            let l,t = s |> Seq.head
-            metropolisHastings' random writeOut endCon proposeJump (toFn method frequency) f t l s sc ) ([f theta, theta], (initialCovariance,initialScale))
-        ||> fun r s -> 
-            let l,t = r |> Seq.head
-            metropolisHastings' random writeOut endCondition proposeJump (TuningMode.none) f t l r s
+            tuningSteps
+            |> Seq.fold(fun (s,sc) (method,frequency,endCon) -> 
+                let l,t = s |> Seq.head
+                metropolisHastings' random writeOut endCon proposeJump (toFn method frequency) f t l s sc ) ([f theta, theta], (initialCovariance,initialScale))
+            ||> fun r s -> 
+                let l,t = r |> Seq.head
+                metropolisHastings' random writeOut endCondition proposeJump (TuningMode.none) f t l r s
 
-    let randomWalk (tuningSteps:seq<TuneStep<float>>) writeOut n domain (f:Objective<float>) : (float * float[]) list =
-        let random = MathNet.Numerics.Random.MersenneTwister(true)
-        let initialCovariance = TuningMode.covarianceFromBounds 10000 domain random
-        match tryGenerateTheta f domain random 10000 with
-        | Ok theta ->
-            writeOut <| GeneralEvent (sprintf "[Optimisation] Initial theta is %A" theta)
-            randomWalk' initialCovariance 1. theta tuningSteps random writeOut n domain f |> fst
-        | Error _ -> invalidOp "Could not generate theta"
-
-    let adaptiveMetropolis weighting period writeOut n domain (f:Objective<float>) : (float * float[]) list =
-        randomWalk [ (TuneMethod.CovarianceWithScale weighting, period, n) ] writeOut (EndConditions.afterIteration 0) domain f
-
-
+    
     module MetropolisWithinGibbs =
 
         open Bristlecone.Statistics
@@ -436,68 +433,94 @@ module MonteCarlo =
                 then core isAdaptive writeOut random domain f fullResults batchLength (batchNumber+1) (fullResults |> Seq.head |> snd) sigmas
                 else (batchNumber, fullResults, sigmas)
 
+    
+    /// A Markov Chain Monte Carlo (MCMC) sampling algorithm that randomly 'walks'
+    /// through a n-dimensional posterior distribution of the parameter space.
+    /// Specify `tuningSteps` to prime the jump size before random walk.
+    let randomWalk (tuningSteps:seq<TuneStep<float>>) : Optimise<float>=
+        fun random writeOut n domain f ->
+            let initialCovariance = TuningMode.covarianceFromBounds 10000 domain random
+            match tryGenerateTheta f domain random 10000 with
+            | Ok theta ->
+                writeOut <| GeneralEvent (sprintf "[Optimisation] Initial theta is %A" theta)
+                RandomWalk.randomWalk' initialCovariance 1. theta tuningSteps random writeOut n domain f |> fst
+            | Error _ -> invalidOp "Could not generate theta"
 
-    let ``Adaptive-Metropolis-within Gibbs`` writeOut endCon domain (f:Objective<float>) : (float * float[]) list =
-        let random = MathNet.Numerics.Random.MersenneTwister(true)
-        match tryGenerateTheta f domain random 10000 with
-        | Ok theta ->
-            writeOut <| GeneralEvent (sprintf "[Optimisation] Initial theta is %A" theta)
+    /// A Markov Chain Monte Carlo (MCMC) sampling algorithm that continually adjusts the
+    /// covariance matrix based on the recently-sampled posterior distribution. Proposed
+    /// jumps are therefore tuned to the recent history of accepted jumps.
+    let adaptiveMetropolis weighting period : Optimise<float> =
+        fun random writeOut n domain f ->
+            randomWalk [ (CovarianceWithScale weighting, period, n) ] random writeOut (EndConditions.afterIteration 0) domain f
+
+    /// An adaptive Metropolis-within-Gibbs sampler that tunes the variance of
+    /// each parameter according to the per-parameter acceptance rate.
+    /// Reference: Bai Y (2009). “An Adaptive Directional Metropolis-within-Gibbs Algorithm.”
+    /// Technical Report in Department of Statistics at the University of Toronto.
+    let ``Adaptive-Metropolis-within Gibbs`` : Optimise<float> =
+        fun random writeOut endCon domain f ->
+            match tryGenerateTheta f domain random 10000 with
+            | Ok theta ->
+                writeOut <| GeneralEvent (sprintf "[Optimisation] Initial theta is %A" theta)
+                let sigmas = theta |> Array.map(fun _ -> 0.)
+                let _,result,_ = MetropolisWithinGibbs.core true writeOut random domain f [] 100 1 (theta:float[]) sigmas
+                result
+            | Error _ -> invalidOp "Could not generate theta"
+
+    /// A non-adaptive Metropolis-within-gibbs Sampler. Each parameter is updated
+    /// individually, unlike the random walk algorithm.
+    let ``Metropolis-within Gibbs`` : Optimise<float> =
+        fun random writeOut endCon domain (f:Objective<float>) ->
+            let theta = initialise domain random
             let sigmas = theta |> Array.map(fun _ -> 0.)
-            let _,result,_ = MetropolisWithinGibbs.core true writeOut random domain f [] 100 1 (theta:float[]) sigmas
+            let _,result,_ = MetropolisWithinGibbs.core false writeOut random domain f [] 100 1 (theta:float[]) sigmas
             result
-        | Error _ -> invalidOp "Could not generate theta"
 
-    let ``Metropolis-within Gibbs`` writeOut endCon domain (f:Objective<float>) : (float * float[]) list =
-        let random = MathNet.Numerics.Random.MersenneTwister(true)
-        let theta = initialise domain random
-        let sigmas = theta |> Array.map(fun _ -> 0.)
-        let _,result,_ = MetropolisWithinGibbs.core false writeOut random domain f [] 100 1 (theta:float[]) sigmas
-        result
-
-    /// Implementation similar to that proposed by Yang and Rosenthal: "Automatically Tuned General-Purpose MCMC via New Adaptive Diagnostics"
+    /// Implementation similar to that proposed by Yang and Rosenthal: "Automatically Tuned
+    /// General-Purpose MCMC via New Adaptive Diagnostics"
     /// Reference: http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.70.7198&rep=rep1&type=pdf
-    let ``Automatic MCMC (Adaptive Diagnostics)`` writeOut n domain (f:Objective<float>) : Solution<float> list =
+    let ``Automatic (Adaptive Diagnostics)`` : Optimise<float> =
+        fun random writeOut endCon domain (f:Objective<float>) ->
 
-        // Starting condition
-        let random = MathNet.Numerics.Random.MersenneTwister(true)
-        let initialTheta = initialise domain random
-        let initialSigma = initialTheta |> Array.map(fun _ -> 0.)
+            // Starting condition
+            let initialTheta = initialise domain random
+            let initialSigma = initialTheta |> Array.map(fun _ -> 0.)
 
-        let mwg adapt batchSize currentBatch theta sigmas =
-                MetropolisWithinGibbs.core adapt writeOut random domain f [] batchSize currentBatch theta sigmas
+            let mwg adapt batchSize currentBatch theta sigmas =
+                    MetropolisWithinGibbs.core adapt writeOut random domain f [] batchSize currentBatch theta sigmas
 
-        // 1st Adaptive Phase
-        writeOut <| GeneralEvent "Generalised MCMC: Starting 1st Adaptive Phase"
-        let batches,results,tunedSigmas = 
-            initialSigma
-            |> mwg true 100 1 initialTheta
-            |> fun (b,r,s) -> 
-                let _,theta = r |> Seq.head
-                mwg true 200 b theta s
-            |> fun (b,r,s) -> 
-                let _,theta = r |> Seq.head
-                mwg true 400 b theta s
-            // Transient phase
-            |> fun (b,r,s) -> 
-                writeOut <| GeneralEvent "Generalised MCMC: Starting Transient Phase"
-                let _,theta = r |> Seq.head
-                mwg false 200 b theta s
+            // 1st Adaptive Phase
+            writeOut <| GeneralEvent "Generalised MCMC: Starting 1st Adaptive Phase"
+            let batches,results,tunedSigmas = 
+                initialSigma
+                |> mwg true 100 1 initialTheta
+                |> fun (b,r,s) -> 
+                    let _,theta = r |> Seq.head
+                    mwg true 200 b theta s
+                |> fun (b,r,s) -> 
+                    let _,theta = r |> Seq.head
+                    mwg true 400 b theta s
+                // Transient phase
+                |> fun (b,r,s) -> 
+                    writeOut <| GeneralEvent "Generalised MCMC: Starting Transient Phase"
+                    let _,theta = r |> Seq.head
+                    mwg false 200 b theta s
 
-        // 2nd Adaptive Phase
-        // a) Compute a covariance matrix from the previous sigma values
-        let covariance = 
-            tunedSigmas
-            |> Array.map exp
-            |> TuningMode.covarianceFromSigmas 10000 random
+            // 2nd Adaptive Phase
+            // a) Compute a covariance matrix from the previous sigma values
+            let covariance = 
+                tunedSigmas
+                |> Array.map exp
+                |> TuningMode.covarianceFromSigmas 10000 random
 
-        // b) Continue the chain using the covariance matrix and last theta
-        writeOut <| GeneralEvent "Generalised MCMC: Starting 2nd Adaptive Phase"
-        let secondAdaptation, finalScale = 
-            randomWalk' covariance 1. (results |> Seq.head |> snd) [ (TuneMethod.CovarianceWithScaleTotalHistory 0.750, 200, EndConditions.stationarySquaredJumpDistance) ] random writeOut (EndConditions.afterIteration 0) domain f
+            // b) Continue the chain using the covariance matrix and last theta
+            writeOut <| GeneralEvent "Generalised MCMC: Starting 2nd Adaptive Phase"
+            let secondAdaptation, finalScale = 
+                RandomWalk.randomWalk' covariance 1. (results |> Seq.head |> snd) [ (TuneMethod.CovarianceWithScaleTotalHistory 0.750, 200, EndConditions.stationarySquaredJumpDistance) ] random writeOut (EndConditions.afterIteration 0) domain f
 
-        // 3. Burn-in and sampling
-        writeOut <| GeneralEvent "Generalised MCMC: Starting Sampling Phase (random walk MCMC, with burnin and clean trace)"
-        randomWalk' (finalScale |> fst) (finalScale |> snd) (secondAdaptation |> Seq.head |> snd) [] random writeOut n domain f |> fst
+            // 3. Burn-in and sampling
+            writeOut <| GeneralEvent "Generalised MCMC: Starting Sampling Phase (random walk MCMC, with burnin and clean trace)"
+            RandomWalk.randomWalk' (finalScale |> fst) (finalScale |> snd) (secondAdaptation |> Seq.head |> snd) [] random writeOut endCon domain f |> fst
 
 
     /// A meta-heuristic that approximates a global optimium by
@@ -564,7 +587,7 @@ module MonteCarlo =
               TemperatureCeiling: float option
               BoilingAcceptanceRate: float
               InitialTemperature: float
-              PretuneLength: int
+              PreTuneLength: int
               TuneLength: int
               TuneN: int
               AnnealStepLength: EndCondition<'a> }
@@ -575,7 +598,7 @@ module MonteCarlo =
                 BoilingAcceptanceRate = 0.85
                 TemperatureCeiling = Some 200.
                 InitialTemperature = 1.00
-                PretuneLength = 5000
+                PreTuneLength = 5000
                 TuneLength = 100000
                 TuneN = 50
                 AnnealStepLength = EndConditions.improvementCount 250 250
@@ -651,10 +674,9 @@ module MonteCarlo =
             else (temperature, min)
 
         // Given a candidate distribution + machine, run base SA algorithm
-        let simulatedAnnealing scale settings annealEnd machine (jump:System.Random->float->float->unit->float) cool writeOut domain f =
+        let simulatedAnnealing scale settings annealEnd machine (jump:System.Random->float->float->unit->float) cool random writeOut domain f =
 
             // 1. Initial conditions
-            let random = MathNet.Numerics.Random.MersenneTwister(true)
             let draw' = jump random
             let theta1 = initialise domain random
             let l1 = f theta1
@@ -706,7 +728,7 @@ module MonteCarlo =
                 else (newScaleInfo |> Array.map fst, l1, theta1)
 
             let tunedScale,l2,theta2 = 
-                homogenousChain initialScale (EndConditions.afterIteration settings.PretuneLength) 1. (l1, theta1)
+                homogenousChain initialScale (EndConditions.afterIteration settings.PreTuneLength) 1. (l1, theta1)
                 |> List.minBy fst
                 |> tune (initialScale |> Array.map(fun t -> (t, Array.empty))) 1
             writeOut <| GeneralEvent (sprintf "Tuned = %A" tunedScale)
@@ -719,20 +741,22 @@ module MonteCarlo =
 
         /// Candidate distribution: Gaussian univariate []
         /// Probability: Boltzmann Machine
-        let classicalSimulatedAnnealing scale tDependentProposal settings writeOut n domain (f:Objective<float>) : Solution<float> list =
-            let gaussian rnd scale t = 
-                let s = if tDependentProposal then scale * (sqrt t) else scale
-                Bristlecone.Statistics.Distributions.Normal.draw rnd 0. s
-            simulatedAnnealing scale settings n Machines.boltzmann gaussian (CoolingSchemes.exponential 0.05) writeOut domain f
+        let classicalSimulatedAnnealing scale tDependentProposal settings : Optimise<float> =
+            fun random writeOut endCon domain (f:Objective<float>) ->
+                let gaussian rnd scale t = 
+                    let s = if tDependentProposal then scale * (sqrt t) else scale
+                    Bristlecone.Statistics.Distributions.Normal.draw rnd 0. s
+                simulatedAnnealing scale settings endCon Machines.boltzmann gaussian (CoolingSchemes.exponential 0.05) random writeOut domain f
 
         /// Candidate distribution: Cauchy univariate []
         /// Probability: Bottzmann Machine
-        let fastSimulatedAnnealing scale tDependentProposal settings writeOut n domain (f:Objective<float>) : (float * float[]) list =
-            let cauchy rnd scale t = 
-                let s = if tDependentProposal then scale * (sqrt t) else scale
-                let c = MathNet.Numerics.Distributions.Cauchy(0., s, rnd)
-                fun () -> c.Sample()
-            simulatedAnnealing scale settings n Machines.boltzmann cauchy (CoolingSchemes.fastCauchyCoolingSchedule) writeOut domain f
+        let fastSimulatedAnnealing scale tDependentProposal settings : Optimise<float> =
+            fun random writeOut endCon domain (f:Objective<float>) ->
+                let cauchy rnd scale t = 
+                    let s = if tDependentProposal then scale * (sqrt t) else scale
+                    let c = MathNet.Numerics.Distributions.Cauchy(0., s, rnd)
+                    fun () -> c.Sample()
+                simulatedAnnealing scale settings endCon Machines.boltzmann cauchy (CoolingSchemes.fastCauchyCoolingSchedule) random writeOut domain f
 
 
     /// An adaptation of the Filzbach method (originally by Drew Purves)
@@ -748,7 +772,6 @@ module MonteCarlo =
         let filzbach' settings (theta:float[]) random writeOut (sampleEnd:EndCondition<float>) (domain:Domain) (f:Objective<float>) =
             writeOut <| GeneralEvent (sprintf "[Optimisation] Starting Filzbach-style MCMC optimisation")
             let sample sd = Normal.draw random 0. sd
-            // let sample sd = fun () -> MathNet.Numerics.Distributions.Cauchy.Sample(random, 0., sd)
             let scaleRnd = Bristlecone.Statistics.Distributions.ContinuousUniform.draw random 0. 1.
             let paramRnd = MathNet.Numerics.Distributions.DiscreteUniform(0, theta.Length - 1, random)
             let initialScale = domain |> Array.map(fun (l,u,_) -> (u - l) / 6.)
@@ -828,13 +851,15 @@ module MonteCarlo =
             let results,_ = step false (burnScales |> Array.map(fun t -> (t, Array.empty))) sampleEnd (burnResults |> Seq.head) []
             [ results; burnResults ] |> List.concat
 
-        let filzbach settings writeOut n domain (f:Objective<float>) : (float * float[]) list =
-            let random = MathNet.Numerics.Random.MersenneTwister(true)
-            match tryGenerateTheta f domain random 10000 with
-            | Ok theta ->
-                writeOut <| GeneralEvent (sprintf "[Optimisation] Initial theta is %A" theta)
-                filzbach' settings theta random writeOut n domain f
-            | Error _ -> invalidOp "Could not generate theta"
+        /// A Monte Carlo Markov Chain sampler based on the 'Filzbach' algorithm from
+        /// Microsoft Research Cambridge.
+        let filzbach settings : Optimise<float> =
+            fun random writeOut endCon domain (f:Objective<float>) ->
+                match tryGenerateTheta f domain random 10000 with
+                | Ok theta ->
+                    writeOut <| GeneralEvent (sprintf "[Optimisation] Initial theta is %A" theta)
+                    filzbach' settings theta random writeOut endCon domain f
+                | Error _ -> invalidOp "Could not generate theta"
 
 
 /// Nelder Mead implementation
@@ -912,9 +937,8 @@ module Amoeba =
         let initialize (d:Domain) (rng:System.Random) =
             [| for (min,max,_) in d -> min + (max-min) * rng.NextDouble() |]
 
-        let solve settings logger (endWhen:EndCondition<float>) domain f =
+        let solve settings rng logger (endWhen:EndCondition<float>) domain f =
             let dim = Array.length domain
-            let rng = System.Random()
             let start =             
                 [| for _ in 1 .. settings.Size -> initialize domain rng |]
                 |> Array.map (evaluate f)
@@ -929,46 +953,54 @@ module Amoeba =
 
             search 50000 amoeba
 
+
+        let rec swarm settings rng logger numberOfLevels iterationsPerLevel numberOfAmoeba (paramBounds:Domain) (f:Objective<float>) =
+
+            let amoebaResults = 
+                [|1 .. numberOfAmoeba|]
+                |> Array.collect (fun _ -> 
+                    try [|solve settings rng logger iterationsPerLevel paramBounds f|]
+                    with | e -> 
+                        logger <| GeneralEvent (sprintf "Warning: Could not generate numercal solution for point (with EXN %s): %A" e.Message paramBounds)
+                        [||] )
+
+            // Drop worst 20% of likelihoods
+            let mostLikely = amoebaResults |> Array.map List.head |> Array.minBy fst
+            let percentile80thRank = int (System.Math.Floor (float (80. / 100. * (float amoebaResults.Length + 1.))))
+            let percentile80thValue = fst amoebaResults.[0].[percentile80thRank - 1]
+            logger <| GeneralEvent (sprintf "80th percentile = %f" percentile80thValue)
+            let ranked = amoebaResults |> Array.map List.head |> Array.filter (fun x -> (fst x) <= percentile80thValue)
+
+            let dims = Array.length paramBounds
+            let boundsList = ranked |> Array.map snd
+
+            let getBounds (dim:int) (points:Point<'a> array) =
+                let max = points |> Array.maxBy (fun p -> p.[dim])
+                let min = points |> Array.minBy (fun p -> p.[dim])
+                logger <| GeneralEvent (sprintf "Min %A Max %A" min.[dim] max.[dim])
+                (min.[dim], max.[dim], Bristlecone.Parameter.Constraint.Unconstrained)
+
+            let bounds =
+                [|0 .. dims - 1|]
+                |> Array.map (fun dim -> (boundsList |> getBounds dim))
+
+            let boundWidth =
+                bounds
+                |> Array.sumBy (fun (l,h,_) -> h - l)
+            logger <| GeneralEvent (sprintf "Bound width: %f" boundWidth)
+            
+            if (numberOfLevels > 1 && boundWidth > 0.01) 
+                then swarm settings rng logger (numberOfLevels-1) iterationsPerLevel numberOfAmoeba bounds f
+                else mostLikely
+
+
+    /// Optimise an objective function using a single downhill Nelder Mead simplex.
+    let single settings : Optimise<float> =
+        Solver.solve settings
+
     /// Optimisation heuristic that creates a swarm of amoeba (Nelder-Mead) solvers.
     /// The swarm proceeds for `numberOfLevels` levels, constraining the starting bounds
     /// at each level to the 80th percentile of the current set of best likelihoods.
-    let rec swarm logger numberOfLevels iterationsPerLevel numberOfAomeba (paramBounds:Domain) (f:Objective<float>) =
-
-        let aomebaResults = 
-            [|1 .. numberOfAomeba|]
-            |> Array.collect (fun _ -> 
-                try [|Solver.solve Solver.Default logger iterationsPerLevel paramBounds f|]
-                with | e -> 
-                    logger <| GeneralEvent (sprintf "Warning: Could not generate numercal solution for point (with EXN %s): %A" e.Message paramBounds)
-                    [||] )
-
-        let mostLikely = aomebaResults |> Array.map List.head |> Array.minBy fst
-
-        // Drop worst 20% of likelihoods
-        let percentile80thRank = int (System.Math.Floor (float (80. / 100. * (float aomebaResults.Length + 1.))))
-        let percentile80thValue = fst aomebaResults.[0].[percentile80thRank - 1]
-        logger <| GeneralEvent (sprintf "80th percentile = %f" percentile80thValue)
-        let ranked = aomebaResults |> Array.map List.head |> Array.filter (fun x -> (fst x) <= percentile80thValue)
-
-        let dims = Array.length paramBounds
-
-        let boundsList = ranked |> Array.map snd
-
-        let getBounds (dim:int) (points:Point<'a> array) =
-            let max = points |> Array.maxBy (fun p -> p.[dim])
-            let min = points |> Array.minBy (fun p -> p.[dim])
-            logger <| GeneralEvent (sprintf "Min %A Max %A" min.[dim] max.[dim])
-            (min.[dim], max.[dim], Bristlecone.Parameter.Constraint.Unconstrained)
-
-        let bounds =
-            [|0 .. dims - 1|]
-            |> Array.map (fun dim -> (boundsList |> getBounds dim))
-
-        let boundWidth =
-            bounds
-            |> Array.sumBy (fun (l,h,_) -> h - l)
-        logger <| GeneralEvent (sprintf "Bound width: %f" boundWidth)
-        
-        if (numberOfLevels > 1 && boundWidth > 0.01) 
-            then swarm logger (numberOfLevels-1) iterationsPerLevel numberOfAomeba bounds f
-            else mostLikely
+    let swarm levels amoebaAtLevel settings: Optimise<float> =
+        fun rng logger endAt domain f ->
+            [ Solver.swarm settings rng logger levels endAt amoebaAtLevel domain f ]

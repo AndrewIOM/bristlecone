@@ -5,6 +5,7 @@ type LogEvent =
     | DifferentiationEvent of string
     | GeneralEvent of string
     | WorkloadEvent of string
+    | DebugEvent of string
 
 and ModelFitState = {
     Iteration: int
@@ -12,12 +13,12 @@ and ModelFitState = {
     Theta: seq<float>
 }
 
-
+/// Simple logger to console that prints line-by-line progress and events.
 module Console =
 
     open System.Threading
 
-    let print nIteration threadId (x:LogEvent) = 
+    let internal print nIteration threadId (x:LogEvent) = 
         match x with
         | OptimisationEvent e ->
             if e.Iteration % nIteration = 0

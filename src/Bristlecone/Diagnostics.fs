@@ -1,22 +1,29 @@
+/// Diagnostic techniques for determining the suitability of 
+/// results obtained with Bristlecone.
 module Bristlecone.Diagnostics
 
 open Bristlecone.ModelSystem
-open Bristlecone.ModelSelection.ResultSet
 
-/// Convergence diagnostics for monte-carlo markov chain (MCMC) analayses.
+/// Convergence diagnostics for monte-carlo markov chain (MCMC) analyses.
 module Convergence =
 
+    open Bristlecone.ModelSelection
+
+    /// A per-parameter convergence statistic. The statistic used is given in `StatisticName`.
     type ConvergenceStatistic = {
         Subject: string
-        HypothesisId: int
-        Parameter: ShortCode
+        HypothesisId: string
+        Parameter: ShortCode.ShortCode
         StatisticName: string
-        StatisticValue: float 
+        StatisticValue: float
     }
 
-    let gelmanRubin nBurn n (result:ResultSet<string,ModelSystem>) =
+    /// Calculate the Gelman-Rubin statistic for each parameter in the given
+    /// `ResultSet`. The statistic tends downwards to one, with one indicating
+    /// perfect convergence between all chains.
+    let gelmanRubin n (result:ResultSet.ResultSet<string,ModelSystem>) =
         let subjectId,_,hi,r = result
-        printfn "Calculating Rhat for %s %i" subjectId hi
+        printfn "Calculating Rhat for %s %s" subjectId hi
         match r with
         | Some (results, mle) ->
             let chains = 
@@ -28,9 +35,8 @@ module Convergence =
             if (chains |> Seq.length) < 2 then None
             else
                 let chains' = chains |> Seq.map(fun c -> c |> Seq.take minChainLength)
-                printfn "Using %i chains (with %i common iterations)" (chains |> Seq.length) minChainLength
                 mle.Parameters
-                |> Map.toSeq
+                |> Parameter.Pool.toList
                 |> Seq.mapi(fun i (code,p) -> 
                     { Subject = subjectId
                       HypothesisId = hi
@@ -43,20 +49,25 @@ module Convergence =
                     }) |> Some
         | None -> None
 
-    let gelmanRubinAll nBurn n (results:ResultSet<string,ModelSystem> list) =
-        results |> Seq.choose (gelmanRubin nBurn n)
+    /// Calculate the Gelman-Rubin statistic for each parameter in all of the
+    /// given `ResultSet`. The statistic tends downwards to one, with one indicating
+    /// perfect convergence between all chains.
+    let gelmanRubinAll n (results:ResultSet.ResultSet<string,ModelSystem> list) =
+        results |> Seq.choose (gelmanRubin n)
 
 
-/// Functions to enable logging of internal dynamics within
-/// models. 
+/// Logging functions to output the internal dynamics of model systems.
 module ModelComponents =
 
-    open EstimationEngine
+    open Bristlecone.ModelSelection
+    open Bristlecone.EstimationEngine
 
     type IComponentLogger<'data> =
         abstract member StoreValue: string -> float -> 'data -> 'data
         abstract member GetAll: unit -> Map<string,Map<float,'data>>
 
+    /// A component logger stores the value at each time t for each
+    /// component specified by a `componentId`.
     type ComponentLogger<'data>() =
         let mutable (data:Map<string,Map<float,'data>>) = [] |> Map.ofList
         interface IComponentLogger<'data> with
@@ -70,6 +81,7 @@ module ModelComponents =
 
             member __.GetAll() = data
 
+    /// A component logger that does not store any values.
     type PassThrough<'data>() =
         interface IComponentLogger<'data> with
             member __.StoreValue c t v = v
@@ -77,14 +89,18 @@ module ModelComponents =
 
     /// Log out components specified in a model by disabling optimisation.
     /// The model will only be computed once. 
-    let calculateComponents fitFn engine (result:ResultSet<'subject,IComponentLogger<'data>->ModelSystem>) =
+    let calculateComponents fitFn engine (result:ResultSet.ResultSet<'subject,IComponentLogger<'data>->ModelSystem>) =
         let subject,hypothesis,_,estimate = result
         match estimate with
         | None -> [] |> Map.ofList
         | Some (_,mle) ->
             let eng = { engine with OptimiseWith = Optimisation.None.passThrough }
             let cLog = ComponentLogger<'data>() :> IComponentLogger<'data>
-            let p = mle.Parameters |> Map.map(fun k v -> Parameter.create Unconstrained (v |> Parameter.getEstimate) (v |> Parameter.getEstimate))
+            let p = 
+                mle.Parameters 
+                |> Parameter.Pool.toList
+                |> List.choose(fun (k,v) -> Parameter.create Parameter.Constraint.Unconstrained (v |> Parameter.getTransformedValue) (v |> Parameter.getTransformedValue) |> Option.map (fun v -> k,v))
+                |> Parameter.Pool.fromList
             let mleHypothesis = { hypothesis cLog with Parameters = p }
             fitFn subject mleHypothesis eng |> ignore
             cLog.GetAll()
