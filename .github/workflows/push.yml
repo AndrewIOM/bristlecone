@@ -11,7 +11,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest]
+        os: [ubuntu-latest]
 
     steps:
     - uses: actions/checkout@master
@@ -59,4 +59,4 @@ jobs:
       run: ls -r bin
     - name: Publish NuGets (if this version not published before)
       if: matrix.os == 'macos-latest'
-      run: dotnet nuget push bin\*.nupkg -s https://api.nuget.org/v3/index.json -k ${{ secrets.NUGETKEY }} --skip-duplicate
+      run: dotnet nuget push bin/*.nupkg -s https://api.nuget.org/v3/index.json -k ${{ secrets.NUGETKEY }} --skip-duplicate
