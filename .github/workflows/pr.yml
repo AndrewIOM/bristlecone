@@ -51,6 +51,3 @@ jobs:
       run: dotnet restore bristlecone.sln
     - name: Build
       run: dotnet fake build -t All
-    - name: Check R log
-      if: ${{ always() }}
-      run: cat rlog.txt

@@ -3,44 +3,15 @@ version 5.198.0
 framework: auto-detect
 
 source https://nuget.org/api/v2
+storage: none
 
 nuget FSharp.Core 4.5.0
 nuget FSharp.Data
-nuget NETStandard.Library.NETFramework
 nuget MathNet.Numerics
 nuget MathNet.Numerics.FSharp
 nuget Accord.Statistics
 nuget RProvider 2.0.0-beta
 
-nuget Argu
 nuget Expecto
 nuget Expecto.BenchmarkDotNet
 nuget Expecto.FsCheck
-
-clitool dotnet-fake
-
-group Formatting
-source https://nuget.org/api/v2
-source https://ci.appveyor.com/nuget/fsharp-formatting
-
-nuget FSharp.Formatting prerelease
-nuget FSharp.Formatting.CommandTool prerelease
-
-group FakeBuild
-source https://api.nuget.org/v3/index.json
-
-storage: none
-
-nuget FSharp.Core 4.5.0
-nuget Fake.Core.Target
-nuget Fake.Core.UserInput
-nuget Fake.IO.FileSystem
-nuget Fake.DotNet.Cli
-nuget Fake.Tools.Git
-nuget Fake.DotNet.MSBuild
-nuget Fake.Core.ReleaseNotes 
-nuget Fake.DotNet.AssemblyInfoFile
-nuget Fake.DotNet.Paket
-nuget Fake.DotNet.Testing.Expecto 
-nuget Fake.DotNet.FSFormatting 
-nuget Fake.Api.GitHub
