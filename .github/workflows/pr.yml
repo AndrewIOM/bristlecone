@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest]
+        os: [macos-latest]
     env:
       RPROVIDER_LOG: rlog.txt
 
