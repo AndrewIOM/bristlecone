@@ -1,8 +1,8 @@
 (**
 ---
 title: Dendroecology
-category: Documentation
-categoryindex: 2
+category: Bristlecone.Dendro
+categoryindex: 3
 index: 1
 ---
 *)

@@ -2,7 +2,7 @@
 ---
 title: Quick Tour
 category: Tutorials
-categoryindex: 1
+categoryindex: 5
 index: 1
 ---
 *)

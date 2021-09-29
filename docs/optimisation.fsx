@@ -1,8 +1,8 @@
 (**
 ---
 title: Optimisation
-category: Documentation
-categoryindex: 2
+category: Components
+categoryindex: 4
 index: 1
 ---
 *)
