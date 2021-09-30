@@ -1,9 +1,9 @@
 (**
 ---
-title: Engine
-category: Documentation
-categoryindex: 2
-index: 1
+title: Logging
+category: Components
+categoryindex: 4
+index: 3
 ---
 *)
 
@@ -20,7 +20,7 @@ index: 1
 #endif // IPYNB
 
 (**
-Estimation Engine
+Logging in Bristlecone
 ========================
 
 Forthcoming
