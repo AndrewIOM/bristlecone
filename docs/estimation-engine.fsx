@@ -1,6 +1,6 @@
 (**
 ---
-title: Estimation Engine
+title: Defining a Model-Fitting Method (Estimation Engine)
 category: The Bristlecone Language
 categoryindex: 1
 index: 3

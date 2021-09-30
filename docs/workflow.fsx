@@ -3,7 +3,7 @@
 title: Ensembles and Parallel Processing
 category: Techniques
 categoryindex: 2
-index: 1
+index: 4
 ---
 *)
 
