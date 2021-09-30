@@ -23,18 +23,19 @@ index: 1
 Bristlecone
 ======================
 
-Bristlecone is a library for conducting model-fitting and model-selection analyses on time-series data. The library was designed for models in ecology / biology.
+Bristlecone is a library for conducting model-fitting and model-selection analyses on time-series data.
+Although originally designed for the investigation of non-linear dynamics within ecological 
+and environmental sciences, the library can be used across finance, econometrics and 
+other fields that apply non-linear modelling techniques.
 
-<div class="row">
-  <div class="span1"></div>
-  <div class="span6">
-    <div class="well well-small" id="nuget">
-      The Bristlecone library can be <a href="https://nuget.org/packages/Bristlecone">installed from NuGet</a>:
-      <pre>$ dotnet add package Bristlecone</pre>
-    </div>
-  </div>
-  <div class="span1"></div>
-</div>
+## Quick Start
+
+Once you have installed [the .NET SDK](https://dot.net), the Bristlecone library 
+can be [installed from NuGet](https://nuget.org/packages/Bristlecone).
+
+### Use in an F# script
+
+![img/example.png](img/example.png)
 
 Example
 -------
