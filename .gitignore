@@ -195,3 +195,4 @@ output
 .ionide
 symbolCache.db
 tmp/watch
+Directory.Build.props
