@@ -23,22 +23,15 @@ jobs:
       with:
           r-version: '4.0.2'
     - name: Set R_HOME environment variable
-      run:   |
-         if [ "$RUNNER_OS" == "Linux" ]; then
-              echo "R_HOME=$(R RHOME)" >> "$GITHUB_ENV"
-         elif [ "$RUNNER_OS" == "macOS" ]; then
-              echo "R_HOME=$(R RHOME)" >> "$GITHUB_ENV"
-         elif [ "$RUNNER_OS" == "Windows" ]; then
-              echo "R_HOME=$(R RHOME)" >> "$GITHUB_ENV"
-         else
-              echo "$RUNNER_OS not supported"
-              exit 1
-         fi
+      run: echo "R_HOME=$(R RHOME)" >> "$GITHUB_ENV"
       shell: bash
     - name: Verify R Home
       run: |
         Rscript -e 'R.home()'
         echo "${{ env.R_HOME }}"
+    - name: Install R package dependencies
+      run: Rscript -e "install.packages(c('ggplot'))"
+      shell: bash
     - name: Setup .NET
       uses: actions/setup-dotnet@v1
       with:

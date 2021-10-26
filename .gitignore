@@ -190,6 +190,7 @@ temp/gh-pages/*
 
 # fsdocs
 output
+.fsdocs
 
 .ionide
 symbolCache.db

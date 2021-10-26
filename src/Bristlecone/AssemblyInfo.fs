@@ -6,7 +6,7 @@ open System.Reflection
 [<assembly: AssemblyCompanyAttribute("")>]
 [<assembly: AssemblyProductAttribute("Bristlecone")>]
 [<assembly: AssemblyDescriptionAttribute("Time-series modelling in F#")>]
-[<assembly: AssemblyVersionAttribute("1.0.0")>]
-[<assembly: AssemblyFileVersionAttribute("1.0.0")>]
+[<assembly: AssemblyVersionAttribute("2.0.0")>]
+[<assembly: AssemblyFileVersionAttribute("2.0.0")>]
 do ()
 
