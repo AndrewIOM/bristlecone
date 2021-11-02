@@ -49,7 +49,7 @@ let license = "MIT"
 let iconUrl = ""
 let copyright = "(C) 2018 Andrew Martin"
 
-let packageProjectUrl = "https://github.com/AndrewIOM/bristlecone"
+let packageProjectUrl = "https://acm.im/bristlecone"
 let repositoryType = "git"
 let repositoryUrl = "https://github.com/AndrewIOM/bristlecone"
 let repositoryContentUrl = "https://raw.githubusercontent.com/AndrewIOM/bristlecone"
