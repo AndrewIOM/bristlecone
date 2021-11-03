@@ -11,7 +11,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest]
+        os: [macos-latest, ubuntu-latest]
 
     steps:
     - uses: actions/checkout@master
@@ -22,6 +22,8 @@ jobs:
     - name: Set R_HOME environment variable
       run:   |
          if [ "$RUNNER_OS" == "Linux" ]; then
+              mkdir -p ~/.local/lib/R
+              echo "R_LIBS_USER=~/.local/lib/R" >> "$GITHUB_ENV"
               echo "R_HOME=$(R RHOME)" >> "$GITHUB_ENV"
          elif [ "$RUNNER_OS" == "macOS" ]; then
               echo "R_HOME=$(R RHOME)" >> "$GITHUB_ENV"
