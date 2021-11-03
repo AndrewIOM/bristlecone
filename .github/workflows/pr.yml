@@ -63,5 +63,11 @@ jobs:
       run: dotnet paket restore
     - name: Restore dependencies
       run: dotnet restore bristlecone.sln
+    - name: Test nuget permissions?
+      run: ls -la ~/.nuget/packages/rprovider/2.0.2/lib/net5.0/server/linux-x64
+      shell: bash
     - name: Build
       run: dotnet fake build -t All
+    - name: Check R log
+      if: ${{ always() }}
+      run: cat rlog.txt
