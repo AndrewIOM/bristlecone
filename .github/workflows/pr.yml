@@ -41,6 +41,9 @@ jobs:
       run: |
         Rscript -e 'R.home()'
         echo "${{ env.R_HOME }}"
+    - name: Install R package dependencies
+      run: Rscript -e "install.packages(c('ggplot2'))"
+      shell: bash
     - name: Setup .NET
       uses: actions/setup-dotnet@v1
       with:

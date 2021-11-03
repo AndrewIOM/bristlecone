@@ -51,7 +51,7 @@ module RealTimeTrace =
         >!> R.facet__grid(namedParams ["facets", "Parameter~."; "scales", "free"])
 
 
-    type TraceGraph(graphicsDevice:Device, refreshRate, maxTraceItems) = 
+    type TraceGraph(graphicsDevice:Device, refreshRate:int, maxTraceItems) = 
 
         let __ = 
             match graphicsDevice with
@@ -73,7 +73,7 @@ module RealTimeTrace =
                         | Some t -> t |> appendToTrace e
                         | None -> [] |> appendToTrace e
                     let map = traceMap |> Map.add chainId trace
-                    if (System.DateTime.Now - lastDrawn) > System.TimeSpan.FromSeconds(refreshRate)
+                    if (System.DateTime.Now - lastDrawn) > System.TimeSpan.FromSeconds(float refreshRate)
                     then 
                         map |> facetedTrace |> R.print |> ignore
                         return! messageLoop map System.DateTime.Now
@@ -87,7 +87,7 @@ module RealTimeTrace =
             agent.Post (msg, chain)
 
     let graphWithConsole refreshRate maxData = 
-        let consolePost = Bristlecone.Logging.Console.logger ()
+        let consolePost = Bristlecone.Logging.Console.logger refreshRate
         let graphLog = TraceGraph(Device.X11, refreshRate, maxData)
         (fun event -> 
             consolePost event

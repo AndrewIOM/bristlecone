@@ -84,7 +84,7 @@ module ModelComponents =
     /// A component logger that does not store any values.
     type PassThrough<'data>() =
         interface IComponentLogger<'data> with
-            member __.StoreValue c t v = v
+            member __.StoreValue _ _ v = v
             member __.GetAll() = [] |> Map.ofList
 
     /// Log out components specified in a model by disabling optimisation.

@@ -49,9 +49,10 @@ let license = "MIT"
 let iconUrl = ""
 let copyright = "(C) 2018 Andrew Martin"
 
-let packageProjectUrl = "https://github.com/AndrewIOM/bristlecone"
+let packageProjectUrl = "https://acm.im/bristlecone"
 let repositoryType = "git"
 let repositoryUrl = "https://github.com/AndrewIOM/bristlecone"
+let repositoryContentUrl = "https://raw.githubusercontent.com/AndrewIOM/bristlecone"
 
 // --------------------------------------------------------------------------------------
 // The rest of the code is standard F# build script
@@ -60,7 +61,7 @@ let repositoryUrl = "https://github.com/AndrewIOM/bristlecone"
 // Read release notes & version info from RELEASE_NOTES.md
 System.Environment.CurrentDirectory <- __SOURCE_DIRECTORY__
 let binDir = __SOURCE_DIRECTORY__ @@ "bin"
-let release = System.IO.File.ReadLines "RELEASE_NOTES.md" |> Fake.Core.ReleaseNotes.parse
+let release = System.IO.File.ReadLines "RELEASE_NOTES.MD" |> Fake.Core.ReleaseNotes.parse
 
 // Generate assembly info files with the right version & up-to-date information
 Target.create "AssemblyInfo" (fun _ ->
@@ -150,6 +151,28 @@ Target.create "NuGet" (fun _ ->
 //--------------------------------------------------------------------------------------
 //Generate the documentation
 
+Target.create "DocsMeta" (fun _ ->
+    [ "<Project xmlns=\"http://schemas.microsoft.com/developer/msbuild/2003\">"
+      "<PropertyGroup>"
+      sprintf "<Copyright>%s</Copyright>" copyright
+      sprintf "<Authors>%s</Authors>" authors
+      sprintf "<PackageProjectUrl>%s</PackageProjectUrl>" packageProjectUrl
+      sprintf "<RepositoryUrl>%s</RepositoryUrl>" repositoryUrl
+      sprintf "<PackageLicense>%s</PackageLicense>" license
+      sprintf "<PackageReleaseNotes>%s</PackageReleaseNotes>" (List.head release.Notes)
+      sprintf "<PackageIconUrl>%s/master/docs/content/logo.png</PackageIconUrl>" repositoryContentUrl
+      sprintf "<PackageTags>%s</PackageTags>" tags
+      sprintf "<Version>%s</Version>" release.NugetVersion
+      sprintf "<FsDocsLogoSource>%s/master/docs/img/logo.png</FsDocsLogoSource>" repositoryContentUrl
+      sprintf "<FsDocsLicenseLink>%s/blob/master/LICENSE.md</FsDocsLicenseLink>" repositoryUrl
+      sprintf "<FsDocsReleaseNotesLink>%s/blob/master/RELEASE_NOTES.md</FsDocsReleaseNotesLink>" repositoryUrl
+      "<FsDocsWarnOnMissingDocs>true</FsDocsWarnOnMissingDocs>"
+      "<FsDocsTheme>default</FsDocsTheme>"
+      "</PropertyGroup>"
+      "</Project>"]
+    |> Fake.IO.File.write false "Directory.Build.props"
+)
+
 Target.create "GenerateDocs" (fun _ ->
    Fake.IO.Shell.cleanDir ".fsdocs"
    DotNet.exec id "fsdocs" "build --clean" |> ignore
@@ -161,7 +184,7 @@ Target.create "GenerateDocs" (fun _ ->
 Target.create "All" ignore
 
 "Clean" ==> "AssemblyInfo" ==> "Build"
-"Build" ==> "CleanDocs" ==> "GenerateDocs" ==> "All"
+"Build" ==> "CleanDocs" ==> "DocsMeta" ==> "GenerateDocs" ==> "All"
 "Build" ==> "NuGet" ==> "All"
 "Build" ==> "RunTests" ==> "All"
 
