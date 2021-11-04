@@ -48,7 +48,7 @@ jobs:
         Rscript -e 'R.home()'
         echo "${{ env.R_HOME }}"
     - name: Install R package dependencies
-      run: Rscript -e "install.packages(c('ggplot2'))"
+      run: Rscript -e "install.packages(c('ggplot2'), repos = 'http://cran.us.r-project.org')"
       shell: bash
     - name: Setup .NET
       uses: actions/setup-dotnet@v1
@@ -60,6 +60,14 @@ jobs:
       run: dotnet paket restore
     - name: Restore dependencies
       run: dotnet restore bristlecone.sln
+    - name: Set nuget cache permissions
+      run:   |
+        if [ "$RUNNER_OS" == "Linux" ]; then
+          sudo chown -R $USER:$USER ~/.nuget/packages/rprovider
+        elif [ "$RUNNER_OS" == "macOS" ]; then
+          sudo chown -R $USER: ~/.nuget/packages/rprovider 
+        fi
+      shell: bash
     - name: Build
       run: dotnet fake build -t All
     - name: Deploy documentation from master
