@@ -63,8 +63,10 @@ jobs:
       run:   |
         if [ "$RUNNER_OS" == "Linux" ]; then
           sudo chown -R $USER:$USER ~/.nuget
+          sudo chmod 775 ~/.nuget
         elif [ "$RUNNER_OS" == "macOS" ]; then
           sudo chown -R $USER: ~/.nuget
+          sudo chmod 775 ~/.nuget
         fi
       shell: bash
     - name: Build
