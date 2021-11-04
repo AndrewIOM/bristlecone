@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-latest]
+        os: [macos-latest, ubuntu-latest, windows-latest]
     env:
       RPROVIDER_LOG: rlog.txt
 
@@ -46,11 +46,14 @@ jobs:
               exit 1
          fi
       shell: bash
-    - name: Set .nuget permissions
-      run:  |
+    - name: Set .nuget cache permissions
+      run:   |
         mkdir ~/.nuget/
-        cd ~/.nuget/
-        sudo chown -R $USER:$USER .
+        if [ "$RUNNER_OS" == "Linux" ]; then
+          sudo chown -R $USER:$USER ~/.nuget
+        elif [ "$RUNNER_OS" == "macOS" ]; then
+          sudo chown -R $USER: ~/.nuget 
+        fi
       shell: bash
     - name: Install R package dependencies
       run: Rscript -e "install.packages(c('ggplot2'))"
