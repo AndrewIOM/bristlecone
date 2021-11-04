@@ -68,6 +68,8 @@ jobs:
           sudo chown -R $USER: ~/.nuget
           sudo chmod 775 ~/.nuget
         fi
+        echo "ls -la ~/"
+        echo "ls -la ~/.nuget/packages/rprovider/2.0.2/lib/net5.0/server/osx-x64/"
       shell: bash
     - name: Build
       run: dotnet fake build -t All
