@@ -48,6 +48,7 @@ jobs:
       shell: bash
     - name: Set .nuget permissions
       run:  |
+        mkdir ~/.nuget/
         cd ~/.nuget/
         sudo chown -R $USER:$USER .
       shell: bash
