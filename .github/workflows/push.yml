@@ -63,9 +63,9 @@ jobs:
     - name: Set nuget cache permissions
       run:   |
         if [ "$RUNNER_OS" == "Linux" ]; then
-          sudo chown -R $USER:$USER ~/.nuget/packages/rprovider
+          sudo chown -R $USER:$USER ~/.nuget
         elif [ "$RUNNER_OS" == "macOS" ]; then
-          sudo chown -R $USER: ~/.nuget/packages/rprovider 
+          sudo chown -R $USER: ~/.nuget 
         fi
       shell: bash
     - name: Build
