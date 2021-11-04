@@ -46,10 +46,11 @@ jobs:
               exit 1
          fi
       shell: bash
-    - name: Verify R Home
-      run: |
-        Rscript -e 'R.home()'
-        echo "${{ env.R_HOME }}"
+    - name: Set .nuget permissions
+      run:  |
+        cd ~/.nuget/
+        sudo chown -R $USER:$USER .
+      shell: bash
     - name: Install R package dependencies
       run: Rscript -e "install.packages(c('ggplot2'))"
       shell: bash
@@ -63,9 +64,6 @@ jobs:
       run: dotnet paket restore
     - name: Restore dependencies
       run: dotnet restore bristlecone.sln
-    - name: Test nuget permissions?
-      run: ls -la ~/.nuget/packages/rprovider/2.0.2/lib/net5.0/server/linux-x64
-      shell: bash
     - name: Build
       run: dotnet fake build -t All
     - name: Check R log
