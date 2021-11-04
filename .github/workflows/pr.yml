@@ -46,15 +46,6 @@ jobs:
               exit 1
          fi
       shell: bash
-    - name: Set .nuget cache permissions
-      run:   |
-        mkdir ~/.nuget/
-        if [ "$RUNNER_OS" == "Linux" ]; then
-          sudo chown -R $USER:$USER ~/.nuget
-        elif [ "$RUNNER_OS" == "macOS" ]; then
-          sudo chown -R $USER: ~/.nuget 
-        fi
-      shell: bash
     - name: Install R package dependencies
       run: Rscript -e "install.packages(c('ggplot2'))"
       shell: bash
@@ -68,6 +59,14 @@ jobs:
       run: dotnet paket restore
     - name: Restore dependencies
       run: dotnet restore bristlecone.sln
+    - name: Set nuget cache permissions
+      run:   |
+        if [ "$RUNNER_OS" == "Linux" ]; then
+          sudo chown -R $USER:$USER ~/.nuget/rprovider
+        elif [ "$RUNNER_OS" == "macOS" ]; then
+          sudo chown -R $USER: ~/.nuget/rprovider 
+        fi
+      shell: bash
     - name: Build
       run: dotnet fake build -t All
     - name: Check R log
