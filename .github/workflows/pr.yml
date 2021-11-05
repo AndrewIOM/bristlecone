@@ -38,12 +38,8 @@ jobs:
               exit 1
          fi
       shell: bash
-    - name: Verify R Home
-      run: |
-        Rscript -e 'R.home()'
-        echo "${{ env.R_HOME }}"
     - name: Install R package dependencies
-      run: Rscript -e "install.packages(c('ggplot2'))"
+      run: Rscript -e "install.packages(c('ggplot2'), repos = 'http://cran.us.r-project.org')"
       shell: bash
     - name: Test F# scripts
       run: dotnet fsi citest.fsx
