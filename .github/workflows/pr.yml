@@ -39,7 +39,7 @@ jobs:
          fi
       shell: bash
     - name: Install R package dependencies
-      run: Rscript -e "install.packages(c('ggplot2'), repos = 'http://cran.us.r-project.org')"
+      run: Rscript -e "install.packages(c('ggplot2', 'zoo'), repos = 'http://cran.us.r-project.org')"
       shell: bash
     - name: Test F# scripts
       run: dotnet fsi citest.fsx
