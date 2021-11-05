@@ -133,7 +133,7 @@ NUGET
       DynamicInterop (>= 0.9.1)
       FSharp.Core (>= 4.6.2)
       R.NET (>= 1.9)
-    RProvider (2.0.1-beta2)
+    RProvider (2.0.2)
       FSharp.Core (>= 4.6.2) - restriction: || (== net5.0) (&& (== netcoreapp3.1) (>= net5.0)) (&& (== netstandard2.0) (>= net5.0))
       Newtonsoft.Json (>= 13.0.1) - restriction: || (== net5.0) (&& (== netcoreapp3.1) (>= net5.0)) (&& (== netstandard2.0) (>= net5.0))
       PipeMethodCalls (>= 3.0.4) - restriction: || (== net5.0) (&& (== netcoreapp3.1) (>= net5.0)) (&& (== netstandard2.0) (>= net5.0))

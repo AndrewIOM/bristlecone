@@ -93,7 +93,7 @@ Target.create "CleanDocs" (fun _ ->
 
 Target.create "Build" (fun _ ->
     Trace.log " --- Building the app --- "
-    Fake.DotNet.DotNet.build id (projectName + ".sln")
+    Fake.DotNet.DotNet.build id ("bristlecone.sln")
 )
 
 // --------------------------------------------------------------------------------------
@@ -103,7 +103,7 @@ Target.create "RunTests" (fun _ ->
     let rHome = Environment.environVarOrFail "R_HOME"
     Trace.logf "R_HOME is set as %s" rHome
     let result = Fake.DotNet.DotNet.exec (fun args -> 
-        { args with Verbosity = Some Fake.DotNet.DotNet.Verbosity.Normal}) "test" (projectName + ".sln")
+        { args with Verbosity = Some Fake.DotNet.DotNet.Verbosity.Normal}) "test" ("bristlecone.sln")
     if result.ExitCode <> 0 then failwith "Tests failed"
 )
 
@@ -146,7 +146,7 @@ Target.create "NuGet" (fun _ ->
             OutputPath = Some "bin"
             MSBuildParams = { p.MSBuildParams with Properties = properties}
         }
-    ) (projectName + ".sln"))
+    ) ("bristlecone.sln"))
 
 //--------------------------------------------------------------------------------------
 //Generate the documentation

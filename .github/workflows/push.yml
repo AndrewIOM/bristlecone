@@ -11,24 +11,41 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest]
+        os: [macos-latest, ubuntu-latest, windows-latest]
 
     steps:
     - uses: actions/checkout@master
     - uses: r-lib/actions/setup-r@v1
-      name: Setup R environment
+      name: Setup R - Windows / macOS
+      if: matrix.os != 'ubuntu-latest'
       with:
           r-version: '4.0.2'
     - name: Set R_HOME environment variable
-      run: echo "R_HOME=$(R RHOME)" >> "$GITHUB_ENV"
+      run:   |
+         if [ "$RUNNER_OS" == "Linux" ]; then
+              mkdir -p ~/.local/lib/R
+              echo "R_LIBS_USER=~/.local/lib/R" >> "$GITHUB_ENV"
+              echo "R_HOME=$(R RHOME)" >> "$GITHUB_ENV"
+         elif [ "$RUNNER_OS" == "macOS" ]; then
+              echo "R_HOME=$(R RHOME)" >> "$GITHUB_ENV"
+         elif [ "$RUNNER_OS" == "Windows" ]; then
+              echo "R_HOME=$(R RHOME)" >> "$GITHUB_ENV"
+         else
+              echo "$RUNNER_OS not supported"
+              exit 1
+         fi
       shell: bash
     - name: Verify R Home
       run: |
         Rscript -e 'R.home()'
         echo "${{ env.R_HOME }}"
     - name: Install R package dependencies
-      run: Rscript -e "install.packages(c('ggplot2'))"
+      run: Rscript -e "install.packages(c('ggplot2', 'zoo'), repos = 'http://cran.us.r-project.org')"
       shell: bash
+    - name: Test F# scripts
+      run: dotnet fsi citest.fsx
+    - name: Check R log
+      run: cat rlog.txt
     - name: Setup .NET
       uses: actions/setup-dotnet@v1
       with:
