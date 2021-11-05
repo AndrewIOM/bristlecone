@@ -41,6 +41,10 @@ jobs:
     - name: Install R package dependencies
       run: Rscript -e "install.packages(c('ggplot2', 'zoo'), repos = 'http://cran.us.r-project.org')"
       shell: bash
+    - name: Test F# scripts
+      run: dotnet fsi citest.fsx
+    - name: Check R log
+      run: cat rlog.txt
     - name: Setup .NET
       uses: actions/setup-dotnet@v1
       with:
@@ -51,10 +55,6 @@ jobs:
       run: dotnet paket restore
     - name: Restore dependencies
       run: dotnet restore bristlecone.sln
-    - name: Test F# scripts
-      run: dotnet fsi citest.fsx
-    - name: Check R log
-      run: cat rlog.txt
     - name: Build
       run: dotnet fake build -t All
     - name: Check R log

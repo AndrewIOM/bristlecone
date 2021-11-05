@@ -11,18 +11,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-latest]
+        os: [macos-latest, ubuntu-latest, windows-latest]
 
     steps:
     - uses: actions/checkout@master
-    - name: Setup R - Ubuntu
-      if: matrix.os == 'ubuntu-latest'
-      run:   |
-          sudo apt update -qq
-          sudo apt install --no-install-recommends software-properties-common dirmngr
-          wget -qO- https://cloud.r-project.org/bin/linux/ubuntu/marutter_pubkey.asc | sudo tee -a /etc/apt/trusted.gpg.d/cran_ubuntu_key.asc
-          sudo add-apt-repository "deb https://cloud.r-project.org/bin/linux/ubuntu $(lsb_release -cs)-cran40/"
-          sudo apt install --no-install-recommends r-base
     - uses: r-lib/actions/setup-r@v1
       name: Setup R - Windows / macOS
       if: matrix.os != 'ubuntu-latest'
@@ -48,8 +40,12 @@ jobs:
         Rscript -e 'R.home()'
         echo "${{ env.R_HOME }}"
     - name: Install R package dependencies
-      run: Rscript -e "install.packages(c('ggplot2'), repos = 'http://cran.us.r-project.org')"
+      run: Rscript -e "install.packages(c('ggplot2', 'zoo'), repos = 'http://cran.us.r-project.org')"
       shell: bash
+    - name: Test F# scripts
+      run: dotnet fsi citest.fsx
+    - name: Check R log
+      run: cat rlog.txt
     - name: Setup .NET
       uses: actions/setup-dotnet@v1
       with:
@@ -60,14 +56,6 @@ jobs:
       run: dotnet paket restore
     - name: Restore dependencies
       run: dotnet restore bristlecone.sln
-    - name: Set nuget cache permissions
-      run:   |
-        if [ "$RUNNER_OS" == "Linux" ]; then
-          sudo chown -R $USER:$USER ~/.nuget
-        elif [ "$RUNNER_OS" == "macOS" ]; then
-          sudo chown -R $USER: ~/.nuget 
-        fi
-      shell: bash
     - name: Build
       run: dotnet fake build -t All
     - name: Deploy documentation from master
