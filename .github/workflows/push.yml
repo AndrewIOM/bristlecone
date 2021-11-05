@@ -44,8 +44,6 @@ jobs:
       shell: bash
     - name: Test F# scripts
       run: dotnet fsi citest.fsx
-    - name: Check R log
-      run: cat rlog.txt
     - name: Setup .NET
       uses: actions/setup-dotnet@v1
       with:
