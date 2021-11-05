@@ -12,20 +12,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-latest]
+        os: [ubuntu-latest]
     env:
       RPROVIDER_LOG: rlog.txt
 
     steps:
     - uses: actions/checkout@master
-    - name: Setup R - Ubuntu
-      if: matrix.os == 'ubuntu-latest'
-      run:   |
-          sudo apt update -qq
-          sudo apt install --no-install-recommends software-properties-common dirmngr
-          wget -qO- https://cloud.r-project.org/bin/linux/ubuntu/marutter_pubkey.asc | sudo tee -a /etc/apt/trusted.gpg.d/cran_ubuntu_key.asc
-          sudo add-apt-repository "deb https://cloud.r-project.org/bin/linux/ubuntu $(lsb_release -cs)-cran40/"
-          sudo apt install --no-install-recommends r-base
     - uses: r-lib/actions/setup-r@v1
       name: Setup R - Windows / macOS
       if: matrix.os != 'ubuntu-latest'
@@ -53,6 +45,11 @@ jobs:
     - name: Install R package dependencies
       run: Rscript -e "install.packages(c('ggplot2'))"
       shell: bash
+    - name: Test F# scripts
+      run: dotnet fsi citest.fsx
+    - name: Check R log
+      if: ${{ always() }}
+      run: cat rlog.txt
     - name: Setup .NET
       uses: actions/setup-dotnet@v1
       with:
@@ -61,11 +58,12 @@ jobs:
       run: dotnet tool restore
     - name: Restore paket dependencies
       run: dotnet paket restore
+    - name: Test3 library build
+      run:  |
+        dotnet restore test3
+        dotnet build test3
     - name: Restore dependencies
       run: dotnet restore bristlecone.sln
-    - name: Test nuget permissions?
-      run: ls -la ~/.nuget/packages/rprovider/2.0.2/lib/net5.0/server/linux-x64
-      shell: bash
     - name: Build
       run: dotnet fake build -t All
     - name: Check R log
