@@ -26,6 +26,21 @@ module Likelihood =
 
     /// Negative log likelihood for a bivariate normal distribution.
     /// For two random variables with bivariate normal N(u1,u2,sigma1,sigma2,rho).
+    let internal gaussian' sigmax obsx expx = 
+        let diffx = obsx - expx
+        -0.5 * (log(2. * pi) + log(sigmax) + diffx ** 2.0 / sigmax)
+
+    /// <summary>
+    /// Log likelihood function for single equation system, assuming Gaussian error for x.
+    /// </summary> 
+    let gaussian key pool data = 
+        let x = data |> getData key
+        let sigmax = pool |> tryGetTransformedValue "σ[x]" |> Option.get
+        [1 .. (Array.length x.Observed) - 1] 
+        |> List.sumBy (fun i -> (gaussian' sigmax x.Observed.[i]  x.Expected.[i]))
+
+    /// Negative log likelihood for a bivariate normal distribution.
+    /// For two random variables with bivariate normal N(u1,u2,sigma1,sigma2,rho).
     let internal bivariateGaussian' sigmax sigmay rho obsx obsy expx expy = 
         let diffx = obsx - expx
         let diffy = obsy - expy
@@ -47,9 +62,6 @@ module Likelihood =
         let rho = pool |> Parameter.Pool.tryGetTransformedValue "ρ" |> Option.get
         [1 .. (Array.length x.Observed) - 1] 
         |> List.sumBy (fun i -> (bivariateGaussian' sigmax sigmay rho x.Observed.[i] y.Observed.[i] x.Expected.[i] y.Expected.[i])) 
-
-    
-
 
     // How to refactor likelihood functions?
     // - Need to access parameters?
