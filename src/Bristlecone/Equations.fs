@@ -35,7 +35,7 @@ module Likelihood =
     /// </summary> 
     let gaussian key pool data = 
         let x = data |> getData key
-        let sigmax = pool |> tryGetTransformedValue "σ[x]" |> Option.get
+        let sigmax = pool |> Parameter.Pool.tryGetTransformedValue "σ[x]" |> Option.get
         [1 .. (Array.length x.Observed) - 1] 
         |> List.sumBy (fun i -> (gaussian' sigmax x.Observed.[i]  x.Expected.[i]))
 
