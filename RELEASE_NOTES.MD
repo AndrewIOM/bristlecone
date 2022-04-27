@@ -1,3 +1,6 @@
+#### 2.0.0-alpha2 - 2022-04-27
+* FEATURE: Add univariate gaussian -log likelihood function
+
 #### 2.0.0-alpha1 - 2021-09-28
 * FEATURE: Domain Specific Language (DSL) for scaffolding models in the `Bristlecone.Language` namespace.
 * FEATURE: Pass user-defined Random instances to the EstimationEngine to enable working with seeds for reproducing previous results.
