@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title>Calculating Confidence Intervals</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="author" content="Andrew Martin">
+
+    <link rel="stylesheet" id="theme_link" href="https://cdnjs.cloudflare.com/ajax/libs/bootswatch/4.6.0/materia/bootstrap.min.css">
+    <script src="https://code.jquery.com/jquery-3.4.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.0/dist/js/bootstrap.bundle.min.js" integrity="sha384-Piv4xVNRyMGpqkS2by6br4gNJ7DXjqk09RmUpJ8jgGtD7zP9yug3goQfGII0yAns" crossorigin="anonymous"></script>
+
+    <script type="text/javascript" async src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.7/MathJax.js?config=TeX-MML-AM_CHTML"></script>
+
+    <link rel="shortcut icon" type="image/x-icon" href="img/favicon.ico">
+    <link type="text/css" rel="stylesheet" href="https://acm.im/bristlecone/content/navbar-fixed-left.css" />
+    <link type="text/css" rel="stylesheet" href="https://acm.im/bristlecone/content/fsdocs-default.css" />
+    <link type="text/css" rel="stylesheet" href="https://acm.im/bristlecone/content/fsdocs-custom.css" />
+    <script type="text/javascript" src="https://acm.im/bristlecone/content/fsdocs-tips.js"></script>
+    <!-- HTML5 shim, for IE6-8 support of HTML5 elements -->
+    <!--[if lt IE 9]>
+      <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <!-- BEGIN SEARCH BOX: this adds support for the search box -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/JavaScript-autoComplete/1.0.4/auto-complete.css" />
+    <!-- END SEARCH BOX: this adds support for the search box -->
+    
+</head>
+
+<body>
+    <nav class="navbar navbar-expand-md navbar-light bg-secondary fixed-left" id="fsdocs-nav">
+        <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarsExampleDefault" aria-controls="navbarsExampleDefault" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse navbar-nav-scroll" id="navbarsExampleDefault">
+            <a href="https://acm.im/bristlecone/"><img id="fsdocs-logo" src="https://raw.githubusercontent.com/AndrewIOM/bristlecone/master/docs/img/logo.png" /></a>
+            <!-- BEGIN SEARCH BOX: this adds support for the search box -->
+            <div id="header">
+                <div class="searchbox" id="fsdocs-searchbox">
+                    <label for="search-by">
+                        <i class="fas fa-search"></i>
+                    </label>
+                    <input data-search-input="" id="search-by" type="search" placeholder="Search..." />
+                    <span data-search-clear="">
+                        <i class="fas fa-times"></i>
+                    </span>
+                </div>
+            </div>
+
+            <!-- END SEARCH BOX: this adds support for the search box -->
+            <ul class="navbar-nav">
+                <li class="nav-header">Links</li>
+                <li class="nav-item" id="fsdocs-license-link"><a class="nav-link" href="https://github.com/AndrewIOM/bristlecone/blob/master/LICENSE.md">License</a></li>
+                <li class="nav-item" id="fsdocs-release-notes-link"><a class="nav-link" href="https://github.com/AndrewIOM/bristlecone/blob/master/RELEASE_NOTES.md">Release Notes</a></li>
+                <li class="nav-item" id="fsdocs-repository-link"><a class="nav-link" href="https://github.com/AndrewIOM/bristlecone/">Source Repository</a></li>
+                <li class="nav-header">
+  The Bristlecone Language
+</li>             
+<li class="nav-item">
+  <a class="nav-link" href="https://acm.im/bristlecone/language.html">
+    Writing Models
+  </a>
+</li>             
+<li class="nav-item">
+  <a class="nav-link" href="https://acm.im/bristlecone/model.html">
+    Defining a Hypothesis (or Model System)
+  </a>
+</li>             
+<li class="nav-item">
+  <a class="nav-link" href="https://acm.im/bristlecone/estimation-engine.html">
+    Defining a Model-Fitting Method (Estimation Engine)
+  </a>
+</li>             
+<li class="nav-header">
+  Techniques
+</li>             
+<li class="nav-item">
+  <a class="nav-link" href="https://acm.im/bristlecone/data.html">
+    Loading and Saving Data
+  </a>
+</li>             
+<li class="nav-item">
+  <a class="nav-link" href="https://acm.im/bristlecone/model-fitting.html">
+    Model Fitting
+  </a>
+</li>             
+<li class="nav-item">
+  <a class="nav-link" href="https://acm.im/bristlecone/model-selection.html">
+    Model Selection
+  </a>
+</li>             
+<li class="nav-item">
+  <a class="nav-link" href="https://acm.im/bristlecone/workflow.html">
+    Ensembles and Parallel Processing
+  </a>
+</li>             
+<li class="nav-item">
+  <a class="nav-link" href="https://acm.im/bristlecone/confidence-intervals.html">
+    Calculating Confidence Intervals
+  </a>
+</li>             
+<li class="nav-item">
+  <a class="nav-link" href="https://acm.im/bristlecone/diagnostics.html">
+    Diagnostics
+  </a>
+</li>             
+<li class="nav-header">
+  Bristlecone.Dendro
+</li>             
+<li class="nav-item">
+  <a class="nav-link" href="https://acm.im/bristlecone/dendro.html">
+    Dendroecology
+  </a>
+</li>             
+<li class="nav-header">
+  Components
+</li>             
+<li class="nav-item">
+  <a class="nav-link" href="https://acm.im/bristlecone/optimisation.html">
+    Optimisation
+  </a>
+</li>             
+<li class="nav-item">
+  <a class="nav-link" href="https://acm.im/bristlecone/integration.html">
+    Integration
+  </a>
+</li>             
+<li class="nav-item">
+  <a class="nav-link" href="https://acm.im/bristlecone/logging.html">
+    Logging
+  </a>
+</li>             
+<li class="nav-header">
+  Tutorials
+</li>             
+<li class="nav-item">
+  <a class="nav-link" href="https://acm.im/bristlecone/tutorial.html">
+    Quick Tour
+  </a>
+</li>
+                <li class="nav-header">
+  API Reference
+</li>             
+<li class="nav-item">
+  <a class="nav-link" href="https://acm.im/bristlecone/reference/index.html">
+    All Namespaces
+  </a>
+</li>
+            </ul>
+        </div>
+    </nav>
+    <div class="container">
+        <div class="masthead">
+            <h3 class="muted"><a href="https://acm.im/bristlecone/">bristlecone</a></h3>
+        </div>
+        <hr />
+        <div class="container" id="fsdocs-content">
+            
+<h1><a name="Calculating-Confidence-Intervals" class="anchor" href="#Calculating-Confidence-Intervals">Calculating Confidence Intervals</a></h1>
+<p>Bristlecone includes functions to calculate confidence intervals based
+on a profile likelihood method. Given the minimum -log likelihood, the
+profile likelihood method samples the parameter space around this point.
+The range sampled for each parameter is discovered at 95% and 68%
+confidence based on a chi squared distribution.</p>
+<p>These functions are included in the <code>Bristlecone.Optimisation.ConfidenceInterval</code> module.
+An example of their use is given below:</p>
+<pre class="fssnip highlighted"><code lang="fsharp"><span class="k">open</span> <span onmouseout="hideTip(event, 'fs1', 1)" onmouseover="showTip(event, 'fs1', 1)" class="id">Bristlecone</span>
+<span class="k">open</span> <span onmouseout="hideTip(event, 'fs2', 2)" onmouseover="showTip(event, 'fs2', 2)" class="m">Bristlecone</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs3', 3)" onmouseover="showTip(event, 'fs3', 3)" class="id">Optimisation</span>
+<span class="k">open</span> <span onmouseout="hideTip(event, 'fs2', 4)" onmouseover="showTip(event, 'fs2', 4)" class="m">Bristlecone</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs4', 5)" onmouseover="showTip(event, 'fs4', 5)" class="id">Data</span>
+
+<span class="c">// fitFn = </span>
+<span class="k">fun</span> <span onmouseout="hideTip(event, 'fs5', 6)" onmouseover="showTip(event, 'fs5', 6)" class="fn">engine</span> <span onmouseout="hideTip(event, 'fs6', 7)" onmouseover="showTip(event, 'fs6', 7)" class="fn">dataset</span> <span onmouseout="hideTip(event, 'fs7', 8)" onmouseover="showTip(event, 'fs7', 8)" class="fn">hypothesis</span> <span onmouseout="hideTip(event, 'fs8', 9)" onmouseover="showTip(event, 'fs8', 9)" class="fn">result</span> <span class="k">-&gt;</span>
+
+    <span class="c">// The function used to fit the model, which unless an</span>
+    <span class="c">// advanced scenario is usually Bristlecone.fit</span>
+    <span class="k">let</span> <span onmouseout="hideTip(event, 'fs9', 10)" onmouseover="showTip(event, 'fs9', 10)" class="fn">fitFn</span> <span class="o">=</span> <span onmouseout="hideTip(event, 'fs2', 11)" onmouseover="showTip(event, 'fs2', 11)" class="m">Bristlecone</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs10', 12)" onmouseover="showTip(event, 'fs10', 12)" class="id">fit</span>
+
+    <span class="c">// The number of jumps to perform in parameter space</span>
+    <span class="k">let</span> <span onmouseout="hideTip(event, 'fs11', 13)" onmouseover="showTip(event, 'fs11', 13)" class="fn">n</span> <span class="o">=</span> <span class="n">10000</span>
+
+    <span class="k">let</span> <span onmouseout="hideTip(event, 'fs12', 14)" onmouseover="showTip(event, 'fs12', 14)" class="fn">ci</span> <span class="o">=</span> <span onmouseout="hideTip(event, 'fs13', 15)" onmouseover="showTip(event, 'fs13', 15)" class="id">ConfidenceInterval</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs14', 16)" onmouseover="showTip(event, 'fs14', 16)" class="m">ProfileLikelihood</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs15', 17)" onmouseover="showTip(event, 'fs15', 17)" class="id">profile</span> <span onmouseout="hideTip(event, 'fs9', 18)" onmouseover="showTip(event, 'fs9', 18)" class="fn">fitFn</span> <span onmouseout="hideTip(event, 'fs5', 19)" onmouseover="showTip(event, 'fs5', 19)" class="fn">engine</span> <span onmouseout="hideTip(event, 'fs6', 20)" onmouseover="showTip(event, 'fs6', 20)" class="fn">dataset</span> <span onmouseout="hideTip(event, 'fs7', 21)" onmouseover="showTip(event, 'fs7', 21)" class="fn">hypothesis</span> <span onmouseout="hideTip(event, 'fs11', 22)" onmouseover="showTip(event, 'fs11', 22)" class="fn">n</span> <span onmouseout="hideTip(event, 'fs8', 23)" onmouseover="showTip(event, 'fs8', 23)" class="fn">result</span>
+
+    <span class="c">// Optionally, save the result</span>
+    <span class="k">let</span> <span onmouseout="hideTip(event, 'fs16', 24)" onmouseover="showTip(event, 'fs16', 24)" class="fn">saveDir</span> <span class="o">=</span> <span class="s">&quot;/some/save/dir&quot;</span>
+    <span class="k">let</span> <span onmouseout="hideTip(event, 'fs17', 25)" onmouseover="showTip(event, 'fs17', 25)" class="fn">subjectName</span> <span class="o">=</span> <span class="s">&quot;some subject&quot;</span>
+    <span class="k">let</span> <span onmouseout="hideTip(event, 'fs18', 26)" onmouseover="showTip(event, 'fs18', 26)" class="fn">modelId</span> <span class="o">=</span> <span class="s">&quot;some model hypothesis&quot;</span>
+    <span onmouseout="hideTip(event, 'fs19', 27)" onmouseover="showTip(event, 'fs19', 27)" class="m">Confidence</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs20', 28)" onmouseover="showTip(event, 'fs20', 28)" class="id">save</span> <span onmouseout="hideTip(event, 'fs16', 29)" onmouseover="showTip(event, 'fs16', 29)" class="fn">saveDir</span> <span onmouseout="hideTip(event, 'fs17', 30)" onmouseover="showTip(event, 'fs17', 30)" class="fn">subjectName</span> <span onmouseout="hideTip(event, 'fs18', 31)" onmouseover="showTip(event, 'fs18', 31)" class="fn">modelId</span> <span onmouseout="hideTip(event, 'fs8', 32)" onmouseover="showTip(event, 'fs8', 32)" class="fn">result</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs21', 33)" onmouseover="showTip(event, 'fs21', 33)" class="id">ResultId</span> <span onmouseout="hideTip(event, 'fs12', 34)" onmouseover="showTip(event, 'fs12', 34)" class="fn">ci</span>
+</code></pre>
+
+            <div class="fsdocs-tip" id="fs1">namespace Bristlecone</div>
+<div class="fsdocs-tip" id="fs2">Multiple items<br />module Bristlecone
+
+from Bristlecone<br /><br />--------------------<br />namespace Bristlecone</div>
+<div class="fsdocs-tip" id="fs3">namespace Bristlecone.Optimisation</div>
+<div class="fsdocs-tip" id="fs4">namespace Bristlecone.Data</div>
+<div class="fsdocs-tip" id="fs5">val engine : EstimationEngine.EstimationEngine&lt;float,float&gt;</div>
+<div class="fsdocs-tip" id="fs6">val dataset : Map&lt;ShortCode.ShortCode,Time.TimeSeries.TimeSeries&lt;float&gt;&gt;</div>
+<div class="fsdocs-tip" id="fs7">val hypothesis : ModelSystem.ModelSystem</div>
+<div class="fsdocs-tip" id="fs8">val result : ModelSystem.EstimationResult</div>
+<div class="fsdocs-tip" id="fs9">val fitFn : (EstimationEngine.EstimationEngine&lt;float,float&gt; -&gt; EstimationEngine.EndCondition&lt;float&gt; -&gt; Map&lt;ShortCode.ShortCode,Time.TimeSeries.TimeSeries&lt;float&gt;&gt; -&gt; ModelSystem.ModelSystem -&gt; ModelSystem.EstimationResult)</div>
+<div class="fsdocs-tip" id="fs10">val fit : engine:EstimationEngine.EstimationEngine&lt;float,float&gt; -&gt; endCondition:EstimationEngine.EndCondition&lt;float&gt; -&gt; timeSeriesData:Map&lt;ShortCode.ShortCode,Time.TimeSeries.TimeSeries&lt;float&gt;&gt; -&gt; model:ModelSystem.ModelSystem -&gt; ModelSystem.EstimationResult<br /><em>&lt;summary&gt;
+ Fit a time-series model to data.
+ 
+ Please note: it is strongly recommended that you test that the given `EstimationEngine`
+ can correctly identify known parameters for your model. Refer to the `Bristlecone.testModel`
+ function, which can be used to generate known data and complete this process.
+ &lt;/summary&gt;<br />&lt;param name=&quot;engine&quot;&gt;The engine encapsulates all settings that form part of the estimation
+ method. Importantly, this includes the random number generator used for all stages 
+ of the analysis; if this is set using a fixed seed, the result will be reproducable.&lt;/param&gt;<br />&lt;param name=&quot;endCondition&quot;&gt;You must specify a stopping condition, after which
+ the optimisation process will cease. Bristlecone includes built-in end conditions
+ in the `Bristlecone.Optimisation.EndConditions` module.&lt;/param&gt;<br />&lt;param name=&quot;timeSeriesData&quot;&gt;&lt;/param&gt;<br />&lt;param name=&quot;model&quot;&gt;&lt;/param&gt;<br />&lt;returns&gt;&lt;/returns&gt;</em></div>
+<div class="fsdocs-tip" id="fs11">val n : int</div>
+<div class="fsdocs-tip" id="fs12">val ci : Map&lt;ShortCode.ShortCode,ConfidenceInterval.ConfidenceInterval&gt;</div>
+<div class="fsdocs-tip" id="fs13">namespace Bristlecone.Optimisation.ConfidenceInterval</div>
+<div class="fsdocs-tip" id="fs14">module ProfileLikelihood
+
+from Bristlecone.Optimisation.ConfidenceInterval<br /><em>&lt;summary&gt;
+ Given a maximum likelihood estimate (MLE), the profile likelihood method
+ runs a Monte Carlo algorithm that samples around the MLE. The range for
+ each parameter is discovered at 95% and 68% confidence based on a chi squared
+ distribution.
+&lt;/summary&gt;</em></div>
+<div class="fsdocs-tip" id="fs15">val profile : fit:(EstimationEngine.EstimationEngine&lt;float,&#39;a&gt; -&gt; EstimationEngine.EndCondition&lt;float&gt; -&gt; &#39;b -&gt; ModelSystem.ModelSystem -&gt; ModelSystem.EstimationResult) -&gt; engine:EstimationEngine.EstimationEngine&lt;float,&#39;a&gt; -&gt; subject:&#39;b -&gt; hypothesis:ModelSystem.ModelSystem -&gt; n:int -&gt; result:ModelSystem.EstimationResult -&gt; Map&lt;ShortCode.ShortCode,ConfidenceInterval.ConfidenceInterval&gt;<br /><em>&lt;summary&gt;
+ The profile likelihood method samples the likelihood space
+ around the Maximum Likelihood Estimate 
+&lt;/summary&gt;</em></div>
+<div class="fsdocs-tip" id="fs16">val saveDir : string</div>
+<div class="fsdocs-tip" id="fs17">val subjectName : string</div>
+<div class="fsdocs-tip" id="fs18">val modelId : string</div>
+<div class="fsdocs-tip" id="fs19">module Confidence
+
+from Bristlecone.Data</div>
+<div class="fsdocs-tip" id="fs20">val save : directory:string -&gt; subject:string -&gt; modelId:string -&gt; runId:System.Guid -&gt; result:CodedMap&lt;ConfidenceInterval.ConfidenceInterval&gt; -&gt; unit</div>
+<div class="fsdocs-tip" id="fs21">ModelSystem.EstimationResult.ResultId: System.Guid</div>
+
+        </div>
+
+        <!-- BEGIN SEARCH BOX: this adds support for the search box -->
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/JavaScript-autoComplete/1.0.4/auto-complete.css" />
+        <script type="text/javascript">var fsdocs_search_baseurl = 'https://acm.im/bristlecone/';</script>
+        <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/lunr.js/2.3.8/lunr.min.js"></script>
+        <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/JavaScript-autoComplete/1.0.4/auto-complete.min.js"></script>
+        <script type="text/javascript" src="https://acm.im/bristlecone/content/fsdocs-search.js"></script>
+        <!-- END SEARCH BOX: this adds support for the search box -->
+    </div>
+</body>
+
+</html>

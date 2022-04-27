@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title>Diagnostics</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="author" content="Andrew Martin">
+
+    <link rel="stylesheet" id="theme_link" href="https://cdnjs.cloudflare.com/ajax/libs/bootswatch/4.6.0/materia/bootstrap.min.css">
+    <script src="https://code.jquery.com/jquery-3.4.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.0/dist/js/bootstrap.bundle.min.js" integrity="sha384-Piv4xVNRyMGpqkS2by6br4gNJ7DXjqk09RmUpJ8jgGtD7zP9yug3goQfGII0yAns" crossorigin="anonymous"></script>
+
+    <script type="text/javascript" async src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.7/MathJax.js?config=TeX-MML-AM_CHTML"></script>
+
+    <link rel="shortcut icon" type="image/x-icon" href="img/favicon.ico">
+    <link type="text/css" rel="stylesheet" href="https://acm.im/bristlecone/content/navbar-fixed-left.css" />
+    <link type="text/css" rel="stylesheet" href="https://acm.im/bristlecone/content/fsdocs-default.css" />
+    <link type="text/css" rel="stylesheet" href="https://acm.im/bristlecone/content/fsdocs-custom.css" />
+    <script type="text/javascript" src="https://acm.im/bristlecone/content/fsdocs-tips.js"></script>
+    <!-- HTML5 shim, for IE6-8 support of HTML5 elements -->
+    <!--[if lt IE 9]>
+      <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <!-- BEGIN SEARCH BOX: this adds support for the search box -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/JavaScript-autoComplete/1.0.4/auto-complete.css" />
+    <!-- END SEARCH BOX: this adds support for the search box -->
+    
+</head>
+
+<body>
+    <nav class="navbar navbar-expand-md navbar-light bg-secondary fixed-left" id="fsdocs-nav">
+        <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarsExampleDefault" aria-controls="navbarsExampleDefault" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse navbar-nav-scroll" id="navbarsExampleDefault">
+            <a href="https://acm.im/bristlecone/"><img id="fsdocs-logo" src="https://raw.githubusercontent.com/AndrewIOM/bristlecone/master/docs/img/logo.png" /></a>
+            <!-- BEGIN SEARCH BOX: this adds support for the search box -->
+            <div id="header">
+                <div class="searchbox" id="fsdocs-searchbox">
+                    <label for="search-by">
+                        <i class="fas fa-search"></i>
+                    </label>
+                    <input data-search-input="" id="search-by" type="search" placeholder="Search..." />
+                    <span data-search-clear="">
+                        <i class="fas fa-times"></i>
+                    </span>
+                </div>
+            </div>
+
+            <!-- END SEARCH BOX: this adds support for the search box -->
+            <ul class="navbar-nav">
+                <li class="nav-header">Links</li>
+                <li class="nav-item" id="fsdocs-license-link"><a class="nav-link" href="https://github.com/AndrewIOM/bristlecone/blob/master/LICENSE.md">License</a></li>
+                <li class="nav-item" id="fsdocs-release-notes-link"><a class="nav-link" href="https://github.com/AndrewIOM/bristlecone/blob/master/RELEASE_NOTES.md">Release Notes</a></li>
+                <li class="nav-item" id="fsdocs-repository-link"><a class="nav-link" href="https://github.com/AndrewIOM/bristlecone/">Source Repository</a></li>
+                <li class="nav-header">
+  The Bristlecone Language
+</li>             
+<li class="nav-item">
+  <a class="nav-link" href="https://acm.im/bristlecone/language.html">
+    Writing Models
+  </a>
+</li>             
+<li class="nav-item">
+  <a class="nav-link" href="https://acm.im/bristlecone/model.html">
+    Defining a Hypothesis (or Model System)
+  </a>
+</li>             
+<li class="nav-item">
+  <a class="nav-link" href="https://acm.im/bristlecone/estimation-engine.html">
+    Defining a Model-Fitting Method (Estimation Engine)
+  </a>
+</li>             
+<li class="nav-header">
+  Techniques
+</li>             
+<li class="nav-item">
+  <a class="nav-link" href="https://acm.im/bristlecone/data.html">
+    Loading and Saving Data
+  </a>
+</li>             
+<li class="nav-item">
+  <a class="nav-link" href="https://acm.im/bristlecone/model-fitting.html">
+    Model Fitting
+  </a>
+</li>             
+<li class="nav-item">
+  <a class="nav-link" href="https://acm.im/bristlecone/model-selection.html">
+    Model Selection
+  </a>
+</li>             
+<li class="nav-item">
+  <a class="nav-link" href="https://acm.im/bristlecone/workflow.html">
+    Ensembles and Parallel Processing
+  </a>
+</li>             
+<li class="nav-item">
+  <a class="nav-link" href="https://acm.im/bristlecone/confidence-intervals.html">
+    Calculating Confidence Intervals
+  </a>
+</li>             
+<li class="nav-item">
+  <a class="nav-link" href="https://acm.im/bristlecone/diagnostics.html">
+    Diagnostics
+  </a>
+</li>             
+<li class="nav-header">
+  Bristlecone.Dendro
+</li>             
+<li class="nav-item">
+  <a class="nav-link" href="https://acm.im/bristlecone/dendro.html">
+    Dendroecology
+  </a>
+</li>             
+<li class="nav-header">
+  Components
+</li>             
+<li class="nav-item">
+  <a class="nav-link" href="https://acm.im/bristlecone/optimisation.html">
+    Optimisation
+  </a>
+</li>             
+<li class="nav-item">
+  <a class="nav-link" href="https://acm.im/bristlecone/integration.html">
+    Integration
+  </a>
+</li>             
+<li class="nav-item">
+  <a class="nav-link" href="https://acm.im/bristlecone/logging.html">
+    Logging
+  </a>
+</li>             
+<li class="nav-header">
+  Tutorials
+</li>             
+<li class="nav-item">
+  <a class="nav-link" href="https://acm.im/bristlecone/tutorial.html">
+    Quick Tour
+  </a>
+</li>
+                <li class="nav-header">
+  API Reference
+</li>             
+<li class="nav-item">
+  <a class="nav-link" href="https://acm.im/bristlecone/reference/index.html">
+    All Namespaces
+  </a>
+</li>
+            </ul>
+        </div>
+    </nav>
+    <div class="container">
+        <div class="masthead">
+            <h3 class="muted"><a href="https://acm.im/bristlecone/">bristlecone</a></h3>
+        </div>
+        <hr />
+        <div class="container" id="fsdocs-content">
+            
+<h1><a name="Diagnostics" class="anchor" href="#Diagnostics">Diagnostics</a></h1>
+<p>Diagnostic statistics are essential to ensure that the model-fitting
+and model-selection results are valid and complete.</p>
+<h3><a name="Convergence-Statistics" class="anchor" href="#Convergence-Statistics">Convergence Statistics</a></h3>
+<p>For Monte-Carlo based optimisation techniques (such as the random walk
+MCMC or the Filzbach-style MCMC) convergence statistics are useful to
+assess whether multiple independent <em>chains</em> have identified the same
+minimum -log likelihood in parameter space, which may be the global minimum.</p>
+<p>Bristlecone includes the Gelman-Rubin convergence statistic (Rhat), which
+can be calculated on a per-parameter basis.</p>
+<pre class="fssnip highlighted"><code lang="fsharp"><span class="k">open</span> <span onmouseout="hideTip(event, 'fs1', 1)" onmouseover="showTip(event, 'fs1', 1)" class="id">Bristlecone</span>
+<span class="k">open</span> <span onmouseout="hideTip(event, 'fs2', 2)" onmouseover="showTip(event, 'fs2', 2)" class="m">Bristlecone</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs3', 3)" onmouseover="showTip(event, 'fs3', 3)" class="m">Diagnostics</span>
+<span class="k">open</span> <span onmouseout="hideTip(event, 'fs2', 4)" onmouseover="showTip(event, 'fs2', 4)" class="m">Bristlecone</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs4', 5)" onmouseover="showTip(event, 'fs4', 5)" class="id">Data</span>
+
+<span class="k">let</span> <span onmouseout="hideTip(event, 'fs5', 6)" onmouseover="showTip(event, 'fs5', 6)" class="id">saveDirectory</span> <span class="o">=</span> <span class="s">&quot;/some/save/dir&quot;</span>
+
+<span class="k">fun</span> <span onmouseout="hideTip(event, 'fs6', 7)" onmouseover="showTip(event, 'fs6', 7)" class="fn">listOfResults</span> <span class="k">-&gt;</span>
+
+    <span class="c">// Calculate Gelman-Rubin statistic for all parameters </span>
+    <span class="c">// across multiple model runs</span>
+    <span class="k">let</span> <span onmouseout="hideTip(event, 'fs7', 8)" onmouseover="showTip(event, 'fs7', 8)" class="fn">stat</span> <span class="o">=</span> <span onmouseout="hideTip(event, 'fs8', 9)" onmouseover="showTip(event, 'fs8', 9)" class="m">Convergence</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs9', 10)" onmouseover="showTip(event, 'fs9', 10)" class="id">gelmanRubinAll</span> <span class="n">1000</span> <span onmouseout="hideTip(event, 'fs6', 11)" onmouseover="showTip(event, 'fs6', 11)" class="fn">listOfResults</span>
+
+    <span class="c">// Save results to a single file</span>
+    <span onmouseout="hideTip(event, 'fs8', 12)" onmouseover="showTip(event, 'fs8', 12)" class="m">Convergence</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs10', 13)" onmouseover="showTip(event, 'fs10', 13)" class="id">save</span> <span onmouseout="hideTip(event, 'fs5', 14)" onmouseover="showTip(event, 'fs5', 14)" class="id">saveDirectory</span> <span onmouseout="hideTip(event, 'fs7', 15)" onmouseover="showTip(event, 'fs7', 15)" class="fn">stat</span>
+</code></pre>
+<h3><a name="Logging-individual-model-components" class="anchor" href="#Logging-individual-model-components">Logging individual model components</a></h3>
+<p>Sometimes it is helpful for diagnostic or visualisation purposes to
+see the values of individual parts of a mathematical model during
+computation, or at the minimum -log likelihood.</p>
+<p>Bristlecone includes the ability to log out the values of individual
+model components through time. An worked example is given below of how to
+obtain computed values across the time-series for components within
+a model system. First, you must set up a model that has a parameter
+of the <code>IComponentLogger&lt;float&gt;)</code> type:</p>
+<p>[ NB TODO: This function must be refactored to work with the new Bristlecone Language ]</p>
+<pre class="fssnip highlighted"><code lang="fsharp"><span class="k">open</span> <span onmouseout="hideTip(event, 'fs2', 16)" onmouseover="showTip(event, 'fs2', 16)" class="m">Bristlecone</span>
+<span class="k">open</span> <span onmouseout="hideTip(event, 'fs2', 17)" onmouseover="showTip(event, 'fs2', 17)" class="m">Bristlecone</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs11', 18)" onmouseover="showTip(event, 'fs11', 18)" class="m">Language</span>
+<span class="k">open</span> <span onmouseout="hideTip(event, 'fs2', 19)" onmouseover="showTip(event, 'fs2', 19)" class="m">Bristlecone</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs3', 20)" onmouseover="showTip(event, 'fs3', 20)" class="m">Diagnostics</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs12', 21)" onmouseover="showTip(event, 'fs12', 21)" class="m">ModelComponents</span>
+
+<span class="c">// let hypothesis (cLog:IComponentLogger&lt;ModelExpression&gt;) =</span>
+
+<span class="c">//     let ``dN/dt`` = </span>
+<span class="c">//         Parameter &quot;r&quot; * This * cLog.StoreValue &quot;log this thing&quot; (Constant 1. - (This / Parameter &quot;K&quot;))</span>
+
+<span class="c">//     Model.empty</span>
+<span class="c">//     |&gt; Model.addEquation       &quot;N&quot;      ``dN/dt``</span>
+<span class="c">//     |&gt; Model.estimateParameter &quot;r&quot;      noConstraints 0.10 5.00 </span>
+<span class="c">//     |&gt; Model.estimateParameter &quot;K&quot;      noConstraints 50.0 150.</span>
+<span class="c">//     |&gt; Model.useLikelihoodFunction      (ModelLibrary.Likelihood.sumOfSquares [ &quot;N&quot; ])</span>
+<span class="c">//     |&gt; Model.compile</span>
+
+
+<span class="c">// fun engine singleResult -&gt;</span>
+<span class="c">//     // A wrapper around the Bristlecone.fit function</span>
+<span class="c">//     let fitFn ts m e = Bristlecone.fit e (Optimisation.EndConditions.afterIteration 1) ts m</span>
+<span class="c">//     let logs = ModelComponents.calculateComponents fitFn engine singleResult</span>
+<span class="c">//     ()</span>
+</code></pre>
+
+            <div class="fsdocs-tip" id="fs1">namespace Bristlecone</div>
+<div class="fsdocs-tip" id="fs2">Multiple items<br />module Bristlecone
+
+from Bristlecone<br /><br />--------------------<br />namespace Bristlecone</div>
+<div class="fsdocs-tip" id="fs3">module Diagnostics
+
+from Bristlecone<br /><em>&lt;summary&gt;
+ Diagnostic techniques for determining the suitability of 
+ results obtained with Bristlecone.
+&lt;/summary&gt;</em></div>
+<div class="fsdocs-tip" id="fs4">namespace Bristlecone.Data</div>
+<div class="fsdocs-tip" id="fs5">val saveDirectory : string</div>
+<div class="fsdocs-tip" id="fs6">val listOfResults : ModelSelection.ResultSet.ResultSet&lt;string,ModelSystem.ModelSystem&gt; list</div>
+<div class="fsdocs-tip" id="fs7">val stat : seq&lt;seq&lt;Convergence.ConvergenceStatistic&gt;&gt;</div>
+<div class="fsdocs-tip" id="fs8">Multiple items<br />module Convergence
+
+from Bristlecone.Data<br /><br />--------------------<br />module Convergence
+
+from Bristlecone.Diagnostics<br /><em>&lt;summary&gt;
+ Convergence diagnostics for monte-carlo markov chain (MCMC) analyses.
+&lt;/summary&gt;</em></div>
+<div class="fsdocs-tip" id="fs9">val gelmanRubinAll : n:int -&gt; results:ModelSelection.ResultSet.ResultSet&lt;string,ModelSystem.ModelSystem&gt; list -&gt; seq&lt;seq&lt;Convergence.ConvergenceStatistic&gt;&gt;<br /><em>&lt;summary&gt;
+ Calculate the Gelman-Rubin statistic for each parameter in all of the
+ given `ResultSet`. The statistic tends downwards to one, with one indicating
+ perfect convergence between all chains.
+&lt;/summary&gt;</em></div>
+<div class="fsdocs-tip" id="fs10">val save : directory:string -&gt; result:seq&lt;seq&lt;Convergence.ConvergenceStatistic&gt;&gt; -&gt; unit</div>
+<div class="fsdocs-tip" id="fs11">module Language
+
+from Bristlecone<br /><em>&lt;summary&gt;
+ An F# Domain Specific Language (DSL) for scripting with
+ Bristlecone.
+&lt;/summary&gt;</em></div>
+<div class="fsdocs-tip" id="fs12">module ModelComponents
+
+from Bristlecone.Diagnostics<br /><em>&lt;summary&gt;
+ Logging functions to output the internal dynamics of model systems.
+&lt;/summary&gt;</em></div>
+
+        </div>
+
+        <!-- BEGIN SEARCH BOX: this adds support for the search box -->
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/JavaScript-autoComplete/1.0.4/auto-complete.css" />
+        <script type="text/javascript">var fsdocs_search_baseurl = 'https://acm.im/bristlecone/';</script>
+        <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/lunr.js/2.3.8/lunr.min.js"></script>
+        <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/JavaScript-autoComplete/1.0.4/auto-complete.min.js"></script>
+        <script type="text/javascript" src="https://acm.im/bristlecone/content/fsdocs-search.js"></script>
+        <!-- END SEARCH BOX: this adds support for the search box -->
+    </div>
+</body>
+
+</html>
