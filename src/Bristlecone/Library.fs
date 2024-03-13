@@ -137,7 +137,7 @@ module Bristlecone =
 
         let objective = Objective.create { model with Parameters = constrainedParameters } (solver Solver.StepType.External) discreteSolve data
 
-        let optimise = engine.OptimiseWith engine.Random engine.LogTo endCondition (constrainedParameters |> Parameter.Pool.toDomain optimisationConstraints)
+        let optimise = engine.OptimiseWith engine.Random engine.LogTo endCondition (constrainedParameters |> Parameter.Pool.toDomain optimisationConstraints) None
         let result = objective |> optimise
         let lowestLikelihood, bestPoint = result |> List.minBy (fun (l,_) -> l)
 

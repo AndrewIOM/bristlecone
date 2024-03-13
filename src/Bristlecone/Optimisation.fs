@@ -13,7 +13,7 @@ module None =
     /// An optimisation function that calculates the value of `f` using
     /// the given bounds. Use when optimisation of the objective is not required.
     let passThrough : Optimise<float> =
-        fun _ writeOut n domain f ->
+        fun _ writeOut _ domain _ f ->
             writeOut <| GeneralEvent "Skipping optimisation: only the result of the given parameters will be computed"
             let point = [| for (min,_,_) in domain -> min |]
             [ f point, point ]
@@ -437,7 +437,7 @@ module MonteCarlo =
     /// through a n-dimensional posterior distribution of the parameter space.
     /// Specify `tuningSteps` to prime the jump size before random walk.
     let randomWalk (tuningSteps:seq<TuneStep<float>>) : Optimise<float>=
-        fun random writeOut n domain f ->
+        fun random writeOut n domain startPoint f ->
             let initialCovariance = TuningMode.covarianceFromBounds 10000 domain random
             match tryGenerateTheta f domain random 10000 with
             | Ok theta ->
@@ -449,15 +449,15 @@ module MonteCarlo =
     /// covariance matrix based on the recently-sampled posterior distribution. Proposed
     /// jumps are therefore tuned to the recent history of accepted jumps.
     let adaptiveMetropolis weighting period : Optimise<float> =
-        fun random writeOut n domain f ->
-            randomWalk [ (CovarianceWithScale weighting, period, n) ] random writeOut (EndConditions.afterIteration 0) domain f
+        fun random writeOut n domain startPoint f ->
+            randomWalk [ (CovarianceWithScale weighting, period, n) ] random writeOut (EndConditions.afterIteration 0) domain startPoint f
 
     /// An adaptive Metropolis-within-Gibbs sampler that tunes the variance of
     /// each parameter according to the per-parameter acceptance rate.
     /// Reference: Bai Y (2009). “An Adaptive Directional Metropolis-within-Gibbs Algorithm.”
     /// Technical Report in Department of Statistics at the University of Toronto.
     let ``Adaptive-Metropolis-within Gibbs`` : Optimise<float> =
-        fun random writeOut endCon domain f ->
+        fun random writeOut endCon domain startPoint f ->
             match tryGenerateTheta f domain random 10000 with
             | Ok theta ->
                 writeOut <| GeneralEvent (sprintf "[Optimisation] Initial theta is %A" theta)
@@ -469,7 +469,7 @@ module MonteCarlo =
     /// A non-adaptive Metropolis-within-gibbs Sampler. Each parameter is updated
     /// individually, unlike the random walk algorithm.
     let ``Metropolis-within Gibbs`` : Optimise<float> =
-        fun random writeOut endCon domain (f:Objective<float>) ->
+        fun random writeOut endCon domain startPoint (f:Objective<float>) ->
             let theta = initialise domain random
             let sigmas = theta |> Array.map(fun _ -> 0.)
             let _,result,_ = MetropolisWithinGibbs.core false writeOut random domain f [] 100 1 (theta:float[]) sigmas
@@ -479,7 +479,7 @@ module MonteCarlo =
     /// General-Purpose MCMC via New Adaptive Diagnostics"
     /// Reference: http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.70.7198&rep=rep1&type=pdf
     let ``Automatic (Adaptive Diagnostics)`` : Optimise<float> =
-        fun random writeOut endCon domain (f:Objective<float>) ->
+        fun random writeOut endCon domain startPoint (f:Objective<float>) ->
 
             // Starting condition
             let initialTheta = initialise domain random
@@ -673,7 +673,7 @@ module MonteCarlo =
             else (temperature, min)
 
         // Given a candidate distribution + machine, run base SA algorithm
-        let simulatedAnnealing scale settings annealEnd machine (jump:System.Random->float->float->unit->float) cool random writeOut domain f =
+        let simulatedAnnealing scale settings annealEnd machine (jump:System.Random->float->float->unit->float) cool random writeOut domain startPoint f =
 
             // 1. Initial conditions
             let draw' = jump random
@@ -741,21 +741,21 @@ module MonteCarlo =
         /// Candidate distribution: Gaussian univariate []
         /// Probability: Boltzmann Machine
         let classicalSimulatedAnnealing scale tDependentProposal settings : Optimise<float> =
-            fun random writeOut endCon domain (f:Objective<float>) ->
+            fun random writeOut endCon domain startPoint (f:Objective<float>) ->
                 let gaussian rnd scale t = 
                     let s = if tDependentProposal then scale * (sqrt t) else scale
                     Bristlecone.Statistics.Distributions.Normal.draw rnd 0. s
-                simulatedAnnealing scale settings endCon Machines.boltzmann gaussian (CoolingSchemes.exponential 0.05) random writeOut domain f
+                simulatedAnnealing scale settings endCon Machines.boltzmann gaussian (CoolingSchemes.exponential 0.05) random writeOut domain startPoint f
 
         /// Candidate distribution: Cauchy univariate []
         /// Probability: Bottzmann Machine
         let fastSimulatedAnnealing scale tDependentProposal settings : Optimise<float> =
-            fun random writeOut endCon domain (f:Objective<float>) ->
+            fun random writeOut endCon domain startPoint (f:Objective<float>) ->
                 let cauchy rnd scale t = 
                     let s = if tDependentProposal then scale * (sqrt t) else scale
                     let c = MathNet.Numerics.Distributions.Cauchy(0., s, rnd)
                     fun () -> c.Sample()
-                simulatedAnnealing scale settings endCon Machines.boltzmann cauchy (CoolingSchemes.fastCauchyCoolingSchedule) random writeOut domain f
+                simulatedAnnealing scale settings endCon Machines.boltzmann cauchy (CoolingSchemes.fastCauchyCoolingSchedule) random writeOut domain startPoint f
 
 
     /// An adaptation of the Filzbach method (originally by Drew Purves)
@@ -805,9 +805,7 @@ module MonteCarlo =
                     Array.zip3 theta scalesToChange domain
                     |> Array.map(fun (x,((ti,n),shouldChange),(_,_,con)) -> 
                         if shouldChange
-                        then 
-                            printfn "%A" scalesToChange
-                            constrainJump x (sample ti ()) 1. con
+                        then constrainJump x (sample ti ()) 1. con
                         else x )
 
                 // Metropolis step here
@@ -844,7 +842,7 @@ module MonteCarlo =
                 if endWhen d currentIteration
                 then (newResult, newScaleInfo |> Array.map fst)
                 else 
-                    writeOut <| OptimisationEvent { Iteration = newResult |> List.length; Likelihood = result |> fst; Theta = result |> snd }
+                    writeOut <| OptimisationEvent { Iteration = currentIteration; Likelihood = result |> fst; Theta = result |> snd }
                     step burning newScaleInfo endWhen result newResult (currentIteration + 1)
 
             writeOut <| GeneralEvent (sprintf "[Filzbach] Starting burn-in at point %A (L = %f)" theta l1)
@@ -856,12 +854,17 @@ module MonteCarlo =
         /// A Monte Carlo Markov Chain sampler based on the 'Filzbach' algorithm from
         /// Microsoft Research Cambridge.
         let filzbach settings : Optimise<float> =
-            fun random writeOut endCon domain (f:Objective<float>) ->
-                match tryGenerateTheta f domain random 10000 with
-                | Ok theta ->
-                    writeOut <| GeneralEvent (sprintf "[Optimisation] Initial theta is %A" theta)
+            fun random writeOut endCon domain startPoint (f:Objective<float>) ->
+                match startPoint with
+                | Some theta ->
+                    writeOut <| GeneralEvent (sprintf "[Optimisation] Pre-defined initial theta is %A" theta)
                     filzbach' settings theta random writeOut endCon domain f
-                | Error _ -> invalidOp "Could not generate theta"
+                | None ->
+                    match tryGenerateTheta f domain random 10000 with
+                    | Ok theta ->
+                        writeOut <| GeneralEvent (sprintf "[Optimisation] Initial theta is %A" theta)
+                        filzbach' settings theta random writeOut endCon domain f
+                    | Error _ -> invalidOp "Could not generate theta"
 
 
 /// Nelder Mead implementation
@@ -939,7 +942,7 @@ module Amoeba =
         let initialize (d:Domain) (rng:System.Random) =
             [| for (min,max,_) in d -> min + (max-min) * rng.NextDouble() |]
 
-        let solve settings rng logger (endWhen:EndCondition<float>) domain f =
+        let solve settings rng logger (endWhen:EndCondition<float>) domain startPoint f =
             let dim = Array.length domain
             let start =             
                 [| for _ in 1 .. settings.Size -> initialize domain rng |]
@@ -956,12 +959,12 @@ module Amoeba =
             search 50000 amoeba
 
 
-        let rec swarm settings rng logger numberOfLevels iterationsPerLevel numberOfAmoeba (paramBounds:Domain) (f:Objective<float>) =
+        let rec swarm settings rng logger numberOfLevels iterationsPerLevel numberOfAmoeba (paramBounds:Domain) startPoint (f:Objective<float>) =
 
             let amoebaResults = 
                 [|1 .. numberOfAmoeba|]
                 |> Array.collect (fun _ -> 
-                    try [|solve settings rng logger iterationsPerLevel paramBounds f|]
+                    try [|solve settings rng logger iterationsPerLevel paramBounds startPoint f|]
                     with | e -> 
                         logger <| GeneralEvent (sprintf "Warning: Could not generate numercal solution for point (with EXN %s): %A" e.Message paramBounds)
                         [||] )
@@ -992,7 +995,7 @@ module Amoeba =
             logger <| GeneralEvent (sprintf "Bound width: %f" boundWidth)
             
             if (numberOfLevels > 1 && boundWidth > 0.01) 
-                then swarm settings rng logger (numberOfLevels-1) iterationsPerLevel numberOfAmoeba bounds f
+                then swarm settings rng logger (numberOfLevels-1) iterationsPerLevel numberOfAmoeba bounds startPoint f
                 else mostLikely
 
 
@@ -1004,5 +1007,5 @@ module Amoeba =
     /// The swarm proceeds for `numberOfLevels` levels, constraining the starting bounds
     /// at each level to the 80th percentile of the current set of best likelihoods.
     let swarm levels amoebaAtLevel settings: Optimise<float> =
-        fun rng logger endAt domain f ->
-            [ Solver.swarm settings rng logger levels endAt amoebaAtLevel domain f ]
+        fun rng logger endAt domain startPoint f ->
+            [ Solver.swarm settings rng logger levels endAt amoebaAtLevel domain startPoint f ]
