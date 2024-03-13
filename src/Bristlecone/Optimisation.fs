@@ -25,8 +25,8 @@ module EndConditions =
 
     /// End the optimisation procedure when a minimum number of iterations is exceeded.
     let afterIteration iteration : EndCondition<float> =
-        fun results -> 
-            results |> Seq.length >= iteration
+        fun _ currentIteration -> 
+            currentIteration >= iteration
 
     /// An `EndCondition` that calculates that segregates the most recent n results into
     /// five bins, and runs a regression to detect a temporal variation in the mean
@@ -34,7 +34,7 @@ module EndConditions =
     /// regression is assessed to determine if the MSJD is increasing through time for every
     /// parameter sequentially: if all p-values are >0.1, then the `EndCondition` is true.
     let stationarySquaredJumpDistance' fixedBin pointsRequired : EndCondition<float> =
-        fun results ->
+        fun results _ ->
             if (results |> Seq.length) % (fixedBin * pointsRequired) = 0
             then
                 let trendSignificance =
@@ -102,10 +102,10 @@ module EndConditions =
 
         convergenceAgent.Error.Add(fun e -> printfn "Convergence agent reported an error = %s" e.Message)
 
-        fun results -> 
+        fun results currentIteration -> 
             if results.Length % thin = 0 && results.Length >= thin
             then 
-                printfn "Sending message to convergence agent at %i" results.Length
+                printfn "Sending message to convergence agent at %i" currentIteration
                 let threadId = System.Threading.Thread.CurrentThread.ManagedThreadId
                 convergenceAgent.PostAndReply (fun reply -> (threadId, results, reply))
             else false
@@ -166,9 +166,8 @@ module MonteCarlo =
     ///   the analysis. The `(float * 'a) list` represents a list of paired -log likelihood values with
     ///   the proposed theta. 
     /// 
-    let rec metropolisHastings' random writeOut endCondition propose tune f theta1 l1 d scale =
+    let rec metropolisHastings' random writeOut endCondition propose tune f theta1 l1 d scale iteration =
         if theta1 |> Array.isEmpty then invalidOp "Not valid theta"
-        let iteration = d |> Seq.length
         let sc = scale |> tune iteration d
         let theta2 = theta1 |> propose sc
         if (theta2 |> Array.length) <> (theta1 |> Array.length) then invalidOp "Theta different length"
@@ -182,11 +181,11 @@ module MonteCarlo =
                 if rand < ratio && l2 <> infinity && l2 <> -infinity && l2 <> nan
                     then (theta2, l2)
                     else (theta1, l1)
-        if endCondition d
+        if endCondition d iteration
         then (d, sc)
         else
             writeOut <| OptimisationEvent { Iteration = iteration; Likelihood = lAccepted; Theta = thetaAccepted }
-            metropolisHastings' random writeOut endCondition propose tune f thetaAccepted lAccepted ((lAccepted,thetaAccepted)::d) sc
+            metropolisHastings' random writeOut endCondition propose tune f thetaAccepted lAccepted ((lAccepted,thetaAccepted)::d) sc (iteration + 1)
 
 
     module TuningMode =
@@ -336,10 +335,10 @@ module MonteCarlo =
             tuningSteps
             |> Seq.fold(fun (s,sc) (method,frequency,endCon) -> 
                 let l,t = s |> Seq.head
-                metropolisHastings' random writeOut endCon proposeJump (toFn method frequency) f t l s sc ) ([f theta, theta], (initialCovariance,initialScale))
+                metropolisHastings' random writeOut endCon proposeJump (toFn method frequency) f t l s sc s.Length ) ([f theta, theta], (initialCovariance,initialScale))
             ||> fun r s -> 
                 let l,t = r |> Seq.head
-                metropolisHastings' random writeOut endCondition proposeJump (TuningMode.none) f t l r s
+                metropolisHastings' random writeOut endCondition proposeJump (TuningMode.none) f t l r s (r.Length)
 
     
     module MetropolisWithinGibbs =
@@ -372,7 +371,7 @@ module MonteCarlo =
                 |> Array.scan (fun (j,results) (lsj,_) -> 
                     let l,theta = results |> Seq.head
                     let proposeJump = fun _ t -> propose t j lsj domain random
-                    let results = metropolisHastings' random ignore (EndConditions.afterIteration batchLength) proposeJump TuningMode.none f theta l [] () |> fst
+                    let results = metropolisHastings' random ignore (EndConditions.afterIteration batchLength) proposeJump TuningMode.none f theta l [] () (results |> List.length) |> fst
                     (j+1, results)) (0, [ (f theta, theta) ])
                 |> Array.tail       // Skip initial state
                 |> Array.map snd    // Discard parameter number
@@ -574,8 +573,8 @@ module MonteCarlo =
                 |> (fun x -> printfn "Average jump is %f" x; x)) <= defaultTolerance
 
             let improvementCount count interval : EndCondition<float> =
-                fun results ->
-                    if (results |> List.length) % interval = 0 
+                fun results iteration ->
+                    if iteration % interval = 0 
                     then (results |> List.pairwise |> List.where(fun (x,y) -> x < y) |> List.length) >= count
                     else false
 
@@ -628,18 +627,18 @@ module MonteCarlo =
         /// Run a homogenous Markov chain recursively until an end condition - `atEnd` - is met.
         let rec markovChain writeOut atEnd propose probability random f temperature initialPoint =
             let propose' = tryMove propose (temperature |> probability) random f
-            let rec run point d =
+            let rec run point d iteration =
                 let newPoint = point |> propose'
                 if newPoint |> fst = nan
-                then run point d
+                then run point d iteration
                 else
                     let state = newPoint::d
-                    if state |> atEnd 
+                    if atEnd state iteration
                     then state
                     else 
-                        writeOut <| OptimisationEvent { Iteration = d |> List.length; Likelihood = newPoint |> fst; Theta = newPoint |> snd }
-                        run (state |> Seq.head) state
-            run initialPoint [ initialPoint ]
+                        writeOut <| OptimisationEvent { Iteration = iteration; Likelihood = newPoint |> fst; Theta = newPoint |> snd }
+                        run (state |> Seq.head) state (iteration + 1)
+            run initialPoint [ initialPoint ] 1
 
         /// Cool between homoegenous markov chains according to `cool` schedule.
         /// Each anneal recursion begins from the end of the previous markov chain.
@@ -775,9 +774,10 @@ module MonteCarlo =
             let scaleRnd = Bristlecone.Statistics.Distributions.ContinuousUniform.draw random 0. 1.
             let paramRnd = MathNet.Numerics.Distributions.DiscreteUniform(0, theta.Length - 1, random)
             let initialScale = domain |> Array.map(fun (l,u,_) -> (u - l) / 6.)
+            printfn "Initial scale: %A" initialScale
             let l1 = f theta
 
-            let rec step burning (p:(float*float[])[]) endWhen (l1, theta1) d =
+            let rec step burning (p:(float*float[])[]) endWhen (l1, theta1) d currentIteration =
                 // Change one to many parameter at once (Filzbach-style)
                 let scalesToChange = 
                     if scaleRnd() < 0.670
@@ -805,7 +805,9 @@ module MonteCarlo =
                     Array.zip3 theta scalesToChange domain
                     |> Array.map(fun (x,((ti,n),shouldChange),(_,_,con)) -> 
                         if shouldChange
-                        then constrainJump x (sample ti ()) 1. con
+                        then 
+                            printfn "%A" scalesToChange
+                            constrainJump x (sample ti ()) 1. con
                         else x )
 
                 // Metropolis step here
@@ -839,16 +841,16 @@ module MonteCarlo =
                 // End Tune Scales (burnin only)
 
                 let newResult = result::d
-                if endWhen d
+                if endWhen d currentIteration
                 then (newResult, newScaleInfo |> Array.map fst)
                 else 
                     writeOut <| OptimisationEvent { Iteration = newResult |> List.length; Likelihood = result |> fst; Theta = result |> snd }
-                    step burning newScaleInfo endWhen result newResult
+                    step burning newScaleInfo endWhen result newResult (currentIteration + 1)
 
             writeOut <| GeneralEvent (sprintf "[Filzbach] Starting burn-in at point %A (L = %f)" theta l1)
-            let burnResults,burnScales = step true (initialScale |> Array.map(fun x -> x, Array.empty)) settings.BurnLength (l1, theta) []
+            let burnResults,burnScales = step true (initialScale |> Array.map(fun x -> x, Array.empty)) settings.BurnLength (l1, theta) [] 0
             writeOut <| GeneralEvent (sprintf "[Filzbach] Burn-in complete. Starting sampling at point %A" (burnResults |> Seq.head))
-            let results,_ = step false (burnScales |> Array.map(fun t -> (t, Array.empty))) sampleEnd (burnResults |> Seq.head) []
+            let results,_ = step false (burnScales |> Array.map(fun t -> (t, Array.empty))) sampleEnd (burnResults |> Seq.head) [] 0
             [ results; burnResults ] |> List.concat
 
         /// A Monte Carlo Markov Chain sampler based on the 'Filzbach' algorithm from

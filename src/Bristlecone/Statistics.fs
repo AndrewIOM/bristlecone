@@ -22,7 +22,7 @@ module Distributions =
     module MutlivariateNormal =
 
         let mapply (m:Matrix<float>) f = 
-            m.EnumerateIndexed() |> Seq.iter(fun (i,j,v) -> m.[i,j] <- f v ); m
+            m.EnumerateIndexed() |> Seq.iter(fun struct (i,j,v) -> m.[i,j] <- f v ); m
 
         // See: https://stackoverflow.com/questions/11277146/multivariate-normal-distribution-with-math-net
         let sample' (rnd:System.Random) = 

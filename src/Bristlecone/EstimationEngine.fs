@@ -56,7 +56,9 @@ module EstimationEngine =
     type Point<'a> = 'a []
     type Solution<'a> = float * Point<'a>
     type Objective<'a> = Point<'a> -> float
-    type EndCondition<'a> = Solution<'a> list -> bool
+    /// Determines if the end has been reached based on a list
+    /// of tupled Solutions with their iteration number.
+    type EndCondition<'a> = (Solution<'a>) list -> int -> bool
     type Domain = (float*float*Parameter.Constraint) []
 
     type Time = float
