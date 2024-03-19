@@ -73,3 +73,22 @@ module LocalMinima =
         let a = 10.
         let z = x |> Array.sumBy(fun x -> x ** 2. - a * cos(2. * pi * x))
         a * float x.Length + z
+
+module Timeseries =
+
+    open Bristlecone.Language
+
+    let ``predator-prey`` =
+
+        let ``dh/dt`` = Parameter "α" * This - Parameter "β" * This * Environment "lynx"
+        let ``dl/dt`` = - Parameter "γ" * This + Parameter "Δ" * Environment "hare" * This
+
+        Model.empty
+        |> Model.addEquation       "hare"   ``dh/dt``
+        |> Model.addEquation       "lynx"   ``dl/dt``
+        |> Model.estimateParameter "α"      noConstraints 0.10 0.60    // Natural growth rate of hares in absence of predation
+        |> Model.estimateParameter "β"      noConstraints 0.10 0.60    // Death rate per encounter of hares due to predation
+        |> Model.estimateParameter "Δ"      noConstraints 0.10 0.60    // Efficiency of turning predated hares into lynx
+        |> Model.estimateParameter "γ"      noConstraints 0.10 0.60    // Natural death rate of lynx in the absence of food
+        |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ "hare"; "lynx" ])
+        |> Model.compile

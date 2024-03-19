@@ -883,13 +883,7 @@ module Amoeba =
 
         type Settings = { Alpha:float; Sigma:float; Gamma:float; Rho:float; Size:int }
 
-        let Default = { Alpha=1.0; Sigma=0.5; Gamma=2.0; Rho=(-0.5); Size=3 }
-
-        let print logger a = 
-            logger <| GeneralEvent "Amoeba state"
-            a.Solutions 
-            |> Seq.iter (fun (v,x) -> 
-                logger <| GeneralEvent (sprintf "  %.2f, %s" v (x |> Seq.map string |> String.concat ",")))
+        let Default = { Alpha = 1.; Sigma = 0.5; Gamma = 2.; Rho = (-0.5); Size = 3 }
 
         let evaluate (f:Objective<'a>) (x:Point<'a>) = (f x, x)
         let valueOf (s:Solution<'a>) = fst s
@@ -902,7 +896,7 @@ module Amoeba =
 
         let centroid (a:Amoeba) = 
             [| for d in 0 .. (a.Dim - 1) -> 
-                (a.Solutions.[0..a.Size - 2] |> Seq.averageBy(fun (_,x) -> x.[d])) |]
+                (a.Solutions.[0..a.Size - 2] |> Array.averageBy(fun (_,x) -> x.[d])) |]
 
         let stretch ((X,Y):Point<float>*Point<float>) (s:float) =
             Array.map2 (fun x y -> x + s * (x - y)) X Y
@@ -972,9 +966,11 @@ module Amoeba =
             // Drop worst 20% of likelihoods
             let mostLikely = amoebaResults |> Array.map List.head |> Array.minBy fst
             let percentile80thRank = int (System.Math.Floor (float (80. / 100. * (float amoebaResults.Length + 1.))))
-            let percentile80thValue = fst amoebaResults.[0].[percentile80thRank - 1]
-            logger <| GeneralEvent (sprintf "80th percentile = %f" percentile80thValue)
-            let ranked = amoebaResults |> Array.map List.head |> Array.filter (fun x -> (fst x) <= percentile80thValue)
+            let ranked = 
+                amoebaResults 
+                |> Array.map List.head
+                |> Array.sortBy fst
+                |> Array.take (amoebaResults.Length - percentile80thRank)
 
             let dims = Array.length paramBounds
             let boundsList = ranked |> Array.map snd

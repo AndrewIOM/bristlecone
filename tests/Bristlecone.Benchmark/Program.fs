@@ -39,12 +39,12 @@ module TestSuite =
 
     // Functions, input domain, global minimum, and global minimum point(s)
     let fixedDimension =
-        [ "Bukin Sixth", bukinSixth |> twoDim, [ (-15., -5.); (-3., 3.) ], 0., [ [ -10.; 1. ] ]
-        //   "Cross in tray", crossInTray |> twoDim,  [ 1 .. Config.startPointCount ] |> List.map(fun _ -> twoDimension -10. 10.), -2.06261185, [[1.3491; -1.3491]; [1.3491; 1.3491]; [-1.3491; 1.3491]; [-1.3491; -1.3491]]
+        [ "Bukin Sixth",    bukinSixth |> twoDim,   [ (-15., -5.); (-3., 3.) ], 0., [ [ -10.; 1. ] ]
+        //   "Holder Table",   holderTable |> twoDim,  [ (-10., 10.); (-10., 10.) ], -19.20850257, [[8.05502; 9.66459]; [8.05502; -9.66459]; [-8.05502; 9.66459]; [-8.05502; -9.66459]]
+          "Cross in tray",  crossInTray |> twoDim,  [ (-10., 10.); (-10., 10.) ], -2.06261185, [[1.3491; -1.3491]; [1.3491; 1.3491]; [-1.3491; 1.3491]; [-1.3491; -1.3491]]
         //   "Dropwave", dropWave |> twoDim,     [ 1 .. Config.startPointCount ] |> List.map(fun _ -> twoDimension -5.12 5.12), -1., [[0.;0.]]
         //   "Eggholder", eggHolder |> twoDim,    [ 1 .. Config.startPointCount ] |> List.map(fun _ -> twoDimension -5.12 5.12), -959.6406627, [[512.; 404.2319]]
         //   "Gramarcy-Lee", gramacyLee |> oneDim,   [ 1 .. Config.startPointCount ] |> List.map(fun _ -> [between 0.5 2.5]), -0.869011134989500, [[0.548563444114526]]
-        //   "Holder Table", holderTable |> twoDim,  [ 1 .. Config.startPointCount ] |> List.map(fun _ -> twoDimension -10. 10.), -19.20850257, [[8.05502; 9.66459]; [8.05502; -9.66459]; [-8.05502; 9.66459]; [-8.05502; -9.66459]]
         //   "Langermann", langermann |> twoDim,   [(0., 10.); (0., 10.)], -5.1621259, [[2.00299219; 1.006096]]
         ]
 
@@ -85,14 +85,14 @@ let annealSettings =
 
 let optimFunctions =
     [ "amoeba single",          Amoeba.Solver.solve Amoeba.Solver.Default
-    //   "amoeba swarm",           Amoeba.swarm 5 20 Amoeba.Solver.Default
-      // "anneal classic",         MonteCarlo.SimulatedAnnealing.classicalSimulatedAnnealing 0.01 false annealSettings
+      "amoeba swarm",           Amoeba.swarm 5 20 Amoeba.Solver.Default
+      "anneal classic",         MonteCarlo.SimulatedAnnealing.classicalSimulatedAnnealing 0.01 false annealSettings
       "anneal cauchy",          MonteCarlo.SimulatedAnnealing.fastSimulatedAnnealing 0.01 false annealSettings
-      "filzbach",               MonteCarlo.Filzbach.filzbach { TuneAfterChanges = 10000; MaxScaleChange = 0.5; MinScaleChange = 0.5; BurnLength = EndConditions.afterIteration 100000 }
+    //   "filzbach",               MonteCarlo.Filzbach.filzbach { TuneAfterChanges = 10000; MaxScaleChange = 0.5; MinScaleChange = 0.5; BurnLength = EndConditions.afterIteration 100000 }
       // "automatic MCMC",         MonteCarlo.``Automatic (Adaptive Diagnostics)``
       // "metropolis-gibbs",       MonteCarlo.``Metropolis-within Gibbs``
-      // "adaptive metropolis",    MonteCarlo.adaptiveMetropolis 0.250 500
-      // "random walk MCMC",       MonteCarlo.randomWalk []
+      "adaptive metropolis",    MonteCarlo.adaptiveMetropolis 0.250 500
+      "random walk MCMC",       MonteCarlo.randomWalk []
       // "random walk w/ tuning",  MonteCarlo.randomWalk [ MonteCarlo.TuneMethod.CovarianceWithScale 0.25, 500, EndConditions.afterIteration 10000 ]
       ]
 
@@ -175,6 +175,16 @@ let runOptimTests () =
                 result, watch.ElapsedMilliseconds, startPoint)
             |> summariseRuns modelName optimName minVal minima
         ))
+
+let runTimeSeriesTests () =
+    let r = 
+        TestFunctions.Timeseries.``predator-prey``
+        |> Bristlecone.Bristlecone.testModel engine settings
+        |> Result.map(fun r ->
+            r.Parameters
+            )
+    ()
+
 
 [<EntryPoint>]
 let main argv = 

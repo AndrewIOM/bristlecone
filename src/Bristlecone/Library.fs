@@ -322,6 +322,7 @@ module Bristlecone =
                     | Error _ -> failwith "Error" )
             let errorStructure = estimated.Series |> Seq.map(fun k -> k.Key.Value, k.Value.Values |> Seq.map(fun t -> (t.Fit - t.Obs) ** 2. )) |> Map.ofSeq
             { ErrorStructure = errorStructure
+              RealLikeihood = 
               Parameters = paramDiffs
               Series = estimated.Series |> Seq.map(fun k -> k.Key.Value, k.Value) |> Map.ofSeq } |> Ok
         | Error e -> Error e
