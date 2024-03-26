@@ -132,7 +132,7 @@ module Parameter =
         /// Gets the 'real' / non-transformed value for use in model
         /// calculation.
         let internal tryGetRealValue key (pool:ParameterPool) : float option =
-            pool |> toList |> List.tryFind (fun (x,_) -> x.Value = key) |> Option.map snd |> Option.bind (getEstimate >> resultToOption)
+            pool |> unwrap |> Map.tryFindBy (fun k -> k.Value = key) |> Option.bind (getEstimate >> resultToOption)
 
         /// Returns the starting bounds in transformed parameter space if
         /// the parameter has not been estimated. If the parameter has already

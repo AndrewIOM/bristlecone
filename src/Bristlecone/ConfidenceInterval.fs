@@ -90,10 +90,11 @@ module ProfileLikelihood =
                         if shouldChange
                         then Bristlecone.Optimisation.MonteCarlo.constrainJump x (draw' ti ()) 1. con
                         else x )
-                let result = Bristlecone.Optimisation.MonteCarlo.SimulatedAnnealing.tryMove propose (machine 1.) random f (l1, theta1)
+                let result = Bristlecone.Optimisation.MonteCarlo.SimulatedAnnealing.tryMove propose (machine 1.) random f 100 (l1, theta1)
+                if result.IsNone then failwith "Could not move in parameter space."
                 let newScaleInfo = 
                     scalesToChange 
-                    |> Array.zip (result |> snd)
+                    |> Array.zip (result.Value |> snd)
                     |> Array.map(fun (v, ((ti,previous),changed)) ->
                         let ti, previous =
                             if changed then (ti, (previous |> Array.append [|v|]))  // Append new parameter values to previous ones
@@ -112,8 +113,8 @@ module ProfileLikelihood =
 
                 if k < settings.KMax
                 then
-                    writeOut <| OptimisationEvent { Iteration = k; Likelihood = result |> fst; Theta = result |> snd } 
-                    tune newScaleInfo (k + 1) (results |> List.append [result]) result
+                    writeOut <| OptimisationEvent { Iteration = k; Likelihood = result.Value |> fst; Theta = result.Value |> snd } 
+                    tune newScaleInfo (k + 1) (results |> List.append [result.Value]) result.Value
                 else newScaleInfo |> Array.map fst
 
             let result = tune (initialScale |> Array.map(fun t -> (t, Array.empty))) 1 [] (l1, theta1)

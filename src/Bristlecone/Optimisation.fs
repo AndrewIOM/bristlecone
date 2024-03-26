@@ -604,40 +604,47 @@ module MonteCarlo =
             }
 
         /// Jump based on a proposal function and probability function
-        let tryMove propose probability random f (l1,theta1) : Solution<float> =
+        let tryMove propose probability random f tries (l1,theta1) : Solution<float> option =
             let rec catchNan tries =
                 let theta2 = theta1 |> propose
                 let l2 = f theta2
                 if System.Double.IsNaN l2 
                 then
-                    if tries <= 1 then failwith "Could not move after 100 tries. Are you using suitable parameter bounds?"
-                    catchNan (tries - 1) 
-                else (theta2, l2)
-            let theta2,l2 = catchNan 100
-            if l2 < l1
-            then (l2, theta2)
-            else
-                let rand = ContinuousUniform.draw random 0. 1. ()
-                let ratio = probability (l2 - l1)
-                //printfn "Random = %f Ratio = %f (L1=%f L2=%f)" rand ratio l1 l2
-                if rand < ratio
-                    then (l2, theta2)
-                    else (l1, theta1)
+                    if tries <= 1 
+                    then None
+                    else catchNan (tries - 1) 
+                else Some (theta2, l2)
+            catchNan tries |> Option.map(fun (theta2,l2) ->
+                if l2 < l1
+                then (l2, theta2)
+                else
+                    let rand = ContinuousUniform.draw random 0. 1. ()
+                    let ratio = probability (l2 - l1)
+                    //printfn "Random = %f Ratio = %f (L1=%f L2=%f)" rand ratio l1 l2
+                    if rand < ratio
+                        then (l2, theta2)
+                        else (l1, theta1)
+            )
 
         /// Run a homogenous Markov chain recursively until an end condition - `atEnd` - is met.
         let rec markovChain writeOut atEnd propose probability random f temperature initialPoint =
-            let propose' = tryMove propose (temperature |> probability) random f
+            let propose' = tryMove propose (temperature |> probability) random f 100
             let rec run point d iteration =
                 let newPoint = point |> propose'
-                if newPoint |> fst = nan
-                then run point d iteration
-                else
-                    let state = newPoint::d
-                    if atEnd state iteration
-                    then state
-                    else 
-                        writeOut <| OptimisationEvent { Iteration = iteration; Likelihood = newPoint |> fst; Theta = newPoint |> snd }
-                        run (state |> Seq.head) state (iteration + 1)
+                match newPoint with
+                | None -> 
+                    writeOut <| GeneralEvent (sprintf "Abandoning chain at iteration %i as could not move after 100 tries." iteration)
+                    d
+                | Some newPoint ->
+                    if newPoint |> fst = nan
+                    then run point d iteration
+                    else
+                        let state = newPoint::d
+                        if atEnd state iteration
+                        then state
+                        else 
+                            writeOut <| OptimisationEvent { Iteration = iteration; Likelihood = newPoint |> fst; Theta = newPoint |> snd }
+                            run (state |> Seq.head) state (iteration + 1)
             run initialPoint [ initialPoint ] 1
 
         /// Cool between homoegenous markov chains according to `cool` schedule.
@@ -651,7 +658,8 @@ module MonteCarlo =
                 writeOut <| GeneralEvent (sprintf "[Annealing] Best point is %f at temperature %f" (bestAtTemperature |> fst) temperature)
                 anneal writeOut chainEnd annealEnd cool markov (cool temperature (history |> List.length)) bestAtTemperature (*(results |> List.head)*) history
 
-        /// Heat up temperature intil acceptance rate of bad moves is above the threshold `endAcceptanceRate`.
+        /// Heat up temperature until acceptance rate of bad moves is above the threshold `endAcceptanceRate`.
+        /// If it becomes impossible to propose a move during heating, then heating ends.
         let rec heat write endCondition ceiling endAcceptanceRate heatingSchedule markov bestTheta temperature =
             let chain = markov endCondition temperature bestTheta
             let min = chain |> List.minBy fst
@@ -702,10 +710,11 @@ module MonteCarlo =
                         if shouldChange
                         then constrainJump x (draw' ti 1. ()) 1. con
                         else x )
-                let result = tryMove propose (machine 1.) random f (l1, theta1)
+                let result = tryMove propose (machine 1.) random f 100 (l1, theta1)
+                if result.IsNone then failwith "Could not move in parameter space."
                 let newScaleInfo = 
                     scalesToChange 
-                    |> Array.zip (result |> snd)
+                    |> Array.zip (result.Value |> snd)
                     |> Array.map(fun (v, ((ti,previous),changed)) ->
                         let ti, previous = 
                             if changed then (ti, (previous |> Array.append [|v|]))  // Append new parameter values to previous ones
@@ -720,10 +729,10 @@ module MonteCarlo =
                         else (ti, previous) )
 
                 if k % 1000 = 0 then
-                    writeOut <| GeneralEvent (sprintf "Tuning is at %A (k=%i/%i) [-logL %f]" (newScaleInfo |> Array.map fst) k kMax (result |> fst))
+                    writeOut <| GeneralEvent (sprintf "Tuning is at %A (k=%i/%i) [-logL %f]" (newScaleInfo |> Array.map fst) k kMax (result.Value |> fst))
 
                 if k < kMax
-                then tune newScaleInfo (k + 1) result
+                then tune newScaleInfo (k + 1) result.Value
                 else (newScaleInfo |> Array.map fst, l1, theta1)
 
             let tunedScale,l2,theta2 = 
@@ -809,7 +818,8 @@ module MonteCarlo =
                         else x )
 
                 // Metropolis step here
-                let result = SimulatedAnnealing.tryMove propose (SimulatedAnnealing.Machines.boltzmann 1.) random f (l1, theta1)
+                let result = SimulatedAnnealing.tryMove propose (SimulatedAnnealing.Machines.boltzmann 1.) random f 100 (l1, theta1)
+                if Option.isNone result then failwith "Could not move in parameter space."
                 // End metropolis step
                 
                 // Tune Scales (burnin only)
@@ -817,7 +827,7 @@ module MonteCarlo =
                     if not burning then p
                     else 
                         scalesToChange 
-                        |> Array.zip (result |> snd)
+                        |> Array.zip (result.Value |> snd)
                         |> Array.mapi(fun parameteri (v, ((ti,previous),changed)) ->
                             let ti, previous = 
                                 if changed then (ti, (previous |> Array.append [|v|]))  // Append new parameter values to previous ones
@@ -838,12 +848,12 @@ module MonteCarlo =
                             else (ti, previous) )
                 // End Tune Scales (burnin only)
 
-                let newResult = result::d
+                let newResult = result.Value::d
                 if endWhen d currentIteration
                 then (newResult, newScaleInfo |> Array.map fst)
                 else 
-                    writeOut <| OptimisationEvent { Iteration = currentIteration; Likelihood = result |> fst; Theta = result |> snd }
-                    step burning newScaleInfo endWhen result newResult (currentIteration + 1)
+                    writeOut <| OptimisationEvent { Iteration = currentIteration; Likelihood = result.Value |> fst; Theta = result.Value |> snd }
+                    step burning newScaleInfo endWhen result.Value newResult (currentIteration + 1)
 
             writeOut <| GeneralEvent (sprintf "[Filzbach] Starting burn-in at point %A (L = %f)" theta l1)
             let burnResults,burnScales = step true (initialScale |> Array.map(fun x -> x, Array.empty)) settings.BurnLength (l1, theta) [] 0

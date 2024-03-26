@@ -179,117 +179,6 @@ module Bristlecone =
             //let ts = data |> Map.map(fun _ v -> TimeSeries.fromSeq (v, DateTime.Now))
             //fit engine endCondition ts model
 
-
-    module Test =
-
-        type GenerationRule = (ShortCode.ShortCode * (seq<float> -> bool))
-
-        module GenerationRules =
-
-            /// Ensures that all generated values are less than i
-            let alwaysLessThan i variable : GenerationRule =
-                variable, fun data -> data |> Seq.max < i
-
-            /// Ensures that all generated values are greater than i
-            let alwaysMoreThan i variable : GenerationRule =
-                variable, fun data -> data |> Seq.min > i
-
-            /// Ensures that there is always a positive change in values of a variable
-            let monotonicallyIncreasing variable : GenerationRule =
-                variable, fun data -> 
-                    data |> Seq.pairwise |> Seq.map(fun (x1,x2) -> (x2 - x1) > 0.) |> Seq.contains false 
-        
-        type TestSettings<'a> = {
-            TimeSeriesLength: int
-            StartValues: CodedMap<'a>
-            EndCondition: EndCondition<'a>
-            GenerationRules: GenerationRule list
-            NoiseGeneration: Parameter.Pool -> CodedMap<TimeSeries<'a>> -> CodedMap<TimeSeries<'a>>
-            EnvironmentalData: CodedMap<TimeSeries<'a>>
-            Resolution: FixedTemporalResolution
-            Random: System.Random
-            StartDate: DateTime
-            Attempts: int
-        } with
-            static member Default = {
-                Resolution = FixedTemporalResolution.Years (PositiveInt.create 1).Value
-                TimeSeriesLength = 30
-                StartValues = Map.empty
-                EndCondition = Optimisation.EndConditions.afterIteration 1000
-                GenerationRules = []
-                NoiseGeneration = fun _ -> id
-                EnvironmentalData = Map.empty
-                Random = MathNet.Numerics.Random.MersenneTwister()
-                StartDate = DateTime(1970,01,01)  
-                Attempts = 50000
-            }
-        
-        type ParameterTestResult = {
-            Identifier: string
-            RealValue: float
-            EstimatedValue: float
-        }
-
-        and TestResult = {
-            Parameters: ParameterTestResult list
-            Series: Map<string,FitSeries>
-            ErrorStructure: Map<string,seq<float>>
-        }
-
-        /// Draw a random set of parameters
-        /// TODO Correct handling of constrained parameter values (when drawing parameter sets)
-        let drawParameterSet rnd pool =
-            pool
-            |> Parameter.Pool.map(fun _ v ->
-                let lower,upper = 
-                    match Parameter.bounds v with
-                    | Some b -> b
-                    | None -> failwith "Parameters already estimated"
-                let trueValue = Statistics.Distributions.ContinuousUniform.draw rnd lower upper ()
-                match Parameter.setTransformedValue v trueValue with
-                | Ok p -> p
-                | Error e -> failwith e )
-
-        /// Generate a fixed-resolution time-series for testing model fits
-        let generateFixedSeries writeOut equations timeMode seriesLength startPoint startDate resolution env theta =
-            let applyFakeTime s = TimeSeries.fromSeq startDate resolution s
-            let eqs = equations |> Map.map (fun _ v -> v theta)
-            match timeMode with
-            | Discrete -> invalidOp "Not supported at this time"
-            | Continuous i -> 
-                i writeOut 0. (seriesLength |> float) 1. startPoint env eqs
-                |> Map.map (fun _ v -> applyFakeTime v)
-
-        /// A test procedure for computing measures given time series data.
-        let generateMeasures measures startValues (expected:CodedMap<TimeSeries<'a>>) : CodedMap<TimeSeries<'a>> =
-            let time = (expected |> Seq.head).Value |> TimeSeries.toObservations |> Seq.map snd
-            measures
-            |> Map.map (fun key measure -> Solver.Discrete.solve startValues key measure (expected |> Map.map(fun _ t -> t.Values |> Seq.toArray)))
-            |> Map.fold (fun acc key value -> Map.add key (time |> Seq.zip value |> TimeSeries.fromObservations) acc) expected
-
-        /// Generate data
-        let generateData engine model testSettings theta =
-            let envIndex = testSettings.EnvironmentalData |> Map.map(fun k v -> TimeIndex.TimeIndex(testSettings.StartDate, testSettings.Resolution, TimeIndex.IndexMode.Interpolate Statistics.Interpolate.bilinear, v))
-            theta
-            |> generateFixedSeries engine.LogTo model.Equations engine.TimeHandling testSettings.TimeSeriesLength testSettings.StartValues testSettings.StartDate testSettings.Resolution envIndex
-            |> testSettings.NoiseGeneration theta
-            |> generateMeasures model.Measures testSettings.StartValues
-
-        /// Generate data and check that it complies with the
-        /// given ruleset.
-        let rec generateAndCheck (engine:EstimationEngine.EstimationEngine<'a,'b>) settings (model:ModelSystem.ModelSystem) attempts = 
-            let theta = drawParameterSet engine.Random model.Parameters
-            let series = generateData engine model settings theta
-            let brokeTheRules = 
-                settings.GenerationRules
-                |> List.map(fun (key,ruleFn) -> series |> Map.find key |> TimeSeries.toObservations |> Seq.map fst |> ruleFn)
-                |> List.contains false
-            if brokeTheRules then
-                if attempts = 0 
-                then Error "Could not generate data that complies with the given ruleset" 
-                else generateAndCheck engine settings model (attempts - 1)
-            else Ok (series, theta)
-
     open Test
 
     /// **Description**
@@ -301,9 +190,13 @@ module Bristlecone =
     let testModel engine (settings:Test.TestSettings<float>) (model:ModelSystem) : Result<Test.TestResult,string> =
         engine.LogTo <| GeneralEvent "Attempting to generate parameter set."
         engine.LogTo <| GeneralEvent (sprintf "The data must comply with %i rules after %i tries." settings.GenerationRules.Length settings.Attempts)
-        let trueData = Test.generateAndCheck engine settings model settings.Attempts
+        let trueData = 
+            Test.isValidSettings model settings
+            |> Result.bind(fun _ -> Test.Compute.tryGenerateData engine settings model settings.Attempts)
         match trueData with
         | Ok (d,theta) -> 
+            let realEstimate = fit { engine with OptimiseWith = Optimisation.None.passThrough } settings.EndCondition (Map.merge d settings.EnvironmentalData (fun x y -> x)) { model with Parameters = Parameter.Pool.fromEstimated theta }
+            printfn "Real estimate was %A" <| realEstimate
             let estimated = fit engine settings.EndCondition (Map.merge d settings.EnvironmentalData (fun x y -> x)) model
             let paramDiffs : Test.ParameterTestResult list =
                 estimated.Parameters
@@ -322,9 +215,11 @@ module Bristlecone =
                     | Error _ -> failwith "Error" )
             let errorStructure = estimated.Series |> Seq.map(fun k -> k.Key.Value, k.Value.Values |> Seq.map(fun t -> (t.Fit - t.Obs) ** 2. )) |> Map.ofSeq
             { ErrorStructure = errorStructure
-              RealLikeihood = 
               Parameters = paramDiffs
-              Series = estimated.Series |> Seq.map(fun k -> k.Key.Value, k.Value) |> Map.ofSeq } |> Ok
+              Series = estimated.Series |> Seq.map(fun k -> k.Key.Value, k.Value) |> Map.ofSeq
+              RealLikelihood = realEstimate.Likelihood
+              EstimatedLikelihood = estimated.Likelihood
+               } |> Ok
         | Error e -> Error e
 
     /// **Description**

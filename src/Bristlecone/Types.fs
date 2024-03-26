@@ -259,6 +259,11 @@ module Result =
         | head::tail ->
             retn cons <*> (f head) <*> (mapResult f tail)
 
+    let ofOption errorMessage o =
+        match o with
+        | Some o -> Ok o
+        | None -> Error errorMessage
+
 [<AutoOpen>]
 module ListExtensions =
 

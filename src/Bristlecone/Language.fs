@@ -11,6 +11,15 @@ module Language =
     /// model equation, or other model component.
     let code = ShortCode.create
 
+    let private makeResolution f n = 
+        match PositiveInt.create n with
+        | None -> failwithf "%i is not a positive integer" n
+        | Some p -> f p
+
+    let years n = makeResolution Time.Resolution.Years n
+    let months n = makeResolution Time.Resolution.Months n
+    let days n = makeResolution Time.Resolution.Days n
+
     let lookup name (map:CodedMap<float>) = 
         match map |> Map.tryFindBy (fun k -> k.Value = name) with
         | Some k -> k
@@ -234,6 +243,23 @@ module Language =
         let includeMeasure name measure builder = ModelBuilder.add name (ModelBuilder.MeasureFragment measure) builder
         let useLikelihoodFunction likelihoodFn builder = ModelBuilder.add "likelihood" (ModelBuilder.LikelihoodFragment likelihoodFn) builder
         let compile = ModelBuilder.compile
+
+
+    /// Terms for designing tests for model systems.
+    module Test =
+
+        let defaultSettings = Bristlecone.Test.TestSettings<float>.Default
+
+        /// If the start value has already been set, it will be overwritten with the new value.
+        let withStartValue code value (settings:Bristlecone.Test.TestSettings<float>) =
+            match ShortCode.create code with
+            | Some c -> 
+                { settings with StartValues = settings.StartValues |> Map.add c value }
+            | None -> failwithf "'%s' is not a valid short code" code        
+
+        let run settings =
+            Bristlecone.testModel
+
 
     let noConstraints = Parameter.Constraint.Unconstrained
     let notNegative = Parameter.Constraint.PositiveOnly
