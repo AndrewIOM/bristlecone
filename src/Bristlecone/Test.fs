@@ -130,7 +130,6 @@ module Test =
     module Compute =
 
         /// Draw a random set of parameters
-        /// TODO Correct handling of constrained parameter values (when drawing parameter sets)
         let drawParameterSet rnd pool =
             pool
             |> Parameter.Pool.map(fun _ v ->

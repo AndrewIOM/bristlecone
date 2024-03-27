@@ -185,7 +185,10 @@ module Parameter =
             let result =
                 pool
                 |> toList 
-                |> List.choose(fun (k,v) -> create (detatchConstraint v |> snd) (v |> getTransformedValue) (v |> getTransformedValue) |> Option.map (fun v -> k,v))
+                |> List.choose(fun (k,v) -> 
+                    match v |> getEstimate with
+                    | Ok estimate -> create (detatchConstraint v |> snd) estimate estimate |> Option.map (fun v -> k,v)
+                    | Error _ -> failwithf "Could not get estimate for %A" v)
                 |> fromList
             if count result <> count pool 
             then failwith "Parameter pools were of different lengths"
