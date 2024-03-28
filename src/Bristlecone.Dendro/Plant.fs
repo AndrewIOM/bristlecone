@@ -18,7 +18,6 @@ module EnvironmentalVariables =
 [<RequireQualifiedAccess>]
 module PlantIndividual =
 
-
     type PlantGrowth =
         | RingWidth of GrowthSeries.GrowthSeries<mm>
         | BasalArea of GrowthSeries.GrowthSeries<mm^2>
@@ -39,7 +38,19 @@ module PlantIndividual =
         float x
 
     let zipEnv envName envData (plant:PlantIndividual) =
-        { plant with Environment = plant.Environment.Add (envName, envData) }
+        let code = ShortCode.create envName
+        match code with
+        | None -> failwith "%s is not a valid environment code."
+        | Some c -> { plant with Environment = plant.Environment.Add (c, envData) }
+
+    /// Assigns local environmental conditions to each plant in a sequence,
+    /// given a sequence of environmental time-series where each time-series
+    /// has the code of the plant associated with it.
+    let zipEnvMany envName (env:(string * TimeSeries.TimeSeries<float>) seq) plants =
+        plants
+        |> Seq.map (fun s -> (s.Identifier.Value, s))
+        |> Seq.keyMatch env
+        |> Seq.map (fun (_,plant,e) -> zipEnv envName plant e)
 
     let growthSeries plant =
         match plant with
@@ -94,10 +105,12 @@ module PlantIndividual =
             |> List.unzip
         let startDate = startDates |> List.map snd |> List.max
         let endDate = endDates |> List.min
-        let mapts f = TimeSeries.map f
         { plant with Environment = plant.Environment |> Map.toList |> List.map (fun (x,y) -> x,y |> TimeSeries.bound startDate endDate |> Option.get) |> Map.ofList
                      Growth = plant.Growth |> growthSeries |> GrowthSeries.growthToTime |> TimeSeries.bound startDate endDate |> Option.get |> TimeSeries.map (fun (x,t) -> x * 1.<mm>) |> GrowthSeries.Absolute |> RingWidth }
 
+    /// Where a plant has associated environmental data, discard the beginning
+    /// or end of the growth and environment time-series where not all data
+    /// are present.
     let keepCommonYears (plant:PlantIndividual) =
         let allSeries = 
             let response = plant.Growth |> growthSeries |> GrowthSeries.growthToTime

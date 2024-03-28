@@ -35,16 +35,18 @@ module TestSuite =
 
     let twoDim f (x: float[]) = f x.[0] x.[1]
     let oneDim f (x: float[]) = f x.[0]
+    let multidim f (x: float[]) = f x
 
     // Functions, input domain, global minimum, and global minimum point(s)
     let fixedDimension =
-        [ "Bukin Sixth",    bukinSixth |> twoDim,   [ (-15., -5.); (-3., 3.) ], 0., [ [ -10.; 1. ] ]
+        [ "Ackley (2D)",    ackley |> multidim,     [ (-32.768, 32.768); (-32.768, 32.768) ], 0., [[0.; 0.]]
+          "Bukin Sixth",    bukinSixth |> twoDim,   [ (-15., -5.); (-3., 3.) ], 0., [ [ -10.; 1. ] ]
           "Holder Table",   holderTable |> twoDim,  [ (-10., 10.); (-10., 10.) ], -19.20850257, [[8.05502; 9.66459]; [8.05502; -9.66459]; [-8.05502; 9.66459]; [-8.05502; -9.66459]]
           "Cross in tray",  crossInTray |> twoDim,  [ (-10., 10.); (-10., 10.) ], -2.06261185, [[1.3491; -1.3491]; [1.3491; 1.3491]; [-1.3491; 1.3491]; [-1.3491; -1.3491]]
-        //   "Dropwave", dropWave |> twoDim,     [ 1 .. Config.startPointCount ] |> List.map(fun _ -> twoDimension -5.12 5.12), -1., [[0.;0.]]
-        //   "Eggholder", eggHolder |> twoDim,    [ 1 .. Config.startPointCount ] |> List.map(fun _ -> twoDimension -5.12 5.12), -959.6406627, [[512.; 404.2319]]
-        //   "Gramarcy-Lee", gramacyLee |> oneDim,   [ 1 .. Config.startPointCount ] |> List.map(fun _ -> [between 0.5 2.5]), -0.869011134989500, [[0.548563444114526]]
-        //   "Langermann", langermann |> twoDim,   [(0., 10.); (0., 10.)], -5.1621259, [[2.00299219; 1.006096]]
+        //   "Dropwave",       dropWave |> twoDim,     [ (-512., 512.) ], 1., [[0.;0.]]
+        //   "Eggholder",      eggHolder |> twoDim,    [ (-512., 512.) ], -959.6406627, [[512.; 404.2319]]
+        //   "Gramarcy-Lee",   gramacyLee |> oneDim,   [ (0.5, 2.5) ], -0.869011134989500, [[0.548563444114526]]
+        //   "Langermann",     langermann |> twoDim,   [(0., 10.); (0., 10.)], -5.1621259, [[2.00299219; 1.006096]]
         ]
 
 // let nDimensional = [
@@ -194,14 +196,16 @@ module TimeSeriesTests =
             MillisecondsMedian = successes |> List.map (snd >> float) |> median
         }
 
-    let engine optimise = 
+    let engine optimise isAmoeba = 
         Bristlecone.Bristlecone.mkContinuous 
         |> Bristlecone.Bristlecone.withCustomOptimisation optimise
+        |> (fun b -> if isAmoeba then { b with Constrain = Bristlecone.Parameter.ConstraintMode.Transform } else b)
 
     let runTimeSeriesTests timeModels optimFunctions =
         List.allPairs optimFunctions timeModels
-        |> List.map(fun ((optimName, optimise), (modelName, modelFn, startValues)) ->
-            runReplicated Config.startPointCount (fun () -> Bristlecone.Bristlecone.testModel (engine optimise) settings modelFn)
+        |> List.map(fun ((optimName: string, optimise), (modelName, modelFn, startValues)) ->
+            let isAmoeba = optimName.Contains("amoeba")
+            runReplicated Config.startPointCount (fun () -> Bristlecone.Bristlecone.testModel (engine optimise isAmoeba) settings modelFn)
             |> summarise modelName optimName
         )
 
@@ -220,7 +224,7 @@ let annealSettings =
                 EndConditions.afterIteration 10000 x) }
 
 let optimFunctions =
-    [ //"amoeba single",          Amoeba.Solver.solve Amoeba.Solver.Default
+    [ "amoeba single",          Amoeba.Solver.solve Amoeba.Solver.Default
      //  "amoeba swarm",           Amoeba.swarm 5 20 Amoeba.Solver.Default
     //   "anneal classic",         MonteCarlo.SimulatedAnnealing.classicalSimulatedAnnealing 0.01 false annealSettings
     //   "anneal cauchy",          MonteCarlo.SimulatedAnnealing.fastSimulatedAnnealing 0.01 false annealSettings
@@ -228,7 +232,7 @@ let optimFunctions =
       // "automatic MCMC",         MonteCarlo.``Automatic (Adaptive Diagnostics)``
       // "metropolis-gibbs",       MonteCarlo.``Metropolis-within Gibbs``
     //   "adaptive metropolis",    MonteCarlo.adaptiveMetropolis 0.250 500
-      "random walk MCMC",       MonteCarlo.randomWalk []
+    //   "random walk MCMC",       MonteCarlo.randomWalk []
       // "random walk w/ tuning",  MonteCarlo.randomWalk [ MonteCarlo.TuneMethod.CovarianceWithScale 0.25, 500, EndConditions.afterIteration 10000 ]
     ]
 
