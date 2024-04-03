@@ -7,22 +7,21 @@ type LogEvent =
     | WorkloadEvent of string
     | DebugEvent of string
 
-and ModelFitState = {
-    Iteration: int
-    Likelihood: float
-    Theta: seq<float>
-}
+and ModelFitState =
+    { Iteration: int
+      Likelihood: float
+      Theta: seq<float> }
 
 /// Simple logger to console that prints line-by-line progress and events.
 module Console =
 
     open System.Threading
 
-    let internal print nIteration threadId (x:LogEvent) = 
+    let internal print nIteration threadId (x: LogEvent) =
         match x with
         | OptimisationEvent e ->
-            if e.Iteration % nIteration = 0
-            then printfn "##%i## At iteration %i (-logL = %f) %A" threadId e.Iteration e.Likelihood e.Theta
+            if e.Iteration % nIteration = 0 then
+                printfn "##%i## At iteration %i (-logL = %f) %A" threadId e.Iteration e.Likelihood e.Theta
         | _ -> printfn "##%i## %A" threadId x
 
     /// A simple console logger.
@@ -30,16 +29,19 @@ module Console =
     /// the current likelihood and parameter values.
     let logger (nIteration) =
 
-        let agent = MailboxProcessor.Start(fun inbox -> 
-            let rec messageLoop () = async {
-                let! threadId,msg = inbox.Receive()
-                print nIteration threadId msg
-                return! messageLoop ()
-                }
-            messageLoop () )
+        let agent =
+            MailboxProcessor.Start(fun inbox ->
+                let rec messageLoop () =
+                    async {
+                        let! threadId, msg = inbox.Receive()
+                        print nIteration threadId msg
+                        return! messageLoop ()
+                    }
+
+                messageLoop ())
 
         agent.Error.Add(fun e -> printfn "Error = %A" e)
 
-        fun msg -> 
+        fun msg ->
             let threadId = Thread.CurrentThread.ManagedThreadId
-            agent.Post (threadId, msg)
+            agent.Post(threadId, msg)
