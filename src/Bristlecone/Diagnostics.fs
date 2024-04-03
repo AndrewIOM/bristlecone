@@ -94,7 +94,7 @@ module ModelComponents =
         match estimate with
         | None -> [] |> Map.ofList
         | Some (_,mle) ->
-            let eng = { engine with OptimiseWith = Optimisation.None.passThrough }
+            let eng = { engine with OptimiseWith = Optimisation.None.none }
             let cLog = ComponentLogger<'data>() :> IComponentLogger<'data>
             let p = 
                 mle.Parameters 

@@ -114,7 +114,7 @@ module Solver =
                 expected
                 |> Map.toList
                 |> List.map(fun (c,d) -> d |> Array.map(fun x -> (c, x)) |> Seq.toList) // Add shortcode to each time point's value
-                |> Bristlecone.List.flip // Flip list so that it is primarily timepoint-indexed
+                |> List.flip // Flip list so that it is primarily timepoint-indexed
                 |> List.map Map.ofList // Make environment at each time into a CodedMap<float>
                 // Scan through the environments, outputting the measure at each time
                 |> List.scan(fun (previousEnv,previousX) currentEnv -> 

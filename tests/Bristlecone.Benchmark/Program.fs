@@ -157,7 +157,11 @@ let runOptimTests optimFunctions =
                 |> List.toArray
             runReplicated Config.startPointCount (fun () -> 
                 let startPoint = domain |> Array.map (fun (min, max, _) -> TestSuite.between min max)
-                let result : list<Bristlecone.EstimationEngine.Solution<float>> = optimise Config.rng logger endCondition domain (Some startPoint) f
+                let result : list<Bristlecone.EstimationEngine.Solution<float>> = 
+                    // There are no constraints in these benchmarks, so transform vs detatch is irrelevant.
+                    match optimise with
+                    | Bristlecone.EstimationEngine.InTransformedSpace optim -> optim Config.rng logger endCondition domain (Some startPoint) f
+                    | Bristlecone.EstimationEngine.InDetachedSpace optim -> optim Config.rng logger endCondition domain (Some startPoint) f
                 (result, startPoint) )
             |> summariseRuns modelName optimName minima minVal minima
         ))
@@ -196,16 +200,14 @@ module TimeSeriesTests =
             MillisecondsMedian = successes |> List.map (snd >> float) |> median
         }
 
-    let engine optimise isAmoeba = 
+    let engine optimise = 
         Bristlecone.Bristlecone.mkContinuous 
         |> Bristlecone.Bristlecone.withCustomOptimisation optimise
-        |> (fun b -> if isAmoeba then { b with Constrain = Bristlecone.Parameter.ConstraintMode.Transform } else b)
 
     let runTimeSeriesTests timeModels optimFunctions =
         List.allPairs optimFunctions timeModels
         |> List.map(fun ((optimName: string, optimise), (modelName, modelFn, startValues)) ->
-            let isAmoeba = optimName.Contains("amoeba")
-            runReplicated Config.startPointCount (fun () -> Bristlecone.Bristlecone.testModel (engine optimise isAmoeba) settings modelFn)
+            runReplicated Config.startPointCount (fun () -> Bristlecone.Bristlecone.testModel (engine optimise) settings modelFn)
             |> summarise modelName optimName
         )
 
@@ -224,7 +226,7 @@ let annealSettings =
                 EndConditions.afterIteration 10000 x) }
 
 let optimFunctions =
-    [ "amoeba single",          Amoeba.Solver.solve Amoeba.Solver.Default
+    [ "amoeba single",          Amoeba.single Amoeba.Solver.Default
      //  "amoeba swarm",           Amoeba.swarm 5 20 Amoeba.Solver.Default
     //   "anneal classic",         MonteCarlo.SimulatedAnnealing.classicalSimulatedAnnealing 0.01 false annealSettings
     //   "anneal cauchy",          MonteCarlo.SimulatedAnnealing.fastSimulatedAnnealing 0.01 false annealSettings

@@ -194,4 +194,15 @@ module Parameter =
             then failwith "Parameter pools were of different lengths"
             else result
 
+        /// Flips all parameters in the pool to work in `Detached` mode rather
+        /// than `Transformed` mode.
+        let detatchConstraints pool =
+            pool
+            |> toList
+            |> List.map (fun (k,v) ->
+                let x,y = detatchConstraint v
+                (k, x), y )
+            |> List.unzip
+            |> fun (a,b) -> a |> fromList, b
+
     type Pool = Pool.ParameterPool

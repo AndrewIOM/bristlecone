@@ -121,7 +121,8 @@ module ProfileLikelihood =
             writeOut <| GeneralEvent (sprintf "Tuned = %A" result)
             [(l1, theta1)]
 
-        let classic settings : Optimise<float> =
+        let classic settings : Optimiser<float> =
+            InDetachedSpace <|
             fun random writeOut n domain _ f ->
                 let gaussian rnd scale = Bristlecone.Statistics.Distributions.Normal.draw rnd 0. scale
                 tunedSearch random settings MonteCarlo.SimulatedAnnealing.Machines.boltzmann gaussian writeOut domain f

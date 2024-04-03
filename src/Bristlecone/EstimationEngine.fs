@@ -37,12 +37,14 @@ module ModelSystem =
 
     type FitValue = { Fit: float; Obs: float }
     type FitSeries = TimeSeries<FitValue>
+    
+    /// An estimated model fit for a time-series model.
     type EstimationResult = {
-        ResultId:   System.Guid
-        Likelihood: float
-        Parameters: Parameter.Pool
-        Series:     CodedMap<FitSeries>
-        Trace:      (float * float []) list
+        ResultId:       System.Guid
+        Likelihood:     float
+        Parameters:     Parameter.Pool
+        Series:         CodedMap<FitSeries>
+        Trace:          (float * float []) list
         InternalDynamics: CodedMap<float[]> option }
 
 module EstimationEngine =
@@ -70,15 +72,22 @@ module EstimationEngine =
     type Integrate<'data,'time> = WriteOut -> 'time -> 'time -> 'time -> CodedMap<'data> -> CodedMap<TimeIndex.TimeIndex<'data>> -> CodedMap<ODE> -> CodedMap<'data[]>
     type Optimise<'data> = Random -> WriteOut -> EndCondition<'data> -> Domain -> Point<'data> option -> ('data[] -> 'data) -> Solution<'data> list
 
+    /// An `Optimiser` is an optimisation algorithm that may work either
+    /// in 'transformed' parameter space (where parameter constraints are
+    /// automatically handled) or in 'detatched' space (where the optimisation
+    /// algorithm is responsible for respecting parameter constraints).
+    type Optimiser<'data> =
+        | InTransformedSpace of Optimise<'data>
+        | InDetachedSpace of Optimise<'data>
+
     type TimeMode<'data, 'time> =
         | Discrete
         | Continuous of Integrate<'data, 'time>
 
     type EstimationEngine<'data, 'time> = {
         TimeHandling: TimeMode<'data,'time>
-        OptimiseWith: Optimise<'data>
+        OptimiseWith: Optimiser<'data>
         Conditioning: Conditioning<'data>
-        Constrain: Parameter.ConstraintMode
         LogTo: WriteOut
         Random: Random
     }

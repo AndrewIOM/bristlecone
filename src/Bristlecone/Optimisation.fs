@@ -12,12 +12,12 @@ module None =
 
     /// An optimisation function that calculates the value of `f` using
     /// the given bounds. Use when optimisation of the objective is not required.
-    let passThrough : Optimise<float> =
+    let none : Optimiser<float> =
+        InDetachedSpace <|
         fun _ writeOut _ domain _ f ->
             writeOut <| GeneralEvent "Skipping optimisation: only the result of the given parameters will be computed"
             let point = [| for (min,_,_) in domain -> min |]
             [ f point, point ]
-
 
 module EndConditions =
 
@@ -431,12 +431,8 @@ module MonteCarlo =
                 if linearTrendPValues |> List.exists(fun p -> p <= 0.1) || linearTrendPValues.Length = 0
                 then core isAdaptive writeOut random domain f fullResults batchLength (batchNumber+1) (fullResults |> Seq.head |> snd) sigmas
                 else (batchNumber, fullResults, sigmas)
-
     
-    /// A Markov Chain Monte Carlo (MCMC) sampling algorithm that randomly 'walks'
-    /// through a n-dimensional posterior distribution of the parameter space.
-    /// Specify `tuningSteps` to prime the jump size before random walk.
-    let randomWalk (tuningSteps:seq<TuneStep<float>>) : Optimise<float>=
+    let randomWalk' (tuningSteps:seq<TuneStep<float>>) : Optimise<float>=
         fun random writeOut n domain startPoint f ->
             let initialCovariance = TuningMode.covarianceFromBounds 10000 domain random
             match tryGenerateTheta f domain random 10000 with
@@ -445,18 +441,26 @@ module MonteCarlo =
                 RandomWalk.randomWalk' initialCovariance 1. theta tuningSteps random writeOut n domain f |> fst
             | Error _ -> invalidOp "Could not generate theta"
 
+    /// A Markov Chain Monte Carlo (MCMC) sampling algorithm that randomly 'walks'
+    /// through a n-dimensional posterior distribution of the parameter space.
+    /// Specify `tuningSteps` to prime the jump size before random walk.
+    let randomWalk (tuningSteps:seq<TuneStep<float>>): Optimiser<float> = 
+        InDetachedSpace <| randomWalk' tuningSteps
+
     /// A Markov Chain Monte Carlo (MCMC) sampling algorithm that continually adjusts the
     /// covariance matrix based on the recently-sampled posterior distribution. Proposed
     /// jumps are therefore tuned to the recent history of accepted jumps.
-    let adaptiveMetropolis weighting period : Optimise<float> =
+    let adaptiveMetropolis weighting period : Optimiser<float> =
+        InDetachedSpace <|
         fun random writeOut n domain startPoint f ->
-            randomWalk [ (CovarianceWithScale weighting, period, n) ] random writeOut (EndConditions.afterIteration 0) domain startPoint f
+            randomWalk' [ (CovarianceWithScale weighting, period, n) ] random writeOut (EndConditions.afterIteration 0) domain startPoint f
 
     /// An adaptive Metropolis-within-Gibbs sampler that tunes the variance of
     /// each parameter according to the per-parameter acceptance rate.
     /// Reference: Bai Y (2009). “An Adaptive Directional Metropolis-within-Gibbs Algorithm.”
     /// Technical Report in Department of Statistics at the University of Toronto.
-    let ``Adaptive-Metropolis-within Gibbs`` : Optimise<float> =
+    let ``Adaptive-Metropolis-within Gibbs`` : Optimiser<float> =
+        InDetachedSpace <|
         fun random writeOut endCon domain startPoint f ->
             match tryGenerateTheta f domain random 10000 with
             | Ok theta ->
@@ -468,7 +472,8 @@ module MonteCarlo =
 
     /// A non-adaptive Metropolis-within-gibbs Sampler. Each parameter is updated
     /// individually, unlike the random walk algorithm.
-    let ``Metropolis-within Gibbs`` : Optimise<float> =
+    let ``Metropolis-within Gibbs`` : Optimiser<float> =
+        InDetachedSpace <|
         fun random writeOut endCon domain startPoint (f:Objective<float>) ->
             let theta = initialise domain random
             let sigmas = theta |> Array.map(fun _ -> 0.)
@@ -478,7 +483,8 @@ module MonteCarlo =
     /// Implementation similar to that proposed by Yang and Rosenthal: "Automatically Tuned
     /// General-Purpose MCMC via New Adaptive Diagnostics"
     /// Reference: http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.70.7198&rep=rep1&type=pdf
-    let ``Automatic (Adaptive Diagnostics)`` : Optimise<float> =
+    let ``Automatic (Adaptive Diagnostics)`` : Optimiser<float> =
+        InDetachedSpace <|
         fun random writeOut endCon domain startPoint (f:Objective<float>) ->
 
             // Starting condition
@@ -749,7 +755,8 @@ module MonteCarlo =
 
         /// Candidate distribution: Gaussian univariate []
         /// Probability: Boltzmann Machine
-        let classicalSimulatedAnnealing scale tDependentProposal settings : Optimise<float> =
+        let classicalSimulatedAnnealing scale tDependentProposal settings : Optimiser<float> =
+            InDetachedSpace <|
             fun random writeOut endCon domain startPoint (f:Objective<float>) ->
                 let gaussian rnd scale t = 
                     let s = if tDependentProposal then scale * (sqrt t) else scale
@@ -758,7 +765,8 @@ module MonteCarlo =
 
         /// Candidate distribution: Cauchy univariate []
         /// Probability: Bottzmann Machine
-        let fastSimulatedAnnealing scale tDependentProposal settings : Optimise<float> =
+        let fastSimulatedAnnealing scale tDependentProposal settings : Optimiser<float> =
+            InDetachedSpace <|
             fun random writeOut endCon domain startPoint (f:Objective<float>) ->
                 let cauchy rnd scale t = 
                     let s = if tDependentProposal then scale * (sqrt t) else scale
@@ -863,7 +871,8 @@ module MonteCarlo =
 
         /// A Monte Carlo Markov Chain sampler based on the 'Filzbach' algorithm from
         /// Microsoft Research Cambridge.
-        let filzbach settings : Optimise<float> =
+        let filzbach settings : Optimiser<float> =
+            InDetachedSpace <|
             fun random writeOut endCon domain startPoint (f:Objective<float>) ->
                 match startPoint with
                 | Some theta ->
@@ -946,7 +955,7 @@ module Amoeba =
         let initialize (d:Domain) (rng:System.Random) =
             [| for (min,max,_) in d -> min + (max-min) * rng.NextDouble() |]
 
-        let solve settings rng logger (endWhen:EndCondition<float>) domain startPoint f =
+        let solve settings rng writeOut (endWhen:EndCondition<float>) domain startPoint f =
             let dim = Array.length domain
             let start =             
                 [| for _ in 1 .. settings.Size -> initialize domain rng |]
@@ -955,9 +964,11 @@ module Amoeba =
             let amoeba = { Dim = dim; Solutions = start }
 
             let rec search i (a:Amoeba) =
-                if i > 0 then search (i-1) (update a f settings) // TODO unify array vs list
+                if i > 0 then 
+                    // writeOut <| OptimisationEvent { Iteration = i; Likelihood = a; Theta = thetaAccepted }
+                    search (i-1) (update a f settings) // TODO unify array vs list
                 else 
-                    logger <| GeneralEvent (sprintf "Solution: -L = %f" (fst a.Solutions.[0]))
+                    writeOut <| GeneralEvent (sprintf "Solution: -L = %f" (fst a.Solutions.[0]))
                     a.Solutions |> Array.toList
 
             search 50000 amoeba
@@ -1006,12 +1017,14 @@ module Amoeba =
 
 
     /// Optimise an objective function using a single downhill Nelder Mead simplex.
-    let single settings : Optimise<float> =
+    let single settings : Optimiser<float> =
+        InTransformedSpace <|
         Solver.solve settings
 
     /// Optimisation heuristic that creates a swarm of amoeba (Nelder-Mead) solvers.
     /// The swarm proceeds for `numberOfLevels` levels, constraining the starting bounds
     /// at each level to the 80th percentile of the current set of best likelihoods.
-    let swarm levels amoebaAtLevel settings: Optimise<float> =
+    let swarm levels amoebaAtLevel settings: Optimiser<float> =
+        InTransformedSpace <|
         fun rng logger endAt domain startPoint f ->
             [ Solver.swarm settings rng logger levels endAt amoebaAtLevel domain startPoint f ]
