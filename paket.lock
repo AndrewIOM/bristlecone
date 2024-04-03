@@ -9,7 +9,7 @@ NUGET
       Accord (>= 3.8)
       Accord.Math (>= 3.8)
     DynamicInterop (0.9.1) - restriction: || (== net6.0) (== net8.0) (&& (== netstandard2.0) (>= net5.0))
-    FSharp.Core (4.7.2)
+    FSharp.Core (5.0.2)
     FSharp.Data (4.2.8)
       FSharp.Core (>= 4.7.2)
     MathNet.Numerics (5.0)
