@@ -1,4 +1,4 @@
-#r "nuget:RProvider,2.0.2"
+#r "nuget:RProvider,2.1.0"
 
 open RProvider
 open RProvider.``base``
