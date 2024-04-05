@@ -58,7 +58,7 @@ module Bristlecone =
             timeSeriesData
             |> Map.filter (fun k _ -> equationKeys |> Seq.contains k)
             |> TimeFrame.tryCreate
-            |> Result.ofOption "Observations for dynamic variables must share a common sampling time sequence"
+            |> Result.ofOption "There must be at least one time-series of observations. If more than one specified, observations for dynamic variables must share a common sampling time sequence"
 
         /// Finds environmental data in a timeseries map (i.e. those datasets that are not
         /// dynamic variables or measures), and constructs a common `TimeFrame`.

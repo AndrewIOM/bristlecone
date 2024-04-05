@@ -7,50 +7,6 @@ open Bristlecone
 open Bristlecone.Language
 open FsCheck
 
-let genStrings minLength maxLength =
-    gen {
-        let! length = Gen.choose (minLength, maxLength)
-        let! chars = Gen.arrayOfLength length Arb.generate<char>
-        return String chars
-    }
-
-let tupleGen<'snd> fn =
-    gen {
-        let! length = Gen.choose (0, 100)
-        let! list1 = Gen.listOfLength length fn
-        let! list2 = Gen.listOfLength length (Arb.generate<'snd>)
-        return Seq.zip list1 list2
-    }
-
-type ShortCodeGen() =
-    static member ShortCode() : Arbitrary<ShortCode.ShortCode> =
-        let createCode code = ShortCode.create code |> Option.get
-        genStrings 1 10 |> Gen.map createCode |> Arb.fromGen
-
-    static member EquationList = genStrings 1 10 |> tupleGen<ModelExpression> |> Arb.fromGen
-
-    static member MeasureList =
-        genStrings 1 10 |> tupleGen<ModelSystem.MeasureEquation> |> Arb.fromGen
-
-    static member Pool =
-        gen {
-            let! n = Gen.choose (1, 100)
-            let! codes = Gen.listOfLength n Arb.generate<ShortCode.ShortCode>
-            let! bounds1 = Gen.listOfLength n Arb.generate<NormalFloat>
-            let! bounds2 = Gen.listOfLength n Arb.generate<NormalFloat>
-
-            return
-                List.zip3 codes bounds1 bounds2
-                |> List.map (fun (c, b1, b2) -> c, Parameter.create noConstraints b1.Get b2.Get |> Option.get)
-                |> Parameter.Pool.fromList
-        }
-        |> Arb.fromGen
-
-let config =
-    { FsCheckConfig.defaultConfig with
-        arbitrary = [ typeof<ShortCodeGen> ] }
-
-
 [<Tests>]
 let modelExpressionOperators =
     testList
@@ -108,9 +64,10 @@ let modelExpressions =
                       (f ())
                       (p |> snd |> Parameter.getTransformedValue)
                       "Did not fail when parameter was not present"
-              | None -> Expect.throws (fun () -> f |> ignore) "Parameter was not present"
+              | None -> 
+                Expect.throws (fun () -> f |> ignore) "Parameter was not present"
 
-          testPropertyWithConfig config "Getting parameter values returns real value when present"
+          testPropertyWithConfig Config.config "Getting parameter values returns real value when present"
           <| fun pool x t e ->
               let selectedCode =
                   Gen.elements (pool |> Parameter.Pool.toList |> List.map fst)
@@ -124,15 +81,15 @@ let modelExpressions =
 
               Expect.equal result existingValue "The parameter value was not correct"
 
-          testProperty "Fails when environmental (aka time-varying) data is not present"
-          <| fun code x t pool e ->
-              let f () = Environment code |> compute x t pool e
+          testPropertyWithConfig Config.config "Fails when environmental (aka time-varying) data is not present"
+          <| fun (code:ShortCode.ShortCode) x t pool e ->
+              let f () = Environment code.Value |> compute x t pool e
 
-              match e |> Map.tryFindBy (fun m -> m.Value = code) with
+              match e |> Map.tryFindBy (fun m -> m.Value = code.Value) with
               | Some environ -> Expect.equal (f ()) environ "Did not fail when parameter was not present"
               | None -> Expect.throws (fun () -> f |> ignore) "The parameter was not present"
 
-          testPropertyWithConfig config "Retrieves environment when present"
+          testPropertyWithConfig Config.config "Retrieves environment when present"
           <| fun identifier (value: NormalFloat) x t pool ->
               let e: CodedMap<float> = Map.ofList [ identifier, value.Get ]
               Environment identifier.Value |> compute x t pool e = value.Get ]
@@ -145,15 +102,14 @@ let modelBuilder =
 
           testProperty "Does not compile when more than one likelihood function"
           <| fun (likelihoodFns: ModelSystem.Likelihood list) ->
-              let mb =
+              let f () =
                   likelihoodFns
                   |> Seq.fold (fun mb l -> mb |> Model.useLikelihoodFunction l) Model.empty
-
-              let fn () =
-                  mb |> Model.addEquation "x" (Constant 1.) |> Model.compile
+                  |> Model.addEquation "x" (Constant 1.) 
+                  |> Model.compile
 
               if likelihoodFns |> Seq.length <> 1 then
-                  Expect.throws (fun () -> fn () |> ignore) "Allowed more than one likelihood function"
+                  Expect.throws (fun () -> f () |> ignore) "Allowed more than one likelihood function"
 
           testProperty "Cannot add an equation with a blank identifier"
           <| fun name eq ->
@@ -162,22 +118,25 @@ let modelBuilder =
                       (fun () -> Model.empty |> Model.addEquation name eq |> ignore)
                       "Allowed a blank identifier"
 
-          testPropertyWithConfig config "Does not compile when no equations are specified"
+          testPropertyWithConfig Config.config "Does not compile when no equations are specified"
           <| fun (eqs: (string * ModelExpression) seq) ->
-              let mb =
-                  eqs |> Seq.fold (fun mb (n, eq) -> mb |> Model.addEquation n eq) Model.empty
+              if eqs |> Seq.map fst |> Seq.hasDuplicates then
+                  ()
+              else
+                  let mb =
+                      eqs |> Seq.fold (fun mb (n, eq) -> mb |> Model.addEquation n eq) Model.empty
 
-              let fn () = mb |> Model.compile
+                  let fn () = mb |> Model.compile
 
-              if eqs |> Seq.length <> 1 then
-                  Expect.throws (fun () -> fn () |> ignore) "Did not throw when no equations specified"
+                  if eqs |> Seq.length <> 1 then
+                      Expect.throws (fun () -> fn () |> ignore) "Did not throw when no equations specified"
 
-          testPropertyWithConfig config "Compiles with one likelihood function and one or more equations"
-          <| fun l eqs ->
+          testPropertyWithConfig Config.config "Compiles with one likelihood function and one or more equations (no duplicate keys)"
+          <| fun l (eqs: CodedMap<ModelExpression>) ->
               let mb =
                   eqs
-                  |> Seq.fold
-                      (fun mb (n, eq) -> mb |> Model.addEquation n eq)
+                  |> Map.fold
+                      (fun mb k v -> mb |> Model.addEquation k.Value v)
                       (Model.empty |> Model.useLikelihoodFunction l)
 
               if eqs |> Seq.isEmpty then
@@ -185,42 +144,40 @@ let modelBuilder =
               else
                   mb |> Model.compile |> ignore
 
-          testPropertyWithConfig config "Compiles whether measures are present or not"
-          <| fun likelihood eq1 measures ->
-              let model =
-                  Model.empty
-                  |> Model.useLikelihoodFunction likelihood
-                  |> Model.addEquation "eq1" eq1
-
-              measures
-              |> Seq.fold (fun mb (n, m) -> mb |> Model.includeMeasure n m) model
-              |> Model.compile
-              |> ignore
-
-          testProperty "Doesn't compile if duplicate keys exist"
-          <| fun likelihood eqs measures ->
-
-              // May fail if strings are null or empty
-              // May fail if same string within group (e.g. equations)
-
-              let model =
-                  eqs
-                  |> Seq.fold
-                      (fun mb (n, eq) -> mb |> Model.addEquation n eq)
-                      (Model.empty |> Model.useLikelihoodFunction likelihood)
-
-              let keys = [ (eqs |> List.map fst); (measures |> List.map fst) ] |> List.concat
-
-              if keys.Length = (keys |> List.distinct |> List.length) then
-                  Model.compile model |> ignore
+          testPropertyWithConfig Config.config "Compiles whether measures are present or not"
+          <| fun likelihood eq1 (measures:CodedMap<ModelSystem.MeasureEquation>) ->
+              if measures.Keys |> Seq.hasDuplicates then ()
               else
-                  Expect.throws (fun () -> Model.compile model |> ignore) "Duplicate keys existed"
+                let model =
+                    Model.empty
+                    |> Model.useLikelihoodFunction likelihood
+                    |> Model.addEquation "eq1" eq1
 
-          //         testProperty "Only compiles when all required parameters are specified" <| fail
+                measures
+                |> Map.fold (fun mb n m -> mb |> Model.includeMeasure n.Value m) model
+                |> Model.compile
+                |> ignore
 
-          //         testProperty "Only compiles when all specified parameters are used" <| fail
+          testPropertyWithConfig Config.config "Doesn't compile if duplicate keys exist"
+          <| fun likelihood (eqs: (ShortCode.ShortCode * ModelExpression) list) measures ->
+                let compile () =
+                    eqs
+                    |> Seq.fold
+                        (fun mb (n, eq) -> mb |> Model.addEquation n.Value eq)
+                        (Model.empty |> Model.useLikelihoodFunction likelihood)
+                    |> Model.compile
 
-          //         testProperty "Equations in the built model have the correct result" <| fail
+                let keys = [ (eqs |> List.map fst); (measures |> List.map fst) ] |> List.concat
+                if keys |> Seq.hasDuplicates then
+                    Expect.throws (compile >> ignore) "Duplicate keys existed"
+                else
+                    compile () |> ignore
+
+            // testProperty "Only compiles when all required parameters are specified" <| fun (pool:Parameter.Pool) ->
+
+            // testProperty "Only compiles when all specified parameters are used" <| fail
+
+            // testProperty "Equations in the built model have the correct result" <| fail
 
           ]
 
