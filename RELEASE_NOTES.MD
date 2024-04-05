@@ -1,4 +1,4 @@
-#### 2.0.0 - unreleased
+#### 2.0.0-alpha2 - unreleased
 * FEATURE: Benchmark suite of common test functions for optimisation routines
 * FEATURE: Performance tuning of optimisers. For example, Filzbach 94% faster.
 
