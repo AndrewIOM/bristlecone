@@ -3,8 +3,8 @@
 // #nuget: Bristlecone
 
 ////////////////////////////////////////////////////
-/// Plant nitrogen limitation using wood rings
-/// and nitrogen isotopes
+// Plant nitrogen limitation using wood rings
+// and nitrogen isotopes
 ////////////////////////////////////////////////////
 
 (* An example Bristlecone script for working with
@@ -140,97 +140,67 @@ let engine =
 // configuration can find known parameters for a model. If this step fails, there is an
 // issue with either your model, or the Bristlecone configuration.
 
+let testSettings =
+    Test.create
+    |> Test.addNoise (Test.Noise.tryAddNormal "sigma[y]" "N")
+    |> Test.addNoise (Test.Noise.tryAddNormal "sigma[x]" "bs")
+    |> Test.addGenerationRules [ 
+        Test.GenerationRules.alwaysMoreThan -3. "N"
+        Test.GenerationRules.alwaysLessThan 20. "N"
+        Test.GenerationRules.alwaysMoreThan 0. "bs"
+        Test.GenerationRules.monotonicallyIncreasing "x" ] // There must be at least 10mm of wood production
+    |> Test.addStartValues [
+        "x", 5.0
+        "bs", 5.0 |> Allometric.Proxies.toBiomassMM
+        "N", 3.64 ]
+    |> Test.withTimeSeriesLength 30
+    |> Test.endWhen (Optimisation.EndConditions.afterIteration 1000)
+
+let testResult =
+    hypotheses 
+    |> List.map(fst >> Bristlecone.testModel engine testSettings)
+
 
 // 5. Load Real Data
 // ----------------------------
-// Here, we are using the FSharp.Data type provider to read in .csv datasets.
+// Here, we are using the Bristlecone.Dendro package to 
+// read in dendroecological data.
+
+open Bristlecone.Dendro
+
+let shrubData =
+    let plants = Data.PlantIndividual.loadRingWidths (__SOURCE_DIRECTORY__ + "/../data/yamal-rw.csv")
+    let isotopeData = Data.PlantIndividual.loadLocalEnvironmentVariable (__SOURCE_DIRECTORY__ + "/../data/yuribei-d15N-imputed.csv")
+    plants |> PlantIndividual.zipEnvMany "N" isotopeData
 
 
 // 6. Fit Models to Real Data
 // -----------------------------------
 
 
+
 // 7. Calculate model comparison statistics
 // -----------------------------------
-
-
-
-// TEMP - old script. How to refactor into central libraries?
-// .....
-
-// Could do with defnining a tree ring type that specifies the ways they work.
-// - Tree ring type has transforms between measurements. e.g. ring width to biomass.
-// - Can have other measurements for the individual (isotopes etc.).
-// - Can have associated climate data (that applies across many individuals).
-// Things that need to be able to to:
-// - Define start values
-// - Load in and add additional measurements / climate data
-// Static type:
-// - Gen for fake start values
  
-module DendroPlant =
-
-    type DendroPlant = {
-        Series: GrowthSeries.GrowthSeries
-    }
- 
- 
-  
- //2. Test using fake data
- //----------------------------
- let startValues = [ code "x", 5.; code "N", 3.64; code "bs", (5. |> ModelComponents.Proxies.toBiomassMM)] |> Map.ofList
- let generationRules = 
-     [ code "bs", fun data -> data |> Seq.min > 0.
-       code "N", fun data -> data |> Seq.min > -3.0
-       code "x", fun data -> data |> Seq.pairwise |> Seq.sumBy (fun (a,b) -> b - a) > 10.   // There must be at least 10mm of wood production
-       code "N",  fun data -> data |> Seq.max < 20. ]                                        // N must not get to levels above 20 units
-
- let addNoise p data =
-     let random = System.Random()
-     data |> Map.map(fun key value -> 
-         let sigma =
-             match key with
-             | k when k = code "N" -> p |> Pool.getEstimate "sigma[y]"
-             | k when k = code "bs" -> p |> Pool.getEstimate "sigma[x]"
-             | _ -> invalidOp "No sigma for this!"
-         let draw = Bristlecone.Statistics.Distributions.Normal.draw random 0. sigma
-         value |> TimeSeries.map (fun (x,_) -> x + draw()))
-
- let testResult =
-     hypotheses
-     |> Seq.head
-     |> Bristlecone.testModel Options.engine 30 startValues Options.endWhen generationRules addNoise
-
-
+   
 // 3. Load Real Data and Estimate
 // ----------------------------
 
-let shrubs = 
-    let yuribei = Data.PlantIndividual.loadRingWidths (__SOURCE_DIRECTORY__ + "/../data/yamal-rw.csv")
-    let d15N = Data.PlantIndividual.loadLocalEnvironmentVariable (__SOURCE_DIRECTORY__ + "/../data/yuribei-d15N-imputed.csv")
-    yuribei
-    |> Seq.map (fun s -> (s.Identifier.Value, s))
-    |> Seq.keyMatch d15N
-    |> Seq.map (fun (_,plant,d15N) -> PlantIndividual.zipEnv (code "N") plant d15N)
-    |> Seq.toList
-
-let getStartValues (startDate:System.DateTime) (plant:PlantIndividual) =
+// Define the start values for a model system, as follows:
+// initial radius = 
+let startValues (startDate:System.DateTime) (plant:PlantIndividual.PlantIndividual) =
     let initialRadius =
         match plant.Growth with
-        | RingWidth s -> 
+        | PlantIndividual.PlantGrowth.RingWidth s -> 
             match s with
-            | Absolute c -> c.Head |> fst |> removeUnit
-            | Cumulative c -> 
-                let start = (c |> TimeSeries.trimStart (startDate - System.TimeSpan.FromDays(366.))).Values |> Seq.head |> removeUnit
-                // printfn "Start cumulative growth = %f" start
-                start
-            | Relative _ -> invalidOp "Not implemented"
-        | _ -> invalidOp "Not implemented 2"
-    let initialMass = initialRadius |> removeUnit |> ModelComponents.Proxies.toBiomassMM
+            | GrowthSeries.Absolute c -> c.Head |> fst
+            | _ -> invalidOp "Not applicable"
+        | _ -> invalidOp "Not applicable"
+    let initialMass = initialRadius |> ModelComponents.Proxies.toBiomassMM
     let initialNitrogen = plant.Environment.[code "N"].Head |> fst
-    [ (code "x", initialRadius)
-      (code "N", initialNitrogen)
-      (code "bs", initialMass) ] |> Map.ofList
+    [ ("x", initialRadius)
+      ("N", initialNitrogen)
+      ("bs", initialMass) ] |> Map.ofList
 
 let workPackages shrubs hypotheses engine saveDirectory =
     seq {
@@ -239,7 +209,7 @@ let workPackages shrubs hypotheses engine saveDirectory =
             // 1. Arrange the subject and settings
             let shrub = s |> PlantIndividual.toCumulativeGrowth
             let common = shrub |> PlantIndividual.keepCommonYears
-            let startDate = (common.Environment.[code "N"]).StartDate |> snd
+            let startDate = (common.Environment.["N"]).StartDate |> snd
             let startConditions = getStartValues startDate shrub
             let e = engine |> Bristlecone.withConditioning (Custom startConditions)
 
@@ -259,61 +229,19 @@ let work = workPackages shrubs hypotheses Options.engine Options.resultsDirector
 let run() = work |> Seq.iter (OrchestrationMessage.StartWorkPackage >> Options.orchestrator.Post)
 
 
-// Temp
-module Temp =
-
-    open Bristlecone.Data
-
-    /// Load an `EstimationResult` that has previously been saved as
-    /// three seperate dataframes. Results will only be reconstructed
-    /// when file names and formats are in original Bristlecone format.
-    let loadAll directory subject (modelSystem:ModelSystem) modelId =
-        let mles = MLE.load directory subject modelId |> Seq.map(fun (k,v) -> k.ToString(), v)
-        let series = Series.load directory subject modelId |> Seq.map(fun (k,v) -> k.ToString(), v)
-        let traces = Trace.load directory subject modelId |> Seq.map(fun (k,v) -> k.ToString(), v)
-
-        printfn "%s %i" subject modelId
-
-        let updateParameter (k:ShortCode) v newParameters =
-            printfn "New key is %s" k.Value
-            if k = code "conductivity" then 
-                match newParameters |> Map.tryFind k with
-                | Some i -> Parameter.setEstimate v i
-                | None -> Parameter.setEstimate v (newParameters |> Map.find (code "insulation"))
-            else Parameter.setEstimate v (newParameters |> Map.find k)
-
-        mles
-        |> Seq.keyMatch series
-        |> Seq.map(fun (k,v1,v2) -> (k, (v1, v2)))
-        |> Seq.keyMatch traces
-        |> Seq.map(fun (k,t,(s,(l,p))) ->
-            { ResultId = k |> System.Guid.Parse
-              Likelihood = l
-              Parameters = modelSystem.Parameters |> Map.map(fun k v -> updateParameter k v p)
-              Series = s 
-              Trace = t })
-
-
 let saveDiagnostics () =
 
     // 1. Get all results sliced by plant and hypothesis
     let results = 
-        let get subject model modelId = Temp.loadAll Options.resultsDirectory subject.Identifier.Value model modelId
+        let get subject model modelId = Bristlecone.Data.EstimationResult.loadAll Options.resultsDirectory subject.Identifier.Value model modelId
         Bristlecone.ModelSelection.ResultSet.arrangeResultSets shrubs hypotheses get
 
     // 2. Save convergence statistics to file
     // NB include only results within 5 likelihood of the minimum (to remove outliers)
     results 
-    |> Seq.map(fun (x,a,b,c) -> x.Identifier.Value,a,b,c)
-    |> Seq.toList
-    // |> List.map(fun (x,a,b,c) ->
-    //     if c.IsSome
-    //     then
-    //         let all = fst c.Value
-    //         let minimum = snd c.Value
-    //         (x,a,b,Some (all |> Seq.where(fun e -> e.Likelihood < (minimum.Likelihood) + 5.), minimum))
-    //     else (x,a,b,c))
-    |> Diagnostics.Convergence.gelmanRubinAll 10000 3
+    // |> Seq.map(fun (x,a,b,c) -> x.Identifier.Value,a,b,c)
+    // |> Seq.toList
+    |> Diagnostics.Convergence.gelmanRubinAll 10000
     |> Data.Convergence.save Options.resultsDirectory
 
     // 3. Save Akaike weights to file

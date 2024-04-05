@@ -8,23 +8,39 @@ module JulianDate =
     let secondsInDay = minutesInDay * 60
     let J2000 = 2451545
 
-    let gregorianToJulian (gDate:DateTime) timeZoneOffsetHours =
+    let gregorianToJulian (gDate: DateTime) timeZoneOffsetHours =
         let year, month =
-            if gDate.Month <= 2
-            then float (gDate.Year - 1), float (gDate.Month + 12)
-            else float gDate.Year, float gDate.Month
+            if gDate.Month <= 2 then
+                float (gDate.Year - 1), float (gDate.Month + 12)
+            else
+                float gDate.Year, float gDate.Month
+
         let a = floor (year / 100.)
         let b = 2. - a + floor (a / 4.)
-        let jDay = floor(365.25 * (year + 4716.)) + floor(30.6001 * (month + 1.)) + (float gDate.Day) + b - 1524.5
-        let jTime = (((float gDate.Hour) * (60. * 60.)) + ((float gDate.Minute) * 60.) + (float gDate.Second)) / (float secondsInDay)
+
+        let jDay =
+            floor (365.25 * (year + 4716.))
+            + floor (30.6001 * (month + 1.))
+            + (float gDate.Day)
+            + b
+            - 1524.5
+
+        let jTime =
+            (((float gDate.Hour) * (60. * 60.))
+             + ((float gDate.Minute) * 60.)
+             + (float gDate.Second))
+            / (float secondsInDay)
+
         jDay + jTime - timeZoneOffsetHours / 24.
 
-    let toDate (timeZone:TimeZoneInfo) (gDate:DateTime) (time:float) =
+    let toDate (timeZone: TimeZoneInfo) (gDate: DateTime) (time: float) =
         let additionalDays = floor time
         let hours = int <| floor (time * 24.) % 24.
         let minutes = int <| floor ((time * 24. * 60.) % 60.)
         let seconds = int <| floor ((time * 24. * 60. * 60.) % 60.)
-        (DateTimeOffset(gDate.Year, gDate.Month, gDate.Day, hours, minutes, seconds, timeZone.GetUtcOffset(gDate))).AddDays(additionalDays)
+
+        (DateTimeOffset(gDate.Year, gDate.Month, gDate.Day, hours, minutes, seconds, timeZone.GetUtcOffset(gDate)))
+            .AddDays(additionalDays)
 
     let julianCentury jDate =
         let daysInCentury = 36525.
@@ -48,7 +64,7 @@ module Sunrise =
         match dayLength with
         | CompleteLight -> 1.
         | CompleteDark -> 0.
-        | PartialLight (sr,ss) -> (ss - sr).TotalHours / 24.
+        | PartialLight(sr, ss) -> (ss - sr).TotalHours / 24.
 
     let geomMeanAnomalySun t =
         357.52911 + t * (35999.05029 - 0.0001537 * t)
@@ -58,49 +74,54 @@ module Sunrise =
 
     let eccentricityEarthOrbit t =
         0.016708634 - t * (0.000042037 + 0.0000001267 * t)
-    
-    let radians degrees =
-        degrees * Math.PI / 180.
 
-    let degrees radians =
-        radians * 180. / Math.PI
+    let radians degrees = degrees * Math.PI / 180.
+
+    let degrees radians = radians * 180. / Math.PI
 
     let equationOfCentreSun ma t =
-        sin(radians(ma)) * (1.914602 - t * (0.004817 + 0.000014 * t))
-            + sin(radians(2. * ma)) * (0.019993 - 0.000101 * t)
-            + sin(radians(3. * ma)) * 0.000289
+        sin (radians (ma)) * (1.914602 - t * (0.004817 + 0.000014 * t))
+        + sin (radians (2. * ma)) * (0.019993 - 0.000101 * t)
+        + sin (radians (3. * ma)) * 0.000289
 
-    let trueLongitudeSun (m1:float) eoc =
-        m1 + eoc
+    let trueLongitudeSun (m1: float) eoc = m1 + eoc
 
     let apparentLongitudeSun t1 t =
-        t1 - 0.00569 - 0.00478 * sin(radians(125.04 - 1934.136 * t))
+        t1 - 0.00569 - 0.00478 * sin (radians (125.04 - 1934.136 * t))
 
     let meanObliquityOfEcliptic t =
-        23. + (26. + ((21.448 - t * (46.815 + t * (0.00059 - t * 0.001813)))) / 60.) / 60.
+        23.
+        + (26. + ((21.448 - t * (46.815 + t * (0.00059 - t * 0.001813)))) / 60.) / 60.
 
     let obliquityCorrection oe t =
-        oe + 0.00256 * cos(radians(125.04 - 1934.136 * t))
+        oe + 0.00256 * cos (radians (125.04 - 1934.136 * t))
 
     let equationOfTime oc ml eo ma =
-        let y = tan(radians(oc / 2.)) * tan(radians(oc / 2.))
-        let eTime = 
-            y * sin(2. * radians(ml))
-            - 2. * eo * sin(radians(ma))
-            + 4. * eo * y * sin(radians(ma)) * cos(2. * radians(ml))
-            - 0.5 * y * y * sin(4. * radians(ml))
-            - 1.25 * eo * eo * sin(2. * radians(ma))
-        4. * degrees(eTime)
+        let y = tan (radians (oc / 2.)) * tan (radians (oc / 2.))
+
+        let eTime =
+            y * sin (2. * radians (ml)) - 2. * eo * sin (radians (ma))
+            + 4. * eo * y * sin (radians (ma)) * cos (2. * radians (ml))
+            - 0.5 * y * y * sin (4. * radians (ml))
+            - 1.25 * eo * eo * sin (2. * radians (ma))
+
+        4. * degrees (eTime)
 
     let declinationOfSun oc al =
-        degrees(asin(sin(radians(oc)) * sin(radians(al))))
+        degrees (asin (sin (radians (oc)) * sin (radians (al))))
 
     let cosHourAngle declinationOfSun northLatitude =
-        (sin(radians(-0.83)) - (sin(radians(northLatitude)) * sin(radians(declinationOfSun))))
-            / (cos(radians(northLatitude)) * cos(radians(declinationOfSun)))
+        (sin (radians (-0.83))
+         - (sin (radians (northLatitude)) * sin (radians (declinationOfSun))))
+        / (cos (radians (northLatitude)) * cos (radians (declinationOfSun)))
 
     let hourAngleSunrise lat d =
-        degrees(acos(cos(radians(90.833)) / (cos(radians(lat)) * cos(radians(d))) - tan(radians(lat)) * tan(radians(d))))
+        degrees (
+            acos (
+                cos (radians (90.833)) / (cos (radians (lat)) * cos (radians (d)))
+                - tan (radians (lat)) * tan (radians (d))
+            )
+        )
 
     let solarNoon lng eot tzoff =
         (720. - 4. * lng - eot + tzoff * 60.) / (float JulianDate.minutesInDay)
@@ -133,8 +154,11 @@ module Sunrise =
         let eot = equationOfTime oc ml eo ma
 
         let cosHa = cosHourAngle d lat
-        if cosHa > 1. then CompleteDark
-        else if cosHa < -1. then CompleteLight
+
+        if cosHa > 1. then
+            CompleteDark
+        else if cosHa < -1. then
+            CompleteLight
         else
             let ha = hourAngleSunrise lat d
             let sn = solarNoon lng eot tzOffHr
@@ -146,12 +170,12 @@ module Sunrise =
 
     type DayLengthCache(latitude, longitude, timeZone) =
 
-        let mutable (lightData:Map<DateTime,DayLength>) = [] |> Map.ofList
-        with
-            member __.GetLight(date) =
-                match lightData |> Map.tryFind date with
-                | Some l -> l
-                | None -> 
-                    let l = calculate date.Year date.Month date.Day latitude longitude timeZone
-                    lightData <- lightData |> Map.add date l
-                    l
+        let mutable (lightData: Map<DateTime, DayLength>) = [] |> Map.ofList
+
+        member __.GetLight(date) =
+            match lightData |> Map.tryFind date with
+            | Some l -> l
+            | None ->
+                let l = calculate date.Year date.Month date.Day latitude longitude timeZone
+                lightData <- lightData |> Map.add date l
+                l

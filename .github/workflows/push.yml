@@ -11,13 +11,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-latest, windows-latest]
+        os: [macos-latest, ubuntu-20.04, windows-latest]
 
     steps:
     - uses: actions/checkout@master
     - uses: r-lib/actions/setup-r@v1
       name: Setup R - Windows / macOS
-      if: matrix.os != 'ubuntu-latest'
+      if: matrix.os != 'ubuntu-20.04'
       with:
           r-version: '4.0.2'
     - name: Set R_HOME environment variable
@@ -47,7 +47,7 @@ jobs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v1
       with:
-        dotnet-version: 5.0.x
+        dotnet-version: 6.0.x
     - name: Restore tool dependencies
       run: dotnet tool restore
     - name: Restore paket dependencies

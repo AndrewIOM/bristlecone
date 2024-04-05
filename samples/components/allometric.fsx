@@ -3,7 +3,6 @@ module Allometric
 #load "../bristlecone.fsx"
 
 open Bristlecone
-open Bristlecone.Language
 
 let pi = System.Math.PI
 
@@ -81,6 +80,9 @@ module Götmark2016_ShrubModel =
 module Allometrics =
 
     open Götmark2016_ShrubModel
+    open Bristlecone.Dendro
+
+    let private removeUnit (x:float<_>) = float x
 
     let mass woodDensity volume =
         volume * woodDensity
@@ -88,8 +90,9 @@ module Allometrics =
     let massToVolume woodDensity mass =
         mass / woodDensity
 
-    let shrubBiomass b a rtip p lmin k5 k6 n woodDensity radius =
+    let shrubBiomass b a rtip p lmin k5 k6 n woodDensity (radius:float<mm>) =
         radius
+        |> removeUnit
         |> NiklasAndSpatz_Allometry.stemLength k5 k6
         |> shrubVolume b a rtip p lmin k5 k6 n |> snd
         |> mass woodDensity
@@ -108,9 +111,11 @@ module Allometrics =
 
 module Proxies =
 
+    open Bristlecone.Dendro
+
     /// Radius in millimetres
-    let toBiomassMM radiusMM = 
-        radiusMM / 10. |> Allometrics.shrubBiomass Constants.b Constants.a Constants.rtip Constants.p Constants.lmin Constants.k5 Constants.k6 Constants.numberOfStems Constants.salixWoodDensity
+    let toBiomassMM (radius:float<mm>) = 
+        radius / 10. |> Allometrics.shrubBiomass Constants.b Constants.a Constants.rtip Constants.p Constants.lmin Constants.k5 Constants.k6 Constants.numberOfStems Constants.salixWoodDensity
 
     /// Biomass in grams.
     let toRadiusMM biomassGrams = 

@@ -19,6 +19,7 @@
     <Compile Include="Workflow.fs" />
     <Compile Include="Objective.fs" />
     <Compile Include="Solver.fs" />
+    <Compile Include="Test.fs" />
     <Compile Include="Library.fs" />
     <Compile Include="Equations.fs" />
     <Compile Include="Language.fs" />

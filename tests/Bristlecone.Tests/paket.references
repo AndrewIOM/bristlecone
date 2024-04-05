@@ -1,4 +1,4 @@
-FSharp.Core
-Expecto
-Expecto.BenchmarkDotNet
-Expecto.FsCheck
+group Test
+    Expecto
+    Expecto.BenchmarkDotNet
+    Expecto.FsCheck

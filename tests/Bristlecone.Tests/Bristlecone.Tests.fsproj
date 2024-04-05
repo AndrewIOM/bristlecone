@@ -2,16 +2,18 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>netcoreapp3.1</TargetFramework>
+    <TargetFramework>net6.0</TargetFramework>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/Bristlecone/Bristlecone.fsproj" />
     <Compile Include="Time.fs" />
     <Compile Include="Parameter.fs" />
-    <!-- <Compile Include="Optimisation.fs" />
+    <Compile Include="Optimisation.fs" />
     <Compile Include="ModelSelection.fs" />
-    <Compile Include="Workflow.fs" /> -->
+    <Compile Include="Workflow.fs" />
+    <Compile Include="Test.fs" />
+    <Compile Include="Bristlecone.fs" />
     <Compile Include="Language.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>

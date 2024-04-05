@@ -28,6 +28,11 @@ To get started with Bristlecone, see [the documentation website with tutorials, 
 
 In addition, in the `samples` folder there are example scripts for simple to more complex models.
 
+#### Benchmarks
+
+A suite of benchmarks - covering optimisation methods and ecological time-series models - are included in the `test/Bristlecone.Benchmark` project. The most recent results of the benchmark tests [are here](benchmarks.md).
+
+
 Developers: Build Instructions
 ----------------
 

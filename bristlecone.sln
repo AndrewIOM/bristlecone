@@ -23,6 +23,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "project", "project", "{BF60
 	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{ED8079DD-2B06-4030-9F0F-DC548F98E1C4}"
+	ProjectSection(SolutionItems) = preProject
+	EndProjectSection
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Bristlecone.Tests", "tests\Bristlecone.Tests\Bristlecone.Tests.fsproj", "{D82667D7-EC01-4CD8-9D5E-C32232B62284}"
 EndProject
@@ -48,6 +50,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{E2553722-911
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Bristlecone.Charts.R", "src\Bristlecone.Charts.R\Bristlecone.Charts.R.fsproj", "{2F5FF7E7-E250-4B2D-A058-ABD0052D6D1B}"
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Bristlecone.Benchmark", "tests\Bristlecone.Benchmark\Bristlecone.Benchmark.fsproj", "{6FC53231-69B1-424B-82BC-11014A7168A1}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -70,6 +74,10 @@ Global
 		{2F5FF7E7-E250-4B2D-A058-ABD0052D6D1B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{2F5FF7E7-E250-4B2D-A058-ABD0052D6D1B}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{2F5FF7E7-E250-4B2D-A058-ABD0052D6D1B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6FC53231-69B1-424B-82BC-11014A7168A1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6FC53231-69B1-424B-82BC-11014A7168A1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6FC53231-69B1-424B-82BC-11014A7168A1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6FC53231-69B1-424B-82BC-11014A7168A1}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -79,5 +87,6 @@ Global
 		{07A1121A-EB9F-4CFA-9D39-2ECC6BB58145} = {E2553722-911E-4F7A-A282-EBF14E807D3D}
 		{B7339FEC-0891-4DF8-8BB5-0B806A64F32F} = {E2553722-911E-4F7A-A282-EBF14E807D3D}
 		{2F5FF7E7-E250-4B2D-A058-ABD0052D6D1B} = {E2553722-911E-4F7A-A282-EBF14E807D3D}
+		{6FC53231-69B1-424B-82BC-11014A7168A1} = {ED8079DD-2B06-4030-9F0F-DC548F98E1C4}
 	EndGlobalSection
 EndGlobal
