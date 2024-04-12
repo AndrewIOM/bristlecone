@@ -155,7 +155,7 @@ module ``Fit`` =
                   [
 
                     testPropertyWithConfig Config.config "Positive only parameter is transformed when optimising in transformed space"
-                    <| fun (dataCodes: ShortCode.ShortCode list) (data: float list) startDate months (b1: NormalFloat) (b2: NormalFloat) ->
+                    <| fun (data: float list) startDate months (b1: NormalFloat) (b2: NormalFloat) ->
                         let testModel b1 b2 = TestModels.twoEquationConstant Language.notNegative b1 b2
                         if b1.Get = b2.Get || b1.Get = 0. || b2.Get = 0.
                         then
@@ -177,18 +177,18 @@ module ``Fit`` =
                                     OptimiseWith = optimTest }
 
                             let data = 
-                                dataCodes
+                                [ (ShortCode.create "x").Value; (ShortCode.create "y").Value ]
                                 |> Seq.map(fun c -> c, Time.TimeSeries.fromSeq startDate (Time.FixedTemporalResolution.Months months) data)
                                 |> Map.ofSeq
 
                             let result =
                                 Expect.wantOk
-                                    (Bristlecone.fit defaultEngine defaultEndCon data (testModel b1 b2))
+                                    (Bristlecone.fit engine defaultEndCon data (testModel b1 b2))
                                     "Errored when should be OK"
 
                             Expect.equal
                                 inOptimMin
-                                (min b1 b2)
+                                (min (log(b1)) (log(b2)))
                                 "The lower bound was not transformed inside the optimiser" ]
 
               ]

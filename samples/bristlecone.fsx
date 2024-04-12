@@ -1,6 +1,5 @@
-#r "../packages/FSharp.Data/lib/netstandard2.0/FSharp.Data.dll"
-#r "../packages/MathNet.Numerics/lib/netstandard2.0/MathNet.Numerics.dll"
-#r "../packages/MathNet.Numerics.FSharp/lib/netstandard2.0/MathNet.Numerics.FSharp.dll"
+#r "nuget: MathNet.Numerics.FSharp"
+#r "nuget: FSharp.Data"
 
 #r "../src/Bristlecone/bin/Debug/netstandard2.0/Microsoft.Research.Oslo.dll"
 #r "../src/Bristlecone/bin/Debug/netstandard2.0/Bristlecone.dll"

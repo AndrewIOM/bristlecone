@@ -151,7 +151,7 @@ let testSettings =
         Test.GenerationRules.monotonicallyIncreasing "x" ] // There must be at least 10mm of wood production
     |> Test.addStartValues [
         "x", 5.0
-        "bs", 5.0 |> Allometric.Proxies.toBiomassMM
+        "bs", 5.0<Dendro.mm> |> Allometric.Proxies.toBiomassMM
         "N", 3.64 ]
     |> Test.withTimeSeriesLength 30
     |> Test.endWhen (Optimisation.EndConditions.afterIteration 1000)
