@@ -12,11 +12,11 @@ index: 4
 #r "../src/Bristlecone/bin/Release/netstandard2.0/Bristlecone.dll"
 (*** condition: fsx ***)
 #if FSX
-#r "nuget: Bristlecone,{{package-version}}"
+#r "nuget: Bristlecone,{{fsdocs-package-version}}"
 #endif // FSX
 (*** condition: ipynb ***)
 #if IPYNB
-#r "nuget: Bristlecone,{{package-version}}"
+#r "nuget: Bristlecone,{{fsdocs-package-version}}"
 #endif // IPYNB
 
 (**
@@ -116,17 +116,17 @@ the orchestration agent:
 
 let orchestrator = Orchestration.OrchestrationAgent(logger, System.Environment.ProcessorCount, false)
 
-fun datasets hypotheses engine ->
+// fun datasets hypotheses engine ->
 
-    // Orchestrate the analyses
-    let work = workPackages datasets hypotheses engine
-    let run() = 
-        work 
-        |> Seq.iter (
-            Orchestration.OrchestrationMessage.StartWorkPackage 
-            >> orchestrator.Post)
+//     // Orchestrate the analyses
+//     let work = workPackages datasets hypotheses engine
+//     let run() = 
+//         work 
+//         |> Seq.iter (
+//             Orchestration.OrchestrationMessage.StartWorkPackage 
+//             >> orchestrator.Post)
 
-    run()
+//     run()
 
 (**
 If the above code is supplied with datasets, hypotheses, and an

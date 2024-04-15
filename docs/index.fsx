@@ -10,6 +10,7 @@ index: 1
 (*** condition: prepare ***)
 #nowarn "211"
 #r "../src/Bristlecone/bin/Release/netstandard2.0/Bristlecone.dll"
+#r "nuget: MathNet.Numerics.FSharp,5.0.0"
 (*** condition: fsx ***)
 #if FSX
 #r "nuget: Bristlecone,{{package-version}}"
@@ -30,15 +31,16 @@ other fields that apply non-linear modelling techniques.
 
 ## Quick Start
 
-Once you have installed [the .NET SDK](https://dot.net), the Bristlecone library 
-can be [installed from NuGet](https://nuget.org/packages/Bristlecone).
+Bristlecone is an F# .NET library. You can easily get started by installing 
+[the latest .NET SDK](https://dot.net). You may then simply use the
+Bristlecone package in a script, application, or library. 
+The nuget package [is available here](https://nuget.org/packages/Bristlecone).
 
-### Use in an F# script
+### To use in an F# script
 
 ![img/example.png](img/example.png)
 
-Example
--------
+## Example
 
 This example demonstrates the layout of a model when defined in Bristlecone.
 
@@ -61,10 +63,13 @@ let hypothesis =
 
 let engine = 
     Bristlecone.mkContinuous
-    |> Bristlecone.withTunedMCMC [ ]//Optimisation.MonteCarlo.TuneMethod.CovarianceWithScale 0.750, 200, Optimisation.EndConditions.afterIteration 25000  ]
+    |> Bristlecone.withCustomOptimisation (Optimisation.Amoeba.swarm 5 20 Optimisation.Amoeba.Solver.Default)
 
 let testSettings = Bristlecone.Test.TestSettings<float>.Default
-Bristlecone.testModel engine testSettings hypothesis
+let testResult = Bristlecone.testModel engine testSettings hypothesis
+
+(*** include-fsi-output ***)
+
 
 (**
 In the above snippet, a von Bertalanffy growth model is defined as a hypothesis to test. We then create an `EstimationEngine`, which defines the methodology for model-fitting. In Bristlecone, an `EstimationEngine` is created and customised using the F# forward pipe operator (for R users this may be familiar; this concept was adapted into the dplyr %>% operator). The call to `testModel` generates random test data, and assesses whether the model-fitting method can accurately estimate known parameters.

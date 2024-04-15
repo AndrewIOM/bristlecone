@@ -157,9 +157,9 @@ Target.create "DocsMeta" (fun _ ->
       sprintf "<PackageIconUrl>%s/master/docs/content/logo.png</PackageIconUrl>" repositoryContentUrl
       sprintf "<PackageTags>%s</PackageTags>" tags
       sprintf "<Version>%s</Version>" release.NugetVersion
-      sprintf "<FsDocsLogoSource>%s/master/docs/img/logo.png</FsDocsLogoSource>" repositoryContentUrl
-      sprintf "<FsDocsLicenseLink>%s/blob/master/LICENSE.md</FsDocsLicenseLink>" repositoryUrl
-      sprintf "<FsDocsReleaseNotesLink>%s/blob/master/RELEASE_NOTES.md</FsDocsReleaseNotesLink>" repositoryUrl
+      sprintf "<FsDocsLogoSource>/img/logo.png</FsDocsLogoSource>"
+      sprintf "<FsDocsLicenseLink>%s/blob/master/LICENSE</FsDocsLicenseLink>" repositoryUrl
+      sprintf "<FsDocsReleaseNotesLink>%s/blob/master/RELEASE_NOTES.MD</FsDocsReleaseNotesLink>" repositoryUrl
       "<FsDocsWarnOnMissingDocs>true</FsDocsWarnOnMissingDocs>"
       "<FsDocsTheme>default</FsDocsTheme>"
       "</PropertyGroup>"
@@ -169,7 +169,7 @@ Target.create "DocsMeta" (fun _ ->
 
 Target.create "GenerateDocs" (fun _ ->
    Fake.IO.Shell.cleanDir ".fsdocs"
-   DotNet.exec id "fsdocs" "build --clean" |> ignore
+   DotNet.exec id "fsdocs" "build --clean --eval --strict" |> ignore
 )
 
 // --------------------------------------------------------------------------------------

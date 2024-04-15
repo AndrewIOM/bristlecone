@@ -12,11 +12,11 @@ index: 2
 #r "../src/Bristlecone/bin/Release/netstandard2.0/Bristlecone.dll"
 (*** condition: fsx ***)
 #if FSX
-#r "nuget: Bristlecone,{{package-version}}"
+#r "nuget: Bristlecone,{{fsdocs-package-version}}"
 #endif // FSX
 (*** condition: ipynb ***)
 #if IPYNB
-#r "nuget: Bristlecone,{{package-version}}"
+#r "nuget: Bristlecone,{{fsdocs-package-version}}"
 #endif // IPYNB
 
 (**
@@ -48,6 +48,11 @@ Bristlecone expressions.*
 *)
 
 let ``dN/dt`` = Parameter "r" * This * (Constant 1. - (This / Parameter "K"))
+
+(**
+From the above code, our model is compiled into the following internal representation:
+*)
+(*** include-value: ``dN/dt`` ***)
 
 (** 
 Our model of the change in *N* (population count) over time has two estimatable parameters defined using the `Parameter` term,
