@@ -155,17 +155,33 @@ module MonteCarlo =
                else
                    (Normal.draw rng (max + (min - max) / 2.) ((min - max) / 6.)) () |]
 
+    /// Assesses if theta is valid based on the provided
+    /// constraints. 
+    let isInvalidTheta theta constraints =
+        Seq.zip theta constraints
+        |> Seq.map(fun (v,c) ->
+            match c with
+            | Bristlecone.Parameter.Constraint.Unconstrained -> true
+            | Bristlecone.Parameter.Constraint.PositiveOnly -> v > 0. )
+        |> Seq.contains false
 
+    /// Attempts to generate random theta based on starting bounds
+    /// for n tries. If the theta does not meet given constraints, or
+    /// `f` evaluates to NaN or an infinity then the algorithm tries again.
     let rec tryGenerateTheta f domain random n =
         if n < 0 then
             Error "Could not generate a starting point given the domain"
         else
             let t = initialise domain random
-
-            if System.Double.IsNaN(f t) || System.Double.IsInfinity(f t) then
+            let isInvalid = isInvalidTheta t (domain |> Seq.map (fun (_,_,c) -> c))
+            if isInvalid then
                 tryGenerateTheta f domain random (n - 1)
             else
-                Ok t
+                if System.Double.IsNaN(f t) || System.Double.IsInfinity(f t)
+                then
+                    tryGenerateTheta f domain random (n - 1)
+                else
+                    Ok t
 
     /// Jump in parameter space while reflecting constraints.
     let constrainJump initial jump (scaleFactor: float) c =
