@@ -97,7 +97,7 @@ module Timeseries =
 
     let ``predator-prey`` =
         predatorPreyBase
-        |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ "hare"; "lynx" ])
+        |> Model.useLikelihoodFunction (Bristlecone.ModelLibrary.Likelihood.sumOfSquares [ "hare"; "lynx" ])
         |> Model.compile
 
     let ``predator-prey [with noise]`` =
@@ -105,5 +105,5 @@ module Timeseries =
         |> Model.estimateParameter "σ[x]" notNegative 0.01 0.5
         |> Model.estimateParameter "σ[y]" notNegative 0.01 0.5
         |> Model.estimateParameter "ρ" noConstraints -0.5 0.5
-        |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.bivariateGaussian "hare" "lynx")
+        |> Model.useLikelihoodFunction (Bristlecone.ModelLibrary.Likelihood.bivariateGaussian "hare" "lynx")
         |> Model.compile

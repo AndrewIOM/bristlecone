@@ -137,18 +137,13 @@ module Parameter =
             |> Option.map snd
             |> Option.map getTransformedValue
 
-        let private resultToOption r =
-            match r with
-            | Ok x -> Some x
-            | Error _ -> None
-
         /// Gets the 'real' / non-transformed value for use in model
         /// calculation.
         let internal tryGetRealValue key (pool: ParameterPool) : float option =
             pool
             |> unwrap
             |> Map.tryFindBy (fun k -> k.Value = key)
-            |> Option.bind (getEstimate >> resultToOption)
+            |> Option.bind (getEstimate >> Result.toOption)
 
         /// Returns the starting bounds in transformed parameter space if
         /// the parameter has not been estimated. If the parameter has already
@@ -188,7 +183,8 @@ module Parameter =
             if count pool = (point |> Array.length) then
                 pool
                 |> toList
-                |> List.mapi (fun i (sc, p) -> sc, setTransformedValue p point.[i])
+                |> List.mapi (fun i (sc, p) -> 
+                    sc, setTransformedValue p point.[i])
                 |> List.choose (fun (c, r) ->
                     match r with
                     | Ok x -> Some(c, x)

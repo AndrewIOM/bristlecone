@@ -144,7 +144,7 @@ let modelBuilder =
         [
 
           testProperty "Does not compile when more than one likelihood function"
-          <| fun (likelihoodFns: ModelSystem.Likelihood list) ->
+          <| fun (likelihoodFns: ModelSystem.LikelihoodFn list) ->
               let mb =
                   likelihoodFns
                   |> Seq.fold (fun mb l -> mb |> Model.useLikelihoodFunction l) Model.empty

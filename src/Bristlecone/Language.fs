@@ -181,7 +181,7 @@ module Language =
         type ModelFragment =
             | EquationFragment of ModelExpression
             | ParameterFragment of Parameter.Parameter
-            | LikelihoodFragment of ModelSystem.Likelihood
+            | LikelihoodFragment of ModelSystem.LikelihoodFn
             | MeasureFragment of ModelSystem.MeasureEquation
 
         type ModelBuilder = private ModelBuilder of Map<ShortCode.ShortCode, ModelFragment>
