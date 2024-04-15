@@ -127,6 +127,9 @@ module Parameter =
 
         let toList pool = (pool |> unwrap) |> Map.toList
 
+        let hasParameter name pool =
+            pool |> unwrap |> Map.tryFindBy(fun k -> k.Value = name)
+
         /// Returns Some value if a parameter with the `key`
         /// exists in the Pool. The value returned is transformed
         /// for an unconstrained parameter space.

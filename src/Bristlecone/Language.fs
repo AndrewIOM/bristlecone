@@ -150,6 +150,39 @@ module Language =
             | Invalid -> bind ((), "invalid model")
             | Conditional _ -> bind ((), "conditional element") // TODO
 
+        type Requirement =
+            | ParameterRequirement of string
+            | EnvironmentRequirement of string
+
+        /// Determines the parameter and environmental data requirements of the defined model expression.
+        let rec requirements ex reqs =
+            match ex with
+            | This -> reqs
+            | Time -> reqs
+            | Environment name -> EnvironmentRequirement name :: reqs
+            | Parameter name -> ParameterRequirement name :: reqs
+            | Constant _ -> reqs
+            | Add list
+            | Multiply list ->
+                list 
+                |> List.collect(fun l -> requirements l reqs)
+                |> List.append reqs
+            | Divide(l, r)
+            | Subtract(l, r) ->
+                [ requirements l reqs; requirements r reqs; reqs ] |> List.concat
+            | Arbitrary(fn, r) ->
+                r 
+                |> List.map(fun r ->
+                    match r with
+                    | ArbitraryEnvironment e -> EnvironmentRequirement e
+                    | ArbitraryParameter p -> ParameterRequirement p)
+                |> List.append reqs
+            | Mod(e, _) -> requirements e reqs
+            | Exponent(e, _) -> requirements e reqs
+            | Invalid -> reqs
+            | Conditional _ -> reqs
+
+
     /// Allows common F# functions to use Bristlecone model expressions.
     module ComputableFragment =
 
@@ -257,17 +290,24 @@ module Language =
                 |> Seq.choose id
                 |> Map.ofSeq
 
-            // let requirements =
-            //     equations
-            //     |> Map.map (fun k v -> ExpressionParser.describe v |> Writer.run |> snd)
+            if Seq.hasDuplicates (Seq.concat [ Map.keys measures; Map.keys equations ])
+            then failwith "Duplicate keys were used within equation and measures. These must be unique."
 
-            // 1. Check all requirements are met (equations, measures, likelihood fn)
+            if equations.IsEmpty then failwith "No equations specified. You must state at least one model equation."
 
-            // 2. Check that all estimatable parameters are used.
-
-
-            // 3. Summarise each equation:
-            // > Print if mass / time is required.
+            equations 
+            |> Map.map (fun _ v -> ExpressionParser.requirements v [])
+            |> Map.toList
+            |> List.map snd
+            |> List.collect id
+            |> List.distinct
+            |> List.iter(fun req ->
+                match req with
+                | ExpressionParser.ParameterRequirement p ->
+                    match parameters |> Parameter.Pool.hasParameter p with
+                    | Some p -> ()
+                    | None -> failwithf "The specified model requires the parameter '%s' but this has not been set up." p
+                | ExpressionParser.EnvironmentRequirement _ -> ())
 
             { Likelihood = likelihoods |> Seq.head
               Parameters = parameters

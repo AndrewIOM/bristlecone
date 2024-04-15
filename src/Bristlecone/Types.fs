@@ -109,6 +109,9 @@ module Seq =
         let variance = nums |> List.averageBy (fun x -> sqr (x - mean))
         sqrt (variance)
 
+    let hasDuplicates seq =
+        (seq |> Seq.distinct |> Seq.length) <> (seq |> Seq.length)
+
 [<RequireQualifiedAccess>]
 module Map =
 

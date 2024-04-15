@@ -8,6 +8,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/Bristlecone/Bristlecone.fsproj" />
+    <Compile Include="Config.fs" />
     <Compile Include="Time.fs" />
     <Compile Include="Parameter.fs" />
     <Compile Include="Optimisation.fs" />

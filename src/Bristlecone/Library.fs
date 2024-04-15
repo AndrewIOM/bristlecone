@@ -130,10 +130,21 @@ module Bristlecone =
         // A. Setup initial time point values based on conditioning method.
         let t0 = Fit.t0 timeSeriesData engine.Conditioning engine.LogTo
 
+        // Check there is time-series data actually included and corresponding to correct equations.
+        let hasRequiredData =
+            if timeSeriesData.IsEmpty then Error "No time-series data was specified"
+            else
+                if Set.isSubset (model.Equations |> Map.keys |> set) (timeSeriesData |> Map.keys |> set)
+                then Ok timeSeriesData
+                else Error (sprintf "Required time-series data were missing. Need: %A" (model.Equations |> Map.keys |> Seq.map (fun k -> k.Value) |> String.concat " + "))
+
         // B. Create a continuous-time that outputs float[]
         // containing only the values for the dynamic variable resolution.
         let continuousSolver =
             result {
+                
+                let! timeSeriesData = hasRequiredData
+
                 // 1. Set time-series into common timeline
                 let! commonDynamicTimeFrame = Fit.observationsToCommonTimeFrame model.Equations timeSeriesData
 
