@@ -57,7 +57,6 @@ let hypothesis =
 
 let engine = 
     Bristlecone.mkContinuous
-    |> Bristlecone.withContinuousTime Integration.MathNet.integrate
     |> Bristlecone.withConditioning Conditioning.RepeatFirstDataPoint
     |> Bristlecone.withTunedMCMC [ Optimisation.MonteCarlo.TuneMethod.CovarianceWithScale 0.200, 250, Optimisation.EndConditions.afterIteration 20000 ]
 
@@ -68,11 +67,17 @@ let engine =
 // configuration can find known parameters for a model. If this step fails, there is an
 // issue with either your model, or the Bristlecone configuration.
 
-let startValues = [ ShortCode.create "lynx", 30.09; ShortCode.create "hare", 19.58 ] |> Map.ofList
+let testSettings =
+    Test.create
+    |> Test.withTimeSeriesLength 30
+    |> Test.addStartValues [ "stem radius", 2.3 ]
+    |> Test.addGenerationRules [ 
+        Test.GenerationRules.alwaysLessThan 1000. "stem radius"
+        Test.GenerationRules.alwaysMoreThan 0. "stem radius"
+        Test.GenerationRules.monotonicallyIncreasing "x" ] // There must be at least 10mm of wood production
+    |> Test.endWhen (Optimisation.EndConditions.afterIteration 1000)
 
-// TODO Test settings new format
-
-hypothesis |> Bristlecone.testModel engine Options.testSeriesLength startValues Options.iterations []
+let testResult = Bristlecone.testModel engine testSettings hypothesis
 
 
 // 4. Load Real Data
@@ -87,7 +92,6 @@ hypothesis |> Bristlecone.testModel engine Options.testSeriesLength startValues 
 
 open FSharp.Data
 
-// TODO Is there a way to streamline this?
 [<Literal>] 
 let DailyTemperatureUrl = __SOURCE_DIRECTORY__ + "/data/mean-temperature-daily.csv"
 
@@ -99,35 +103,10 @@ let meanTemperatureMonthly =
     |> TimeSeries.interpolate
     |> TimeSeries.generalise (FixedTemporalResolution.Months (PositiveInt.create 1)) (fun x -> x |> Seq.averageBy fst)
 
-
-module Test =
-
-    open Bristlecone.Test
-
-    let settings = TestSettings.Default
-    
-    let testSettings = {
-        Resolution = Years 1
-        TimeSeriesLength = 30
-        StartValues = [ code "b", 5.
-                        code "t", 255. ] |> Map.ofList
-        EndCondition = Settings.endWhen
-        GenerationRules = [ "b" |> GenerationRules.alwaysLessThan 1000000.
-                            "b" |> GenerationRules.alwaysMoreThan 0.
-                            code "b", fun data -> (data |> Seq.max) - (data |> Seq.min) > 100. ]
-        NoiseGeneration = fun p data -> data
-        EnvironmentalData = [ code "t", TemperatureData.monthly ] |> Map.ofList
-        Random = MathNet.Numerics.Random.MersenneTwister()
-        StartDate = System.DateTime(1970,01,01)  
-        Attempts = 50000 }
-
-    let run () =
-        hypothesis
-        |> Bristlecone.testModel Settings.engine testSettings
-
-
-let testResult = Test.run()
+// TODO read in stem radius sample dataset
 
 // 4. Fit Model to Real Data
 // -----------------------------------
-let result = hypothesis |> Bristlecone.fit engine (Optimisation.EndConditions.afterIteration Options.iterations) data
+let result =
+    hypothesis 
+    |> Bristlecone.fit engine Settings.endWhen data
