@@ -6,24 +6,17 @@ categoryindex: 1
 index: 1
 ---
 
-[![Script](img/badge-script.svg)]({{root}}/{{fsdocs-source-basename}}.fsx)&emsp;
-[![Notebook](img/badge-notebook.svg)]({{root}}/{{fsdocs-source-basename}}.ipynb)
+[![Script]({{root}}/img/badge-script.svg)]({{root}}/{{fsdocs-source-basename}}.fsx)&emsp;
+[![Notebook]({{root}}/img/badge-notebook.svg)]({{root}}/{{fsdocs-source-basename}}.ipynb)
 *)
 
 (*** condition: prepare ***)
 #nowarn "211"
-#r "nuget:MathNet.Numerics.FSharp,4.15"
+#r "nuget: MathNet.Numerics.FSharp,5.0.0"
+#r "nuget: FSharp.Data,6.3"
 #r "../../src/Bristlecone/bin/Release/netstandard2.0/Bristlecone.dll"
-(*** condition: fsx ***)
-#if FSX
-#r "nuget: Bristlecone,{{fsdocs-package-version}}"
-#endif // FSX
-(*** condition: ipynb ***)
-#if IPYNB
-#r "nuget: Bristlecone,{{fsdocs-package-version}}"
-#endif // IPYNB
 
-#r "nuget:RProvider"
+#r "nuget: Plotly.NET, 4.2.0"
 
 (**
 Predator-Prey Dynamics: Snowshoe Hare and Lynx
@@ -96,6 +89,7 @@ let engine =
     |> Bristlecone.withTunedMCMC []
     |> Bristlecone.withContinuousTime Integration.MathNet.integrate
     |> Bristlecone.withConditioning Conditioning.RepeatFirstDataPoint
+    |> Bristlecone.withSeed 1000
 
 (**
 ### Does it all work? Testing the engine and model
@@ -122,8 +116,8 @@ let testSettings =
     |> Test.addStartValues [
         "hare", 50.
         "lynx", 75. ]
-    // |> Test.addNoise (Test.Noise.tryAddNormal "σ[y]" "lynx")
-    // |> Test.addNoise (Test.Noise.tryAddNormal "σ[x]" "hare")
+    |> Test.addNoise (Test.Noise.tryAddNormal "σ[y]" "lynx")
+    |> Test.addNoise (Test.Noise.tryAddNormal "σ[x]" "hare")
     |> Test.addGenerationRules [
         Test.GenerationRules.alwaysLessThan 10000. "lynx"
         Test.GenerationRules.alwaysLessThan 10000. "hare" ]
@@ -142,79 +136,133 @@ With these test settings, we can now run the test.
 let testResult =
     ``predator-prey`` 
     |> Bristlecone.testModel engine testSettings
-(*** include-fsi-merged-output ***)
+(*** include-output ***)
 
 (**
-We can check the test settings by...
+We can plot the test results to check the fit.
 *)
 
+(*** hide ***)
 module Graphing =
 
-    // Testing out ggplot for graphics
-    open RProvider
-    open RProvider.Operators
-    open RProvider.ggplot2
-    open RProvider.svglite
-    open RDotNet
+    open Plotly.NET
 
-    let (++) (a:SymbolicExpression) b = R.``+``([ a; b ])
-
-    let xyPlot (testResult:Result<Bristlecone.Test.TestResult,string>) =
-        
-        let data =
-            match testResult with
-            | Ok r ->
-                r.Series
-                |> Seq.collect(fun kv ->
+    let pairedFits (series:Map<string,ModelSystem.FitSeries>) =
+        match testResult with
+        | Ok r ->
+            series
+            |> Seq.map(fun kv ->
+                let lines = 
                     kv.Value
                     |> Bristlecone.Time.TimeSeries.toObservations
-                    |> Seq.map(fun (d,v) -> kv.Key, v, d.Fit, d.Obs))
-            | Error _ -> []
+                    |> Seq.collect(fun (d,v) ->
+                        [
+                            v, "Modelled", d.Fit
+                            v, "Observed", d.Obs
+                        ])
+                    |> Seq.groupBy(fun (_,x,_) -> x)
+                    |> Seq.map(fun (_,s) -> s |> Seq.map(fun (x,_,y) -> x,y))
+                    |> Seq.toList
+                // Each chart has the modelled and observed series                
+                Chart.combine [ Chart.Line(xy = lines.[0], Name = "Modelled"); Chart.Line(xy = lines.[1], Name = "Observed") ]
+                |> Chart.withTitle kv.Key
+            )
+            |> Chart.Grid(2,1)
+            |> fun x -> printfn "%A" x; x
+            |> GenericChart.toChartHTML
+            |> fun x -> printfn "%s" x; x
+        | Error e -> sprintf "Cannot display data, as model fit did not run successfully (%s)" e
 
-        let df = R.data_frame([
-            "variable" => (data |> Seq.map(fun (a,_,_,_) -> a))
-            "time" => (data |> Seq.map(fun (_,b,_,_) -> b))
-            "modelled" => (data |> Seq.map(fun (_,_,c,_) -> c))
-            "observed" => (data |> Seq.map(fun (_,_,_,d) -> d))
-        ])
+    let pairedFitsForTestResult (testResult:Result<Bristlecone.Test.TestResult,string>) =
+        match testResult with
+        | Ok r -> pairedFits r.Series
+        | Error e -> sprintf "Cannot display data, as model fit did not run successfully (%s)" e
 
-        let s = R.svgstring()
+    let pairedFitsForResult (testResult:Result<Bristlecone.ModelSystem.EstimationResult,string>) =
+        match testResult with
+        | Ok r -> pairedFits (r.Series |> Seq.map(fun kv -> kv.Key.Value, kv.Value) |> Map.ofSeq)
+        | Error e -> sprintf "Cannot display data, as model fit did not run successfully (%s)" e
 
-        R.plot([ "x" => df?time; "y" => df?observed ])
+    let parameterTrace (result:Result<ModelSystem.EstimationResult,'b>) =
+        match result with
+        | Ok r -> 
+            r.Trace
+            |> Seq.map snd
+            |> Seq.map Seq.toList
+            |> Seq.toList
+            |> List.flip
+            |> List.map(fun values ->
+                Chart.Line(y = values, x = [ 1 .. values.Length ]))
+            |> Chart.Grid(3,3)
+            |> GenericChart.toChartHTML
+        | Error _ -> "Model did not fit successfully"
 
-        // R.ggplot()
-        //     ++ R.geom__line(R.aes(["x" => df?time, "y" => df?modelled, "group" => df?variable]))
-        //     ++ R.geom__line(R.aes(["x" => df?time, "y" => df?observed, "group" => df?variable]))
-        //     |> ignore
 
-        let html = s.AsFunction().Invoke().GetValue<string>()
-        RProvider.grDevices.R.dev_off() |> ignore
-        html
 
-let html = Graphing.xyPlot testResult
+(*** hide ***)
+Graphing.pairedFitsForTestResult testResult
 (*** include-it-raw ***)
 
-printfn "%s" html
+(**
+### Fitting to real data
 
-// // 3. Load in Real Data
-// // ----------------------------
-// // Here, we are using the FSharp.Data type provider to read in a CSV file.
+First, we must load in the real data, which is in a CSV file. Here, we will use
+the FSharp.Data type provider to read in the CSV file (see [the FSharp.Data docs](http://fsprojects.github.io/FSharp.Data/library/CsvProvider.html)
+for further information on how to use the library). We place the raw data into
+a Bristlecone `TimeSeries` type using `TimeSeries.fromObservations`:
+*)
 
-// type PopulationData = FSharp.Data.CsvProvider<"/Users/andrewmartin/Documents/GitHub Projects/bristlecone/docs/examples/data/lynx-hare.csv">
-// let data = 
-//     let csv = PopulationData.Load "/Users/andrewmartin/Documents/GitHub Projects/bristlecone/docs/examples/data/lynx-hare.csv"
-//     [ (code "hare").Value, Time.TimeSeries.fromObservations (csv.Rows |> Seq.map(fun r -> float r.Hare, r.Year))
-//       (code "lynx").Value, Time.TimeSeries.fromObservations (csv.Rows |> Seq.map(fun r -> float r.Lynx, r.Year)) ] |> Map.ofList
+[<Literal>]
+let ResolutionFolder = __SOURCE_DIRECTORY__
 
+type PopulationData = FSharp.Data.CsvProvider<"data/lynx-hare.csv", ResolutionFolder = ResolutionFolder>
 
-// // 0. Configure Options
-// // ----------------------------
+let data = 
+    let csv = PopulationData.Load (__SOURCE_DIRECTORY__ + "/data/lynx-hare.csv")
+    [ (code "hare").Value, Time.TimeSeries.fromObservations (csv.Rows |> Seq.map(fun r -> float r.Hare, r.Year))
+      (code "lynx").Value, Time.TimeSeries.fromObservations (csv.Rows |> Seq.map(fun r -> float r.Lynx, r.Year)) ] |> Map.ofList
 
-// module Options =
-//     let iterations = 100000
+(*** include-value: data ***)
 
+(**
+Once the data are in Bristlecone `TimeSeries` we can run `Bristlecone.fit`, which is
+the main fitting function of the Bristlecone library.
+*)
 
-// // 4. Fit Model to Real Data
-// // -----------------------------------
-// let result = ``predator-prey`` |> Bristlecone.fit engine (Optimisation.EndConditions.afterIteration Options.iterations) data
+let endCondition = Optimisation.EndConditions.afterIteration 10000
 
+let result = 
+    ``predator-prey`` 
+    |> Bristlecone.fit engine endCondition data
+
+(*** include-value: result ***)
+
+(**
+### Inspecting the model fit
+
+The `Bristlecone.fit` function returns an `EstimationResult`, which contains some
+key information that may be used to inspect the model fit:
+
+* Likelihood. The minimum likelihood identified during optimisation.
+* Parameters. The parameter set (*θ*) identified at the minimum likelihood.
+* Series. A TimeSeries for each variable in the model, which at each time point contains paired Modelled-Observed values.
+* Trace. The likelihood and *θ* that occurred at each step in optimisation, with the latest first.
+* Internal Dynamics. Not relevant for this simple model.
+
+First, we can use the `Series` to inspect by eye the model fit versus the observed time-series:
+*)
+
+(*** hide ***)
+Graphing.pairedFitsForResult result
+(*** include-it-raw ***)
+
+(**
+
+*NB: this documentation is auto-generated so we cannot comment directly on the randomly generated scenario.*
+
+Next, we can examine the traces to see how parameter values evolved over the course of
+the optimisation routine:
+*)
+
+Graphing.parameterTrace result
+(*** include-it-raw ***)

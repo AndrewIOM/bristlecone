@@ -5,29 +5,38 @@ open System
 [<RequireQualifiedAccess>]
 module Parameter =
 
+    /// The mode in which constraints are handled by the parameter.
+    /// In `Transform` mode, the parameter value is transformed
+    /// when requested in 'optimisation space'. Alternatively,
+    /// in `Detached` mode, the real parameter value is simply
+    /// returned when requested in 'optimisation space'.
     type ConstraintMode =
         | Transform
         | Detached
 
-    /// Limits a `Parameter` to certain value ranges within
-    /// Bristlecone.
+    /// Limits a `Parameter` to certain value ranges by
+    /// applying mathematical transformations when requested
+    /// for 'optimisation space'.
     type Constraint =
         | Unconstrained
         | PositiveOnly
 
-    type EstimationStartingBounds = float * float
-
     type Estimation =
-        | NotEstimated of EstimationStartingBounds
-        | Estimated of float
+        | NotEstimated of lowStartingBound:float * highStartingBound:float
+        | Estimated of estimate:float
 
     type Parameter = private Parameter of Constraint * ConstraintMode * Estimation
 
+    /// Converts the parameter value in optimisation space
+    /// into its 'real' value for storage in the parameter.
     let internal transformIn con value =
         match con with
         | Unconstrained -> value
         | PositiveOnly -> exp value
 
+    /// Converts the 'real' parameter value into that required
+    /// in optimisation space, for when optimisation algorithms
+    /// have no knowledge of constraints.
     let internal transformOut con value =
         match con with
         | Unconstrained -> value
@@ -113,7 +122,7 @@ module Parameter =
         let c, _, estimate = p |> unwrap
 
         match estimate with
-        | NotEstimated x -> (Parameter(c, Detached, NotEstimated x), c)
+        | NotEstimated (x,y) -> (Parameter(c, Detached, NotEstimated (x,y)), c)
         | Estimated v -> (Parameter(c, Detached, Estimated v), c)
 
     /// Contains the `ParameterPool` type, which represents the set of parameters
@@ -191,7 +200,9 @@ module Parameter =
                 |> List.choose (fun (c, r) ->
                     match r with
                     | Ok x -> Some(c, x)
-                    | Error _ -> None)
+                    | Error _ -> 
+                        printfn "Error in (%A, %A)" c r
+                        None)
                 |> fromList
                 |> validateLength pool
             else
