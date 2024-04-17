@@ -9,7 +9,7 @@ index: 1
 
 (*** condition: prepare ***)
 #nowarn "211"
-#r "../src/Bristlecone/bin/Release/netstandard2.0/Bristlecone.dll"
+#r "../src/Bristlecone/bin/Debug/netstandard2.0/Bristlecone.dll"
 #r "nuget: MathNet.Numerics.FSharp,5.0.0"
 (*** condition: fsx ***)
 #if FSX
