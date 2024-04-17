@@ -41,7 +41,7 @@ let companyName = ""
 let tags = "modelling time-series F# fsharp R data-science ecology model-fitting"
 let license = "MIT"
 let iconUrl = ""
-let copyright = "(C) 2018 Andrew Martin"
+let copyright = "(C) 2018-24 Andrew Martin"
 
 let packageProjectUrl = "https://acm.im/bristlecone"
 let repositoryType = "git"
