@@ -84,7 +84,7 @@ module Language =
         | Parameter name ->
             match pool |> Parameter.Pool.tryGetRealValue name with
             | Some est -> est
-            | None -> failwithf "The equation could not be calculated. The parameter '%s' has not been set up." name
+            | None -> failwithf "The equation could not be calculated. The parameter '%s' has not been set up (or has yet to be estimated)." name
         | Constant n -> n
         | Add list ->
             match list with

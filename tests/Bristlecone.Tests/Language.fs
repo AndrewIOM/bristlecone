@@ -60,10 +60,12 @@ let modelExpressions =
 
               match pool |> Parameter.Pool.toList |> List.tryFind (fun (k, _) -> k.Value = code.Value) with
               | Some p ->
-                  Expect.equal
-                      (f ())
-                      (p |> snd |> Parameter.getTransformedValue)
-                      "Did not fail when parameter was not present"
+                  if p |> snd |> Parameter.isEstimated
+                  then
+                    Expect.equal
+                        (f ())
+                        (p |> snd |> Parameter.getTransformedValue)
+                        "Did not fail when parameter was not present"
               | None -> 
                 Expect.throws (fun () -> f () |> ignore) "Parameter was not present"
 
@@ -74,12 +76,16 @@ let modelExpressions =
                   |> Gen.sample 1 1
                   |> List.head
 
-              let result = Parameter selectedCode.Value |> compute x t pool e
+              if not (pool |> Parameter.Pool.hasParameter selectedCode.Value |> Option.map Parameter.isEstimated).Value
+              then ()
+              else
 
-              let existingValue =
-                  pool |> Parameter.Pool.tryGetRealValue selectedCode.Value |> Option.get
+                let existingValue =
+                    pool |> Parameter.Pool.tryGetRealValue selectedCode.Value |> Option.get
 
-              Expect.equal result existingValue "The parameter value was not correct"
+                let result = Parameter selectedCode.Value |> compute x t pool e
+
+                Expect.equal result existingValue "The parameter value was not correct"
 
           testPropertyWithConfig Config.config "Fails when environmental (aka time-varying) data is not present"
           <| fun (code:ShortCode.ShortCode) x t pool e ->
@@ -161,23 +167,25 @@ let modelBuilder =
                 |> ignore
 
           testPropertyWithConfig Config.config "Doesn't compile if duplicate keys exist"
-          <| fun likelihood (eqs: (ShortCode.ShortCode * ModelExpression) list) (measures: (ShortCode.ShortCode * ModelSystem.MeasureEquation) list) ->
-                let compile () =
-                    eqs
-                    |> Seq.fold
-                        (fun mb (n, eq) -> mb |> Model.addEquation n.Value eq)
-                        (Model.empty |> Model.useLikelihoodFunction likelihood)
-                    |> fun mb -> 
-                        Seq.fold
-                            (fun mb (n: ShortCode.ShortCode, eq) -> mb |> Model.includeMeasure n.Value eq)
-                            mb measures
-                    |> Model.compile
-
-                let keys = [ (eqs |> List.map fst); (measures |> List.map fst) ] |> List.concat
-                if keys |> Seq.hasDuplicates then
-                    Expect.throws (compile >> ignore) "Duplicate keys existed"
+          <| fun likelihood (eqs: ShortCode.ShortCode list) (measures: (ShortCode.ShortCode * ModelSystem.MeasureEquation) list) ->
+                if eqs.IsEmpty then ()
                 else
-                    compile () |> ignore
+                    let compile () =
+                        eqs
+                        |> Seq.fold
+                            (fun mb n -> mb |> Model.addEquation n.Value This)
+                            (Model.empty |> Model.useLikelihoodFunction likelihood)
+                        |> fun mb -> 
+                            Seq.fold
+                                (fun mb (n: ShortCode.ShortCode, eq) -> mb |> Model.includeMeasure n.Value eq)
+                                mb measures
+                        |> Model.compile
+
+                    let keys = [ eqs; (measures |> List.map fst) ] |> List.concat
+                    if keys |> Seq.hasDuplicates then
+                        Expect.throws (compile >> ignore) "Duplicate keys existed"
+                    else
+                        compile () |> ignore
 
             // testProperty "Only compiles when all required parameters are specified" <| fun (pool:Parameter.Pool) ->
 

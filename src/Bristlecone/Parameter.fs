@@ -70,6 +70,14 @@ module Parameter =
         else
             None
 
+    /// Determines if the parameter has been estimated or not.
+    let isEstimated parameter =
+        let _, _, estimate = parameter |> unwrap
+
+        match estimate with
+        | NotEstimated _ -> false
+        | Estimated v -> true
+
     /// Retrieve the estimated parameter value for further analysis.
     /// Will only be `Ok` if parameter has been estimated.
     let getEstimate parameter =
