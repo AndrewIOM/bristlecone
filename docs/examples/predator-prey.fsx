@@ -89,9 +89,11 @@ let engine =
     |> Bristlecone.withTunedMCMC []
     |> Bristlecone.withContinuousTime Integration.MathNet.integrate
     |> Bristlecone.withConditioning Conditioning.RepeatFirstDataPoint
-    |> Bristlecone.withSeed 1000
+    |> Bristlecone.withSeed 1000 // We are setting a seed for this example - see below
 
 (**
+*Note. We have set a seed for random number generation for this worked example. This ensures that the results are the same each time this documentation is generated.*
+
 ### Does it all work? Testing the engine and model
 
 Before being confident in the ability of our estimation engine to

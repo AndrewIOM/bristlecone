@@ -1,5 +1,5 @@
-/// Diagnostic techniques for determining the suitability of
-/// results obtained with Bristlecone.
+/// <summary>Diagnostic techniques for determining the suitability of
+/// results obtained with Bristlecone.</summary>
 module Bristlecone.Diagnostics
 
 open Bristlecone.ModelSystem

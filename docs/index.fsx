@@ -77,11 +77,17 @@ In the above snippet, a von Bertalanffy growth model is defined as a hypothesis 
 Samples & documentation
 -----------------------
 
-The API reference is automatically generated from Markdown comments in the library implementation.
+An API reference is automatically generated from XML comments in the library implementation.
 
- * [Tutorial](tutorial.html) covers the basic components and workflow of Bristlecone.
+In addition, this documentation includes step-by-step example analyses. Each analysis may be downloaded
+as an F# script or Jupyter notebook using the buttons at the top of each example page.
 
- * [API Reference](reference/index.html) contains automatically generated documentation for all types, modules
+ * [The predator-prey example](examples/predator-prey.html) covers basic model-fitting with Bristlecone.
+
+ * [The shrub-resource example](example/shrub-resource.html) is a more 
+   comprehensive example that covers model-fitting and model-selection (MFMS) with Bristlecone.
+
+ * The [API Reference](reference/index.html) contains automatically generated documentation for all types, modules
    and functions in the library. This includes additional brief samples on using most of the
    functions.
  

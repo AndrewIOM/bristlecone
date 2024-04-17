@@ -1,8 +1,10 @@
-/// Pre-built model parts for use in Bristlecone.
 namespace Bristlecone.ModelLibrary
 
-/// Likelihood functions to represent a variety of distributions
-/// and data types.
+/// <summary>Likelihood functions to represent a variety of distributions and data types.</summary>
+///
+/// <namespacedoc>
+///   <summary>Pre-built model parts for use in Bristlecone</summary>
+/// </namespacedoc> 
 module Likelihood =
 
     open Bristlecone
