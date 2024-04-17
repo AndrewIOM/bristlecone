@@ -57,6 +57,40 @@ module ``Objective creation`` =
             // testProperty "Throws when time-series are not the same length" <| fun x ->
             //     false
 
+            testPropertyWithConfig Config.config "Likelihood functions use 'real' parameter values"
+                <| fun shouldTransform (data: float list) (b1: NormalFloat) (b2: NormalFloat) ->
+                    
+                    // Returns the parameter value
+                    let fakeLikelihood : Bristlecone.ModelSystem.LikelihoodFn =
+                        fun paramAccessor data ->
+                            paramAccessor.Get "a"
+
+                    if b1.Get = b2.Get || b1.Get = 0. || b2.Get = 0.
+                    then ()
+                    else 
+                        let b1 = if b1.Get < 0. then b1.Get * -1. else b1.Get
+                        let b2 = if b2.Get < 0. then b2.Get * -1. else b2.Get
+
+                        let mode =
+                            if shouldTransform then Language.notNegative
+                            else Language.noConstraints
+
+                        let model =
+                            Language.Model.empty
+                            |> Language.Model.addEquation "x" (Language.Parameter "a")
+                            |> Language.Model.estimateParameter "a" mode (min b1 b2) (max b1 b2)
+                            |> Language.Model.useLikelihoodFunction fakeLikelihood
+                            |> Language.Model.compile
+
+                        let testObjective =
+                            Objective.create model (fun _ -> Map.empty) (fun _ _ _ -> [| 2.0 |]) ([ (ShortCode.create "x").Value, data |> List.toArray ] |> Map.ofList)
+
+                        Expect.floatClose
+                            Accuracy.high
+                            (testObjective [| (if shouldTransform then Parameter.transformOut mode b1 else b1) |])
+                            b1
+                            "The likelihood function did not retrieve the 'real' parameter value"
+
             ]
 
 module ``Fit`` =

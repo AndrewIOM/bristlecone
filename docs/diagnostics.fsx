@@ -12,11 +12,11 @@ index: 5
 #r "../src/Bristlecone/bin/Release/netstandard2.0/Bristlecone.dll"
 (*** condition: fsx ***)
 #if FSX
-#r "nuget: Bristlecone,{{package-version}}"
+#r "nuget: Bristlecone,{{fsdocs-package-version}}"
 #endif // FSX
 (*** condition: ipynb ***)
 #if IPYNB
-#r "nuget: Bristlecone,{{package-version}}"
+#r "nuget: Bristlecone,{{fsdocs-package-version}}"
 #endif // IPYNB
 
 (**
@@ -69,9 +69,9 @@ of the `IComponentLogger<float>)` type:
 [ NB TODO: This function must be refactored to work with the new Bristlecone Language ]
 *)
 
-open Bristlecone
-open Bristlecone.Language
-open Bristlecone.Diagnostics.ModelComponents
+// open Bristlecone
+// open Bristlecone.Language
+// open Bristlecone.Diagnostics.ModelComponents
 
 // let hypothesis (cLog:IComponentLogger<ModelExpression>) =
 

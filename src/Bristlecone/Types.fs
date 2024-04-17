@@ -298,6 +298,13 @@ module Result =
         | Some o -> Ok o
         | None -> Error errorMessage
 
+    /// If OK, return Some, otherwise None.
+    let toOption r =
+        match r with
+        | Ok x -> Some x
+        | Error _ -> None
+
+
 [<AutoOpen>]
 module ListExtensions =
 

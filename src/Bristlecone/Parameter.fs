@@ -5,29 +5,38 @@ open System
 [<RequireQualifiedAccess>]
 module Parameter =
 
+    /// The mode in which constraints are handled by the parameter.
+    /// In `Transform` mode, the parameter value is transformed
+    /// when requested in 'optimisation space'. Alternatively,
+    /// in `Detached` mode, the real parameter value is simply
+    /// returned when requested in 'optimisation space'.
     type ConstraintMode =
         | Transform
         | Detached
 
-    /// Limits a `Parameter` to certain value ranges within
-    /// Bristlecone.
+    /// Limits a `Parameter` to certain value ranges by
+    /// applying mathematical transformations when requested
+    /// for 'optimisation space'.
     type Constraint =
         | Unconstrained
         | PositiveOnly
 
-    type EstimationStartingBounds = float * float
-
     type Estimation =
-        | NotEstimated of EstimationStartingBounds
-        | Estimated of float
+        | NotEstimated of lowStartingBound:float * highStartingBound:float
+        | Estimated of estimate:float
 
     type Parameter = private Parameter of Constraint * ConstraintMode * Estimation
 
+    /// Converts the parameter value in optimisation space
+    /// into its 'real' value for storage in the parameter.
     let internal transformIn con value =
         match con with
         | Unconstrained -> value
         | PositiveOnly -> exp value
 
+    /// Converts the 'real' parameter value into that required
+    /// in optimisation space, for when optimisation algorithms
+    /// have no knowledge of constraints.
     let internal transformOut con value =
         match con with
         | Unconstrained -> value
@@ -60,6 +69,14 @@ module Parameter =
             Parameter(con, Transform, (NotEstimated(min, max))) |> Some
         else
             None
+
+    /// Determines if the parameter has been estimated or not.
+    let isEstimated parameter =
+        let _, _, estimate = parameter |> unwrap
+
+        match estimate with
+        | NotEstimated _ -> false
+        | Estimated v -> true
 
     /// Retrieve the estimated parameter value for further analysis.
     /// Will only be `Ok` if parameter has been estimated.
@@ -113,7 +130,7 @@ module Parameter =
         let c, _, estimate = p |> unwrap
 
         match estimate with
-        | NotEstimated x -> (Parameter(c, Detached, NotEstimated x), c)
+        | NotEstimated (x,y) -> (Parameter(c, Detached, NotEstimated (x,y)), c)
         | Estimated v -> (Parameter(c, Detached, Estimated v), c)
 
     /// Contains the `ParameterPool` type, which represents the set of parameters
@@ -140,18 +157,13 @@ module Parameter =
             |> Option.map snd
             |> Option.map getTransformedValue
 
-        let private resultToOption r =
-            match r with
-            | Ok x -> Some x
-            | Error _ -> None
-
         /// Gets the 'real' / non-transformed value for use in model
         /// calculation.
         let internal tryGetRealValue key (pool: ParameterPool) : float option =
             pool
             |> unwrap
             |> Map.tryFindBy (fun k -> k.Value = key)
-            |> Option.bind (getEstimate >> resultToOption)
+            |> Option.bind (getEstimate >> Result.toOption)
 
         /// Returns the starting bounds in transformed parameter space if
         /// the parameter has not been estimated. If the parameter has already
@@ -191,11 +203,14 @@ module Parameter =
             if count pool = (point |> Array.length) then
                 pool
                 |> toList
-                |> List.mapi (fun i (sc, p) -> sc, setTransformedValue p point.[i])
+                |> List.mapi (fun i (sc, p) -> 
+                    sc, setTransformedValue p point.[i])
                 |> List.choose (fun (c, r) ->
                     match r with
                     | Ok x -> Some(c, x)
-                    | Error _ -> None)
+                    | Error _ -> 
+                        printfn "Error in (%A, %A)" c r
+                        None)
                 |> fromList
                 |> validateLength pool
             else

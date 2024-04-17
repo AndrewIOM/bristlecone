@@ -2,6 +2,10 @@ namespace Bristlecone.Optimisation.ConfidenceInterval
 
 open Bristlecone.Logging
 
+/// <namespacedoc>
+///   <summary>Contains functions for calculating confidence intervals on model fits.</summary>
+/// </namespacedoc>
+/// 
 /// The 95% and 68% confidence interval around a point estimate.
 type ConfidenceInterval =
     { ``95%``: Interval

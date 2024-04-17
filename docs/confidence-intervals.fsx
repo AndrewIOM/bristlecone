@@ -12,11 +12,11 @@ index: 5
 #r "../src/Bristlecone/bin/Release/netstandard2.0/Bristlecone.dll"
 (*** condition: fsx ***)
 #if FSX
-#r "nuget: Bristlecone,{{package-version}}"
+#r "nuget: Bristlecone,{{fsdocs-package-version}}"
 #endif // FSX
 (*** condition: ipynb ***)
 #if IPYNB
-#r "nuget: Bristlecone,{{package-version}}"
+#r "nuget: Bristlecone,{{fsdocs-package-version}}"
 #endif // IPYNB
 
 (**
@@ -37,20 +37,20 @@ open Bristlecone
 open Bristlecone.Optimisation
 open Bristlecone.Data
 
-// fitFn = 
-fun engine dataset hypothesis result ->
+// // fitFn = 
+// fun engine dataset hypothesis result ->
 
-    // The function used to fit the model, which unless an
-    // advanced scenario is usually Bristlecone.fit
-    let fitFn = Bristlecone.fit
+//     // The function used to fit the model, which unless an
+//     // advanced scenario is usually Bristlecone.fit
+//     let fitFn = Bristlecone.fit
 
-    // The number of jumps to perform in parameter space
-    let n = 10000
+//     // The number of jumps to perform in parameter space
+//     let n = 10000
 
-    let ci = ConfidenceInterval.ProfileLikelihood.profile fitFn engine dataset hypothesis n result
+//     let ci = ConfidenceInterval.ProfileLikelihood.profile fitFn engine dataset hypothesis n result
 
-    // Optionally, save the result
-    let saveDir = "/some/save/dir"
-    let subjectName = "some subject"
-    let modelId = "some model hypothesis"
-    Confidence.save saveDir subjectName modelId result.ResultId ci
+//     // Optionally, save the result
+//     let saveDir = "/some/save/dir"
+//     let subjectName = "some subject"
+//     let modelId = "some model hypothesis"
+//     Confidence.save saveDir subjectName modelId result.ResultId ci

@@ -19,19 +19,22 @@ module ModelSystem =
     type PredictedSeries =
         { Expected: float[]; Observed: float[] }
 
+    /// A function that returns a parameter's current value by its name.
+    type ParameterValueAccessor = ParameterValueAccessor of (string -> float)
+        with member this.Get name = let (ParameterValueAccessor v) = this in v name
+
     /// A function that computes the likelihood of a set of parameters.
-    type Likelihood = Parameter.Pool -> CodedMap<PredictedSeries> -> float
+    type LikelihoodFn = ParameterValueAccessor -> CodedMap<PredictedSeries> -> float
 
     /// A function that computes a measured system property given a
     /// current (time t) and previous (time t-1) system state.
     type MeasureEquation = float -> Environment -> Environment -> float
 
-    /// TODO Constrain model system so that codes cannot be duplicated
     type ModelSystem =
         { Parameters: Parameter.Pool
           Equations: CodedMap<ModelEquation>
           Measures: CodedMap<MeasureEquation>
-          Likelihood: Likelihood }
+          Likelihood: LikelihoodFn }
 
     type FitValue = { Fit: float; Obs: float }
     type FitSeries = TimeSeries<FitValue>

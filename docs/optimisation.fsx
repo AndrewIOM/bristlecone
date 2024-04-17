@@ -12,11 +12,11 @@ index: 1
 #r "../src/Bristlecone/bin/Release/netstandard2.0/Bristlecone.dll"
 (*** condition: fsx ***)
 #if FSX
-#r "nuget: Bristlecone,{{package-version}}"
+#r "nuget: Bristlecone,{{fsdocs-package-version}}"
 #endif // FSX
 (*** condition: ipynb ***)
 #if IPYNB
-#r "nuget: Bristlecone,{{package-version}}"
+#r "nuget: Bristlecone,{{fsdocs-package-version}}"
 #endif // IPYNB
 
 (**
@@ -36,7 +36,8 @@ procedure can be used with Bristlecone by plugging in as follows:
 
 open Bristlecone
 
-let myCustomOptimiser : EstimationEngine.Optimise<float> =
+let myCustomOptimiser : EstimationEngine.Optimiser<float> =
+    EstimationEngine.InDetachedSpace <|
     fun writeOut n domain f -> invalidOp "Doesn't actually do anything!"
 
 let engine =
@@ -69,11 +70,11 @@ uses a Cauchy distribution for jumps:
 
 let settings = MonteCarlo.SimulatedAnnealing.AnnealSettings<float>.Default
 
-let classicalSA : EstimationEngine.Optimise<float> = 
-    MonteCarlo.SimulatedAnnealing.classicalSimulatedAnnealing 0.01 false settings
+// Classical Simulated Annealing:
+MonteCarlo.SimulatedAnnealing.classicalSimulatedAnnealing 0.01 false settings
 
-let fastSA : EstimationEngine.Optimise<float> = 
-    MonteCarlo.SimulatedAnnealing.fastSimulatedAnnealing 0.01 false settings
+// Fast Simulated Annealing:
+MonteCarlo.SimulatedAnnealing.fastSimulatedAnnealing 0.01 false settings
 
 (**
 The FSA approach enables greater exploration of more distant portions of
@@ -100,6 +101,7 @@ It can be used as follows:
 *)
 
 let settingsNM = Amoeba.Solver.Default
+(*** include-value: settingsNM ***)
 
 let single : EstimationEngine.Optimise<float> = 
     Amoeba.Solver.solve settingsNM
@@ -117,8 +119,7 @@ can be used from:
 let levels = 5
 let individuals = 20
 
-let swarmMode : EstimationEngine.Optimise<float> = 
-    Amoeba.swarm levels individuals settingsNM
+Amoeba.swarm levels individuals settingsNM
 
 (**
 ### Monte Carlo methods
@@ -140,15 +141,13 @@ which will be run before the final random walk.
 *)
 
 // Random walk with no tuning steps
-let randomWalk : EstimationEngine.Optimise<float> = 
-    MonteCarlo.randomWalk []
+MonteCarlo.randomWalk []
 
 // Random walk with 50,000 iterations of tuning, during
 // which the individual parameter jump sizes are scaled
 // every 500 iterations.
-let randomWalkWithTuning : EstimationEngine.Optimise<float> =
-    [ MonteCarlo.TuneMethod.Scale, 500, EndConditions.afterIteration 50000 ]
-    |> MonteCarlo.randomWalk
+[ MonteCarlo.TuneMethod.Scale, 500, EndConditions.afterIteration 50000 ]
+|> MonteCarlo.randomWalk
 
 
 (**
@@ -162,8 +161,7 @@ parameter space.
 let weighting = 0.250 // Weight to give to recent history versus existing covariance structure
 let frequency = 200 // Tune the covariance structure every 200 iterations
 
-let am : EstimationEngine.Optimise<float> = 
-    MonteCarlo.adaptiveMetropolis weighting frequency
+MonteCarlo.adaptiveMetropolis weighting frequency
 
 (**
 
@@ -186,8 +184,7 @@ let settingsFB = { TuneAfterChanges = 20
                    MinScaleChange = 0.01
                    BurnLength = EndConditions.afterIteration 100000 }
 
-let optim : EstimationEngine.Optimise<float> = 
-    filzbach settingsFB
+filzbach settingsFB
 
 (**
 #### 'Automatic' optimisation
@@ -197,7 +194,7 @@ General-Purpose MCMC via New Adaptive Diagnostics"
 [Reference](http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.70.7198&rep=rep1&type=pdf)
 *)
 
-let auto = MonteCarlo.``Automatic (Adaptive Diagnostics)``
+MonteCarlo.``Automatic (Adaptive Diagnostics)``
 
 (**
 #### Adaptive-Metropolis-within Gibbs
@@ -208,7 +205,7 @@ Reference: Bai Y (2009). “An Adaptive Directional Metropolis-within-Gibbs Algo
 Technical Report in Department of Statistics at the University of Toronto.
 *)
 
-let amwg = MonteCarlo.``Adaptive-Metropolis-within Gibbs``
+MonteCarlo.``Adaptive-Metropolis-within Gibbs``
 
 (**
 #### Metropolis-within Gibbs
@@ -217,4 +214,4 @@ A non-adaptive Metropolis-within-gibbs Sampler. Each parameter
 is updated individually, unlike the random walk algorithm.
 *)
 
-let mwg = MonteCarlo.``Metropolis-within Gibbs``
+MonteCarlo.``Metropolis-within Gibbs``

@@ -29,6 +29,10 @@ module Bristlecone =
     /// Add a writer
     let withOutput out engine = { engine with LogTo = out }
 
+    /// Use a mersenne twister random number generator 
+    /// with a specific seed.
+    let withSeed seed engine = { engine with Random = MathNet.Numerics.Random.MersenneTwister(seed, true) }
+
     /// Use a custom integration method
     let withContinuousTime t engine =
         { engine with
@@ -284,8 +288,6 @@ module Bristlecone =
                     (Map.merge trueData settings.EnvironmentalData (fun x y -> x))
                     { model with
                         Parameters = Parameter.Pool.fromEstimated theta }
-
-            printfn "Real estimate was %A" <| realEstimate
 
             let! estimated =
                 fit engine settings.EndCondition (Map.merge trueData settings.EnvironmentalData (fun x y -> x)) model

@@ -10,6 +10,11 @@ open Bristlecone
 open Bristlecone.ModelSystem
 open FSharp.Data
 
+/// <namespacedoc>
+///   <summary>Contains functions that enable loading and saving of core Bristlecone types to file storage.</summary>
+/// </namespacedoc>
+/// 
+/// <summary>Specifies how file paths are constructed for different data types.</summary>
 module Config =
 
     type DataType =
