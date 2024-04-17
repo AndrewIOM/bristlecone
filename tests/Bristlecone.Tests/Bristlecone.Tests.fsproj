@@ -9,7 +9,7 @@
   <ItemGroup>
     <ProjectReference Include="../../src/Bristlecone/Bristlecone.fsproj" />
     <ProjectReference Include="../../src/Bristlecone.Dendro/Bristlecone.Dendro.fsproj" />
-    <ProjectReference Include="../../src/Bristlecone.Dendro/Bristlecone.Charts.R.fsproj" />
+    <ProjectReference Include="../../src/Bristlecone.Charts.R/Bristlecone.Charts.R.fsproj" />
     <Compile Include="Config.fs" />
     <Compile Include="Time.fs" />
     <Compile Include="Parameter.fs" />
