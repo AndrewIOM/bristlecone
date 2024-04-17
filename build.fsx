@@ -97,7 +97,7 @@ Target.create "RunTests" (fun _ ->
     let rHome = Environment.environVarOrFail "R_HOME"
     Trace.logf "R_HOME is set as %s" rHome
     let result = Fake.DotNet.DotNet.exec (fun args -> 
-        { args with Verbosity = Some Fake.DotNet.DotNet.Verbosity.Normal}) "run" ("tests/Bristlecone.Tests")
+        { args with Verbosity = Some Fake.DotNet.DotNet.Verbosity.Normal}) "run" ("--project tests/Bristlecone.Tests")
     if result.ExitCode <> 0 then failwith "Tests failed"
 )
 
