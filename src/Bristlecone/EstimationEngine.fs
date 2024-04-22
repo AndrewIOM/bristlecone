@@ -34,7 +34,7 @@ module ModelSystem =
         { Parameters: Parameter.Pool
           Equations: CodedMap<ModelEquation>
           Measures: CodedMap<MeasureEquation>
-          Likelihood: LikelihoodFn }
+          NegLogLikelihood: LikelihoodFn }
 
     type FitValue = { Fit: float; Obs: float }
     type FitSeries = TimeSeries<FitValue>

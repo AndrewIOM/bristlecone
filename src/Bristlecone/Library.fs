@@ -3,14 +3,21 @@ namespace Bristlecone
 open System
 open Bristlecone.Logging
 
+/// <namespacedoc>
+///   <summary>The core library of Bristlecone, containing model-fitting functions.</summary>
+/// </namespacedoc>
+/// 
+/// Main functionality of Bristlecone, including functions to scaffold
+/// `ModelSystem`s and for model-fitting (tests and real fits).
 [<RequireQualifiedAccess>]
 module Bristlecone =
 
     open Bristlecone.Time
     open Bristlecone.ModelSystem
     open Bristlecone.EstimationEngine
+    open Bristlecone.Statistics
 
-    /// A standard estimation engine using a random-walk monte carlo optimiser.
+    /// <summary>A basic estimation engine for discrete-time equations, using a Nelder-Mead optimiser.</summary>
     let mkDiscrete: EstimationEngine<float, float> =
         { TimeHandling = Discrete
           OptimiseWith = Optimisation.Amoeba.single Optimisation.Amoeba.Solver.Default
@@ -18,7 +25,7 @@ module Bristlecone =
           Random = MathNet.Numerics.Random.MersenneTwister(true)
           Conditioning = Conditioning.NoConditioning }
 
-    /// A standard `EstimationEngine` for ordinary differential equation models.
+    /// <summary>A basic estimation engine for ordinary differential equations, using a Nelder-Mead optimiser.</summary>
     let mkContinuous =
         { TimeHandling = Continuous <| Integration.MathNet.integrate
           OptimiseWith = Optimisation.Amoeba.single Optimisation.Amoeba.Solver.Default
@@ -26,7 +33,12 @@ module Bristlecone =
           Random = MathNet.Numerics.Random.MersenneTwister(true)
           Conditioning = Conditioning.RepeatFirstDataPoint }
 
-    /// Add a writer
+    /// <summary>Substitute a specific logger into</summary>
+    /// <param name="out"></param>
+    /// <param name="engine"></param>
+    /// <typeparam name="'a"></typeparam>
+    /// <typeparam name="'b"></typeparam>
+    /// <returns></returns>
     let withOutput out engine = { engine with LogTo = out }
 
     /// Use a mersenne twister random number generator 
@@ -51,7 +63,7 @@ module Bristlecone =
 
     let withCustomOptimisation optim engine = { engine with OptimiseWith = optim }
 
-    module Fit =
+    module internal Fit =
 
         /// Places a map of `TimeSeries` into a `TimeFrame` that has data
         /// that shares a common timeline. If no timeline is shared, returns
@@ -129,7 +141,7 @@ module Bristlecone =
     /// <param name="timeSeriesData"></param>
     /// <param name="model"></param>
     /// <returns></returns>
-    let fit engine endCondition timeSeriesData (model: ModelSystem) =
+    let tryFit engine endCondition timeSeriesData (model: ModelSystem) =
 
         // A. Setup initial time point values based on conditioning method.
         let t0 = Fit.t0 timeSeriesData engine.Conditioning engine.LogTo
@@ -256,16 +268,29 @@ module Bristlecone =
                   InternalDynamics = Some estimatedHighRes }
         }
 
+    /// <summary>Fit a time-series model to data.</summary>
+    /// <param name="engine">An estimation engine configured and tested for the given model.</param>
+    /// <param name="endCondition">The condition at which optimisation should cease.</param>
+    /// <param name="timeSeriesData">Time-series dataset that contains a series for each equation in the model system.</param>
+    /// <param name="model">A model system of equations, likelihood function, estimatible parameters, and optional measures.</param>
+    /// <returns>The result of the model-fitting procedure. If an error occurs, throws an exception.</returns>
+    let fit engine endCondition timeSeriesData (model: ModelSystem) =
+        tryFit engine endCondition timeSeriesData model |> Result.forceOk
 
     open Test
 
-    /// **Description**
-    /// Test that the specified estimation engine can correctly estimate known parameters. Random parameter sets are generated from the given model system.
-    /// **Parameters**
-    ///   * `model` - a `ModelSystem` of equations and parameters
-    ///   * `testSettings` - settings
-    ///   * `engine` - an `EstimationEngine`
-    let testModel engine (settings: Test.TestSettings<float>) (model: ModelSystem) : Result<Test.TestResult, string> =
+    /// <summary>Tests that the specified estimation engine can correctly 
+    /// estimate known parameters given specfici test settings. 
+    /// Random parameter sets and resultant fake time-series data are generated
+    /// for the model system by using the rules and noise generation settings
+    /// in the stated test settings.</summary>
+    /// <param name="engine"></param>
+    /// <param name="settings"></param>
+    /// <param name="model"></param>
+    /// <returns>A test result that indicates the error structure. 
+    /// It is wrapped in an F# Result, indicating if the procedure
+    /// was successful or not.</returns>
+    let tryTestModel engine (settings: Test.TestSettings<float>) (model: ModelSystem) =
         engine.LogTo <| GeneralEvent "Attempting to generate parameter set."
 
         engine.LogTo
@@ -280,7 +305,7 @@ module Bristlecone =
             let! settings = Test.isValidSettings model settings
             let! trueData, theta = Test.Compute.tryGenerateData engine settings model settings.Attempts
 
-            let! realEstimate =
+            let realEstimate =
                 fit
                     { engine with
                         OptimiseWith = Optimisation.None.none }
@@ -289,7 +314,7 @@ module Bristlecone =
                     { model with
                         Parameters = Parameter.Pool.fromEstimated theta }
 
-            let! estimated =
+            let estimated =
                 fit engine settings.EndCondition (Map.merge trueData settings.EnvironmentalData (fun x y -> x)) model
 
             let paramDiffs: Test.ParameterTestResult list =
@@ -328,30 +353,31 @@ module Bristlecone =
                   EstimatedLikelihood = estimated.Likelihood }
         }
 
-    /// **Description**
-    /// Repeat a model fit many times, removing a single data point at random each time.
-    /// **Parameters**
-    ///   * `engine` - parameter of type `EstimationEngine<float,float>`
-    ///   * `iterations` - parameter of type `int`
-    ///   * `burnin` - parameter of type `int`
-    ///   * `bootstrapCount` - parameter of type `int`
-    ///   * `hypothesis` - parameter of type `ModelSystem`
-    ///   * `identifier` - parameter of type `ShortCode`
-    ///   * `series` - parameter of type `CodedMap<TimeSeries<float>>`
-    ///
-    /// **Output Type**
-    ///   * `EstimationResult list`
-    ///
-    /// **Exceptions**
-    ///
-    let bootstrap engine random iterations bootstrapCount hypothesis (identifier: ShortCode.ShortCode) series =
+    /// <summary>Test that the specified estimation engine can correctly 
+    /// estimate known parameters. Random parameter sets are generated 
+    /// from the given model system.</summary>
+    /// <param name="engine">An estimation engine containing the method used for model-fitting.</param>
+    /// <param name="settings">Test settings that define how the test will be conducted.</param>
+    /// <param name="model">The model system to test against the estimation engine.</param>
+    /// <returns>A test result that indicates differences between the expected and actual fit.</returns>
+    let testModel engine settings model =
+        tryTestModel engine settings model |> Result.forceOk
+
+    /// <summary>Repeat a model fit many times, removing a single data point at random each time.</summary>
+    /// <param name="engine">The estimation engine / fitting method</param>
+    /// <param name="endCondition">The end condition for each model fit</param>
+    /// <param name="bootstrapCount">Number of times to bootstrap data</param>
+    /// <param name="model">A model system / hypothesis to fit</param>
+    /// <param name="series">Time-series to fit with model</param>
+    /// <returns>A list of estimation results (one for each bootstrap) for further analysis</returns>
+    let bootstrap (engine:EstimationEngine.EstimationEngine<float,float>) endCondition bootstrapCount model series =
         let rec bootstrap s numberOfTimes solutions =
             if (numberOfTimes > 0) then
-                let subset = Bootstrap.removeSingle random s
-                let result = fit engine iterations subset hypothesis
+                let subset = Bootstrap.removeSingle engine.Random s
+                let result = fit engine endCondition subset model
 
                 engine.LogTo
-                <| GeneralEvent(sprintf "%s: completed bootstrap %i" identifier.Value numberOfTimes)
+                <| GeneralEvent(sprintf "Completed bootstrap %i" numberOfTimes)
 
                 bootstrap s (numberOfTimes - 1) (solutions |> List.append [ result ])
             else
@@ -359,14 +385,23 @@ module Bristlecone =
 
         bootstrap series bootstrapCount []
 
-    /// "How good am I at predicting the next data point"?
-    ///
+    /// <summary>Addresses the question: "How good am I at predicting the next data point?. Given fitted parameters,
+    /// assesses how well the model predicts the next data point from each point in the time-series data.
+    /// This approach can provide another indication of model performance.</summary>
+    /// <param name="engine">The exact estimation engine used for the existing model fit</param>
+    /// <param name="hypothesis">The exact model system / hypothesis from which parameters have been already estimated</param>
+    /// <param name="preTransform">A function that may transform each shorter time-series before prediction. This may be needed,
+    /// for example, if there are custom start values that need to be configured in a complex way (e.g. for derived mesaurement
+    /// variables).</param>
+    /// <param name="timeSeries">The observed data to predict against.</param>
+    /// <param name="estimatedTheta">A parameter pool containing already estimated parameters from model fitting step</param>
+    /// <returns>A time-series for each variable containing a step-ahead prediction</returns>
     let oneStepAhead
         engine
         hypothesis
-        (preTransform: CodedMap<TimeSeries<float>> -> CodedMap<TimeSeries<float>>)
+        (preTransform: CodedMap<TimeSeries<'a>> -> CodedMap<TimeSeries<float>>)
         (timeSeries)
-        (estimatedTheta: Parameter.Pool)
+        (estimatedTheta: Parameter.Pool) : CodedMap<FitSeries * NStepStatistics>
         =
         let hypothesisMle: ModelSystem =
             { hypothesis with
@@ -384,23 +419,52 @@ module Bristlecone =
 
         let data =
             seq { 1..timeParcelCount }
-            |> Seq.map (fun i -> pairedDataFrames |> Map.map (fun _ v -> v |> Seq.item (i - 1)) |> preTransform)
+            |> Seq.map (fun i -> 
+                pairedDataFrames 
+                |> Map.map (fun _ v -> 
+                    v |> Seq.item (i - 1)) |> preTransform)
 
-        // TODO Remove this hack:
-        // First data point is repeated, then skipped when returned
+        // It is predicting with a repeated first point:
+        // The next point estimate is at t1
+        // The next point observation is at t2
         data
-        |> Seq.map (fun d ->
-            fit
-                (engine
-                 |> withCustomOptimisation Optimisation.None.none
-                 |> withConditioning Conditioning.RepeatFirstDataPoint)
-                (Optimisation.EndConditions.afterIteration 0)
-                d
-                hypothesisMle)
-        |> Seq.toList
+        |> Seq.collect (fun d ->
+            let est = 
+                fit
+                    (engine
+                    |> withCustomOptimisation Optimisation.None.none
+                    |> withConditioning Conditioning.RepeatFirstDataPoint)
+                    (Optimisation.EndConditions.afterIteration 0)
+                    d
+                    hypothesisMle
+
+            let nextObservation = 
+                d |> Map.map(fun c ts -> 
+                    ts |> TimeSeries.toObservations |> Seq.skip 1 |> Seq.head)
+
+            let paired =
+                nextObservation
+                |> Seq.map(fun kv ->
+                    let nextEstimate = (est.Series.[kv.Key].Values |> Seq.head).Fit
+                    (kv.Key, { Obs =  kv.Value |> fst; Fit = nextEstimate }, kv.Value |> snd))
+
+            paired)
+        |> Seq.groupBy(fun (k,_,_) -> k)
+        |> Seq.map(fun (tsName,values) ->
+            let sos = values |> Seq.averageBy(fun (_,x,_) -> (x.Obs - x.Fit) ** 2.)
+            tsName, (values |> Seq.map(fun (_,v,t) -> (v,t)) |> TimeSeries.fromObservations, { RMSE = sqrt sos } )
+            )
+        |> Map.ofSeq
 
 
+    /// <summary>Wrappers for fitting functions that use `Array.Parallel` to run many analyses at once.</summary>
     module Parallel =
 
-        let fit engine endCondition model growth =
-            growth |> Array.Parallel.map (fun g -> fit engine endCondition g model)
+        /// <summary>A wrapper for `Bristlecone.fit` that uses Array.Parallel to run many analyses at once.</summary>
+        /// <param name="engine">An estimation engine</param>
+        /// <param name="endCondition">An end condition</param>
+        /// <param name="model">The model / hypothesis to fit</param>
+        /// <param name="timeSeries">Time-series data to fit with the model</param>
+        /// <returns>A list of estimation results</returns>
+        let fit engine endCondition model timeSeries =
+            timeSeries |> Array.Parallel.map (fun g -> fit engine endCondition g model) |> Array.toList

@@ -1,17 +1,16 @@
 namespace Bristlecone.Data
 
-// Bristlecone loads and saves CSV data in these formats:
-// 1. [Invididual] MLE: best-fitting parameter steps and their likelihood
-// 2. [Individual] Trace: record of optimisation steps
-// 3. [Invididual] Series: best-fitting parameter steps and their likelihood
-// 4. [Ensemble] Model-selection (weights)
-
 open Bristlecone
 open Bristlecone.ModelSystem
 open FSharp.Data
 
 /// <namespacedoc>
-///   <summary>Contains functions that enable loading and saving of core Bristlecone types to file storage.</summary>
+///   <summary>
+/// Contains functions that enable loading and saving of core Bristlecone 
+/// types to file storage. Bristlecone loads and saves CSV data for both
+/// individual model results (MLEs, traces, predicted vs observed series),
+/// and for ensemble-level statistics (model selection / weights).
+/// </summary>
 /// </namespacedoc>
 /// 
 /// <summary>Specifies how file paths are constructed for different data types.</summary>
@@ -22,11 +21,13 @@ module Config =
         | Trace
         | Series
         | Intervals
+        | StepAhead of steps:int
         | Components
 
     type EnsembleType =
         | Weights
         | Convergence
+        | RMSE
 
     let typeAsLabel dataType =
         match dataType with
@@ -35,11 +36,13 @@ module Config =
         | Series -> "series"
         | Intervals -> "ci"
         | Components -> "components"
+        | StepAhead(steps) -> sprintf "%i-step-ahead-prediction" steps
 
     let ensembleAsLabel dataType =
         match dataType with
         | Weights -> "ensemble-weights"
         | Convergence -> "ensemble-convergence"
+        | RMSE -> "ensemble-rmse"
 
     let filePath directory subject modelId (resultId: System.Guid) dataType =
         let path = System.IO.DirectoryInfo(directory)
@@ -75,6 +78,7 @@ module Config =
                 | Series -> "series"
                 | Intervals -> "ci"
                 | Components -> "components"
+                | StepAhead(steps) -> sprintf "%istepahead" steps
 
             let files = path.GetFiles(sprintf "bristlecone-%s-%s-%s-*.csv" subject modelId t)
             let regex = sprintf "bristlecone-%s-%s-%s-(%s).csv" subject modelId t regexGuid
@@ -91,14 +95,15 @@ module Config =
         else
             invalidArg "directory" "The specified directory does not exist"
 
+/// <summary>Functions for loading and saving optimisation traces</summary>
 [<RequireQualifiedAccess>]
 module Trace =
 
     type BristleconeTrace = CsvProvider<"templates/individual-trace.csv", IgnoreErrors=true>
 
-    module Row =
+    module internal Row =
 
-        let internal fromEstimate thinBy subject modelId (result: EstimationResult) : seq<BristleconeTrace.Row> =
+        let fromEstimate thinBy subject modelId (result: EstimationResult) : seq<BristleconeTrace.Row> =
             result.Trace
             |> Seq.rev
             |> Seq.mapi (fun iterationNumber (likelihood, values) ->
@@ -107,10 +112,10 @@ module Trace =
                 |> Seq.mapi (fun i (name, _) ->
                     (subject, modelId, iterationNumber + 1, result.ResultId, name.Value, likelihood, values.[i])
                     |> BristleconeTrace.Row))
-            |> Seq.everyNth thinBy
+            |> if (thinBy |> Option.isSome) then Seq.everyNth thinBy.Value else id
             |> Seq.concat
 
-        let internal toTrace (data: BristleconeTrace) : (float * float[]) list =
+        let toTrace (data: BristleconeTrace) : (float * float[]) list =
             data.Rows
             |> Seq.groupBy (fun r -> r.Iteration)
             |> Seq.map (fun (i, r) ->
@@ -140,12 +145,13 @@ module Trace =
             | 0 -> None
             | _ -> (i, data |> Row.toTrace) |> Some)
 
+/// <summary>Functions of loading and saving Maximum Likelihood Estimates from model fits</summary>
 [<RequireQualifiedAccess>]
 module MLE =
 
     type IndividualMLE = CsvProvider<"templates/individual-mle.csv", IgnoreErrors=true>
 
-    module Row =
+    module internal Row =
 
         let fromResult subject hypothesisId (result: EstimationResult) =
             result.Parameters
@@ -159,17 +165,26 @@ module MLE =
                  v |> Parameter.getTransformedValue)
                 |> IndividualMLE.Row)
 
-        let toResult (data: IndividualMLE) =
+        let toResult (modelSystem:ModelSystem) (data: IndividualMLE) =
             if data.Rows |> Seq.isEmpty then
                 Error "An MLE file is corrupt"
             else
                 let mle = (data.Rows |> Seq.head).NegativeLogLikelihood
 
-                let pool =
+                let estimatedTheta =
                     data.Rows
                     |> Seq.choose (fun r ->
                         ShortCode.create r.ParameterCode |> Option.map (fun o -> o, r.ParameterValue))
                     |> Map.ofSeq
+                let pool =
+                    modelSystem.Parameters
+                    |> Parameter.Pool.toList
+                    |> List.map (fun (k, v) -> k, Parameter.setTransformedValue v (estimatedTheta |> Map.find k))
+                    |> List.choose (fun (c, r) ->
+                        match r with
+                        | Ok x -> Some(c, x)
+                        | Error _ -> None)
+                    |> Parameter.Pool.fromList
 
                 (mle, pool) |> Ok
 
@@ -181,22 +196,40 @@ module MLE =
 
         csv.Save(filePath)
 
-    let load directory subject modelId =
-        let traceFiles = Config.fileMatch directory subject modelId Config.DataType.MLE
+    /// <summary>Load the Maximum Likelihood Estimates
+    /// from the given directory for a given subject and model combination.</summary>
+    /// <param name="directory">The results folder where files are saved</param>
+    /// <param name="subject">An identifier for the subject of the fit</param>
+    /// <param name="modelId">An identifier for the model that was fit</param>
+    /// <returns>A sequence of tuples which contain the analysis ID followed by another tuple
+    /// that contains the likelihood and theta (parameter set)</returns>
+    let load directory subject (modelSystem: ModelSystem) modelId =
+        let files = Config.fileMatch directory subject modelId Config.DataType.MLE
 
-        traceFiles
+        files
         |> Seq.choose (fun (i, f) ->
             let data = IndividualMLE.Load f.FullName
 
             match data.Rows |> Seq.length with
             | 0 -> None
             | _ ->
-                let parsed = data |> Row.toResult
+                let parsed = data |> Row.toResult modelSystem
 
                 match parsed with
                 | Ok mle -> (i, mle) |> Some
                 | Error _ -> None)
 
+    /// <summary>Load the Maximum Likelihood Estimate (with the lowest -log Liklihood)
+    /// from the given directory for a given subject and model combination.</summary>
+    /// <param name="directory">The results folder where files are saved</param>
+    /// <param name="subject">An identifier for the subject of the fit</param>
+    /// <param name="modelId">An identifier for the model that was fit</param>
+    /// <returns>A tuple containing the analysis ID followed by another tuple
+    /// that contains the likelihood and theta (parameter set)</returns>
+    let loadBest directory subject modelSystem modelId =
+        load directory subject modelSystem modelId |> Seq.minBy(fun (_,(mle,_)) -> mle)
+
+/// <summary>Functions for loading and saving predicted vs observed time-series for model fits</summary>
 [<RequireQualifiedAccess>]
 module Series =
 
@@ -204,7 +237,7 @@ module Series =
 
     type IndividualSeries = CsvProvider<"templates/individual-series.csv", IgnoreErrors=true>
 
-    module Row =
+    module internal Row =
 
         let fromResult subject hypothesisId (result: EstimationResult) =
             result.Series
@@ -249,8 +282,14 @@ module Series =
 [<RequireQualifiedAccess>]
 module EstimationResult =
 
-    /// Save the Maximum Likelihood Estimate, trace of the optimisation
-    /// procedure, and time-series.
+    /// <summary>Save the Maximum Likelihood Estimate, trace of the optimisation
+    /// procedure, and time-series.</summary>
+    /// <param name="directory">Relative or absolute directory to save files to</param>
+    /// <param name="subject">An identifier for the subject of the test</param>
+    /// <param name="modelId">An identifier for the model used</param>
+    /// <param name="thinTraceBy">If Some, an integer representing the nth traces to keep from the optimisation trace.
+    /// If None, does not thin the trace.</param>
+    /// <param name="result">The estimation result to save</param>
     let saveAll directory subject modelId thinTraceBy result =
         Trace.save directory subject modelId thinTraceBy result
         MLE.save directory subject modelId result
@@ -261,7 +300,7 @@ module EstimationResult =
     /// when file names and formats are in original Bristlecone format.
     let loadAll directory subject (modelSystem: ModelSystem) modelId =
         let mles =
-            MLE.load directory subject modelId |> Seq.map (fun (k, v) -> k.ToString(), v)
+            MLE.load directory subject modelSystem modelId |> Seq.map (fun (k, v) -> k.ToString(), v)
 
         let series =
             Series.load directory subject modelId |> Seq.map (fun (k, v) -> k.ToString(), v)
@@ -276,15 +315,7 @@ module EstimationResult =
         |> Seq.map (fun (k, t, (s, (l, p))) ->
             { ResultId = k |> System.Guid.Parse
               Likelihood = l
-              Parameters =
-                modelSystem.Parameters
-                |> Parameter.Pool.toList
-                |> List.map (fun (k, v) -> k, Parameter.setTransformedValue v (p |> Map.find k))
-                |> List.choose (fun (c, r) ->
-                    match r with
-                    | Ok x -> Some(c, x)
-                    | Error _ -> None)
-                |> Parameter.Pool.fromList
+              Parameters = p
               Series = s
               InternalDynamics = None
               Trace = t })
@@ -292,7 +323,7 @@ module EstimationResult =
 [<RequireQualifiedAccess>]
 module Confidence =
 
-    open Bristlecone.Optimisation.ConfidenceInterval
+    open Bristlecone.Confidence
 
     type IndividualCI = CsvProvider<"templates/individual-mle-ci.csv">
 
@@ -340,13 +371,60 @@ module Convergence =
 
     type ConvergenceStats = CsvProvider<"templates/ensemble-convergence.csv">
 
-    let toCsvRows (result: seq<Diagnostics.Convergence.ConvergenceStatistic seq>) =
+    let toCsvRows (result: seq<Diagnostics.Convergence.ConvergenceStatistic>) =
         result
-        |> Seq.concat
         |> Seq.map (fun r ->
             ConvergenceStats.Row(r.Subject, r.HypothesisId, r.Parameter.Value, r.StatisticName, r.StatisticValue))
 
     let save directory result =
         let csv = new ConvergenceStats(result |> toCsvRows)
         let filePath = Config.filePathEnsemble directory Config.EnsembleType.Convergence
+        csv.Save(filePath)
+
+/// <summary>Loads and saves one-step-ahead and n-step-ahead prediction
+/// results into and out of simple CSV files</summary>
+[<RequireQualifiedAccess>]
+module NStepAhead =
+
+    type NStepAhead = CsvProvider<"templates/individual-n-step-ahead.csv">
+    type NStepAheadStats = CsvProvider<"templates/ensemble-rmse.csv">
+
+    let internal toCsvRows subjectId hypothesisId analysisId nSteps (result: CodedMap<FitSeries * Statistics.NStepStatistics>) =
+        result
+        |> Seq.collect (fun r ->
+            r.Value
+            |> fst
+            |> Time.TimeSeries.toObservations
+            |> Seq.map(fun (fit,t) ->
+                NStepAhead.Row(subjectId, hypothesisId, analysisId, t, fit.Obs, nSteps, fit.Fit)
+            )
+        )
+    
+    let internal toStatCsvRows (results: seq<string * string * CodedMap<ModelSystem.FitSeries * Statistics.NStepStatistics>>) =
+        results
+        |> Seq.collect(fun (s,h,r) ->
+            r
+            |> Seq.map(fun kv -> NStepAheadStats.Row(s, h, kv.Key.Value, "RMSE", (snd kv.Value).RMSE))
+        )
+
+    /// <summary>Save an individual n-step prediction (excluding statistics) for an
+    /// individual subject and hypothesis / model.</summary>
+    /// <param name="directory">The file directory to save to</param>
+    /// <param name="subjectId">Subject ID</param>
+    /// <param name="modelId">Model ID or Hypothesis ID</param>
+    /// <param name="analysisId">The unique reference of the estimation result used to generate n-step predictions</param>
+    /// <param name="stepsAhead">The number of time-steps ahead predicted</param>
+    /// <param name="result">The n-step prediction from Bristlecone.oneStepAhead or similar</param>
+    let save directory subjectId modelId analysisId stepsAhead result =
+        let csv = new NStepAhead(result |> toCsvRows subjectId modelId analysisId stepsAhead)
+        let filePath = Config.filePath directory subjectId modelId analysisId (Config.DataType.StepAhead stepsAhead)
+        csv.Save(filePath)
+
+    /// <summary>Saves a full ensemble overview of the root mean squared error
+    /// of n-step ahead predictions.</summary>
+    /// <param name="directory">The file directory to save to</param>
+    /// <param name="results">A sequence of subjectID * hypothesisID * n-step result</param>
+    let saveAllRMSE directory results =
+        let csv = new NStepAheadStats(results |> toStatCsvRows)
+        let filePath = Config.filePathEnsemble directory (Config.EnsembleType.RMSE)
         csv.Save(filePath)

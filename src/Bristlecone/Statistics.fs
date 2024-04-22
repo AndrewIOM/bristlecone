@@ -1,5 +1,10 @@
 namespace Bristlecone.Statistics
 
+/// <summary>Statistics returned during n-step ahead analysis</summary>
+type NStepStatistics = {
+    RMSE: float
+}
+
 module Distributions =
 
     open MathNet.Numerics.LinearAlgebra

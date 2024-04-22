@@ -65,8 +65,8 @@ module EndConditions =
         stationarySquaredJumpDistance' 200 5
 
     /// Convergence of results using the Gelman-Rubin Rhat statistic.
-    /// * `thin` - Only test for convergence at multiples of the following intervals (when all chains are ready).
-    /// * `chainCount` - The number of chains to test for convergence. This makes the agent wait until results for all chains are in.
+    /// `thin` - Only test for convergence at multiples of the following intervals (when all chains are ready).
+    /// `chainCount` - The number of chains to test for convergence. This makes the agent wait until results for all chains are in.
     let convergence thin chainCount : EndCondition<float> =
 
         let assess (chains: Map<int, Solution<float> list>) =
@@ -193,26 +193,22 @@ module MonteCarlo =
             else
                 (initial + (jump * scaleFactor))
 
-
-    /// A recursive metropolis hastings algorithm that ends when `endCondition` returns true.
-    ///
-    /// **Parameters**
-    ///   * `random` - `System.Random` to be used for drawing from a uniform distribution.
-    ///   * `writeOut` - side-effect function for handling `LogEvent` items.
-    ///   * `endCondition` - `EndCondition` that dictates when the MH algorithm ends.
-    ///   * `propose` - proposal `'scale -> 'theta -> 'theta` that generates a jump based on the scale value.
-    ///   * `tune` - parameter of type `int -> (float * 'a) list -> 'b -> 'b`, where `int` is current iteration,
-    ///   * `f` - an objective function, `'a -> float`, to optimise.
-    ///   * `theta1` - initial position in parameter space of type `'a`.
-    ///   * `l1` - initial value of -log likelihood at theta1 in parameter space
-    ///   * `d` - history of the chain, of type `(float * 'a) list`. Passing a list here allows continuation of a previous analysis.
-    ///   * `scale` - a scale of type `'b`, which is compatible with the scale tuning function `tune`
-    ///
-    /// **Output Type**
-    ///   * `(float * 'a) list * 'b` - A tuple containing a list of results, and the final scale used in
-    ///   the analysis. The `(float * 'a) list` represents a list of paired -log likelihood values with
-    ///   the proposed theta.
-    ///
+    /// <summary>A recursive metropolis hastings algorithm that ends when `endCondition` returns true.</summary>
+    /// <param name="random">`System.Random` to be used for drawing from a uniform distribution.</param>
+    /// <param name="writeOut">side-effect function for handling `LogEvent` items.</param>
+    /// <param name="endCondition">`EndCondition` that dictates when the MH algorithm ends.</param>
+    /// <param name="propose">proposal `'scale -> 'theta -> 'theta` that generates a jump based on the scale value.</param>
+    /// <param name="tune">parameter of type `int -> (float * 'a) list -> 'b -> 'b`, where `int` is current iteration,</param>
+    /// <param name="f">an objective function, `'a -> float`, to optimise.</param>
+    /// <param name="theta1">initial position in parameter space of type `'a`.</param>
+    /// <param name="l1">initial value of -log likelihood at theta1 in parameter space</param>
+    /// <param name="d">history of the chain, of type `(float * 'a) list`. Passing a list here allows continuation of a previous analysis.</param>
+    /// <param name="scale">a scale of type `'b`, which is compatible with the scale tuning function `tune`</param>
+    /// <param name="iteration">the current iteration number</param>
+    /// <typeparam name="'a"></typeparam>
+    /// <returns>`(float * 'a) list * 'b` - A tuple containing a list of results, and the final scale used in
+    /// the analysis. The `(float * 'a) list` represents a list of paired -log likelihood values with
+    /// the proposed theta.</returns>
     let rec metropolisHastings' random writeOut endCondition propose tune f theta1 l1 d scale iteration =
         if theta1 |> Array.isEmpty then
             invalidOp "Not valid theta"
