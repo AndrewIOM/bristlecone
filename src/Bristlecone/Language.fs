@@ -46,7 +46,9 @@ module Language =
         | Divide of ModelExpression * ModelExpression
         | Arbitrary of (float -> float -> Parameter.Pool -> CodedMap<float> -> float) * list<ArbitraryRequirement>
         | Mod of ModelExpression * ModelExpression
-        | Exponent of ModelExpression * ModelExpression
+        | Power of ModelExpression * ModelExpression
+        | Logarithm of ModelExpression
+        | Exponential of ModelExpression
         | Conditional of ((ModelExpression -> float) -> ModelExpression)
         | Label of string * ModelExpression
         | Invalid
@@ -63,7 +65,9 @@ module Language =
 
         static member (-)(e1, e2) = Subtract(e1, e2)
         static member (%)(e1, remainder) = Mod(e1, remainder)
-        static member Pow(e1, pow) = Exponent(e1, pow)
+        static member Pow(e1, pow) = Power(e1, pow)
+        static member Log(e) = Logarithm(e)
+        static member Exp(e) = Exponential(e)
 
         static member (~-) e =
             Multiply[e
@@ -99,7 +103,9 @@ module Language =
         | Divide(l, r) -> compute x t pool environment l / compute x t pool environment r
         | Arbitrary(fn, _) -> fn x t pool environment
         | Mod(e, m) -> (compute x t pool environment e) % (compute x t pool environment m)
-        | Exponent(e, m) -> (compute x t pool environment e) ** (compute x t pool environment m)
+        | Power(e, m) -> (compute x t pool environment e) ** (compute x t pool environment m)
+        | Logarithm e -> log (compute x t pool environment e)
+        | Exponential e -> exp (compute x t pool environment e)
         | Conditional m -> m (compute x t pool environment) |> compute x t pool environment
         | Label (_,m) -> m |> compute x t pool environment
         | Invalid -> nan
@@ -148,8 +154,10 @@ module Language =
                 | _ -> failwith "List was empty"
             | Divide(l, r) -> describe l |> flatMap (fun () -> describe r)
             | Arbitrary(fn, reqs) -> bind ((), "custom component - TODO may use additional parameters?")
+            | Logarithm(e) -> describe e
+            | Exponential(e) -> describe e
             | Mod(e, _) -> describe e
-            | Exponent(e, _) -> describe e
+            | Power(e, _) -> describe e
             | Invalid -> bind ((), "invalid model")
             | Conditional _ -> bind ((), "conditional element") // TODO
             | Label (_,e) -> describe e
@@ -182,7 +190,9 @@ module Language =
                     | ArbitraryParameter p -> ParameterRequirement p)
                 |> List.append reqs
             | Mod(e, _) -> requirements e reqs
-            | Exponent(e, _) -> requirements e reqs
+            | Power(e, _) -> requirements e reqs
+            | Logarithm e -> requirements e reqs
+            | Exponential e -> requirements e reqs
             | Invalid -> reqs
             | Conditional _ -> reqs
             | Label (_,e) -> requirements e reqs
