@@ -46,7 +46,8 @@ fun engine dataset hypothesis result ->
     // The number of jumps to perform in parameter space
     let n = 10000
 
-    let ci = Confidence.ProfileLikelihood.profile fitFn engine dataset hypothesis n result
+    let ci =
+        Confidence.ProfileLikelihood.profile fitFn engine dataset hypothesis n result
 
     // Optionally, save the result
     let saveDir = "/some/save/dir"

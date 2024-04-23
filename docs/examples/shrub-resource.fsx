@@ -24,127 +24,184 @@ index: 3
 (*** hide ***)
 module Allometric =
 
-   open Bristlecone
+    open Bristlecone
 
-   let pi = System.Math.PI
+    let pi = System.Math.PI
 
-   module Constants =
+    module Constants =
 
-      // Empirically-derived parameters:
-      let k5 = 19.98239 // Allometric fit to Yamal shrub BD-length data #1 (in centimetres)
-      let k6 = 0.42092 // Allometric fit to Yamal shrub BD-length data #2 (in centimetres)
+        // Empirically-derived parameters:
+        let k5 = 19.98239 // Allometric fit to Yamal shrub BD-length data #1 (in centimetres)
+        let k6 = 0.42092 // Allometric fit to Yamal shrub BD-length data #2 (in centimetres)
 
-      // Constants from the literature:
-      let a = 2. // the number of child branches added to previous branches (including the tops of the stems) for a shrub
-      let p = 0.5 // the length of a child branch as a proportion of its parent branch/stem
-      let lmin = 20. //cm. the length at which a stem or branch gets child branches
-      let rtip = 0.1 //cm. the radius of the outermost tip of a stem or branch
-      let b = 0.0075 // the ratio of the basal radius of a stem or branch and its length
-      let salixWoodDensity = 0.5 // g / cm3 (from internet)
-      let numberOfStems = 2.2
+        // Constants from the literature:
+        let a = 2. // the number of child branches added to previous branches (including the tops of the stems) for a shrub
+        let p = 0.5 // the length of a child branch as a proportion of its parent branch/stem
+        let lmin = 20. //cm. the length at which a stem or branch gets child branches
+        let rtip = 0.1 //cm. the radius of the outermost tip of a stem or branch
+        let b = 0.0075 // the ratio of the basal radius of a stem or branch and its length
+        let salixWoodDensity = 0.5 // g / cm3 (from internet)
+        let numberOfStems = 2.2
 
-   module NiklasAndSpatz_Allometry =
+    module NiklasAndSpatz_Allometry =
 
-      let nthroot n A =
-         let rec f x =
-               let m = n - 1.
-               let x' = (m * x + A/x**m) / n
-               match abs(x' - x) with
-               | t when t < abs(x * 1e-9) -> x'
-               | _ -> f x'
-         f (A / double n)
+        let nthroot n A =
+            let rec f x =
+                let m = n - 1.
+                let x' = (m * x + A / x ** m) / n
 
-      /// Gives the basal radius in centimetres of a stem/branch given its length in centimetres. Function from Niklas and Spatz (2004). 
-      /// The basal radius is always positive.
-      let basalRadius k5 k6 stemLength =
-         max (100. * (( 0.01 * stemLength + k6) / k5) ** (3. / 2.) / 2.) 1e-06
+                match abs (x' - x) with
+                | t when t < abs (x * 1e-9) -> x'
+                | _ -> f x'
 
-      /// Inverse equation of basalRadius.
-      let stemLength k5 k6 radius =
-         max (2. * ((nthroot 3. 2.) * 5. ** (2./3.) * k5 * radius ** (2./3.) - 50. * k6)) 1e-06
+            f (A / double n)
 
-   module Götmark2016_ShrubModel =
+        /// Gives the basal radius in centimetres of a stem/branch given its length in centimetres. Function from Niklas and Spatz (2004).
+        /// The basal radius is always positive.
+        let basalRadius k5 k6 stemLength =
+            max (100. * ((0.01 * stemLength + k6) / k5) ** (3. / 2.) / 2.) 1e-06
 
-      /// Total shrub volume given height and number of stems
-      let shrubVolume b a rtip p lmin k5 k6 n h =
+        /// Inverse equation of basalRadius.
+        let stemLength k5 k6 radius =
+            max (2. * ((nthroot 3. 2.) * 5. ** (2. / 3.) * k5 * radius ** (2. / 3.) - 50. * k6)) 1e-06
 
-         let radius = NiklasAndSpatz_Allometry.basalRadius k5 k6
-         let mainStemVolume =
-               match radius h with
-               | r when r > rtip -> n * pi * h * ((radius h) ** 2. + (radius h) * rtip + rtip ** 2.) / 3.
-               | _ -> n * pi * h * rtip ** 2.
+    module Götmark2016_ShrubModel =
 
-         let mutable volume = mainStemVolume
-         let mutable k = 0.
+        /// Total shrub volume given height and number of stems
+        let shrubVolume b a rtip p lmin k5 k6 n h =
 
-         while (p ** k * h > lmin * 2./3.) do
-               let volToAdd =
-                  match (p ** k * h < lmin) with
-                  | true ->
-                     match (b * 3. * p * (p ** k * h - 2. * lmin / 3.) > rtip) with
-                     | true ->
-                           n * a * (a + 1.) ** (float k) * pi * 3. * p * (p ** k * h - 2. * lmin / 3.) * ((radius (3. * p * (p ** k * h - 2. * lmin / 3.))) * (radius (3. * p * (p ** k * h - 2. * lmin / 3.)) * rtip + rtip ** 2.)) / 3.
-                     | false ->
-                           n * a * (a + 1.) ** (float k) * 3. * p * (p ** k * h - 2. * lmin / 3.) * pi * rtip ** 2.
-                  | false ->
-                     match (radius (p ** (k + 1.) * h) > rtip) with
-                     | true ->
-                           n * a * (a + 1.) ** (float k) * pi * p ** (k + 1.) * h * ((radius (p ** (k+1.) * h)) ** 2. + (radius (p ** (k + 1.) * h)) * rtip + rtip ** 2.) / 3.
-                     | false ->
-                           n * a * (a + 1.) ** (float k) * p ** (k + 1.) * h * pi * rtip ** 2.
-               
-               volume <- volume + volToAdd
-               k <- k + 1.
+            let radius = NiklasAndSpatz_Allometry.basalRadius k5 k6
 
-         k, volume
+            let mainStemVolume =
+                match radius h with
+                | r when r > rtip -> n * pi * h * ((radius h) ** 2. + (radius h) * rtip + rtip ** 2.) / 3.
+                | _ -> n * pi * h * rtip ** 2.
+
+            let mutable volume = mainStemVolume
+            let mutable k = 0.
+
+            while (p ** k * h > lmin * 2. / 3.) do
+                let volToAdd =
+                    match (p ** k * h < lmin) with
+                    | true ->
+                        match (b * 3. * p * (p ** k * h - 2. * lmin / 3.) > rtip) with
+                        | true ->
+                            n
+                            * a
+                            * (a + 1.) ** (float k)
+                            * pi
+                            * 3.
+                            * p
+                            * (p ** k * h - 2. * lmin / 3.)
+                            * ((radius (3. * p * (p ** k * h - 2. * lmin / 3.)))
+                               * (radius (3. * p * (p ** k * h - 2. * lmin / 3.)) * rtip + rtip ** 2.))
+                            / 3.
+                        | false ->
+                            n
+                            * a
+                            * (a + 1.) ** (float k)
+                            * 3.
+                            * p
+                            * (p ** k * h - 2. * lmin / 3.)
+                            * pi
+                            * rtip ** 2.
+                    | false ->
+                        match (radius (p ** (k + 1.) * h) > rtip) with
+                        | true ->
+                            n
+                            * a
+                            * (a + 1.) ** (float k)
+                            * pi
+                            * p ** (k + 1.)
+                            * h
+                            * ((radius (p ** (k + 1.) * h)) ** 2.
+                               + (radius (p ** (k + 1.) * h)) * rtip
+                               + rtip ** 2.)
+                            / 3.
+                        | false -> n * a * (a + 1.) ** (float k) * p ** (k + 1.) * h * pi * rtip ** 2.
+
+                volume <- volume + volToAdd
+                k <- k + 1.
+
+            k, volume
 
 
-   module Allometrics =
+    module Allometrics =
 
-      open Götmark2016_ShrubModel
-      open Bristlecone.Dendro
+        open Götmark2016_ShrubModel
+        open Bristlecone.Dendro
 
-      let private removeUnit (x:float<_>) = float x
+        let private removeUnit (x: float<_>) = float x
 
-      let mass woodDensity volume =
-         volume * woodDensity
+        let mass woodDensity volume = volume * woodDensity
 
-      let massToVolume woodDensity mass =
-         mass / woodDensity
+        let massToVolume woodDensity mass = mass / woodDensity
 
-      let shrubBiomass b a rtip p lmin k5 k6 n woodDensity (radius:float<mm>) =
-         radius
-         |> removeUnit
-         |> NiklasAndSpatz_Allometry.stemLength k5 k6
-         |> shrubVolume b a rtip p lmin k5 k6 n |> snd
-         |> mass woodDensity
+        let shrubBiomass b a rtip p lmin k5 k6 n woodDensity (radius: float<mm>) =
+            radius
+            |> removeUnit
+            |> NiklasAndSpatz_Allometry.stemLength k5 k6
+            |> shrubVolume b a rtip p lmin k5 k6 n
+            |> snd
+            |> mass woodDensity
 
-      let shrubRadius b a rtip p lmin k5 k6 n woodDensity mass =
-         let findRadius volume =
-               let v x = x |> NiklasAndSpatz_Allometry.stemLength k5 k6 |> shrubVolume b a rtip p lmin k5 k6 n |> snd
-               let f = (fun x -> (v x) - volume )
-               Statistics.RootFinding.bisect 0 200 f 0.01 100.00 1e-8 // Assumption that shrub radius is between 0.01 and 100.0cm.
-         mass
-         |> massToVolume woodDensity
-         |> findRadius
+        let shrubRadius b a rtip p lmin k5 k6 n woodDensity mass =
+            let findRadius volume =
+                let v x =
+                    x
+                    |> NiklasAndSpatz_Allometry.stemLength k5 k6
+                    |> shrubVolume b a rtip p lmin k5 k6 n
+                    |> snd
 
-      let shrubHeight k5 k6 radius =
-         radius |> NiklasAndSpatz_Allometry.stemLength k5 k6
+                let f = (fun x -> (v x) - volume)
+                Statistics.RootFinding.bisect 0 200 f 0.01 100.00 1e-8 // Assumption that shrub radius is between 0.01 and 100.0cm.
 
-   module Proxies =
+            mass |> massToVolume woodDensity |> findRadius
 
-      open Bristlecone.Dendro
+        let shrubHeight k5 k6 radius =
+            radius |> NiklasAndSpatz_Allometry.stemLength k5 k6
 
-      /// Radius in millimetres
-      let toBiomassMM (radius:float<mm>) = 
-         radius / 10. |> Allometrics.shrubBiomass Constants.b Constants.a Constants.rtip Constants.p Constants.lmin Constants.k5 Constants.k6 Constants.numberOfStems Constants.salixWoodDensity
+    module Proxies =
 
-      /// Biomass in grams.
-      let toRadiusMM biomassGrams = 
-         if System.Double.IsNaN biomassGrams || System.Double.IsInfinity biomassGrams || System.Double.IsNegativeInfinity biomassGrams then nan
-         else
-               let radiusCm = biomassGrams |> Allometrics.shrubRadius Constants.b Constants.a Constants.rtip Constants.p Constants.lmin Constants.k5 Constants.k6 Constants.numberOfStems Constants.salixWoodDensity
-               radiusCm * 10.
+        open Bristlecone.Dendro
+
+        /// Radius in millimetres
+        let toBiomassMM (radius: float<mm>) =
+            radius / 10.
+            |> Allometrics.shrubBiomass
+                Constants.b
+                Constants.a
+                Constants.rtip
+                Constants.p
+                Constants.lmin
+                Constants.k5
+                Constants.k6
+                Constants.numberOfStems
+                Constants.salixWoodDensity
+
+        /// Biomass in grams.
+        let toRadiusMM biomassGrams =
+            if
+                System.Double.IsNaN biomassGrams
+                || System.Double.IsInfinity biomassGrams
+                || System.Double.IsNegativeInfinity biomassGrams
+            then
+                nan
+            else
+                let radiusCm =
+                    biomassGrams
+                    |> Allometrics.shrubRadius
+                        Constants.b
+                        Constants.a
+                        Constants.rtip
+                        Constants.p
+                        Constants.lmin
+                        Constants.k5
+                        Constants.k6
+                        Constants.numberOfStems
+                        Constants.salixWoodDensity
+
+                radiusCm * 10.
 
 
 (**
@@ -164,8 +221,8 @@ of mechanisms for each shrub.
 First, we must load Bristlecone.
 *)
 
-open Bristlecone            // Opens Bristlecone core library and estimation engine
-open Bristlecone.Language   // Open the language for writing Bristlecone models
+open Bristlecone // Opens Bristlecone core library and estimation engine
+open Bristlecone.Language // Open the language for writing Bristlecone models
 open Bristlecone.Time
 
 (**
@@ -191,28 +248,30 @@ The code for the parts of the base model is shown below.
 
 // Empirical transform from δ15N to N availability.
 let ``δ15N -> N availability`` =
-   (Constant 100. * Environment "N" + Constant 309.) / Constant 359.
+    (Constant 100. * Environment "N" + Constant 309.) / Constant 359.
 
 // ODE1. Cumulative stem biomass
 let ``db/dt`` geom nLimitation =
-   Parameter "r" * (geom This) * This * (nLimitation ``δ15N -> N availability``) - Parameter "γ[b]" * This
+    Parameter "r" * (geom This) * This * (nLimitation ``δ15N -> N availability``)
+    - Parameter "γ[b]" * This
 
 // ODE2. Soil nitrogen availability
-let ``dN/dt`` geom feedback limitationName nLimitation =          
-   if limitationName = "None"
-   then Parameter "λ" - Parameter "γ[N]" * ``δ15N -> N availability`` + feedback This
-   else
-      Parameter "λ" - Parameter "γ[N]" * ``δ15N -> N availability``
-      + feedback This
-      - (geom This) * This * (nLimitation ``δ15N -> N availability``)
+let ``dN/dt`` geom feedback limitationName nLimitation =
+    if limitationName = "None" then
+        Parameter "λ" - Parameter "γ[N]" * ``δ15N -> N availability`` + feedback This
+    else
+        Parameter "λ" - Parameter "γ[N]" * ``δ15N -> N availability`` + feedback This
+        - (geom This) * This * (nLimitation ``δ15N -> N availability``)
 
 // Measurement variable: stem radius
 let stemRadius lastRadius lastEnv env =
-   let oldCumulativeMass = lastEnv |> lookup "bs"
-   let newCumulativeMass = env |> lookup "bs"
-   if (newCumulativeMass - oldCumulativeMass) > 0.
-   then newCumulativeMass |> Allometric.Proxies.toRadiusMM // NB Allometrics is given in full in the downloadable script.
-   else lastRadius
+    let oldCumulativeMass = lastEnv |> lookup "bs"
+    let newCumulativeMass = env |> lookup "bs"
+
+    if (newCumulativeMass - oldCumulativeMass) > 0. then
+        newCumulativeMass |> Allometric.Proxies.toRadiusMM // NB Allometrics is given in full in the downloadable script.
+    else
+        lastRadius
 
 (**
 Once we have defined the components, we can scaffold them into a model system.
@@ -221,18 +280,18 @@ the base model as a function that takes parameters representing the
 alternative hypotheses.
 *)
 
-let ``base model`` geometricConstraint plantSoilFeedback (nLimitMode,nLimitation) =
-   Model.empty
-   |> Model.addEquation        "bs"    (``db/dt`` geometricConstraint nLimitation)
-   |> Model.addEquation        "N"     (``dN/dt`` geometricConstraint plantSoilFeedback nLimitMode nLimitation)
-   |> Model.includeMeasure     "x"     stemRadius
-   |> Model.estimateParameter  "λ"     notNegative 0.001 0.500
-   |> Model.estimateParameter  "γ[N]"  notNegative 0.001 0.200
-   |> Model.estimateParameter  "γ[b]"  notNegative 0.001 0.200
-   |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.bivariateGaussian "x" "N")
-   |> Model.estimateParameter  "ρ"     noConstraints -0.500 0.500
-   |> Model.estimateParameter  "σ[x]"  notNegative 0.001 0.100
-   |> Model.estimateParameter  "σ[y]"  notNegative 0.001 0.100
+let ``base model`` geometricConstraint plantSoilFeedback (nLimitMode, nLimitation) =
+    Model.empty
+    |> Model.addEquation "bs" (``db/dt`` geometricConstraint nLimitation)
+    |> Model.addEquation "N" (``dN/dt`` geometricConstraint plantSoilFeedback nLimitMode nLimitation)
+    |> Model.includeMeasure "x" stemRadius
+    |> Model.estimateParameter "λ" notNegative 0.001 0.500
+    |> Model.estimateParameter "γ[N]" notNegative 0.001 0.200
+    |> Model.estimateParameter "γ[b]" notNegative 0.001 0.200
+    |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.bivariateGaussian "x" "N")
+    |> Model.estimateParameter "ρ" noConstraints -0.500 0.500
+    |> Model.estimateParameter "σ[x]" notNegative 0.001 0.100
+    |> Model.estimateParameter "σ[y]" notNegative 0.001 0.100
 
 (**
 ### Defining the competing hypotheses
@@ -269,11 +328,11 @@ added to a `subComponent` by using `|> estimateParameter` afterwards, as below.
 *)
 
 let ``geometric constraint`` =
-   modelComponent "Geometric constraint" [
-      subComponent "None" (Constant 1. |> (*))
-      subComponent "Chapman-Richards" (fun mass -> Constant 1. - (mass / (Parameter "k" * Constant 1000.)))
-      |> estimateParameter "k" notNegative 3.00 5.00  // Asymptotic biomass (in kilograms)
-   ]
+    modelComponent
+        "Geometric constraint"
+        [ subComponent "None" (Constant 1. |> (*))
+          subComponent "Chapman-Richards" (fun mass -> Constant 1. - (mass / (Parameter "k" * Constant 1000.)))
+          |> estimateParameter "k" notNegative 3.00 5.00 ] // Asymptotic biomass (in kilograms)
 
 (**
 #### Plant-soil feedback
@@ -285,15 +344,16 @@ loss occurs. Turning on the feedback here creates an N input into soil based
 on the biomass lost multiplied by a conversion factor `ɑ`.
 *)
 
-let ``plant-soil feedback`` = 
-   
-   let biomassLoss biomass = (Parameter "ɑ" / Constant 100.) * biomass * Parameter "γ[b]"
-   
-   modelComponent "Plant-Soil Feedback" [
-      subComponent "None" (Constant 1. |> (*))
-      subComponent "Biomass Loss" biomassLoss
-      |> estimateParameter "ɑ" notNegative 0.01 1.00  // N-recycling efficiency
-   ]
+let ``plant-soil feedback`` =
+
+    let biomassLoss biomass =
+        (Parameter "ɑ" / Constant 100.) * biomass * Parameter "γ[b]"
+
+    modelComponent
+        "Plant-Soil Feedback"
+        [ subComponent "None" (Constant 1. |> (*))
+          subComponent "Biomass Loss" biomassLoss
+          |> estimateParameter "ɑ" notNegative 0.01 1.00 ] // N-recycling efficiency
 
 (**
 #### Nitrogen limitation
@@ -311,32 +371,39 @@ we use it to restrict the models such that the N-limiting effect cannot
 be zero.
 *)
 
-let ``N-limitation to growth`` = 
+let ``N-limitation to growth`` =
 
-   let saturating minimumNutrient nutrient =
-      let hollingModel n = (Parameter "a" * n) / (Constant 1. + (Parameter "a" (** Parameter "b"*) * Parameter "h" * n))
-      Conditional <| fun compute ->
-         if compute (hollingModel minimumNutrient) < 1e-12
-         then Invalid
-         else hollingModel nutrient
+    let saturating minimumNutrient nutrient =
+        let hollingModel n =
+            (Parameter "a" * n)
+            / (Constant 1. + (Parameter "a" (** Parameter "b"*) * Parameter "h" * n))
 
-   let linear min resource =
-      Conditional <| fun compute ->
-         if compute (Parameter "a" * min) < 1e-12 
-         then Invalid 
-         else Parameter "a" * resource
+        Conditional
+        <| fun compute ->
+            if compute (hollingModel minimumNutrient) < 1e-12 then
+                Invalid
+            else
+                hollingModel nutrient
 
-   modelComponent "N-limitation" [
-      subComponent "Saturating" (saturating (Constant 5.))
-      |> estimateParameter "a" notNegative 0.100 0.400
-      |> estimateParameter "h" notNegative 0.100 0.400
-      |> estimateParameter "r" notNegative 0.500 1.000
-      subComponent "Linear" (linear (Constant 5.))
-      |> estimateParameter "a" notNegative 0.100 0.400
-      |> estimateParameter "r" notNegative 0.500 1.000
-      subComponent "None" (Constant 1. |> (*))
-      |> estimateParameter "r" notNegative 0.500 1.000
-   ]
+    let linear min resource =
+        Conditional
+        <| fun compute ->
+            if compute (Parameter "a" * min) < 1e-12 then
+                Invalid
+            else
+                Parameter "a" * resource
+
+    modelComponent
+        "N-limitation"
+        [ subComponent "Saturating" (saturating (Constant 5.))
+          |> estimateParameter "a" notNegative 0.100 0.400
+          |> estimateParameter "h" notNegative 0.100 0.400
+          |> estimateParameter "r" notNegative 0.500 1.000
+          subComponent "Linear" (linear (Constant 5.))
+          |> estimateParameter "a" notNegative 0.100 0.400
+          |> estimateParameter "r" notNegative 0.500 1.000
+          subComponent "None" (Constant 1. |> (*))
+          |> estimateParameter "r" notNegative 0.500 1.000 ]
 
 (**
 #### Putting the hypotheses together
@@ -360,9 +427,12 @@ The resultant hypotheses (each of which is a `Hypotheses.Hypothesis`) are:
 printfn "There are %i hypotheses" hypotheses.Length
 (*** hide ***)
 hypotheses
-|> Seq.iteri(fun i h -> 
-   printfn "Hypothesis %i [%s]: %s" (i + 1) h.ReferenceCode (h.Components |> Seq.map(fun x -> x.Implementation) |> String.concat " + ")
-)
+|> Seq.iteri (fun i h ->
+    printfn
+        "Hypothesis %i [%s]: %s"
+        (i + 1)
+        h.ReferenceCode
+        (h.Components |> Seq.map (fun x -> x.Implementation) |> String.concat " + "))
 (*** include-output ***)
 
 (**
@@ -383,22 +453,27 @@ to use the graphics functions from the `Bristlecone.Charts.R` package.
 
 let output = Logging.Console.logger 1000
 
-let engine = 
-   Bristlecone.mkContinuous
-   |> Bristlecone.withContinuousTime Integration.MathNet.integrate
-   |> Bristlecone.withOutput output
-   |> Bristlecone.withConditioning Conditioning.RepeatFirstDataPoint
-   |> Bristlecone.withCustomOptimisation (Optimisation.MonteCarlo.SimulatedAnnealing.fastSimulatedAnnealing 0.01 true
-      { Optimisation.MonteCarlo.SimulatedAnnealing.AnnealSettings<float>.Default with 
-            InitialTemperature = 100.
-            TemperatureCeiling = Some 100.
-            HeatRamp = (fun t -> t + 5.00)
-            BoilingAcceptanceRate = 0.85
-            HeatStepLength = Optimisation.EndConditions.afterIteration 1000
-            TuneLength = 1000
-            AnnealStepLength = (fun x n ->
-               Optimisation.MonteCarlo.SimulatedAnnealing.EndConditions.improvementCount 5000 250 x n || 
-                  Optimisation.EndConditions.afterIteration 10000 x n) })
+let engine =
+    Bristlecone.mkContinuous
+    |> Bristlecone.withContinuousTime Integration.MathNet.integrate
+    |> Bristlecone.withOutput output
+    |> Bristlecone.withConditioning Conditioning.RepeatFirstDataPoint
+    |> Bristlecone.withCustomOptimisation (
+        Optimisation.MonteCarlo.SimulatedAnnealing.fastSimulatedAnnealing
+            0.01
+            true
+            { Optimisation.MonteCarlo.SimulatedAnnealing.AnnealSettings<float>.Default with
+                InitialTemperature = 100.
+                TemperatureCeiling = Some 100.
+                HeatRamp = (fun t -> t + 5.00)
+                BoilingAcceptanceRate = 0.85
+                HeatStepLength = Optimisation.EndConditions.afterIteration 1000
+                TuneLength = 1000
+                AnnealStepLength =
+                    (fun x n ->
+                        Optimisation.MonteCarlo.SimulatedAnnealing.EndConditions.improvementCount 5000 250 x n
+                        || Optimisation.EndConditions.afterIteration 10000 x n) }
+    )
 
 (**
 ### Testing the engine and model
@@ -412,22 +487,19 @@ let testSettings =
     Test.create
     |> Test.addNoise (Test.Noise.tryAddNormal "σ[y]" "N")
     |> Test.addNoise (Test.Noise.tryAddNormal "σ[x]" "bs")
-    |> Test.addGenerationRules [ 
-        Test.GenerationRules.alwaysMoreThan -3. "N"
-        Test.GenerationRules.alwaysLessThan 20. "N"
-        Test.GenerationRules.alwaysMoreThan 0. "bs"
-        Test.GenerationRules.monotonicallyIncreasing "x" ] // There must be at least 10mm of wood production
-    |> Test.addStartValues [
-        "x", 5.0
-        "bs", 5.0<Dendro.mm> |> Allometric.Proxies.toBiomassMM
-        "N", 3.64 ]
+    |> Test.addGenerationRules
+        [ Test.GenerationRules.alwaysMoreThan -3. "N"
+          Test.GenerationRules.alwaysLessThan 20. "N"
+          Test.GenerationRules.alwaysMoreThan 0. "bs"
+          Test.GenerationRules.monotonicallyIncreasing "x" ] // There must be at least 10mm of wood production
+    |> Test.addStartValues [ "x", 5.0; "bs", 5.0<Dendro.mm> |> Allometric.Proxies.toBiomassMM; "N", 3.64 ]
     |> Test.withTimeSeriesLength 30
     |> Test.endWhen (Optimisation.EndConditions.afterIteration 1000)
 
 (*** do-not-eval ***)
 let testResult =
-    hypotheses 
-    |> List.map((fun h -> h.Model) >> Bristlecone.testModel engine testSettings)
+    hypotheses
+    |> List.map ((fun h -> h.Model) >> Bristlecone.testModel engine testSettings)
 
 
 (**
@@ -442,8 +514,12 @@ method to wrangle the data into a `TimeSeries` is acceptable.
 open Bristlecone.Dendro
 
 let dataset =
-    let plants = Data.PlantIndividual.loadRingWidths (__SOURCE_DIRECTORY__ + "/../data/yamal-rw.csv")
-    let isotopeData = Data.PlantIndividual.loadLocalEnvironmentVariable (__SOURCE_DIRECTORY__ + "/../data/yuribei-d15N-imputed.csv")
+    let plants =
+        Data.PlantIndividual.loadRingWidths (__SOURCE_DIRECTORY__ + "/../data/yamal-rw.csv")
+
+    let isotopeData =
+        Data.PlantIndividual.loadLocalEnvironmentVariable (__SOURCE_DIRECTORY__ + "/../data/yuribei-d15N-imputed.csv")
+
     plants |> PlantIndividual.zipEnvMany "N" isotopeData
 
 (**
@@ -463,12 +539,12 @@ in parallel. Below, we demonstrate setting up an agent:
 
 open Bristlecone.Workflow
 
-let orchestrator = 
-   Orchestration.OrchestrationAgent (
-      writeOut = output,
-      maxSimultaneous = System.Environment.ProcessorCount,
-      retainResults = false
-   )
+let orchestrator =
+    Orchestration.OrchestrationAgent(
+        writeOut = output,
+        maxSimultaneous = System.Environment.ProcessorCount,
+        retainResults = false
+    )
 
 (**
 
@@ -485,24 +561,29 @@ time-series but not the other. Because of this, we use a custom start
 point for each shrub individual.
 *)
 
-let startValues (startDate:System.DateTime) (plant:PlantIndividual.PlantIndividual) =
-    let removeUnit (x:float<_>) = float x
+let startValues (startDate: System.DateTime) (plant: PlantIndividual.PlantIndividual) =
+    let removeUnit (x: float<_>) = float x
+
     let initialRadius =
         match plant.Growth with
-        | PlantIndividual.PlantGrowth.RingWidth s -> 
+        | PlantIndividual.PlantGrowth.RingWidth s ->
             match s with
-            | GrowthSeries.Cumulative c -> 
+            | GrowthSeries.Cumulative c ->
                 let trimmed = c |> TimeSeries.trimStart (startDate - System.TimeSpan.FromDays(366.))
+
                 match trimmed with
                 | Some t -> t.Values |> Seq.head
                 | None -> failwith "Could not get t0 from ring-width series"
             | _ -> invalidOp "Not applicable"
         | _ -> invalidOp "Not applicable"
+
     let initialMass = initialRadius |> Allometric.Proxies.toBiomassMM
     let initialNitrogen = plant.Environment.[(code "N").Value].Head |> fst
+
     [ ((code "x").Value, initialRadius |> removeUnit)
       ((code "N").Value, initialNitrogen)
-      ((code "bs").Value, initialMass) ] |> Map.ofList
+      ((code "bs").Value, initialMass) ]
+    |> Map.ofList
 
 (**
 Next, we set up some configuration settings, then wrap up our hypotheses and shrubs
@@ -514,47 +595,54 @@ start values for each shrub, then creates per-hypothesis work packages for that 
 
 module Config =
 
-   let numberOfReplicates = 3
-   let resultsDirectory = "results/test/"
-   let thinTrace = Some 100
-   let endWhen = Optimisation.EndConditions.afterIteration 100000
+    let numberOfReplicates = 3
+    let resultsDirectory = "results/test/"
+    let thinTrace = Some 100
+    let endWhen = Optimisation.EndConditions.afterIteration 100000
 
 
 // Function to scaffold work packages
-let workPackages shrubs (hypotheses:Hypotheses.Hypothesis list) engine saveDirectory =
-   seq {
-      for s in shrubs do
+let workPackages shrubs (hypotheses: Hypotheses.Hypothesis list) engine saveDirectory =
+    seq {
+        for s in shrubs do
 
-         // 1. Arrange the subject and settings
-         let shrub = s |> PlantIndividual.toCumulativeGrowth
-         let common = shrub |> PlantIndividual.keepCommonYears
-         let startDate = (common.Environment.[(code "N").Value]).StartDate |> snd
-         let startConditions = startValues startDate shrub
-         let e = engine |> Bristlecone.withConditioning (Conditioning.Custom startConditions)
+            // 1. Arrange the subject and settings
+            let shrub = s |> PlantIndividual.toCumulativeGrowth
+            let common = shrub |> PlantIndividual.keepCommonYears
+            let startDate = (common.Environment.[(code "N").Value]).StartDate |> snd
+            let startConditions = startValues startDate shrub
+            let e = engine |> Bristlecone.withConditioning (Conditioning.Custom startConditions)
 
-         // 2. Setup batches of dependent analyses
-         for h in hypotheses do
-            for _ in [ 1 .. Config.numberOfReplicates ] do
-               yield async {
-                  // A. Compute result
-                  let result = Bristlecone.tryFit e Config.endWhen (Bristlecone.fromDendro common) h.Model
-                  // B. Save to file
-                  match result with
-                  | Ok r -> 
-                     Bristlecone.Data.EstimationResult.saveAll saveDirectory s.Identifier.Value h.ReferenceCode Config.thinTrace r
-                     return r
-                  | Error e -> return failwithf "Error in package: %s" e
-               }
+            // 2. Setup batches of dependent analyses
+            for h in hypotheses do
+                for _ in [ 1 .. Config.numberOfReplicates ] do
+                    yield
+                        async {
+                            // A. Compute result
+                            let result =
+                                Bristlecone.tryFit e Config.endWhen (Bristlecone.fromDendro common) h.Model
+                            // B. Save to file
+                            match result with
+                            | Ok r ->
+                                Bristlecone.Data.EstimationResult.saveAll
+                                    saveDirectory
+                                    s.Identifier.Value
+                                    h.ReferenceCode
+                                    Config.thinTrace
+                                    r
+
+                                return r
+                            | Error e -> return failwithf "Error in package: %s" e
+                        }
     }
 
-let work = 
-   workPackages dataset hypotheses engine Config.resultsDirectory
+let work = workPackages dataset hypotheses engine Config.resultsDirectory
 
 // Calling this function will run all of the analyses, but for this
 // example script we won't run them here.
-let run () = 
-   work 
-   |> Seq.iter (Orchestration.OrchestrationMessage.StartWorkPackage >> orchestrator.Post)
+let run () =
+    work
+    |> Seq.iter (Orchestration.OrchestrationMessage.StartWorkPackage >> orchestrator.Post)
 
 (**
 ### Model selection
@@ -570,74 +658,85 @@ this namespace to save the results.
 
 let saveDiagnostics () =
 
-   // 1. Get all results sliced by plant and hypothesis
-   let results = 
-      let get (subject:PlantIndividual.PlantIndividual) (hypothesis:Hypotheses.Hypothesis) =
-         Bristlecone.Data.EstimationResult.loadAll Config.resultsDirectory subject.Identifier.Value hypothesis.Model hypothesis.ReferenceCode
-      Bristlecone.ModelSelection.ResultSet.arrangeResultSets dataset hypotheses get
+    // 1. Get all results sliced by plant and hypothesis
+    let results =
+        let get (subject: PlantIndividual.PlantIndividual) (hypothesis: Hypotheses.Hypothesis) =
+            Bristlecone.Data.EstimationResult.loadAll
+                Config.resultsDirectory
+                subject.Identifier.Value
+                hypothesis.Model
+                hypothesis.ReferenceCode
 
-   // 2. Save convergence statistics to file
-   results 
-   |> Diagnostics.Convergence.gelmanRubinAll
-         10000
-         (fun (s:PlantIndividual.PlantIndividual) -> s.Identifier.Value)
-         (fun (h:Hypotheses.Hypothesis) -> h.ReferenceCode)
-   |> Data.Convergence.save Config.resultsDirectory
+        Bristlecone.ModelSelection.ResultSet.arrangeResultSets dataset hypotheses get
 
-   // 3. Save Akaike weights to file
-   results
-   |> ModelSelection.Akaike.akaikeWeightsForSet (fun (h:Hypotheses.Hypothesis) -> h.ReferenceCode)
-   |> Seq.map(fun (x,a,b,c) -> x.Identifier.Value,a,b,c)
-   |> Data.ModelSelection.save Config.resultsDirectory
+    // 2. Save convergence statistics to file
+    results
+    |> Diagnostics.Convergence.gelmanRubinAll
+        10000
+        (fun (s: PlantIndividual.PlantIndividual) -> s.Identifier.Value)
+        (fun (h: Hypotheses.Hypothesis) -> h.ReferenceCode)
+    |> Data.Convergence.save Config.resultsDirectory
+
+    // 3. Save Akaike weights to file
+    results
+    |> ModelSelection.Akaike.akaikeWeightsForSet (fun (h: Hypotheses.Hypothesis) -> h.ReferenceCode)
+    |> Seq.map (fun (x, a, b, c) -> x.Identifier.Value, a, b, c)
+    |> Data.ModelSelection.save Config.resultsDirectory
 
 
-   // // 4. Save out logged components
-   // results
-   // |> Seq.map(fun r -> 
-   //    Diagnostics.ModelComponents.calculateComponents fit engine r)
+    // // 4. Save out logged components
+    // results
+    // |> Seq.map(fun r ->
+    //    Diagnostics.ModelComponents.calculateComponents fit engine r)
 
-   // 5. One-step ahead predictions
+    // 5. One-step ahead predictions
 
-   let bestFits = 
-      Seq.allPairs dataset hypotheses
-      |> Seq.map(fun (s, h) ->
-         s, h, Bristlecone.Data.MLE.loadBest Config.resultsDirectory s.Identifier.Value h.Model h.ReferenceCode )
+    let bestFits =
+        Seq.allPairs dataset hypotheses
+        |> Seq.map (fun (s, h) ->
+            s, h, Bristlecone.Data.MLE.loadBest Config.resultsDirectory s.Identifier.Value h.Model h.ReferenceCode)
 
-   let oneStepPredictions =
-      bestFits
-      |> Seq.map(fun (s, h, mle) ->
+    let oneStepPredictions =
+        bestFits
+        |> Seq.map (fun (s, h, mle) ->
 
-               // 0. Convert x into biomass
-               let preTransform (data:CodedMap<TimeSeries<float>>) =
-                  data
-                  |> Map.toList
-                  |> List.collect(fun (k,v) ->
-                     if k.Value = "x"
-                     then [ (k, v); ((code "bs").Value, v |> TimeSeries.map(fun (x,_) -> x * 1.<mm> |> Allometric.Proxies.toBiomassMM)) ]
-                     else [ (k, v)] )
-                  |> Map.ofList
+            // 0. Convert x into biomass
+            let preTransform (data: CodedMap<TimeSeries<float>>) =
+                data
+                |> Map.toList
+                |> List.collect (fun (k, v) ->
+                    if k.Value = "x" then
+                        [ (k, v)
+                          ((code "bs").Value,
+                           v |> TimeSeries.map (fun (x, _) -> x * 1.<mm> |> Allometric.Proxies.toBiomassMM)) ]
+                    else
+                        [ (k, v) ])
+                |> Map.ofList
 
-               // 1. Arrange the subject and settings (same as in model-fitting)
-               let shrub = s |> PlantIndividual.toCumulativeGrowth
-               let common = shrub |> PlantIndividual.keepCommonYears
-               let startDate = (common.Environment.[(code "N").Value]).StartDate |> snd
-               let startConditions = startValues startDate shrub
-               let e = engine |> Bristlecone.withConditioning (Bristlecone.Conditioning.Custom startConditions)
+            // 1. Arrange the subject and settings (same as in model-fitting)
+            let shrub = s |> PlantIndividual.toCumulativeGrowth
+            let common = shrub |> PlantIndividual.keepCommonYears
+            let startDate = (common.Environment.[(code "N").Value]).StartDate |> snd
+            let startConditions = startValues startDate shrub
 
-               let result = Bristlecone.oneStepAhead e h.Model preTransform (Bristlecone.fromDendro common) (mle |> snd |> snd)
-               
-               // Save each n-step ahead result to a csv file
-               Bristlecone.Data.NStepAhead.save
-                  Config.resultsDirectory
-                  s.Identifier.Value
-                  h.ReferenceCode
-                  (mle |> fst)
-                  1
-                  result
-               
-               s.Identifier.Value, h.ReferenceCode, result
-            )
+            let e =
+                engine
+                |> Bristlecone.withConditioning (Bristlecone.Conditioning.Custom startConditions)
 
-   Bristlecone.Data.NStepAhead.saveAllRMSE Config.resultsDirectory oneStepPredictions
+            let result =
+                Bristlecone.oneStepAhead e h.Model preTransform (Bristlecone.fromDendro common) (mle |> snd |> snd)
 
-   ()
+            // Save each n-step ahead result to a csv file
+            Bristlecone.Data.NStepAhead.save
+                Config.resultsDirectory
+                s.Identifier.Value
+                h.ReferenceCode
+                (mle |> fst)
+                1
+                result
+
+            s.Identifier.Value, h.ReferenceCode, result)
+
+    Bristlecone.Data.NStepAhead.saveAllRMSE Config.resultsDirectory oneStepPredictions
+
+    ()

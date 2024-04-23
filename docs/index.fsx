@@ -49,23 +49,22 @@ The nuget package [is available here](https://nuget.org/packages/Bristlecone).
 This example demonstrates the layout of a model when defined in Bristlecone.
 
 *)
-open Bristlecone            // Opens Bristlecone core library and estimation engine
-open Bristlecone.Language   // Open the language for writing Bristlecone models
+open Bristlecone // Opens Bristlecone core library and estimation engine
+open Bristlecone.Language // Open the language for writing Bristlecone models
 
 let hypothesis =
 
-    let vonBertalanffy = 
-        Parameter "η" * This ** Parameter "β" - Parameter "κ" * This
+    let vonBertalanffy = Parameter "η" * This ** Parameter "β" - Parameter "κ" * This
 
     Model.empty
-    |> Model.addEquation       "mass"   vonBertalanffy
-    |> Model.estimateParameter "η"      noConstraints 0.50 1.50 
-    |> Model.estimateParameter "β"      noConstraints 0.01 1.00
-    |> Model.estimateParameter "κ"      noConstraints 0.01 1.00 
+    |> Model.addEquation "mass" vonBertalanffy
+    |> Model.estimateParameter "η" noConstraints 0.50 1.50
+    |> Model.estimateParameter "β" noConstraints 0.01 1.00
+    |> Model.estimateParameter "κ" noConstraints 0.01 1.00
     |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ "mass" ])
     |> Model.compile
 
-let engine = 
+let engine =
     Bristlecone.mkContinuous
     |> Bristlecone.withCustomOptimisation (Optimisation.Amoeba.swarm 5 20 Optimisation.Amoeba.Solver.Default)
 

@@ -29,8 +29,8 @@ smaller models may be composed into larger systems of models.
 To get started, open the Bristlecone libraries.
 *)
 
-open Bristlecone            // Opens Bristlecone core library and estimation engine
-open Bristlecone.Language   // Open the language for writing Bristlecone models
+open Bristlecone // Opens Bristlecone core library and estimation engine
+open Bristlecone.Language // Open the language for writing Bristlecone models
 
 (**
 
@@ -48,8 +48,8 @@ the definition takes some additional model components as function parameters. Fo
 take the following model:
 *)
 
-let someModel someFn = 
-  Parameter "K" + someFn This - Environment "T" * Parameter "J"
+let someModel someFn =
+    Parameter "K" + someFn This - Environment "T" * Parameter "J"
 
 (**
 In the above expression, `someFn` is a function of signature `ModelExpression -> ModelExpression`.
@@ -62,11 +62,11 @@ apply a simple model of non-linear plant growth. To do this, we
 first define a base model as a `ModelSystem` that takes a number of interchangable components:
 *)
 
-let baseModel growthLimit lossRate  = 
-  Model.empty
-  |> Model.addEquation "m" (Parameter "r" * (growthLimit This) - lossRate This)
-  |> Model.estimateParameter "r" noConstraints 0.01 1.00
-  |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ "x" ])
+let baseModel growthLimit lossRate =
+    Model.empty
+    |> Model.addEquation "m" (Parameter "r" * (growthLimit This) - lossRate This)
+    |> Model.estimateParameter "r" noConstraints 0.01 1.00
+    |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ "x" ])
 
 (** 
 Importantly, unlike when normally building models, we do not call `Model.compile` at the end.
@@ -77,19 +77,20 @@ These are made using the `modelComponent` and `subComponent` functions as follow
 *)
 
 let growthLimit =
-  modelComponent "Limitation to growth" [
-    
-    subComponent "Linear" (fun _ -> Constant 1.)
-    
-    subComponent "Monomolecular" (fun m -> Parameter "K" - m)
-    |> estimateParameter "K" notNegative 10.0 50.0
-    
-    subComponent "Gompertz" (fun m -> m * log (Parameter "K" / m) )
-    |> estimateParameter "K" notNegative 10.0 50.0
+    modelComponent
+        "Limitation to growth"
+        [
 
-    subComponent "Logisitc (three parameter)" (fun m -> m * (Constant 1. - (m / Parameter "K")) )
-    |> estimateParameter "K" notNegative 10.0 50.0
-  ]
+          subComponent "Linear" (fun _ -> Constant 1.)
+
+          subComponent "Monomolecular" (fun m -> Parameter "K" - m)
+          |> estimateParameter "K" notNegative 10.0 50.0
+
+          subComponent "Gompertz" (fun m -> m * log (Parameter "K" / m))
+          |> estimateParameter "K" notNegative 10.0 50.0
+
+          subComponent "Logisitc (three parameter)" (fun m -> m * (Constant 1. - (m / Parameter "K")))
+          |> estimateParameter "K" notNegative 10.0 50.0 ]
 
 (**
 If a component requires additional parameters over the base model, these may be added by piping into
@@ -99,13 +100,14 @@ We can similarly define the other required component for the base model - the lo
 *)
 
 let lossRate =
-  modelComponent "Biomass loss rate" [
-    
-    subComponent "None" (fun _ -> Constant 0.)
-    
-    subComponent "Density-dependent" (fun m -> m * Parameter "alpha")
-    |> estimateParameter "alpha" notNegative 0.001 0.10
-  ]
+    modelComponent
+        "Biomass loss rate"
+        [
+
+          subComponent "None" (fun _ -> Constant 0.)
+
+          subComponent "Density-dependent" (fun m -> m * Parameter "alpha")
+          |> estimateParameter "alpha" notNegative 0.001 0.10 ]
 
 (**
 Once the components are set up, we can compile the nested model by making all possible
@@ -114,10 +116,10 @@ compile a list of model hypotheses for us to test.
 *)
 
 let hypotheses =
-  baseModel
-  |> Hypotheses.createFromComponent growthLimit
-  |> Hypotheses.useAnother lossRate
-  |> Hypotheses.compile
+    baseModel
+    |> Hypotheses.createFromComponent growthLimit
+    |> Hypotheses.useAnother lossRate
+    |> Hypotheses.compile
 
 (**
 The resultant constructed hypotheses are shown in the following printout:

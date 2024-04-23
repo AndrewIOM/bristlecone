@@ -52,7 +52,7 @@ To calculate whether there is total sun or darkness, or partial light, at any
 location on any day of the year, we can use the `Sunrise.calculate` function.
 *)
 
-open Bristlecone.Dendro 
+open Bristlecone.Dendro
 
 let latitude = 54.2
 let longitude = -4.2
@@ -66,4 +66,3 @@ As an illustration, if we looked at Tromsø in January we would see far less ava
 
 Sunrise.calculate 2024 01 10 69.64961 18.95702 "Europe/London"
 (*** include-it ***)
-

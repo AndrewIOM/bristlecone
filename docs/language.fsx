@@ -32,8 +32,8 @@ namespace:
 
 *)
 
-open Bristlecone            // Opens Bristlecone core library and estimation engine
-open Bristlecone.Language   // Open the language for writing Bristlecone models
+open Bristlecone // Opens Bristlecone core library and estimation engine
+open Bristlecone.Language // Open the language for writing Bristlecone models
 
 (**
 
@@ -96,9 +96,10 @@ Please see the below example:
 
 let linear =
     Conditional(fun compute ->
-        if compute (Parameter "a" * Constant 5.) < 1e-12 
-        then Invalid 
-        else Parameter "a" * This)
+        if compute (Parameter "a" * Constant 5.) < 1e-12 then
+            Invalid
+        else
+            Parameter "a" * This)
 
 (**
 In this example, the function is limited such that
@@ -128,8 +129,7 @@ to simplify this process within the `Arbitrary` module:
 /// x: population size
 /// t: current time
 /// z: some environmental value
-let someArbitraryFn x t z =
-    x + t * 1.0 - z
+let someArbitraryFn x t z = x + t * 1.0 - z
 
 // TODO Insert example here
 

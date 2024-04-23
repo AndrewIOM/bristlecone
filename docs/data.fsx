@@ -46,8 +46,7 @@ let thinTraceBy = Some 1000 // Only trace every n iterations to save disk space
 let subject = "Mosquito population" // The name of the 'subject' of analysis
 let modelName = "Logistic growth"
 
-fun result ->
-    EstimationResult.saveAll resultsDirectory subject modelName thinTraceBy result
+fun result -> EstimationResult.saveAll resultsDirectory subject modelName thinTraceBy result
 
 (**
 This save function outputs three files: one each for the maximum likelihood estimate,
@@ -85,7 +84,7 @@ fun modelResults ->
     |> ModelSelection.Akaike.akaikeWeights
     |> Bristlecone.Data.ModelSelection.save "/some/dir"
 
-fun (hypothesisResults: ModelSelection.ResultSet.ResultSet<'a,Hypotheses.Hypothesis> seq) ->
+fun (hypothesisResults: ModelSelection.ResultSet.ResultSet<'a, Hypotheses.Hypothesis> seq) ->
     hypothesisResults
     |> ModelSelection.Akaike.akaikeWeightsForSet (fun h -> h.ReferenceCode)
     |> Bristlecone.Data.ModelSelection.save
@@ -102,7 +101,7 @@ the per-parameter R-hat values based on the optimisation trace.
 fun resultSet ->
     resultSet
     |> Bristlecone.Diagnostics.Convergence.gelmanRubin 10000 "some subject" "some hypothesis"
-    |> Option.iter(Bristlecone.Data.Convergence.save "/some/dir")
+    |> Option.iter (Bristlecone.Data.Convergence.save "/some/dir")
 
 (**
 #### Summarise Root Mean Squared Error for many hypotheses / subjects
@@ -112,5 +111,4 @@ and similar functions, you can save the resultant RMSE statistic (an indication
 of model performance) in a summary table across all hypotheses and subjects:
 *)
 
-fun nStepFits ->
-    Bristlecone.Data.NStepAhead.saveAllRMSE "/some/dir" nStepFits
+fun nStepFits -> Bristlecone.Data.NStepAhead.saveAllRMSE "/some/dir" nStepFits

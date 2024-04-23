@@ -49,7 +49,7 @@ let saveDirectory = "/some/save/dir"
 
 fun listOfResults ->
 
-    // Calculate Gelman-Rubin statistic for all parameters 
+    // Calculate Gelman-Rubin statistic for all parameters
     // across multiple model runs
     let stat = Convergence.gelmanRubinAll 1000 listOfResults
 
@@ -78,12 +78,12 @@ of the `IComponentLogger<float>)` type:
 
 // let hypothesis (cLog:IComponentLogger<ModelExpression>) =
 
-//     let ``dN/dt`` = 
+//     let ``dN/dt`` =
 //         Parameter "r" * This * cLog.StoreValue "log this thing" (Constant 1. - (This / Parameter "K"))
 
 //     Model.empty
 //     |> Model.addEquation       "N"      ``dN/dt``
-//     |> Model.estimateParameter "r"      noConstraints 0.10 5.00 
+//     |> Model.estimateParameter "r"      noConstraints 0.10 5.00
 //     |> Model.estimateParameter "K"      noConstraints 50.0 150.
 //     |> Model.useLikelihoodFunction      (ModelLibrary.Likelihood.sumOfSquares [ "N" ])
 //     |> Model.compile

@@ -43,12 +43,9 @@ open Bristlecone
 
 fun results ->
 
-    let weights =
-        results
-        |> ModelSelection.Akaike.akaikeWeights
+    let weights = results |> ModelSelection.Akaike.akaikeWeights
 
     let resultsDirectory = "some/results/directory/"
 
     // Save the weights into a csv file
-    weights
-    |> Bristlecone.Data.ModelSelection.save resultsDirectory
+    weights |> Bristlecone.Data.ModelSelection.save resultsDirectory
