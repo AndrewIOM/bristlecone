@@ -51,7 +51,8 @@ fun listOfResults ->
 
     // Calculate Gelman-Rubin statistic for all parameters
     // across multiple model runs
-    let stat = Convergence.gelmanRubinAll 1000 listOfResults
+    let stat =
+        Convergence.gelmanRubinAll 1000 (fun _ -> "some subject") (fun _ -> "some hypothesis") listOfResults
 
     // Save results to a single file
     Convergence.save saveDirectory stat
@@ -69,7 +70,8 @@ obtain computed values across the time-series for components within
 a model system. First, you must set up a model that has a parameter
 of the `IComponentLogger<float>)` type:
 
-[ NB TODO: This function must be refactored to work with the new Bristlecone Language ]
+[ NB TODO: This function must be refactored to work with the new v2 Bristlecone Language,
+  and as such is currently disabled. ]
 *)
 
 // open Bristlecone

@@ -79,15 +79,17 @@ For model selection, you may calculate Akaike weights either from a sequence of 
 or from a sequence of `ResultSet` (for working with many hypotheses):
 *)
 
-fun modelResults ->
+fun modelResults subjectIds hypothesisIds ->
     modelResults
     |> ModelSelection.Akaike.akaikeWeights
+    |> Seq.zip3 subjectIds hypothesisIds
+    |> Seq.map (fun (s, h, (a, b)) -> (s, h, a, b))
     |> Bristlecone.Data.ModelSelection.save "/some/dir"
 
-fun (hypothesisResults: ModelSelection.ResultSet.ResultSet<'a, Hypotheses.Hypothesis> seq) ->
+fun (hypothesisResults: ModelSelection.ResultSet.ResultSet<string, Hypotheses.Hypothesis> seq) ->
     hypothesisResults
     |> ModelSelection.Akaike.akaikeWeightsForSet (fun h -> h.ReferenceCode)
-    |> Bristlecone.Data.ModelSelection.save
+    |> Bristlecone.Data.ModelSelection.save "/some/dir"
 
 (**
 #### Convergence of Monte-Carlo based optimisation approaches
