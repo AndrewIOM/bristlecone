@@ -40,7 +40,7 @@ let projectDescription =
   but can be used for any ecological models."""
 
 let authors = "Andrew Martin"
-let companyName = ""
+let companyName = "University of Oxford; University of Cambridge"
 let tags = "modelling time-series F# fsharp R data-science ecology model-fitting"
 let license = "MIT"
 let iconUrl = ""
