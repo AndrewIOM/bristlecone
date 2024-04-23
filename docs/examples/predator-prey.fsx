@@ -2,7 +2,7 @@
 ---
 title: Predator-Prey Dynamics
 category: Examples
-categoryindex: 1
+categoryindex: 3
 index: 1
 ---
 
@@ -55,25 +55,23 @@ in lynx data, the variability in hare data, and their covariance.
 let ``predator-prey`` =
 
     let ``dh/dt`` = Parameter "α" * This - Parameter "β" * This * Environment "lynx"
-    let ``dl/dt`` = - Parameter "γ" * This + Parameter "Δ" * Environment "hare" * This
+    let ``dl/dt`` = - Parameter "δ" * This + Parameter "γ" * Environment "hare" * This
 
     Model.empty
     |> Model.addEquation       "hare"   ``dh/dt``
     |> Model.addEquation       "lynx"   ``dl/dt``
 
-    |> Model.estimateParameter "α"      noConstraints 0.01 1.00    // Natural growth rate of hares in absence of predation
-    |> Model.estimateParameter "β"      noConstraints 0.01 1.00    // Death rate per encounter of hares due to predation
-    |> Model.estimateParameter "Δ"      noConstraints 0.01 0.20    // Efficiency of turning predated hares into lynx
-    |> Model.estimateParameter "γ"      noConstraints 0.01 0.20    // Natural death rate of lynx in the absence of food
+    |> Model.estimateParameter "α"      noConstraints 0.75 1.25    // Natural growth rate of hares in absence of predation
+    |> Model.estimateParameter "β"      noConstraints 0.01 0.20    // Death rate per encounter of hares due to predation
+    |> Model.estimateParameter "δ"      noConstraints 0.75 1.25    // Natural death rate of lynx in the absence of food
+    |> Model.estimateParameter "γ"      noConstraints 0.01 0.20    // Efficiency of turning predated hares into lynx
 
-    |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares ["hare"; "lynx"])
+    |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.bivariateGaussian "hare" "lynx")
     |> Model.estimateParameter  "ρ"     noConstraints -0.500 0.500
     |> Model.estimateParameter  "σ[x]"  notNegative 0.001 0.100
     |> Model.estimateParameter  "σ[y]"  notNegative 0.001 0.100
 
     |> Model.compile
-
-    // TODO Error when setting constraints. Optim allows them to go negative!
 
 (**
 ### Setting up the *Bristlecone Engine*
@@ -86,7 +84,8 @@ Runge-Kutta 4 integration method provided by MathNet Numerics.
 
 let engine = 
     Bristlecone.mkContinuous
-    |> Bristlecone.withTunedMCMC []
+    // |> Bristlecone.withCustomOptimisation (Optimisation.Amoeba.swarm 5 20 Optimisation.Amoeba.Solver.Default)
+    |> Bristlecone.withCustomOptimisation (Optimisation.MonteCarlo.Filzbach.filzbach { Optimisation.MonteCarlo.Filzbach.FilzbachSettings<float>.Default with BurnLength = Optimisation.EndConditions.afterIteration 10000 } )
     |> Bristlecone.withContinuousTime Integration.MathNet.integrate
     |> Bristlecone.withConditioning Conditioning.RepeatFirstDataPoint
     |> Bristlecone.withSeed 1000 // We are setting a seed for this example - see below
@@ -121,10 +120,12 @@ let testSettings =
     |> Test.addNoise (Test.Noise.tryAddNormal "σ[y]" "lynx")
     |> Test.addNoise (Test.Noise.tryAddNormal "σ[x]" "hare")
     |> Test.addGenerationRules [
-        Test.GenerationRules.alwaysLessThan 10000. "lynx"
-        Test.GenerationRules.alwaysLessThan 10000. "hare" ]
+        Test.GenerationRules.alwaysLessThan 100000. "lynx"
+        Test.GenerationRules.alwaysMoreThan 10. "lynx"
+        Test.GenerationRules.alwaysLessThan 100000. "hare"
+        Test.GenerationRules.alwaysMoreThan 10. "hare" ]
     |> Test.withTimeSeriesLength 30
-    |> Test.endWhen (Optimisation.EndConditions.afterIteration 1)
+    |> Test.endWhen (Optimisation.EndConditions.afterIteration 100)
 
 (**
 In our `TestSettings`, we have specified the initial time point (t = 0)
@@ -137,7 +138,7 @@ With these test settings, we can now run the test.
 
 let testResult =
     ``predator-prey`` 
-    |> Bristlecone.testModel engine testSettings
+    |> Bristlecone.tryTestModel engine testSettings
 (*** include-output ***)
 
 (**
@@ -235,7 +236,7 @@ let endCondition = Optimisation.EndConditions.afterIteration 10000
 
 let result = 
     ``predator-prey`` 
-    |> Bristlecone.fit engine endCondition data
+    |> Bristlecone.tryFit engine endCondition data
 
 (*** include-value: result ***)
 

@@ -5,6 +5,9 @@ category: Techniques
 categoryindex: 2
 index: 4
 ---
+
+[![Script]({{root}}/img/badge-script.svg)]({{root}}/{{fsdocs-source-basename}}.fsx)&emsp;
+[![Notebook]({{root}}/img/badge-notebook.svg)]({{root}}/{{fsdocs-source-basename}}.ipynb)
 *)
 
 (*** condition: prepare ***)
@@ -116,17 +119,17 @@ the orchestration agent:
 
 let orchestrator = Orchestration.OrchestrationAgent(logger, System.Environment.ProcessorCount, false)
 
-// fun datasets hypotheses engine ->
+fun datasets hypotheses engine ->
 
-//     // Orchestrate the analyses
-//     let work = workPackages datasets hypotheses engine
-//     let run() = 
-//         work 
-//         |> Seq.iter (
-//             Orchestration.OrchestrationMessage.StartWorkPackage 
-//             >> orchestrator.Post)
+    // Orchestrate the analyses
+    let work = workPackages datasets hypotheses engine
+    let run() = 
+        work 
+        |> Seq.iter (
+            Orchestration.OrchestrationMessage.StartWorkPackage 
+            >> orchestrator.Post)
 
-//     run()
+    run()
 
 (**
 If the above code is supplied with datasets, hypotheses, and an

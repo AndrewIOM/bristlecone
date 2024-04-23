@@ -5,6 +5,9 @@ category: Techniques
 categoryindex: 1
 index: 3
 ---
+
+[![Script]({{root}}/img/badge-script.svg)]({{root}}/{{fsdocs-source-basename}}.fsx)&emsp;
+[![Notebook]({{root}}/img/badge-notebook.svg)]({{root}}/{{fsdocs-source-basename}}.ipynb)
 *)
 
 (*** condition: prepare ***)
@@ -40,12 +43,12 @@ open Bristlecone
 
 fun results ->
 
-    let resultsDirectory = "some/results/directory/"
-
     let weights =
         results
-        |> ModelSelection.weights
+        |> ModelSelection.Akaike.akaikeWeights
+
+    let resultsDirectory = "some/results/directory/"
 
     // Save the weights into a csv file
     weights
-    |> Data.ModelSelection.save resultsDirectory
+    |> Bristlecone.Data.ModelSelection.save resultsDirectory
