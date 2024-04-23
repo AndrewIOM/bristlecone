@@ -10,8 +10,7 @@ let expectSameFloat a b message =
     Expect.isTrue (LanguagePrimitives.GenericEqualityER a b) message
 
 let expectSameFloatList a b message =
-    Seq.zip a b
-    |> Seq.iter(fun (a,b) -> expectSameFloat a b message)
+    Seq.zip a b |> Seq.iter (fun (a, b) -> expectSameFloat a b message)
 
 
 
@@ -51,47 +50,56 @@ module ``Objective creation`` =
             "Objective"
             [
 
-            // testProperty "Time-series are paired to correct years" <| fun x ->
-            //     false
+              // testProperty "Time-series are paired to correct years" <| fun x ->
+              //     false
 
-            // testProperty "Throws when time-series are not the same length" <| fun x ->
-            //     false
+              // testProperty "Throws when time-series are not the same length" <| fun x ->
+              //     false
 
-            testPropertyWithConfig Config.config "Likelihood functions use 'real' parameter values"
-                <| fun shouldTransform (data: float list) (b1: NormalFloat) (b2: NormalFloat) ->
-                    
-                    // Returns the parameter value
-                    let fakeLikelihood : Bristlecone.ModelSystem.LikelihoodFn =
-                        fun paramAccessor data ->
-                            paramAccessor.Get "a"
+              testPropertyWithConfig Config.config "Likelihood functions use 'real' parameter values"
+              <| fun shouldTransform (data: float list) (b1: NormalFloat) (b2: NormalFloat) ->
 
-                    if b1.Get = b2.Get || b1.Get = 0. || b2.Get = 0.
-                    then ()
-                    else 
-                        let b1 = if b1.Get < 0. then b1.Get * -1. else b1.Get
-                        let b2 = if b2.Get < 0. then b2.Get * -1. else b2.Get
+                  // Returns the parameter value
+                  let fakeLikelihood: Bristlecone.ModelSystem.LikelihoodFn =
+                      fun paramAccessor data -> paramAccessor.Get "a"
 
-                        let mode =
-                            if shouldTransform then Language.notNegative
-                            else Language.noConstraints
+                  if b1.Get = b2.Get || b1.Get = 0. || b2.Get = 0. then
+                      ()
+                  else
+                      let b1 = if b1.Get < 0. then b1.Get * -1. else b1.Get
+                      let b2 = if b2.Get < 0. then b2.Get * -1. else b2.Get
 
-                        let model =
-                            Language.Model.empty
-                            |> Language.Model.addEquation "x" (Language.Parameter "a")
-                            |> Language.Model.estimateParameter "a" mode (min b1 b2) (max b1 b2)
-                            |> Language.Model.useLikelihoodFunction fakeLikelihood
-                            |> Language.Model.compile
+                      let mode =
+                          if shouldTransform then
+                              Language.notNegative
+                          else
+                              Language.noConstraints
 
-                        let testObjective =
-                            Objective.create model (fun _ -> Map.empty) (fun _ _ _ -> [| 2.0 |]) ([ (ShortCode.create "x").Value, data |> List.toArray ] |> Map.ofList)
+                      let model =
+                          Language.Model.empty
+                          |> Language.Model.addEquation "x" (Language.Parameter "a")
+                          |> Language.Model.estimateParameter "a" mode (min b1 b2) (max b1 b2)
+                          |> Language.Model.useLikelihoodFunction fakeLikelihood
+                          |> Language.Model.compile
 
-                        Expect.floatClose
-                            Accuracy.high
-                            (testObjective [| (if shouldTransform then Parameter.transformOut mode b1 else b1) |])
-                            b1
-                            "The likelihood function did not retrieve the 'real' parameter value"
+                      let testObjective =
+                          Objective.create
+                              model
+                              (fun _ -> Map.empty)
+                              (fun _ _ _ -> [| 2.0 |])
+                              ([ (ShortCode.create "x").Value, data |> List.toArray ] |> Map.ofList)
 
-            ]
+                      Expect.floatClose
+                          Accuracy.high
+                          (testObjective
+                              [| (if shouldTransform then
+                                      Parameter.transformOut mode b1
+                                  else
+                                      b1) |])
+                          b1
+                          "The likelihood function did not retrieve the 'real' parameter value"
+
+              ]
 
 module ``Fit`` =
 
@@ -101,18 +109,22 @@ module ``Fit`` =
             "Conditioning"
             [
 
-                testPropertyWithConfig Config.config "Repeating first data point sets t0 as t1"
-                <| fun time resolution (data: float list) ->
-                    if data.IsEmpty || data.Length = 1 then ()
-                    else
-                        let data =
-                            [ (Language.code "x").Value,
-                                Time.TimeSeries.fromSeq time (Time.FixedTemporalResolution.Years resolution) data ]
-                            |> Map.ofList
+              testPropertyWithConfig Config.config "Repeating first data point sets t0 as t1"
+              <| fun time resolution (data: float list) ->
+                  if data.IsEmpty || data.Length = 1 then
+                      ()
+                  else
+                      let data =
+                          [ (Language.code "x").Value,
+                            Time.TimeSeries.fromSeq time (Time.FixedTemporalResolution.Years resolution) data ]
+                          |> Map.ofList
 
-                        let result = Bristlecone.Fit.t0 data Conditioning.RepeatFirstDataPoint ignore
-                        expectSameFloatList
-                            (result) (data |> Map.map (fun k v -> v.Values |> Seq.head)) "t0 did not equal t1"
+                      let result = Bristlecone.Fit.t0 data Conditioning.RepeatFirstDataPoint ignore
+
+                      expectSameFloatList
+                          (result)
+                          (data |> Map.map (fun k v -> v.Values |> Seq.head))
+                          "t0 did not equal t1"
 
               // testProperty "t0 is set as a custom point when specified" <| fun () ->
               //     false
@@ -130,23 +142,29 @@ module ``Fit`` =
 
                     testPropertyWithConfig Config.config "Core fitting functions are reproducible"
                     <| fun b1 b2 seedNumber (obs: float list) startDate months ->
-                        if System.Double.IsNaN b1 || b1 = infinity || b1 = -infinity ||
-                            System.Double.IsNaN b2 || b2 = infinity || b2 = -infinity
-                        then ()
+                        if
+                            System.Double.IsNaN b1
+                            || b1 = infinity
+                            || b1 = -infinity
+                            || System.Double.IsNaN b2
+                            || b2 = infinity
+                            || b2 = -infinity
+                        then
+                            ()
                         else
                             let data: CodedMap<Time.TimeSeries.TimeSeries<float>> =
                                 [ (Language.code "x").Value,
-                                Time.TimeSeries.fromSeq startDate (Time.FixedTemporalResolution.Months months) obs ]
+                                  Time.TimeSeries.fromSeq startDate (Time.FixedTemporalResolution.Months months) obs ]
                                 |> Map.ofList
 
                             let result =
                                 Expect.wantOk
-                                    (Bristlecone.fit defaultEngine defaultEndCon data (TestModels.constant b1 b2))
+                                    (Bristlecone.tryFit defaultEngine defaultEndCon data (TestModels.constant b1 b2))
                                     "Fitting did not happen successfully."
 
                             let result2 =
                                 Expect.wantOk
-                                    (Bristlecone.fit
+                                    (Bristlecone.tryFit
                                         { defaultEngine with
                                             Random = MathNet.Numerics.Random.MersenneTwister(seedNumber, true) }
                                         defaultEndCon
@@ -155,9 +173,21 @@ module ``Fit`` =
                                     ""
 
                             expectSameFloat result.Likelihood result2.Likelihood "Different likelihoods"
-                            expectSameFloat result.InternalDynamics result.InternalDynamics "Different internal dynamics"
+
+                            expectSameFloat
+                                result.InternalDynamics
+                                result.InternalDynamics
+                                "Different internal dynamics"
+
                             expectSameFloat result.Parameters result2.Parameters "Different parameters"
-                            expectSameFloatList (result.Series |> Seq.collect(fun kv -> kv.Value.Values |> Seq.map(fun v -> v.Fit))) (result2.Series |> Seq.collect(fun kv -> kv.Value.Values |> Seq.map(fun v -> v.Fit))) "Different expected series"
+
+                            expectSameFloatList
+                                (result.Series
+                                 |> Seq.collect (fun kv -> kv.Value.Values |> Seq.map (fun v -> v.Fit)))
+                                (result2.Series
+                                 |> Seq.collect (fun kv -> kv.Value.Values |> Seq.map (fun v -> v.Fit)))
+                                "Different expected series"
+
                             expectSameFloat result.Trace result2.Trace "Different traces"
 
                     // testProperty "Time-series relating to model equations must overlap"
@@ -188,13 +218,18 @@ module ``Fit`` =
                   "Setting up parameter constraints"
                   [
 
-                    testPropertyWithConfig Config.config "Positive only parameter is transformed when optimising in transformed space"
+                    testPropertyWithConfig
+                        Config.config
+                        "Positive only parameter is transformed when optimising in transformed space"
                     <| fun (data: float list) startDate months (b1: NormalFloat) (b2: NormalFloat) ->
-                        let testModel b1 b2 = TestModels.twoEquationConstant Language.notNegative b1 b2
-                        if b1.Get = b2.Get || b1.Get = 0. || b2.Get = 0.
-                        then
-                            Expect.throws (fun () -> testModel b1.Get b2.Get |> ignore) "Model compiled despite having no difference between parameter bounds"
-                        else 
+                        let testModel b1 b2 =
+                            TestModels.twoEquationConstant Language.notNegative b1 b2
+
+                        if b1.Get = b2.Get || b1.Get = 0. || b2.Get = 0. then
+                            Expect.throws
+                                (fun () -> testModel b1.Get b2.Get |> ignore)
+                                "Model compiled despite having no difference between parameter bounds"
+                        else
                             let b1 = if b1.Get < 0. then b1.Get * -1. else b1.Get
                             let b2 = if b2.Get < 0. then b2.Get * -1. else b2.Get
                             let mutable inOptimMin = nan
@@ -210,19 +245,21 @@ module ``Fit`` =
                                 { defaultEngine with
                                     OptimiseWith = optimTest }
 
-                            let data = 
+                            let data =
                                 [ (ShortCode.create "x").Value; (ShortCode.create "y").Value ]
-                                |> Seq.map(fun c -> c, Time.TimeSeries.fromSeq startDate (Time.FixedTemporalResolution.Months months) data)
+                                |> Seq.map (fun c ->
+                                    c,
+                                    Time.TimeSeries.fromSeq startDate (Time.FixedTemporalResolution.Months months) data)
                                 |> Map.ofSeq
 
                             let result =
                                 Expect.wantOk
-                                    (Bristlecone.fit engine defaultEndCon data (testModel b1 b2))
+                                    (Bristlecone.tryFit engine defaultEndCon data (testModel b1 b2))
                                     "Errored when should be OK"
 
                             Expect.equal
                                 inOptimMin
-                                (min (log(b1)) (log(b2)))
+                                (min (log (b1)) (log (b2)))
                                 "The lower bound was not transformed inside the optimiser" ]
 
               ]
