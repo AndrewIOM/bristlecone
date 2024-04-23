@@ -134,14 +134,9 @@ module EndConditions =
             else
                 false
 
-
-/// A module containing Monte Carlo Markov Chain (MCMC) methods for optimisation.
-/// An introduction to MCMC approaches is provided by
-/// [Reali, Priami, and Marchetti (2017)](https://doi.org/10.3389/fams.2017.00006)
-module MonteCarlo =
+module Initialise =
 
     open Bristlecone.Statistics.Distributions
-    open MathNet.Numerics.LinearAlgebra
 
     /// Generate a random point from bounds specified as a `Domain`.
     /// A value for each dimension is drawn from a univariate normal distribution, assuming that
@@ -182,6 +177,15 @@ module MonteCarlo =
                     tryGenerateTheta f domain random (n - 1)
                 else
                     Ok t
+
+
+/// A module containing Monte Carlo Markov Chain (MCMC) methods for optimisation.
+/// An introduction to MCMC approaches is provided by
+/// [Reali, Priami, and Marchetti (2017)](https://doi.org/10.3389/fams.2017.00006)
+module MonteCarlo =
+
+    open Bristlecone.Statistics.Distributions
+    open MathNet.Numerics.LinearAlgebra
 
     /// Jump in parameter space while reflecting constraints.
     let constrainJump initial jump (scaleFactor: float) c =
@@ -597,7 +601,7 @@ module MonteCarlo =
         fun random writeOut n domain startPoint f ->
             let initialCovariance = TuningMode.covarianceFromBounds 10000 domain random
 
-            match tryGenerateTheta f domain random 10000 with
+            match Initialise.tryGenerateTheta f domain random 10000 with
             | Ok theta ->
                 writeOut <| GeneralEvent(sprintf "[Optimisation] Initial theta is %A" theta)
 
@@ -633,7 +637,7 @@ module MonteCarlo =
     let ``Adaptive-Metropolis-within Gibbs``: Optimiser<float> =
         InDetachedSpace
         <| fun random writeOut endCon domain startPoint f ->
-            match tryGenerateTheta f domain random 10000 with
+            match Initialise.tryGenerateTheta f domain random 10000 with
             | Ok theta ->
                 writeOut <| GeneralEvent(sprintf "[Optimisation] Initial theta is %A" theta)
                 let sigmas = theta |> Array.map (fun _ -> 0.)
@@ -649,7 +653,7 @@ module MonteCarlo =
     let ``Metropolis-within Gibbs``: Optimiser<float> =
         InDetachedSpace
         <| fun random writeOut endCon domain startPoint (f: Objective<float>) ->
-            let theta = initialise domain random
+            let theta = Initialise.initialise domain random
             let sigmas = theta |> Array.map (fun _ -> 0.)
 
             let _, result, _ =
@@ -665,7 +669,7 @@ module MonteCarlo =
         <| fun random writeOut endCon domain startPoint (f: Objective<float>) ->
 
             // Starting condition
-            let initialTheta = initialise domain random
+            let initialTheta = Initialise.initialise domain random
             let initialSigma = initialTheta |> Array.map (fun _ -> 0.)
 
             let mwg adapt batchSize currentBatch theta sigmas =
@@ -957,7 +961,7 @@ module MonteCarlo =
 
             // 1. Initial conditions
             let draw' = jump random
-            let theta1 = initialise domain random
+            let theta1 = Initialise.initialise domain random
             let l1 = f theta1
 
             // 2. Chain generator
@@ -1116,6 +1120,13 @@ module MonteCarlo =
               MinScaleChange: float
               BurnLength: EndCondition<'a> }
 
+        with 
+            static member Default = { 
+                TuneAfterChanges = 50
+                MaxScaleChange = 100.00
+                MinScaleChange = 0.0010
+                BurnLength = EndConditions.afterIteration 2000 }
+
         let filzbach'
             settings
             (theta: float[])
@@ -1271,7 +1282,7 @@ module MonteCarlo =
 
                     filzbach' settings theta random writeOut endCon domain f
                 | None ->
-                    match tryGenerateTheta f domain random 10000 with
+                    match Initialise.tryGenerateTheta f domain random 10000 with
                     | Ok theta ->
                         writeOut <| GeneralEvent(sprintf "[Optimisation] Initial theta is %A" theta)
                         filzbach' settings theta random writeOut endCon domain f
@@ -1357,28 +1368,30 @@ module Amoeba =
                 else
                     shrink a f s
 
-        let initialize (d: Domain) (rng: System.Random) =
-            [| for (min, max, _) in d -> min + (max - min) * rng.NextDouble() |]
-
-        let solve settings rng writeOut (endWhen: EndCondition<float>) domain startPoint f =
+        let solve settings rng writeOut atEnd domain _ f =
             let dim = Array.length domain
 
             let start =
-                [| for _ in 1 .. settings.Size -> initialize domain rng |]
+                [| for _ in 1 .. settings.Size -> Initialise.tryGenerateTheta f domain rng 1000 |]
+                |> Array.map(fun r ->
+                    match r with
+                    | Ok r -> r
+                    | Error _ -> failwith "Could not generate theta")
                 |> Array.map (evaluate f)
                 |> Array.sortBy fst
 
             let amoeba = { Dim = dim; Solutions = start }
 
-            let rec search i (a: Amoeba) =
-                if i > 0 then
-                    // writeOut <| OptimisationEvent { Iteration = i; Likelihood = a; Theta = thetaAccepted }
-                    search (i - 1) (update a f settings) // TODO unify array vs list
+            let rec search i trace atEnd (a: Amoeba) =
+                if not <| atEnd trace i then
+                    printfn "i %i, val %A" i (trace |> List.tryHead)
+                    // writeOut <| OptimisationEvent { Iteration = i; Likelihood = trace; Theta = thetaAccepted }
+                    search (i + 1) (a.Best :: trace) atEnd (update a f settings)
                 else
                     writeOut <| GeneralEvent(sprintf "Solution: -L = %f" (fst a.Solutions.[0]))
                     a.Solutions |> Array.toList
 
-            search 50000 amoeba
+            search 0 [] atEnd amoeba
 
 
         let rec swarm
@@ -1444,7 +1457,8 @@ module Amoeba =
 
     /// Optimise an objective function using a single downhill Nelder Mead simplex.
     let single settings : Optimiser<float> =
-        InTransformedSpace <| Solver.solve settings
+        InTransformedSpace 
+        <| Solver.solve settings
 
     /// Optimisation heuristic that creates a swarm of amoeba (Nelder-Mead) solvers.
     /// The swarm proceeds for `numberOfLevels` levels, constraining the starting bounds

@@ -71,7 +71,7 @@ module ProfileLikelihood =
 
             // 1. Initial conditions
             let draw' = jump random
-            let theta1 = Bristlecone.Optimisation.MonteCarlo.initialise domain random
+            let theta1 = Bristlecone.Optimisation.Initialise.initialise domain random
             let l1 = f theta1
 
             // 2. Tune individual parameter scales (for many univariate distributions)
