@@ -221,6 +221,7 @@ module Test =
             attempts
             =
             let theta = drawParameterSet engine.Random model.Parameters
+
             match tryGenerateData' engine model settings theta with
             | Ok series ->
                 let rulesPassed =
@@ -230,6 +231,7 @@ module Test =
                         |> Map.tryFindKey (fun k _ -> k.Value = key)
                         |> Option.map (fun k ->
                             Map.find k series |> TimeSeries.toObservations |> Seq.map fst |> ruleFn))
+
                 if
                     (rulesPassed |> List.contains false)
                     || rulesPassed.Length <> settings.GenerationRules.Length

@@ -5,7 +5,7 @@ open Bristlecone.Logging
 /// <namespacedoc>
 ///   <summary>Contains functions for calculating confidence intervals on model fits.</summary>
 /// </namespacedoc>
-/// 
+///
 /// The 95% and 68% confidence interval around a point estimate.
 type ConfidenceInterval =
     { ``95%``: Interval
@@ -39,7 +39,7 @@ module Bounds =
 
 /// <summary>Given a maximum likelihood estimate (MLE), the profile likelihood method
 /// runs a Monte Carlo algorithm that samples around the MLE.</summary>
-/// <remarks>The range for each parameter is discovered at 95% and 68% 
+/// <remarks>The range for each parameter is discovered at 95% and 68%
 /// confidence based on a chi squared distribution.</remarks>
 module ProfileLikelihood =
 

@@ -4,7 +4,7 @@ namespace Bristlecone.ModelLibrary
 ///
 /// <namespacedoc>
 ///   <summary>Pre-built model parts for use in Bristlecone</summary>
-/// </namespacedoc> 
+/// </namespacedoc>
 module Likelihood =
 
     open Bristlecone

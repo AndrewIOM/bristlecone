@@ -48,6 +48,8 @@ module Objective =
             |> predict system integrate solveDiscrete
             |> pairObservationsToExpected observed
             |> system.NegLogLikelihood(
-                    let pool = point |> Parameter.Pool.fromPointInTransformedSpace system.Parameters
-                    ParameterValueAccessor
-                    <| fun name -> Parameter.Pool.tryGetRealValue name pool |> Option.get)
+                let pool = point |> Parameter.Pool.fromPointInTransformedSpace system.Parameters
+
+                ParameterValueAccessor
+                <| fun name -> Parameter.Pool.tryGetRealValue name pool |> Option.get
+            )

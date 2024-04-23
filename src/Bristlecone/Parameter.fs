@@ -22,8 +22,8 @@ module Parameter =
         | PositiveOnly
 
     type Estimation =
-        | NotEstimated of lowStartingBound:float * highStartingBound:float
-        | Estimated of estimate:float
+        | NotEstimated of lowStartingBound: float * highStartingBound: float
+        | Estimated of estimate: float
 
     type Parameter = private Parameter of Constraint * ConstraintMode * Estimation
 
@@ -130,7 +130,7 @@ module Parameter =
         let c, _, estimate = p |> unwrap
 
         match estimate with
-        | NotEstimated (x,y) -> (Parameter(c, Detached, NotEstimated (x,y)), c)
+        | NotEstimated(x, y) -> (Parameter(c, Detached, NotEstimated(x, y)), c)
         | Estimated v -> (Parameter(c, Detached, Estimated v), c)
 
     /// Contains the `ParameterPool` type, which represents the set of parameters
@@ -145,7 +145,7 @@ module Parameter =
         let toList pool = (pool |> unwrap) |> Map.toList
 
         let hasParameter name pool =
-            pool |> unwrap |> Map.tryFindBy(fun k -> k.Value = name)
+            pool |> unwrap |> Map.tryFindBy (fun k -> k.Value = name)
 
         /// Returns Some value if a parameter with the `key`
         /// exists in the Pool. The value returned is transformed
@@ -203,12 +203,11 @@ module Parameter =
             if count pool = (point |> Array.length) then
                 pool
                 |> toList
-                |> List.mapi (fun i (sc, p) -> 
-                    sc, setTransformedValue p point.[i])
+                |> List.mapi (fun i (sc, p) -> sc, setTransformedValue p point.[i])
                 |> List.choose (fun (c, r) ->
                     match r with
                     | Ok x -> Some(c, x)
-                    | Error _ -> 
+                    | Error _ ->
                         printfn "Error in (%A, %A)" c r
                         None)
                 |> fromList

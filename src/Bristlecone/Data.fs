@@ -6,13 +6,13 @@ open FSharp.Data
 
 /// <namespacedoc>
 ///   <summary>
-/// Contains functions that enable loading and saving of core Bristlecone 
+/// Contains functions that enable loading and saving of core Bristlecone
 /// types to file storage. Bristlecone loads and saves CSV data for both
 /// individual model results (MLEs, traces, predicted vs observed series),
 /// and for ensemble-level statistics (model selection / weights).
 /// </summary>
 /// </namespacedoc>
-/// 
+///
 /// <summary>Specifies how file paths are constructed for different data types.</summary>
 module Config =
 
@@ -21,7 +21,7 @@ module Config =
         | Trace
         | Series
         | Intervals
-        | StepAhead of steps:int
+        | StepAhead of steps: int
         | Components
 
     type EnsembleType =
@@ -112,7 +112,10 @@ module Trace =
                 |> Seq.mapi (fun i (name, _) ->
                     (subject, modelId, iterationNumber + 1, result.ResultId, name.Value, likelihood, values.[i])
                     |> BristleconeTrace.Row))
-            |> if (thinBy |> Option.isSome) then Seq.everyNth thinBy.Value else id
+            |> if (thinBy |> Option.isSome) then
+                   Seq.everyNth thinBy.Value
+               else
+                   id
             |> Seq.concat
 
         let toTrace (data: BristleconeTrace) : (float * float[]) list =
@@ -165,7 +168,7 @@ module MLE =
                  v |> Parameter.getTransformedValue)
                 |> IndividualMLE.Row)
 
-        let toResult (modelSystem:ModelSystem) (data: IndividualMLE) =
+        let toResult (modelSystem: ModelSystem) (data: IndividualMLE) =
             if data.Rows |> Seq.isEmpty then
                 Error "An MLE file is corrupt"
             else
@@ -176,6 +179,7 @@ module MLE =
                     |> Seq.choose (fun r ->
                         ShortCode.create r.ParameterCode |> Option.map (fun o -> o, r.ParameterValue))
                     |> Map.ofSeq
+
                 let pool =
                     modelSystem.Parameters
                     |> Parameter.Pool.toList
@@ -227,7 +231,8 @@ module MLE =
     /// <returns>A tuple containing the analysis ID followed by another tuple
     /// that contains the likelihood and theta (parameter set)</returns>
     let loadBest directory subject modelSystem modelId =
-        load directory subject modelSystem modelId |> Seq.minBy(fun (_,(mle,_)) -> mle)
+        load directory subject modelSystem modelId
+        |> Seq.minBy (fun (_, (mle, _)) -> mle)
 
 /// <summary>Functions for loading and saving predicted vs observed time-series for model fits</summary>
 [<RequireQualifiedAccess>]
@@ -300,7 +305,8 @@ module EstimationResult =
     /// when file names and formats are in original Bristlecone format.
     let loadAll directory subject (modelSystem: ModelSystem) modelId =
         let mles =
-            MLE.load directory subject modelSystem modelId |> Seq.map (fun (k, v) -> k.ToString(), v)
+            MLE.load directory subject modelSystem modelId
+            |> Seq.map (fun (k, v) -> k.ToString(), v)
 
         let series =
             Series.load directory subject modelId |> Seq.map (fun (k, v) -> k.ToString(), v)
@@ -389,23 +395,28 @@ module NStepAhead =
     type NStepAhead = CsvProvider<"templates/individual-n-step-ahead.csv">
     type NStepAheadStats = CsvProvider<"templates/ensemble-rmse.csv">
 
-    let internal toCsvRows subjectId hypothesisId analysisId nSteps (result: CodedMap<FitSeries * Statistics.NStepStatistics>) =
+    let internal toCsvRows
+        subjectId
+        hypothesisId
+        analysisId
+        nSteps
+        (result: CodedMap<FitSeries * Statistics.NStepStatistics>)
+        =
         result
         |> Seq.collect (fun r ->
             r.Value
             |> fst
             |> Time.TimeSeries.toObservations
-            |> Seq.map(fun (fit,t) ->
-                NStepAhead.Row(subjectId, hypothesisId, analysisId, t, fit.Obs, nSteps, fit.Fit)
-            )
-        )
-    
-    let internal toStatCsvRows (results: seq<string * string * CodedMap<ModelSystem.FitSeries * Statistics.NStepStatistics>>) =
+            |> Seq.map (fun (fit, t) ->
+                NStepAhead.Row(subjectId, hypothesisId, analysisId, t, fit.Obs, nSteps, fit.Fit)))
+
+    let internal toStatCsvRows
+        (results: seq<string * string * CodedMap<ModelSystem.FitSeries * Statistics.NStepStatistics>>)
+        =
         results
-        |> Seq.collect(fun (s,h,r) ->
+        |> Seq.collect (fun (s, h, r) ->
             r
-            |> Seq.map(fun kv -> NStepAheadStats.Row(s, h, kv.Key.Value, "RMSE", (snd kv.Value).RMSE))
-        )
+            |> Seq.map (fun kv -> NStepAheadStats.Row(s, h, kv.Key.Value, "RMSE", (snd kv.Value).RMSE)))
 
     /// <summary>Save an individual n-step prediction (excluding statistics) for an
     /// individual subject and hypothesis / model.</summary>
@@ -416,8 +427,12 @@ module NStepAhead =
     /// <param name="stepsAhead">The number of time-steps ahead predicted</param>
     /// <param name="result">The n-step prediction from Bristlecone.oneStepAhead or similar</param>
     let save directory subjectId modelId analysisId stepsAhead result =
-        let csv = new NStepAhead(result |> toCsvRows subjectId modelId analysisId stepsAhead)
-        let filePath = Config.filePath directory subjectId modelId analysisId (Config.DataType.StepAhead stepsAhead)
+        let csv =
+            new NStepAhead(result |> toCsvRows subjectId modelId analysisId stepsAhead)
+
+        let filePath =
+            Config.filePath directory subjectId modelId analysisId (Config.DataType.StepAhead stepsAhead)
+
         csv.Save(filePath)
 
     /// <summary>Saves a full ensemble overview of the root mean squared error

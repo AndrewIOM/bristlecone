@@ -28,13 +28,17 @@ module Convergence =
     let gelmanRubin nMostRecent subjectId hypothesisId (result: ResultSet.ResultSet<'subject, 'hypothesis>) =
         printfn "Calculating Rhat for %s (H = %s)" subjectId hypothesisId
 
-        if result.AllResults |> Seq.isEmpty || result.BestResult.IsNone
-        then None
+        if result.AllResults |> Seq.isEmpty || result.BestResult.IsNone then
+            None
         else
             let chains =
                 result.AllResults
                 |> Seq.sortBy (fun x -> x.Likelihood)
-                |> (fun c -> if c |> Seq.length > nMostRecent then c |> Seq.take nMostRecent else c)
+                |> (fun c ->
+                    if c |> Seq.length > nMostRecent then
+                        c |> Seq.take nMostRecent
+                    else
+                        c)
                 |> Seq.map (fun r -> r.Trace |> Seq.map snd)
 
             let minChainLength = chains |> Seq.minBy (fun x -> x |> Seq.length) |> Seq.length
@@ -47,14 +51,14 @@ module Convergence =
                 result.BestResult.Value.Parameters
                 |> Parameter.Pool.toList
                 |> Seq.mapi (fun i (code, p) ->
-                    {   Subject = subjectId
-                        HypothesisId = hypothesisId
-                        Parameter = code
-                        StatisticName = "R-hat"
-                        StatisticValue =
-                            chains'
-                            |> Seq.map (fun c -> c |> Seq.map (fun x -> x.[i]))
-                            |> Statistics.Convergence.GelmanRubin.rHat })
+                    { Subject = subjectId
+                      HypothesisId = hypothesisId
+                      Parameter = code
+                      StatisticName = "R-hat"
+                      StatisticValue =
+                        chains'
+                        |> Seq.map (fun c -> c |> Seq.map (fun x -> x.[i]))
+                        |> Statistics.Convergence.GelmanRubin.rHat })
                 |> Some
 
     /// <summary>Calculate the Gelman-Rubin statistic for each parameter in all of the given
@@ -66,8 +70,8 @@ module Convergence =
     /// <param name="result">A result set (of 1 .. many results) for a particular subject and hypothesis</param>
     /// <returns>If more than one replicate, the R-hat convergence statistic across replicates</returns>
     let gelmanRubinAll nMostRecent subject hypothesis (results: ResultSet.ResultSet<'subject, 'hypothesis> seq) =
-        results |> Seq.choose (fun r -> 
-            gelmanRubin nMostRecent (subject r.Subject) (hypothesis r.Hypothesis) r )
+        results
+        |> Seq.choose (fun r -> gelmanRubin nMostRecent (subject r.Subject) (hypothesis r.Hypothesis) r)
         |> Seq.concat
 
 
@@ -84,7 +88,7 @@ module ModelComponents =
         /// <summary>A component logger can store value for a
         /// component's value at a particular time.</summary>
         type IComponentLogger<'data> =
-            abstract member StoreValue: componentName:string -> time:float -> value:'data -> 'data
+            abstract member StoreValue: componentName: string -> time: float -> value: 'data -> 'data
             abstract member GetAll: unit -> Map<string, Map<float, 'data>>
 
         /// <summary>A component logger stores the value at each time t for each
@@ -145,6 +149,9 @@ module ModelComponents =
                     |> Option.map (fun v -> k, v))
                 |> Parameter.Pool.fromList
 
-            let mleHypothesis = { result.Hypothesis cLog with Parameters = p }
+            let mleHypothesis =
+                { result.Hypothesis cLog with
+                    Parameters = p }
+
             fitFn result.Subject mleHypothesis eng |> ignore
             cLog.GetAll()

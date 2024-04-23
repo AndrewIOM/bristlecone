@@ -151,13 +151,13 @@ module Initialise =
                    (Normal.draw rng (max + (min - max) / 2.) ((min - max) / 6.)) () |]
 
     /// Assesses if theta is valid based on the provided
-    /// constraints. 
+    /// constraints.
     let isInvalidTheta theta constraints =
         Seq.zip theta constraints
-        |> Seq.map(fun (v,c) ->
+        |> Seq.map (fun (v, c) ->
             match c with
             | Bristlecone.Parameter.Constraint.Unconstrained -> true
-            | Bristlecone.Parameter.Constraint.PositiveOnly -> v > 0. )
+            | Bristlecone.Parameter.Constraint.PositiveOnly -> v > 0.)
         |> Seq.contains false
 
     /// Attempts to generate random theta based on starting bounds
@@ -168,15 +168,14 @@ module Initialise =
             Error "Could not generate a starting point given the domain"
         else
             let t = initialise domain random
-            let isInvalid = isInvalidTheta t (domain |> Seq.map (fun (_,_,c) -> c))
+            let isInvalid = isInvalidTheta t (domain |> Seq.map (fun (_, _, c) -> c))
+
             if isInvalid then
                 tryGenerateTheta f domain random (n - 1)
+            else if System.Double.IsNaN(f t) || System.Double.IsInfinity(f t) then
+                tryGenerateTheta f domain random (n - 1)
             else
-                if System.Double.IsNaN(f t) || System.Double.IsInfinity(f t)
-                then
-                    tryGenerateTheta f domain random (n - 1)
-                else
-                    Ok t
+                Ok t
 
 
 /// A module containing Monte Carlo Markov Chain (MCMC) methods for optimisation.
@@ -1120,12 +1119,11 @@ module MonteCarlo =
               MinScaleChange: float
               BurnLength: EndCondition<'a> }
 
-        with 
-            static member Default = { 
-                TuneAfterChanges = 50
-                MaxScaleChange = 100.00
-                MinScaleChange = 0.0010
-                BurnLength = EndConditions.afterIteration 2000 }
+            static member Default =
+                { TuneAfterChanges = 50
+                  MaxScaleChange = 100.00
+                  MinScaleChange = 0.0010
+                  BurnLength = EndConditions.afterIteration 2000 }
 
         let filzbach'
             settings
@@ -1373,7 +1371,7 @@ module Amoeba =
 
             let start =
                 [| for _ in 1 .. settings.Size -> Initialise.tryGenerateTheta f domain rng 1000 |]
-                |> Array.map(fun r ->
+                |> Array.map (fun r ->
                     match r with
                     | Ok r -> r
                     | Error _ -> failwith "Could not generate theta")
@@ -1457,8 +1455,7 @@ module Amoeba =
 
     /// Optimise an objective function using a single downhill Nelder Mead simplex.
     let single settings : Optimiser<float> =
-        InTransformedSpace 
-        <| Solver.solve settings
+        InTransformedSpace <| Solver.solve settings
 
     /// Optimisation heuristic that creates a swarm of amoeba (Nelder-Mead) solvers.
     /// The swarm proceeds for `numberOfLevels` levels, constraining the starting bounds

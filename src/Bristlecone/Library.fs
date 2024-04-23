@@ -6,7 +6,7 @@ open Bristlecone.Logging
 /// <namespacedoc>
 ///   <summary>The core library of Bristlecone, containing model-fitting functions.</summary>
 /// </namespacedoc>
-/// 
+///
 /// Main functionality of Bristlecone, including functions to scaffold
 /// `ModelSystem`s and for model-fitting (tests and real fits).
 [<RequireQualifiedAccess>]
@@ -41,9 +41,11 @@ module Bristlecone =
     /// <returns></returns>
     let withOutput out engine = { engine with LogTo = out }
 
-    /// Use a mersenne twister random number generator 
+    /// Use a mersenne twister random number generator
     /// with a specific seed.
-    let withSeed seed engine = { engine with Random = MathNet.Numerics.Random.MersenneTwister(seed, true) }
+    let withSeed seed engine =
+        { engine with
+            Random = MathNet.Numerics.Random.MersenneTwister(seed, true) }
 
     /// Use a custom integration method
     let withContinuousTime t engine =
@@ -148,17 +150,22 @@ module Bristlecone =
 
         // Check there is time-series data actually included and corresponding to correct equations.
         let hasRequiredData =
-            if timeSeriesData.IsEmpty then Error "No time-series data was specified"
+            if timeSeriesData.IsEmpty then
+                Error "No time-series data was specified"
+            else if Set.isSubset (model.Equations |> Map.keys |> set) (timeSeriesData |> Map.keys |> set) then
+                Ok timeSeriesData
             else
-                if Set.isSubset (model.Equations |> Map.keys |> set) (timeSeriesData |> Map.keys |> set)
-                then Ok timeSeriesData
-                else Error (sprintf "Required time-series data were missing. Need: %A" (model.Equations |> Map.keys |> Seq.map (fun k -> k.Value) |> String.concat " + "))
+                Error(
+                    sprintf
+                        "Required time-series data were missing. Need: %A"
+                        (model.Equations |> Map.keys |> Seq.map (fun k -> k.Value) |> String.concat " + ")
+                )
 
         // B. Create a continuous-time that outputs float[]
         // containing only the values for the dynamic variable resolution.
         let continuousSolver =
             result {
-                
+
                 let! timeSeriesData = hasRequiredData
 
                 // 1. Set time-series into common timeline
@@ -279,15 +286,15 @@ module Bristlecone =
 
     open Test
 
-    /// <summary>Tests that the specified estimation engine can correctly 
-    /// estimate known parameters given specfici test settings. 
+    /// <summary>Tests that the specified estimation engine can correctly
+    /// estimate known parameters given specfici test settings.
     /// Random parameter sets and resultant fake time-series data are generated
     /// for the model system by using the rules and noise generation settings
     /// in the stated test settings.</summary>
     /// <param name="engine"></param>
     /// <param name="settings"></param>
     /// <param name="model"></param>
-    /// <returns>A test result that indicates the error structure. 
+    /// <returns>A test result that indicates the error structure.
     /// It is wrapped in an F# Result, indicating if the procedure
     /// was successful or not.</returns>
     let tryTestModel engine (settings: Test.TestSettings<float>) (model: ModelSystem) =
@@ -353,8 +360,8 @@ module Bristlecone =
                   EstimatedLikelihood = estimated.Likelihood }
         }
 
-    /// <summary>Test that the specified estimation engine can correctly 
-    /// estimate known parameters. Random parameter sets are generated 
+    /// <summary>Test that the specified estimation engine can correctly
+    /// estimate known parameters. Random parameter sets are generated
     /// from the given model system.</summary>
     /// <param name="engine">An estimation engine containing the method used for model-fitting.</param>
     /// <param name="settings">Test settings that define how the test will be conducted.</param>
@@ -370,14 +377,13 @@ module Bristlecone =
     /// <param name="model">A model system / hypothesis to fit</param>
     /// <param name="series">Time-series to fit with model</param>
     /// <returns>A list of estimation results (one for each bootstrap) for further analysis</returns>
-    let bootstrap (engine:EstimationEngine.EstimationEngine<float,float>) endCondition bootstrapCount model series =
+    let bootstrap (engine: EstimationEngine.EstimationEngine<float, float>) endCondition bootstrapCount model series =
         let rec bootstrap s numberOfTimes solutions =
             if (numberOfTimes > 0) then
                 let subset = Bootstrap.removeSingle engine.Random s
                 let result = fit engine endCondition subset model
 
-                engine.LogTo
-                <| GeneralEvent(sprintf "Completed bootstrap %i" numberOfTimes)
+                engine.LogTo <| GeneralEvent(sprintf "Completed bootstrap %i" numberOfTimes)
 
                 bootstrap s (numberOfTimes - 1) (solutions |> List.append [ result ])
             else
@@ -401,8 +407,8 @@ module Bristlecone =
         hypothesis
         (preTransform: CodedMap<TimeSeries<'a>> -> CodedMap<TimeSeries<float>>)
         (timeSeries)
-        (estimatedTheta: Parameter.Pool) : CodedMap<FitSeries * NStepStatistics>
-        =
+        (estimatedTheta: Parameter.Pool)
+        : CodedMap<FitSeries * NStepStatistics> =
         let hypothesisMle: ModelSystem =
             { hypothesis with
                 Parameters = Parameter.Pool.fromEstimated estimatedTheta }
@@ -419,41 +425,41 @@ module Bristlecone =
 
         let data =
             seq { 1..timeParcelCount }
-            |> Seq.map (fun i -> 
-                pairedDataFrames 
-                |> Map.map (fun _ v -> 
-                    v |> Seq.item (i - 1)) |> preTransform)
+            |> Seq.map (fun i -> pairedDataFrames |> Map.map (fun _ v -> v |> Seq.item (i - 1)) |> preTransform)
 
         // It is predicting with a repeated first point:
         // The next point estimate is at t1
         // The next point observation is at t2
         data
         |> Seq.collect (fun d ->
-            let est = 
+            let est =
                 fit
                     (engine
-                    |> withCustomOptimisation Optimisation.None.none
-                    |> withConditioning Conditioning.RepeatFirstDataPoint)
+                     |> withCustomOptimisation Optimisation.None.none
+                     |> withConditioning Conditioning.RepeatFirstDataPoint)
                     (Optimisation.EndConditions.afterIteration 0)
                     d
                     hypothesisMle
 
-            let nextObservation = 
-                d |> Map.map(fun c ts -> 
-                    ts |> TimeSeries.toObservations |> Seq.skip 1 |> Seq.head)
+            let nextObservation =
+                d
+                |> Map.map (fun c ts -> ts |> TimeSeries.toObservations |> Seq.skip 1 |> Seq.head)
 
             let paired =
                 nextObservation
-                |> Seq.map(fun kv ->
+                |> Seq.map (fun kv ->
                     let nextEstimate = (est.Series.[kv.Key].Values |> Seq.head).Fit
-                    (kv.Key, { Obs =  kv.Value |> fst; Fit = nextEstimate }, kv.Value |> snd))
+
+                    (kv.Key,
+                     { Obs = kv.Value |> fst
+                       Fit = nextEstimate },
+                     kv.Value |> snd))
 
             paired)
-        |> Seq.groupBy(fun (k,_,_) -> k)
-        |> Seq.map(fun (tsName,values) ->
-            let sos = values |> Seq.averageBy(fun (_,x,_) -> (x.Obs - x.Fit) ** 2.)
-            tsName, (values |> Seq.map(fun (_,v,t) -> (v,t)) |> TimeSeries.fromObservations, { RMSE = sqrt sos } )
-            )
+        |> Seq.groupBy (fun (k, _, _) -> k)
+        |> Seq.map (fun (tsName, values) ->
+            let sos = values |> Seq.averageBy (fun (_, x, _) -> (x.Obs - x.Fit) ** 2.)
+            tsName, (values |> Seq.map (fun (_, v, t) -> (v, t)) |> TimeSeries.fromObservations, { RMSE = sqrt sos }))
         |> Map.ofSeq
 
 
@@ -467,4 +473,6 @@ module Bristlecone =
         /// <param name="timeSeries">Time-series data to fit with the model</param>
         /// <returns>A list of estimation results</returns>
         let fit engine endCondition model timeSeries =
-            timeSeries |> Array.Parallel.map (fun g -> fit engine endCondition g model) |> Array.toList
+            timeSeries
+            |> Array.Parallel.map (fun g -> fit engine endCondition g model)
+            |> Array.toList

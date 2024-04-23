@@ -89,7 +89,10 @@ module Language =
         | Parameter name ->
             match pool |> Parameter.Pool.tryGetRealValue name with
             | Some est -> est
-            | None -> failwithf "The equation could not be calculated. The parameter '%s' has not been set up (or has yet to be estimated)." name
+            | None ->
+                failwithf
+                    "The equation could not be calculated. The parameter '%s' has not been set up (or has yet to be estimated)."
+                    name
         | Constant n -> n
         | Add list ->
             match list with
@@ -107,7 +110,7 @@ module Language =
         | Logarithm e -> log (compute x t pool environment e)
         | Exponential e -> exp (compute x t pool environment e)
         | Conditional m -> m (compute x t pool environment) |> compute x t pool environment
-        | Label (_,m) -> m |> compute x t pool environment
+        | Label(_, m) -> m |> compute x t pool environment
         | Invalid -> nan
 
 
@@ -160,7 +163,7 @@ module Language =
             | Power(e, _) -> describe e
             | Invalid -> bind ((), "invalid model")
             | Conditional _ -> bind ((), "conditional element") // TODO
-            | Label (_,e) -> describe e
+            | Label(_, e) -> describe e
 
         type Requirement =
             | ParameterRequirement of string
@@ -175,16 +178,12 @@ module Language =
             | Parameter name -> ParameterRequirement name :: reqs
             | Constant _ -> reqs
             | Add list
-            | Multiply list ->
-                list 
-                |> List.collect(fun l -> requirements l reqs)
-                |> List.append reqs
+            | Multiply list -> list |> List.collect (fun l -> requirements l reqs) |> List.append reqs
             | Divide(l, r)
-            | Subtract(l, r) ->
-                [ requirements l reqs; requirements r reqs; reqs ] |> List.concat
+            | Subtract(l, r) -> [ requirements l reqs; requirements r reqs; reqs ] |> List.concat
             | Arbitrary(fn, r) ->
-                r 
-                |> List.map(fun r ->
+                r
+                |> List.map (fun r ->
                     match r with
                     | ArbitraryEnvironment e -> EnvironmentRequirement e
                     | ArbitraryParameter p -> ParameterRequirement p)
@@ -195,7 +194,7 @@ module Language =
             | Exponential e -> requirements e reqs
             | Invalid -> reqs
             | Conditional _ -> reqs
-            | Label (_,e) -> requirements e reqs
+            | Label(_, e) -> requirements e reqs
 
 
     /// Allows common F# functions to use Bristlecone model expressions.
@@ -305,23 +304,25 @@ module Language =
                 |> Seq.choose id
                 |> Map.ofSeq
 
-            if Seq.hasDuplicates (Seq.concat [ Map.keys measures; Map.keys equations ])
-            then failwith "Duplicate keys were used within equation and measures. These must be unique."
+            if Seq.hasDuplicates (Seq.concat [ Map.keys measures; Map.keys equations ]) then
+                failwith "Duplicate keys were used within equation and measures. These must be unique."
 
-            if equations.IsEmpty then failwith "No equations specified. You must state at least one model equation."
+            if equations.IsEmpty then
+                failwith "No equations specified. You must state at least one model equation."
 
-            equations 
+            equations
             |> Map.map (fun _ v -> ExpressionParser.requirements v [])
             |> Map.toList
             |> List.map snd
             |> List.collect id
             |> List.distinct
-            |> List.iter(fun req ->
+            |> List.iter (fun req ->
                 match req with
                 | ExpressionParser.ParameterRequirement p ->
                     match parameters |> Parameter.Pool.hasParameter p with
                     | Some p -> ()
-                    | None -> failwithf "The specified model requires the parameter '%s' but this has not been set up." p
+                    | None ->
+                        failwithf "The specified model requires the parameter '%s' but this has not been set up." p
                 | ExpressionParser.EnvironmentRequirement _ -> ())
 
             { NegLogLikelihood = likelihoods |> Seq.head
@@ -420,13 +421,16 @@ module Language =
 
         /// <summary>A hypothesis consists of a model system and the names of the
         /// swappable components within it, alongside the name of their current implementation.</summary>
-        type Hypothesis = Hypothesis of ModelSystem.ModelSystem * list<ComponentName>
-        with 
-            member private this.unwrap =
-                this |> fun (Hypothesis (h1,h2)) -> (h1,h2)  
+        type Hypothesis =
+            | Hypothesis of ModelSystem.ModelSystem * list<ComponentName>
+
+            member private this.unwrap = this |> fun (Hypothesis(h1, h2)) -> (h1, h2)
+
             /// <summary>Compiles a reference code that may be used to identify (although not necessarily uniquely) this hypothesis</summary>
             /// <returns>A string in the format XX_XXX_YY_YYY... where XX_XXX is a singe component with XX the component and XXX the implementation.</returns>
-            member this.ReferenceCode = this.unwrap |> snd |> List.map(fun c -> c.Reference) |> String.concat "_"
+            member this.ReferenceCode =
+                this.unwrap |> snd |> List.map (fun c -> c.Reference) |> String.concat "_"
+
             member this.Components = this.unwrap |> snd
             member this.Model = this.unwrap |> fst
 
@@ -496,32 +500,34 @@ module Language =
         let compile (builder: Writer<ModelBuilder.ModelBuilder, ComponentName * CodedMap<Parameter.Parameter>> list) =
             if builder |> List.isEmpty then
                 failwith "No hypotheses specified"
+
             builder
             |> List.map (fun h ->
                 let names = run h
+
                 (names |> addParameters |> Model.compile, names |> snd |> List.map fst)
                 |> Hypothesis)
 
 
-        // type Hypotheses<'subject, 'hypothesis> =
-        //     | Hypotheses of Hypothesis<'subject, 'hypothesis> seq
+// type Hypotheses<'subject, 'hypothesis> =
+//     | Hypotheses of Hypothesis<'subject, 'hypothesis> seq
 
-        // let private unwrap (ResultSetMany m) = m
+// let private unwrap (ResultSetMany m) = m
 
-        // let many sets = ResultSetMany sets
+// let many sets = ResultSetMany sets
 
-        // let subject s sets = 
-        //     sets 
-        //     |> unwrap 
-        //     |> Seq.filter(fun s -> s.Subject = s)
+// let subject s sets =
+//     sets
+//     |> unwrap
+//     |> Seq.filter(fun s -> s.Subject = s)
 
-        // /// <summary>Map a function over results on a per-subject and per-hypothesis basis</summary>
-        // /// <param name="fn">A function to map over the subject-hypothesis groups</param>
-        // /// <param name="sets">A result set (many)</param>
-        // /// <returns>A transformed results set</returns>
-        // let map fn (sets:ResultSetMany<'subject, 'hypothesis>) =
-        //     sets
-        //     |> unwrap
-        //     |> Seq.groupBy(fun s -> s.Subject, s.Hypothesis)
-        //     |> Seq.map(fun (s, h) -> fn s h)
-        //     |> ResultSetMany
+// /// <summary>Map a function over results on a per-subject and per-hypothesis basis</summary>
+// /// <param name="fn">A function to map over the subject-hypothesis groups</param>
+// /// <param name="sets">A result set (many)</param>
+// /// <returns>A transformed results set</returns>
+// let map fn (sets:ResultSetMany<'subject, 'hypothesis>) =
+//     sets
+//     |> unwrap
+//     |> Seq.groupBy(fun s -> s.Subject, s.Hypothesis)
+//     |> Seq.map(fun (s, h) -> fn s h)
+//     |> ResultSetMany

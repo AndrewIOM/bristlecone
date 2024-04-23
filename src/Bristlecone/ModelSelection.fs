@@ -10,12 +10,11 @@ open Bristlecone.ModelSystem
 module ResultSet =
 
     /// <summary>A representation of all results for a particular subject and hypothesis</summary>
-    type ResultSet<'subject, 'hypothesis> = {
-        Subject: 'subject
-        Hypothesis: 'hypothesis
-        BestResult: EstimationResult option
-        AllResults: EstimationResult seq
-    }
+    type ResultSet<'subject, 'hypothesis> =
+        { Subject: 'subject
+          Hypothesis: 'hypothesis
+          BestResult: EstimationResult option
+          AllResults: EstimationResult seq }
 
     /// <summary>Arrange estimation results into subject and hypothesis groups.</summary>
     /// <param name="subjects"></param>
@@ -25,36 +24,29 @@ module ResultSet =
     /// <typeparam name="'hypothesis"></typeparam>
     /// <typeparam name="'a">An estimation result</typeparam>
     /// <returns></returns>
-    let arrangeResultSets<'subject,'hypothesis> (subjects: 'subject seq) (hypotheses: 'hypothesis seq) getResults =
+    let arrangeResultSets<'subject, 'hypothesis> (subjects: 'subject seq) (hypotheses: 'hypothesis seq) getResults =
         Seq.allPairs subjects hypotheses
         |> Seq.map (fun (s, h) ->
             let r = getResults s h
 
             if r |> Seq.isEmpty then
-                {
-                    Subject = s
-                    Hypothesis = h
-                    BestResult = None
-                    AllResults = []
-                }
+                { Subject = s
+                  Hypothesis = h
+                  BestResult = None
+                  AllResults = [] }
             else
                 let r' = r |> Seq.filter (fun x -> not (System.Double.IsNaN(x.Likelihood)))
 
                 if Seq.isEmpty r' then
-                    {
-                        Subject = s
-                        Hypothesis = h
-                        BestResult = None
-                        AllResults = []
-                    }
+                    { Subject = s
+                      Hypothesis = h
+                      BestResult = None
+                      AllResults = [] }
                 else
-                    {
-                        Subject = s
-                        Hypothesis = h
-                        BestResult = r' |> Seq.minBy (fun x -> x.Likelihood) |> Some
-                        AllResults = r'
-                    }
-        )
+                    { Subject = s
+                      Hypothesis = h
+                      BestResult = r' |> Seq.minBy (fun x -> x.Likelihood) |> Some
+                      AllResults = r' })
 
 /// <summary>Runs a model comparison statistic across a sequence of
 /// `ResultSet`s. Uses the best MLE for each subject * hypothesis group
@@ -65,9 +57,7 @@ let internal comparisonStatistic comparisonFn getRefCode (results: ResultSet.Res
     |> Seq.groupBy (fun resultSet -> getRefCode resultSet.Hypothesis)
     |> Seq.collect (fun (_, r) ->
         let weights =
-            r
-            |> Seq.choose (fun resultSet -> resultSet.BestResult)
-            |> comparisonFn
+            r |> Seq.choose (fun resultSet -> resultSet.BestResult) |> comparisonFn
 
         r
         |> Seq.zip weights

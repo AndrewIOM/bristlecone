@@ -9,14 +9,14 @@ module Bristlecone =
     /// basic time-series that may be used for model-fitting</summary>
     /// <param name="plant">A plant individual</param>
     /// <returns>A coded map of time-series data for model-fitting</returns>
-    let fromDendro (plant:PlantIndividual.PlantIndividual) =
+    let fromDendro (plant: PlantIndividual.PlantIndividual) =
         let g =
             match plant.Growth |> PlantIndividual.growthSeries with
             | GrowthSeries.Absolute g -> g
             | GrowthSeries.Cumulative g -> g
             | GrowthSeries.Relative g -> g
-        plant.Environment 
-        |> Map.add (ShortCode.create "x" |> Option.get) g
+
+        plant.Environment |> Map.add (ShortCode.create "x" |> Option.get) g
 
     /// <summary>Fit a model to plant growth time-series. The plant individual's growth data is always labelled as `x`.</summary>
     /// <param name="engine">A configured estimation engine</param>

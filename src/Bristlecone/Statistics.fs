@@ -1,9 +1,7 @@
 namespace Bristlecone.Statistics
 
 /// <summary>Statistics returned during n-step ahead analysis</summary>
-type NStepStatistics = {
-    RMSE: float
-}
+type NStepStatistics = { RMSE: float }
 
 module Distributions =
 
