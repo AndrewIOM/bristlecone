@@ -2,6 +2,7 @@ namespace Bristlecone.Dendro
 
 open System
 
+/// <summary>Provides functions for converting to and from dates in the Julian calendar</summary>
 module JulianDate =
 
     let minutesInDay = 24 * 60
@@ -47,12 +48,12 @@ module JulianDate =
         (jDate - (float J2000)) / daysInCentury
 
 
-/// The sunrise equation can be used to calculate the
+/// <summary>The sunrise equation can be used to calculate the
 /// time of sunrise and sunset for any latitude, longitude,
-/// and date.
-/// See: https://en.wikipedia.org/wiki/Sunrise_equation#Complete_calculation_on_Earth
+/// and date.</summary>
+/// <remarks>See: https://en.wikipedia.org/wiki/Sunrise_equation#Complete_calculation_on_Earth
 /// Adapted from the SolarCalc by NOAA.
-/// Source: https://dotnetfiddle.net/N3j5th
+/// Source: https://dotnetfiddle.net/N3j5th</remarks>
 module Sunrise =
 
     type DayLength =
@@ -168,10 +169,16 @@ module Sunrise =
             let sunsetOffset = JulianDate.toDate timeZone gDate sunset
             (sunriseOffset, sunsetOffset) |> PartialLight
 
+    /// <summary>A cache that may be used in model computation where day lengths
+    /// are continually accessed for the same dates over and over again. Stashes
+    /// each calculated day length per latitude/longitude and time.</summary>
     type DayLengthCache(latitude, longitude, timeZone) =
 
         let mutable (lightData: Map<DateTime, DayLength>) = [] |> Map.ofList
 
+        /// <summary>Daylight hours </summary>
+        /// <param name="date"></param>
+        /// <returns></returns>
         member __.GetLight(date) =
             match lightData |> Map.tryFind date with
             | Some l -> l

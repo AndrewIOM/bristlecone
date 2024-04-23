@@ -5,6 +5,9 @@ category: Components
 categoryindex: 4
 index: 1
 ---
+
+[![Script]({{root}}/img/badge-script.svg)]({{root}}/{{fsdocs-source-basename}}.fsx)&emsp;
+[![Notebook]({{root}}/img/badge-notebook.svg)]({{root}}/{{fsdocs-source-basename}}.ipynb)
 *)
 
 (*** condition: prepare ***)
@@ -36,13 +39,12 @@ procedure can be used with Bristlecone by plugging in as follows:
 
 open Bristlecone
 
-let myCustomOptimiser : EstimationEngine.Optimiser<float> =
-    EstimationEngine.InDetachedSpace <|
-    fun writeOut n domain f -> invalidOp "Doesn't actually do anything!"
+let myCustomOptimiser: EstimationEngine.Optimiser<float> =
+    EstimationEngine.InDetachedSpace
+    <| fun writeOut n domain f -> invalidOp "Doesn't actually do anything!"
 
 let engine =
-    Bristlecone.mkContinuous
-    |> Bristlecone.withCustomOptimisation myCustomOptimiser
+    Bristlecone.mkContinuous |> Bristlecone.withCustomOptimisation myCustomOptimiser
 
 (**
 ## Included optimisation methods
@@ -103,8 +105,7 @@ It can be used as follows:
 let settingsNM = Amoeba.Solver.Default
 (*** include-value: settingsNM ***)
 
-let single : EstimationEngine.Optimise<float> = 
-    Amoeba.Solver.solve settingsNM
+let single: EstimationEngine.Optimise<float> = Amoeba.Solver.solve settingsNM
 
 (**
 A single Nelder-Mead solver is highly subject to local minima. To reduce
@@ -179,10 +180,11 @@ tuning.
 
 open Bristlecone.Optimisation.MonteCarlo.Filzbach
 
-let settingsFB = { TuneAfterChanges = 20
-                   MaxScaleChange = 100.
-                   MinScaleChange = 0.01
-                   BurnLength = EndConditions.afterIteration 100000 }
+let settingsFB =
+    { TuneAfterChanges = 20
+      MaxScaleChange = 100.
+      MinScaleChange = 0.01
+      BurnLength = EndConditions.afterIteration 100000 }
 
 filzbach settingsFB
 

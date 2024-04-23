@@ -5,6 +5,9 @@ category: Techniques
 categoryindex: 2
 index: 5
 ---
+
+[![Script]({{root}}/img/badge-script.svg)]({{root}}/{{fsdocs-source-basename}}.fsx)&emsp;
+[![Notebook]({{root}}/img/badge-notebook.svg)]({{root}}/{{fsdocs-source-basename}}.ipynb)
 *)
 
 (*** condition: prepare ***)
@@ -46,9 +49,10 @@ let saveDirectory = "/some/save/dir"
 
 fun listOfResults ->
 
-    // Calculate Gelman-Rubin statistic for all parameters 
+    // Calculate Gelman-Rubin statistic for all parameters
     // across multiple model runs
-    let stat = Convergence.gelmanRubinAll 1000 listOfResults
+    let stat =
+        Convergence.gelmanRubinAll 1000 (fun _ -> "some subject") (fun _ -> "some hypothesis") listOfResults
 
     // Save results to a single file
     Convergence.save saveDirectory stat
@@ -66,7 +70,8 @@ obtain computed values across the time-series for components within
 a model system. First, you must set up a model that has a parameter
 of the `IComponentLogger<float>)` type:
 
-[ NB TODO: This function must be refactored to work with the new Bristlecone Language ]
+[ NB TODO: This function must be refactored to work with the new v2 Bristlecone Language,
+  and as such is currently disabled. ]
 *)
 
 // open Bristlecone
@@ -75,12 +80,12 @@ of the `IComponentLogger<float>)` type:
 
 // let hypothesis (cLog:IComponentLogger<ModelExpression>) =
 
-//     let ``dN/dt`` = 
+//     let ``dN/dt`` =
 //         Parameter "r" * This * cLog.StoreValue "log this thing" (Constant 1. - (This / Parameter "K"))
 
 //     Model.empty
 //     |> Model.addEquation       "N"      ``dN/dt``
-//     |> Model.estimateParameter "r"      noConstraints 0.10 5.00 
+//     |> Model.estimateParameter "r"      noConstraints 0.10 5.00
 //     |> Model.estimateParameter "K"      noConstraints 50.0 150.
 //     |> Model.useLikelihoodFunction      (ModelLibrary.Likelihood.sumOfSquares [ "N" ])
 //     |> Model.compile

@@ -304,6 +304,10 @@ module Result =
         | Ok x -> Some x
         | Error _ -> None
 
+    let forceOk r =
+        match r with
+        | Ok x -> x
+        | Error e -> failwithf "Error occurred: %s" e
 
 [<AutoOpen>]
 module ListExtensions =

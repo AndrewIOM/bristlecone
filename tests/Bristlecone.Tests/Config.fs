@@ -53,7 +53,7 @@ type BristleconeTypesGen() =
         }
         |> Arb.fromGen
 
-    static member CodedMap<'snd> () =
+    static member CodedMap<'snd>() =
         gen {
             let! n = Gen.choose (1, 100)
             let! codes = Gen.listOfLength n Arb.generate<ShortCode.ShortCode>

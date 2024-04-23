@@ -5,6 +5,9 @@ category: The Bristlecone Language
 categoryindex: 1
 index: 2
 ---
+
+[![Script]({{root}}/img/badge-script.svg)]({{root}}/{{fsdocs-source-basename}}.fsx)&emsp;
+[![Notebook]({{root}}/img/badge-notebook.svg)]({{root}}/{{fsdocs-source-basename}}.ipynb)
 *)
 
 (*** condition: prepare ***)
@@ -36,8 +39,8 @@ A `ModelSystem` is defined by:
 To build a `ModelSystem`, first open the Bristlecone language:
 *)
 
-open Bristlecone            // Opens Bristlecone core library and estimation engine
-open Bristlecone.Language   // Open the language for writing Bristlecone models
+open Bristlecone // Opens Bristlecone core library and estimation engine
+open Bristlecone.Language // Open the language for writing Bristlecone models
 
 (**
 Second, define the parts of your hypothesis. In this example,
@@ -72,10 +75,10 @@ The `ModelSystem` can be created with forward pipes (`|>`) as follows:
 
 let hypothesis =
     Model.empty
-    |> Model.addEquation       "N"      ``dN/dt``
-    |> Model.estimateParameter "r"      noConstraints 0.10 5.00 
-    |> Model.estimateParameter "K"      noConstraints 50.0 150.
-    |> Model.useLikelihoodFunction      (ModelLibrary.Likelihood.sumOfSquares [ "N" ])
+    |> Model.addEquation "N" ``dN/dt``
+    |> Model.estimateParameter "r" noConstraints 0.10 5.00
+    |> Model.estimateParameter "K" noConstraints 50.0 150.
+    |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ "N" ])
     |> Model.compile
 
 (**
@@ -89,7 +92,7 @@ required parts are in place.
 Let's look at defining the estimatable parameters in more detail:
 *)
 
-Model.estimateParameter "r"      noConstraints 0.10 5.00
+Model.estimateParameter "r" noConstraints 0.10 5.00
 
 (**
 For the `Model.estimateParameter` function, first pass 

@@ -5,6 +5,9 @@ category: Components
 categoryindex: 4
 index: 3
 ---
+
+[![Script]({{root}}/img/badge-script.svg)]({{root}}/{{fsdocs-source-basename}}.fsx)&emsp;
+[![Notebook]({{root}}/img/badge-notebook.svg)]({{root}}/{{fsdocs-source-basename}}.ipynb)
 *)
 
 (*** condition: prepare ***)
@@ -50,13 +53,12 @@ function to match the `EstimationEngine.Integration` type signature as follows:
 
 open Bristlecone
 
-let myCustomIntegrator : EstimationEngine.Integrate<'data,'time> =
+let myCustomIntegrator: EstimationEngine.Integrate<'data, 'time> =
     fun writeOut tInitial tEnd tStep initialConditions externalEnvironment model ->
         invalidOp "Doesn't actually do anything!"
 
 let engine =
-    Bristlecone.mkContinuous
-    |> Bristlecone.withContinuousTime myCustomIntegrator
+    Bristlecone.mkContinuous |> Bristlecone.withContinuousTime myCustomIntegrator
 
 (**
 

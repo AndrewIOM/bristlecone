@@ -241,7 +241,7 @@ module TimeSeriesTests =
         List.allPairs optimFunctions timeModels
         |> List.map (fun ((optimName: string, optimise), (modelName, modelFn, startValues)) ->
             runReplicated Config.startPointCount (fun () ->
-                Bristlecone.Bristlecone.testModel (engine optimise) settings modelFn)
+                Bristlecone.Bristlecone.tryTestModel (engine optimise) settings modelFn)
             |> summarise modelName optimName)
 
 
@@ -260,16 +260,21 @@ let annealSettings =
 
 let optimFunctions =
     [ "amoeba single", Amoeba.single Amoeba.Solver.Default
-      //  "amoeba swarm",           Amoeba.swarm 5 20 Amoeba.Solver.Default
-      //   "anneal classic",         MonteCarlo.SimulatedAnnealing.classicalSimulatedAnnealing 0.01 false annealSettings
-      //   "anneal cauchy",          MonteCarlo.SimulatedAnnealing.fastSimulatedAnnealing 0.01 false annealSettings
-      //   "filzbach",               MonteCarlo.Filzbach.filzbach { TuneAfterChanges = 10000; MaxScaleChange = 0.5; MinScaleChange = 0.5; BurnLength = EndConditions.afterIteration 10000 }
-      // "automatic MCMC",         MonteCarlo.``Automatic (Adaptive Diagnostics)``
-      // "metropolis-gibbs",       MonteCarlo.``Metropolis-within Gibbs``
-      //   "adaptive metropolis",    MonteCarlo.adaptiveMetropolis 0.250 500
-      //   "random walk MCMC",       MonteCarlo.randomWalk []
-      // "random walk w/ tuning",  MonteCarlo.randomWalk [ MonteCarlo.TuneMethod.CovarianceWithScale 0.25, 500, EndConditions.afterIteration 10000 ]
-      ]
+      "amoeba swarm", Amoeba.swarm 5 20 Amoeba.Solver.Default
+      "anneal classic", MonteCarlo.SimulatedAnnealing.classicalSimulatedAnnealing 0.01 false annealSettings
+      "anneal cauchy", MonteCarlo.SimulatedAnnealing.fastSimulatedAnnealing 0.01 false annealSettings
+      "filzbach",
+      MonteCarlo.Filzbach.filzbach
+          { TuneAfterChanges = 10000
+            MaxScaleChange = 0.5
+            MinScaleChange = 0.5
+            BurnLength = EndConditions.afterIteration 10000 }
+      "automatic MCMC", MonteCarlo.``Automatic (Adaptive Diagnostics)``
+      "metropolis-gibbs", MonteCarlo.``Metropolis-within Gibbs``
+      "adaptive metropolis", MonteCarlo.adaptiveMetropolis 0.250 500
+      "random walk MCMC", MonteCarlo.randomWalk []
+      "random walk w/ tuning",
+      MonteCarlo.randomWalk [ MonteCarlo.TuneMethod.CovarianceWithScale 0.25, 500, EndConditions.afterIteration 10000 ] ]
 
 let timeModels =
     [ "predator-prey (with gaussian noise)",

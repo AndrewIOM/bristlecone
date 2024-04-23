@@ -1,0 +1,2 @@
+Subject, ModelId, AnalysisId, Time (date), Observed (float), StepsAhead (int), NStepAhead (float)
+YUSL21A,some-id,91a95ab8-6c43-45f4-9353-d507cd3a9909, 95, 0.0022, 1, 0.0034

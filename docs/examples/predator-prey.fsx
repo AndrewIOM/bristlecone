@@ -2,7 +2,7 @@
 ---
 title: Predator-Prey Dynamics
 category: Examples
-categoryindex: 1
+categoryindex: 3
 index: 1
 ---
 
@@ -31,8 +31,8 @@ To get started, we first load and open the Bristlecone library in
 an F# script file (.fsx):
 *)
 
-open Bristlecone            // Opens Bristlecone core library and estimation engine
-open Bristlecone.Language   // Open the language for writing Bristlecone models
+open Bristlecone // Opens Bristlecone core library and estimation engine
+open Bristlecone.Language // Open the language for writing Bristlecone models
 
 (**### Defining the ecological model
 
@@ -55,25 +55,23 @@ in lynx data, the variability in hare data, and their covariance.
 let ``predator-prey`` =
 
     let ``dh/dt`` = Parameter "α" * This - Parameter "β" * This * Environment "lynx"
-    let ``dl/dt`` = - Parameter "γ" * This + Parameter "Δ" * Environment "hare" * This
+    let ``dl/dt`` = -Parameter "δ" * This + Parameter "γ" * Environment "hare" * This
 
     Model.empty
-    |> Model.addEquation       "hare"   ``dh/dt``
-    |> Model.addEquation       "lynx"   ``dl/dt``
+    |> Model.addEquation "hare" ``dh/dt``
+    |> Model.addEquation "lynx" ``dl/dt``
 
-    |> Model.estimateParameter "α"      noConstraints 0.01 1.00    // Natural growth rate of hares in absence of predation
-    |> Model.estimateParameter "β"      noConstraints 0.01 1.00    // Death rate per encounter of hares due to predation
-    |> Model.estimateParameter "Δ"      noConstraints 0.01 0.20    // Efficiency of turning predated hares into lynx
-    |> Model.estimateParameter "γ"      noConstraints 0.01 0.20    // Natural death rate of lynx in the absence of food
+    |> Model.estimateParameter "α" noConstraints 0.75 1.25 // Natural growth rate of hares in absence of predation
+    |> Model.estimateParameter "β" noConstraints 0.01 0.20 // Death rate per encounter of hares due to predation
+    |> Model.estimateParameter "δ" noConstraints 0.75 1.25 // Natural death rate of lynx in the absence of food
+    |> Model.estimateParameter "γ" noConstraints 0.01 0.20 // Efficiency of turning predated hares into lynx
 
-    |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares ["hare"; "lynx"])
-    |> Model.estimateParameter  "ρ"     noConstraints -0.500 0.500
-    |> Model.estimateParameter  "σ[x]"  notNegative 0.001 0.100
-    |> Model.estimateParameter  "σ[y]"  notNegative 0.001 0.100
+    |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.bivariateGaussian "hare" "lynx")
+    |> Model.estimateParameter "ρ" noConstraints -0.500 0.500
+    |> Model.estimateParameter "σ[x]" notNegative 0.001 0.100
+    |> Model.estimateParameter "σ[y]" notNegative 0.001 0.100
 
     |> Model.compile
-
-    // TODO Error when setting constraints. Optim allows them to go negative!
 
 (**
 ### Setting up the *Bristlecone Engine*
@@ -84,9 +82,14 @@ This engine uses a gradident descent method (Nelder Mead simplex), and a basic
 Runge-Kutta 4 integration method provided by MathNet Numerics.
 *)
 
-let engine = 
+let engine =
     Bristlecone.mkContinuous
-    |> Bristlecone.withTunedMCMC []
+    // |> Bristlecone.withCustomOptimisation (Optimisation.Amoeba.swarm 5 20 Optimisation.Amoeba.Solver.Default)
+    |> Bristlecone.withCustomOptimisation (
+        Optimisation.MonteCarlo.Filzbach.filzbach
+            { Optimisation.MonteCarlo.Filzbach.FilzbachSettings<float>.Default with
+                BurnLength = Optimisation.EndConditions.afterIteration 10000 }
+    )
     |> Bristlecone.withContinuousTime Integration.MathNet.integrate
     |> Bristlecone.withConditioning Conditioning.RepeatFirstDataPoint
     |> Bristlecone.withSeed 1000 // We are setting a seed for this example - see below
@@ -115,16 +118,16 @@ but here we will configure some additional settings:
 
 let testSettings =
     Test.create
-    |> Test.addStartValues [
-        "hare", 50.
-        "lynx", 75. ]
+    |> Test.addStartValues [ "hare", 50.; "lynx", 75. ]
     |> Test.addNoise (Test.Noise.tryAddNormal "σ[y]" "lynx")
     |> Test.addNoise (Test.Noise.tryAddNormal "σ[x]" "hare")
-    |> Test.addGenerationRules [
-        Test.GenerationRules.alwaysLessThan 10000. "lynx"
-        Test.GenerationRules.alwaysLessThan 10000. "hare" ]
+    |> Test.addGenerationRules
+        [ Test.GenerationRules.alwaysLessThan 100000. "lynx"
+          Test.GenerationRules.alwaysMoreThan 10. "lynx"
+          Test.GenerationRules.alwaysLessThan 100000. "hare"
+          Test.GenerationRules.alwaysMoreThan 10. "hare" ]
     |> Test.withTimeSeriesLength 30
-    |> Test.endWhen (Optimisation.EndConditions.afterIteration 1)
+    |> Test.endWhen (Optimisation.EndConditions.afterIteration 100)
 
 (**
 In our `TestSettings`, we have specified the initial time point (t = 0)
@@ -135,9 +138,7 @@ should be 30 years in length.
 With these test settings, we can now run the test.
 *)
 
-let testResult =
-    ``predator-prey`` 
-    |> Bristlecone.testModel engine testSettings
+let testResult = ``predator-prey`` |> Bristlecone.tryTestModel engine testSettings
 (*** include-output ***)
 
 (**
@@ -149,53 +150,53 @@ module Graphing =
 
     open Plotly.NET
 
-    let pairedFits (series:Map<string,ModelSystem.FitSeries>) =
+    let pairedFits (series: Map<string, ModelSystem.FitSeries>) =
         match testResult with
         | Ok r ->
             series
-            |> Seq.map(fun kv ->
-                let lines = 
+            |> Seq.map (fun kv ->
+                let lines =
                     kv.Value
                     |> Bristlecone.Time.TimeSeries.toObservations
-                    |> Seq.collect(fun (d,v) ->
-                        [
-                            v, "Modelled", d.Fit
-                            v, "Observed", d.Obs
-                        ])
-                    |> Seq.groupBy(fun (_,x,_) -> x)
-                    |> Seq.map(fun (_,s) -> s |> Seq.map(fun (x,_,y) -> x,y))
+                    |> Seq.collect (fun (d, v) -> [ v, "Modelled", d.Fit; v, "Observed", d.Obs ])
+                    |> Seq.groupBy (fun (_, x, _) -> x)
+                    |> Seq.map (fun (_, s) -> s |> Seq.map (fun (x, _, y) -> x, y))
                     |> Seq.toList
-                // Each chart has the modelled and observed series                
-                Chart.combine [ Chart.Line(xy = lines.[0], Name = "Modelled"); Chart.Line(xy = lines.[1], Name = "Observed") ]
-                |> Chart.withTitle kv.Key
-            )
-            |> Chart.Grid(2,1)
-            |> fun x -> printfn "%A" x; x
+                // Each chart has the modelled and observed series
+                Chart.combine
+                    [ Chart.Line(xy = lines.[0], Name = "Modelled")
+                      Chart.Line(xy = lines.[1], Name = "Observed") ]
+                |> Chart.withTitle kv.Key)
+            |> Chart.Grid(2, 1)
+            |> fun x ->
+                printfn "%A" x
+                x
             |> GenericChart.toChartHTML
-            |> fun x -> printfn "%s" x; x
+            |> fun x ->
+                printfn "%s" x
+                x
         | Error e -> sprintf "Cannot display data, as model fit did not run successfully (%s)" e
 
-    let pairedFitsForTestResult (testResult:Result<Bristlecone.Test.TestResult,string>) =
+    let pairedFitsForTestResult (testResult: Result<Bristlecone.Test.TestResult, string>) =
         match testResult with
         | Ok r -> pairedFits r.Series
         | Error e -> sprintf "Cannot display data, as model fit did not run successfully (%s)" e
 
-    let pairedFitsForResult (testResult:Result<Bristlecone.ModelSystem.EstimationResult,string>) =
+    let pairedFitsForResult (testResult: Result<Bristlecone.ModelSystem.EstimationResult, string>) =
         match testResult with
-        | Ok r -> pairedFits (r.Series |> Seq.map(fun kv -> kv.Key.Value, kv.Value) |> Map.ofSeq)
+        | Ok r -> pairedFits (r.Series |> Seq.map (fun kv -> kv.Key.Value, kv.Value) |> Map.ofSeq)
         | Error e -> sprintf "Cannot display data, as model fit did not run successfully (%s)" e
 
-    let parameterTrace (result:Result<ModelSystem.EstimationResult,'b>) =
+    let parameterTrace (result: Result<ModelSystem.EstimationResult, 'b>) =
         match result with
-        | Ok r -> 
+        | Ok r ->
             r.Trace
             |> Seq.map snd
             |> Seq.map Seq.toList
             |> Seq.toList
             |> List.flip
-            |> List.map(fun values ->
-                Chart.Line(y = values, x = [ 1 .. values.Length ]))
-            |> Chart.Grid(3,3)
+            |> List.map (fun values -> Chart.Line(y = values, x = [ 1 .. values.Length ]))
+            |> Chart.Grid(3, 3)
             |> GenericChart.toChartHTML
         | Error _ -> "Model did not fit successfully"
 
@@ -217,12 +218,14 @@ a Bristlecone `TimeSeries` type using `TimeSeries.fromObservations`:
 [<Literal>]
 let ResolutionFolder = __SOURCE_DIRECTORY__
 
-type PopulationData = FSharp.Data.CsvProvider<"data/lynx-hare.csv", ResolutionFolder = ResolutionFolder>
+type PopulationData = FSharp.Data.CsvProvider<"data/lynx-hare.csv", ResolutionFolder=ResolutionFolder>
 
-let data = 
-    let csv = PopulationData.Load (__SOURCE_DIRECTORY__ + "/data/lynx-hare.csv")
-    [ (code "hare").Value, Time.TimeSeries.fromObservations (csv.Rows |> Seq.map(fun r -> float r.Hare, r.Year))
-      (code "lynx").Value, Time.TimeSeries.fromObservations (csv.Rows |> Seq.map(fun r -> float r.Lynx, r.Year)) ] |> Map.ofList
+let data =
+    let csv = PopulationData.Load(__SOURCE_DIRECTORY__ + "/data/lynx-hare.csv")
+
+    [ (code "hare").Value, Time.TimeSeries.fromObservations (csv.Rows |> Seq.map (fun r -> float r.Hare, r.Year))
+      (code "lynx").Value, Time.TimeSeries.fromObservations (csv.Rows |> Seq.map (fun r -> float r.Lynx, r.Year)) ]
+    |> Map.ofList
 
 (*** include-value: data ***)
 
@@ -233,9 +236,7 @@ the main fitting function of the Bristlecone library.
 
 let endCondition = Optimisation.EndConditions.afterIteration 10000
 
-let result = 
-    ``predator-prey`` 
-    |> Bristlecone.fit engine endCondition data
+let result = ``predator-prey`` |> Bristlecone.tryFit engine endCondition data
 
 (*** include-value: result ***)
 

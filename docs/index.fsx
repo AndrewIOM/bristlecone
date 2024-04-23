@@ -5,6 +5,9 @@ category: Getting Started
 categoryindex: 1
 index: 1
 ---
+
+[![Script]({{root}}/img/badge-script.svg)]({{root}}/{{fsdocs-source-basename}}.fsx)&emsp;
+[![Notebook]({{root}}/img/badge-notebook.svg)]({{root}}/{{fsdocs-source-basename}}.ipynb)
 *)
 
 (*** condition: prepare ***)
@@ -24,7 +27,8 @@ index: 1
 Bristlecone
 ======================
 
-Bristlecone is a library for conducting model-fitting and model-selection analyses on time-series data.
+Bristlecone is a library for easily *composing* theoretical models into larger systems, and
+subsequently conducting model-fitting and model-selection analyses on time-series data.
 Although originally designed for the investigation of non-linear dynamics within ecological 
 and environmental sciences, the library can be used across finance, econometrics and 
 other fields that apply non-linear modelling techniques.
@@ -45,23 +49,22 @@ The nuget package [is available here](https://nuget.org/packages/Bristlecone).
 This example demonstrates the layout of a model when defined in Bristlecone.
 
 *)
-open Bristlecone            // Opens Bristlecone core library and estimation engine
-open Bristlecone.Language   // Open the language for writing Bristlecone models
+open Bristlecone // Opens Bristlecone core library and estimation engine
+open Bristlecone.Language // Open the language for writing Bristlecone models
 
 let hypothesis =
 
-    let vonBertalanffy = 
-        Parameter "η" * This ** Parameter "β" - Parameter "κ" * This
+    let vonBertalanffy = Parameter "η" * This ** Parameter "β" - Parameter "κ" * This
 
     Model.empty
-    |> Model.addEquation       "mass"   vonBertalanffy
-    |> Model.estimateParameter "η"      noConstraints 0.50 1.50 
-    |> Model.estimateParameter "β"      noConstraints 0.01 1.00
-    |> Model.estimateParameter "κ"      noConstraints 0.01 1.00 
+    |> Model.addEquation "mass" vonBertalanffy
+    |> Model.estimateParameter "η" noConstraints 0.50 1.50
+    |> Model.estimateParameter "β" noConstraints 0.01 1.00
+    |> Model.estimateParameter "κ" noConstraints 0.01 1.00
     |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ "mass" ])
     |> Model.compile
 
-let engine = 
+let engine =
     Bristlecone.mkContinuous
     |> Bristlecone.withCustomOptimisation (Optimisation.Amoeba.swarm 5 20 Optimisation.Amoeba.Solver.Default)
 
@@ -84,7 +87,7 @@ as an F# script or Jupyter notebook using the buttons at the top of each example
 
  * [The predator-prey example](examples/predator-prey.html) covers basic model-fitting with Bristlecone.
 
- * [The shrub-resource example](example/shrub-resource.html) is a more 
+ * [The shrub-resource example](examples/shrub-resource.html) is a more 
    comprehensive example that covers model-fitting and model-selection (MFMS) with Bristlecone.
 
  * The [API Reference](reference/index.html) contains automatically generated documentation for all types, modules

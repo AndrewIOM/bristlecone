@@ -222,9 +222,9 @@ module Test =
             =
             let theta = drawParameterSet engine.Random model.Parameters
 
-            tryGenerateData' engine model settings theta
-            |> Result.bind (fun series ->
-                let brokeTheRules =
+            match tryGenerateData' engine model settings theta with
+            | Ok series ->
+                let rulesPassed =
                     settings.GenerationRules
                     |> List.choose (fun (key, ruleFn) ->
                         series
@@ -233,12 +233,13 @@ module Test =
                             Map.find k series |> TimeSeries.toObservations |> Seq.map fst |> ruleFn))
 
                 if
-                    (brokeTheRules |> List.contains false)
-                    || brokeTheRules.Length <> settings.GenerationRules.Length
+                    (rulesPassed |> List.contains false)
+                    || rulesPassed.Length <> settings.GenerationRules.Length
                 then
                     if attempts = 0 then
                         Error "Could not generate data that complies with the given ruleset"
                     else
                         tryGenerateData engine settings model (attempts - 1)
                 else
-                    Ok(series, theta))
+                    Ok(series, theta)
+            | Error e -> Error e

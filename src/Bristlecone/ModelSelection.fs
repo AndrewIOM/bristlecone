@@ -1,34 +1,72 @@
+/// <summary>Contains tools for conducting Model Selection across
+/// individual subjects and hypotheses.</summary>
 module Bristlecone.ModelSelection
 
 open Bristlecone
 open Bristlecone.ModelSystem
 
-/// Organises multiple hypotheses and multiple subjects into
-/// distinct analysis groups.
+/// <summary>Organises multiple hypotheses and multiple subjects into distinct analysis groups.</summary>
 [<RequireQualifiedAccess>]
 module ResultSet =
 
-    /// A representation of all results for a particular subject and hypothesis
+    /// <summary>A representation of all results for a particular subject and hypothesis</summary>
     type ResultSet<'subject, 'hypothesis> =
-        ('subject * 'hypothesis * string * (EstimationResult seq * EstimationResult) option)
+        { Subject: 'subject
+          Hypothesis: 'hypothesis
+          BestResult: EstimationResult option
+          AllResults: EstimationResult seq }
 
-    /// Arrange estimation results into subject and hypothesis groups.
-    let arrangeResultSets subjects hypotheses getResults : ResultSet<'a, 'hypothesis> seq =
-        Seq.allPairs subjects (hypotheses |> Seq.mapi (fun i v -> (i + 1, v)))
-        |> Seq.map (fun (s, (hi, h)) ->
-            let r = getResults s h hi
+    /// <summary>Arrange estimation results into subject and hypothesis groups.</summary>
+    /// <param name="subjects"></param>
+    /// <param name="hypotheses"></param>
+    /// <param name="getResults"></param>
+    /// <typeparam name="'subject"></typeparam>
+    /// <typeparam name="'hypothesis"></typeparam>
+    /// <typeparam name="'a">An estimation result</typeparam>
+    /// <returns></returns>
+    let arrangeResultSets<'subject, 'hypothesis> (subjects: 'subject seq) (hypotheses: 'hypothesis seq) getResults =
+        Seq.allPairs subjects hypotheses
+        |> Seq.map (fun (s, h) ->
+            let r = getResults s h
 
             if r |> Seq.isEmpty then
-                (s, h, hi.ToString(), None)
+                { Subject = s
+                  Hypothesis = h
+                  BestResult = None
+                  AllResults = [] }
             else
                 let r' = r |> Seq.filter (fun x -> not (System.Double.IsNaN(x.Likelihood)))
 
                 if Seq.isEmpty r' then
-                    (s, h, hi.ToString(), None)
+                    { Subject = s
+                      Hypothesis = h
+                      BestResult = None
+                      AllResults = [] }
                 else
-                    (s, h, hi.ToString(), (r', r' |> Seq.minBy (fun x -> x.Likelihood)) |> Some))
+                    { Subject = s
+                      Hypothesis = h
+                      BestResult = r' |> Seq.minBy (fun x -> x.Likelihood) |> Some
+                      AllResults = r' })
 
-/// Functions for conducting Akaike Information Criterion (AIC).
+/// <summary>Runs a model comparison statistic across a sequence of
+/// `ResultSet`s. Uses the best MLE for each subject * hypothesis group
+/// an runs `comparisonFn` across these results.</summary>
+/// <returns>The subject, hypothesis code, the original result, and the statistic.</returns>
+let internal comparisonStatistic comparisonFn getRefCode (results: ResultSet.ResultSet<'subject, 'hypothesis> seq) =
+    results
+    |> Seq.groupBy (fun resultSet -> getRefCode resultSet.Hypothesis)
+    |> Seq.collect (fun (_, r) ->
+        let weights =
+            r |> Seq.choose (fun resultSet -> resultSet.BestResult) |> comparisonFn
+
+        r
+        |> Seq.zip weights
+        |> Seq.map (fun (w, resultSet) -> resultSet.Subject, getRefCode resultSet.Hypothesis, fst w, snd w)
+        |> Seq.toList)
+    |> Seq.toList
+
+
+/// <summary>Functions for conducting Akaike Information Criterion (AIC).</summary>
 module Akaike =
 
     type AkaikeWeight =
@@ -37,26 +75,23 @@ module Akaike =
           AICc: float
           Weight: float }
 
-    ///**Description**
-    /// The Akaike information criterion, a standardised index of model fit quality for models that have different numbers of parameters.
-    ///**Parameters**
-    ///  * `k` - The number of parameters within the model in question.
-    ///  * `logLikelihood` - a `float` representing the minimum log-likelihood achieved for the model in question.
+    /// <summary>The Akaike information criterion, a standardised index of model fit quality for models that have different numbers of parameters.</summary>
+    /// <param name="k">The number of parameters within the model in question.</param>
+    /// <param name="logLikelihood">a `float` representing the minimum log-likelihood achieved for the model in question.</param>
+    /// <returns></returns>
     let aic (k: int) logLikelihood = 2. * logLikelihood + 2. * (float k)
 
-
-    ///**Description**
-    /// The Akaike information criterion, corrected for small sample sizes.
-    /// It represents standardised index of model fit quality for models that have different numbers of parameters.
-    ///**Assumptions**
-    /// Your model must adhere to the following assumptions:
+    /// <summary>The Akaike information criterion, corrected for small sample sizes.
+    /// It represents standardised index of model fit quality for models that have different numbers of parameters.</summary>
+    /// <remarks>Your model must adhere to the following assumptions:
     /// - Univariate
     /// - Linear in parameters
     /// - Normally-distributed residuals
-    ///**Parameters**
-    ///  * `n` - The sample size
-    ///  * `k` - The number of parameters within the model in question.
-    ///  * `logLikelihood` - a `float` representing the minimum log-likelihood achieved for the model in question.
+    /// </remarks>
+    /// <param name="n">The sample size</param>
+    /// <param name="k">The number of parameters within the model in question</param>
+    /// <param name="logLikelihood">A `float` representing the minimum log-likelihood achieved for the model in question.</param>
+    /// <returns></returns>
     let aicc n k logLikelihood =
         let aic = aic k logLikelihood
 
@@ -81,15 +116,10 @@ module Akaike =
               AICc = aicc n p l
               Weight = relative / totalLikelihood })
 
-    /// **Description**
-    /// Akaike weights for a set of model results.
-    /// The weights can be directly interpreted as conditional probabilities for each model.
-    ///
-    /// **Output Type**
-    ///   * A `seq<EstimationResult * float>` of estimation results paired to their Akaike weights.
-    ///
-    /// **Exceptions**
-    ///   * `ArgumentException` - occurs when there are no observations within an estimation result.
+    /// <summary>Akaike weights for a sequence of `EstimationResult`s.</summary>
+    /// <param name="models">The input model results</param>
+    /// <returns>An (EstimationResult * float) sequence of estimation results paired to their Akaike weights.</returns>
+    /// <exception name="ArgumentException">Occurs when there are no observations within an estimation result.</exception>
     let akaikeWeights (models: seq<EstimationResult>) =
         match models |> Seq.tryHead with
         | None -> seq []
@@ -101,41 +131,10 @@ module Akaike =
             |> akaikeWeights' n
             |> Seq.zip models
 
-
-/// A record of an individual maximum likelihood estimate for
-/// a particular subject and hypothesis.
-type Result<'subject> =
-    { AnalysisId: System.Guid
-      Subject: 'subject
-      ModelId: string
-      Estimate: EstimationResult }
-
-/// Given a list of model predictions, find the best MLE for each
-/// model * subject combination, calculate the weights for this set.
-let calculate (results: seq<Result<'subject>>) =
-    results
-    |> Seq.groupBy (fun r -> (r.Subject, r.ModelId))
-    |> Seq.map (fun (_, r) -> r |> Seq.minBy (fun x -> x.Estimate.Likelihood))
-    |> Seq.groupBy (fun r -> r.Subject)
-    |> Seq.collect (fun (_, r) ->
-        let weights =
-            r |> Seq.map (fun r -> r.Estimate) |> Akaike.akaikeWeights |> Seq.map snd
-
-        weights |> Seq.zip r)
-
-///
-let weights (results: ResultSet.ResultSet<'a, 'b> seq) =
-    results
-    |> Seq.groupBy (fun (identifier, _, _, _) -> identifier)
-    |> Seq.collect (fun (_, r) ->
-        let weights =
-            r
-            |> Seq.choose (fun (_, _, _, r) -> r)
-            |> Seq.map (fun (_, mle) -> mle)
-            |> Akaike.akaikeWeights
-
-        r
-        |> Seq.zip weights
-        |> Seq.map (fun (w, (s, _, hi, _)) -> s, hi, fst w, snd w)
-        |> Seq.toList)
-    |> Seq.toList
+    /// <summary>Akaike weights for a result set.</summary>
+    /// <param name="getRefCode">A function that gets a short reference code from a hypothesis.</param>
+    /// <param name="set">A sequence of `ResultSet`s, within each the 1 .. many results of a particular subject * hypothesis combination.</param>
+    /// <returns>An `(EstimationResult * float) seq` of estimation results paired to their Akaike weights.</returns>
+    /// <exception cref="ArgumentException">Occurs when there are no observations within an estimation result.</exception>
+    let akaikeWeightsForSet getRefCode set =
+        comparisonStatistic akaikeWeights getRefCode set

@@ -1,11 +1,11 @@
-namespace Bristlecone.Optimisation.ConfidenceInterval
+namespace Bristlecone.Confidence
 
 open Bristlecone.Logging
 
 /// <namespacedoc>
 ///   <summary>Contains functions for calculating confidence intervals on model fits.</summary>
 /// </namespacedoc>
-/// 
+///
 /// The 95% and 68% confidence interval around a point estimate.
 type ConfidenceInterval =
     { ``95%``: Interval
@@ -14,8 +14,8 @@ type ConfidenceInterval =
 
 and Interval = { Lower: float; Upper: float }
 
-/// Keeps a list of all optimisation events that occur for further analysis.
-type OptimisationEventStash() =
+/// <summary>Keeps a list of all optimisation events that occur for further analysis.</summary>
+type internal OptimisationEventStash() =
     let mutable events = []
 
     member __.SaveEvent(e) =
@@ -26,21 +26,21 @@ type OptimisationEventStash() =
     member __.GetAll() = events
 
 
-/// Differences in likelihood for different confidence intervals
-/// based on a chi squared distribution.
+/// <summary>Differences in likelihood for different confidence intervals
+/// based on a chi squared distribution.</summary>
 module Bounds =
 
-    /// The difference in likelihood at 68% confidence
+    /// <summary>The difference in likelihood at 68% confidence</summary>
     let lowerBound = 0.49447324 // qchisq(0.68,1)/2
 
-    /// The difference in likelihood at 95% confidence
+    /// <summary>The difference in likelihood at 95% confidence</summary>
     let upperBound = 1.92072941 // qchisq(0.95,1)/2
 
 
-/// Given a maximum likelihood estimate (MLE), the profile likelihood method
-/// runs a Monte Carlo algorithm that samples around the MLE. The range for
-/// each parameter is discovered at 95% and 68% confidence based on a chi squared
-/// distribution.
+/// <summary>Given a maximum likelihood estimate (MLE), the profile likelihood method
+/// runs a Monte Carlo algorithm that samples around the MLE.</summary>
+/// <remarks>The range for each parameter is discovered at 95% and 68%
+/// confidence based on a chi squared distribution.</remarks>
 module ProfileLikelihood =
 
     open Bristlecone
@@ -50,7 +50,6 @@ module ProfileLikelihood =
 
     type EstimateFunction<'data, 'time, 'subject> =
         EstimationEngine<'data, 'time> -> ModelSystem -> 'subject -> EstimationResult
-
 
     module CustomOptimisationMethod =
 
@@ -72,7 +71,7 @@ module ProfileLikelihood =
 
             // 1. Initial conditions
             let draw' = jump random
-            let theta1 = Bristlecone.Optimisation.MonteCarlo.initialise domain random
+            let theta1 = Bristlecone.Optimisation.Initialise.initialise domain random
             let l1 = f theta1
 
             // 2. Tune individual parameter scales (for many univariate distributions)

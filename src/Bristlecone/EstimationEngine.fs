@@ -20,8 +20,11 @@ module ModelSystem =
         { Expected: float[]; Observed: float[] }
 
     /// A function that returns a parameter's current value by its name.
-    type ParameterValueAccessor = ParameterValueAccessor of (string -> float)
-        with member this.Get name = let (ParameterValueAccessor v) = this in v name
+    type ParameterValueAccessor =
+        | ParameterValueAccessor of (string -> float)
+
+        member this.Get name =
+            let (ParameterValueAccessor v) = this in v name
 
     /// A function that computes the likelihood of a set of parameters.
     type LikelihoodFn = ParameterValueAccessor -> CodedMap<PredictedSeries> -> float
@@ -34,7 +37,7 @@ module ModelSystem =
         { Parameters: Parameter.Pool
           Equations: CodedMap<ModelEquation>
           Measures: CodedMap<MeasureEquation>
-          Likelihood: LikelihoodFn }
+          NegLogLikelihood: LikelihoodFn }
 
     type FitValue = { Fit: float; Obs: float }
     type FitSeries = TimeSeries<FitValue>

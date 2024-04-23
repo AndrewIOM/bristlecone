@@ -65,8 +65,8 @@ module EndConditions =
         stationarySquaredJumpDistance' 200 5
 
     /// Convergence of results using the Gelman-Rubin Rhat statistic.
-    /// * `thin` - Only test for convergence at multiples of the following intervals (when all chains are ready).
-    /// * `chainCount` - The number of chains to test for convergence. This makes the agent wait until results for all chains are in.
+    /// `thin` - Only test for convergence at multiples of the following intervals (when all chains are ready).
+    /// `chainCount` - The number of chains to test for convergence. This makes the agent wait until results for all chains are in.
     let convergence thin chainCount : EndCondition<float> =
 
         let assess (chains: Map<int, Solution<float> list>) =
@@ -134,14 +134,9 @@ module EndConditions =
             else
                 false
 
-
-/// A module containing Monte Carlo Markov Chain (MCMC) methods for optimisation.
-/// An introduction to MCMC approaches is provided by
-/// [Reali, Priami, and Marchetti (2017)](https://doi.org/10.3389/fams.2017.00006)
-module MonteCarlo =
+module Initialise =
 
     open Bristlecone.Statistics.Distributions
-    open MathNet.Numerics.LinearAlgebra
 
     /// Generate a random point from bounds specified as a `Domain`.
     /// A value for each dimension is drawn from a univariate normal distribution, assuming that
@@ -156,13 +151,13 @@ module MonteCarlo =
                    (Normal.draw rng (max + (min - max) / 2.) ((min - max) / 6.)) () |]
 
     /// Assesses if theta is valid based on the provided
-    /// constraints. 
+    /// constraints.
     let isInvalidTheta theta constraints =
         Seq.zip theta constraints
-        |> Seq.map(fun (v,c) ->
+        |> Seq.map (fun (v, c) ->
             match c with
             | Bristlecone.Parameter.Constraint.Unconstrained -> true
-            | Bristlecone.Parameter.Constraint.PositiveOnly -> v > 0. )
+            | Bristlecone.Parameter.Constraint.PositiveOnly -> v > 0.)
         |> Seq.contains false
 
     /// Attempts to generate random theta based on starting bounds
@@ -173,15 +168,23 @@ module MonteCarlo =
             Error "Could not generate a starting point given the domain"
         else
             let t = initialise domain random
-            let isInvalid = isInvalidTheta t (domain |> Seq.map (fun (_,_,c) -> c))
+            let isInvalid = isInvalidTheta t (domain |> Seq.map (fun (_, _, c) -> c))
+
             if isInvalid then
                 tryGenerateTheta f domain random (n - 1)
+            else if System.Double.IsNaN(f t) || System.Double.IsInfinity(f t) then
+                tryGenerateTheta f domain random (n - 1)
             else
-                if System.Double.IsNaN(f t) || System.Double.IsInfinity(f t)
-                then
-                    tryGenerateTheta f domain random (n - 1)
-                else
-                    Ok t
+                Ok t
+
+
+/// A module containing Monte Carlo Markov Chain (MCMC) methods for optimisation.
+/// An introduction to MCMC approaches is provided by
+/// [Reali, Priami, and Marchetti (2017)](https://doi.org/10.3389/fams.2017.00006)
+module MonteCarlo =
+
+    open Bristlecone.Statistics.Distributions
+    open MathNet.Numerics.LinearAlgebra
 
     /// Jump in parameter space while reflecting constraints.
     let constrainJump initial jump (scaleFactor: float) c =
@@ -193,26 +196,22 @@ module MonteCarlo =
             else
                 (initial + (jump * scaleFactor))
 
-
-    /// A recursive metropolis hastings algorithm that ends when `endCondition` returns true.
-    ///
-    /// **Parameters**
-    ///   * `random` - `System.Random` to be used for drawing from a uniform distribution.
-    ///   * `writeOut` - side-effect function for handling `LogEvent` items.
-    ///   * `endCondition` - `EndCondition` that dictates when the MH algorithm ends.
-    ///   * `propose` - proposal `'scale -> 'theta -> 'theta` that generates a jump based on the scale value.
-    ///   * `tune` - parameter of type `int -> (float * 'a) list -> 'b -> 'b`, where `int` is current iteration,
-    ///   * `f` - an objective function, `'a -> float`, to optimise.
-    ///   * `theta1` - initial position in parameter space of type `'a`.
-    ///   * `l1` - initial value of -log likelihood at theta1 in parameter space
-    ///   * `d` - history of the chain, of type `(float * 'a) list`. Passing a list here allows continuation of a previous analysis.
-    ///   * `scale` - a scale of type `'b`, which is compatible with the scale tuning function `tune`
-    ///
-    /// **Output Type**
-    ///   * `(float * 'a) list * 'b` - A tuple containing a list of results, and the final scale used in
-    ///   the analysis. The `(float * 'a) list` represents a list of paired -log likelihood values with
-    ///   the proposed theta.
-    ///
+    /// <summary>A recursive metropolis hastings algorithm that ends when `endCondition` returns true.</summary>
+    /// <param name="random">`System.Random` to be used for drawing from a uniform distribution.</param>
+    /// <param name="writeOut">side-effect function for handling `LogEvent` items.</param>
+    /// <param name="endCondition">`EndCondition` that dictates when the MH algorithm ends.</param>
+    /// <param name="propose">proposal `'scale -> 'theta -> 'theta` that generates a jump based on the scale value.</param>
+    /// <param name="tune">parameter of type `int -> (float * 'a) list -> 'b -> 'b`, where `int` is current iteration,</param>
+    /// <param name="f">an objective function, `'a -> float`, to optimise.</param>
+    /// <param name="theta1">initial position in parameter space of type `'a`.</param>
+    /// <param name="l1">initial value of -log likelihood at theta1 in parameter space</param>
+    /// <param name="d">history of the chain, of type `(float * 'a) list`. Passing a list here allows continuation of a previous analysis.</param>
+    /// <param name="scale">a scale of type `'b`, which is compatible with the scale tuning function `tune`</param>
+    /// <param name="iteration">the current iteration number</param>
+    /// <typeparam name="'a"></typeparam>
+    /// <returns>`(float * 'a) list * 'b` - A tuple containing a list of results, and the final scale used in
+    /// the analysis. The `(float * 'a) list` represents a list of paired -log likelihood values with
+    /// the proposed theta.</returns>
     let rec metropolisHastings' random writeOut endCondition propose tune f theta1 l1 d scale iteration =
         if theta1 |> Array.isEmpty then
             invalidOp "Not valid theta"
@@ -601,7 +600,7 @@ module MonteCarlo =
         fun random writeOut n domain startPoint f ->
             let initialCovariance = TuningMode.covarianceFromBounds 10000 domain random
 
-            match tryGenerateTheta f domain random 10000 with
+            match Initialise.tryGenerateTheta f domain random 10000 with
             | Ok theta ->
                 writeOut <| GeneralEvent(sprintf "[Optimisation] Initial theta is %A" theta)
 
@@ -637,7 +636,7 @@ module MonteCarlo =
     let ``Adaptive-Metropolis-within Gibbs``: Optimiser<float> =
         InDetachedSpace
         <| fun random writeOut endCon domain startPoint f ->
-            match tryGenerateTheta f domain random 10000 with
+            match Initialise.tryGenerateTheta f domain random 10000 with
             | Ok theta ->
                 writeOut <| GeneralEvent(sprintf "[Optimisation] Initial theta is %A" theta)
                 let sigmas = theta |> Array.map (fun _ -> 0.)
@@ -653,7 +652,7 @@ module MonteCarlo =
     let ``Metropolis-within Gibbs``: Optimiser<float> =
         InDetachedSpace
         <| fun random writeOut endCon domain startPoint (f: Objective<float>) ->
-            let theta = initialise domain random
+            let theta = Initialise.initialise domain random
             let sigmas = theta |> Array.map (fun _ -> 0.)
 
             let _, result, _ =
@@ -669,7 +668,7 @@ module MonteCarlo =
         <| fun random writeOut endCon domain startPoint (f: Objective<float>) ->
 
             // Starting condition
-            let initialTheta = initialise domain random
+            let initialTheta = Initialise.initialise domain random
             let initialSigma = initialTheta |> Array.map (fun _ -> 0.)
 
             let mwg adapt batchSize currentBatch theta sigmas =
@@ -961,7 +960,7 @@ module MonteCarlo =
 
             // 1. Initial conditions
             let draw' = jump random
-            let theta1 = initialise domain random
+            let theta1 = Initialise.initialise domain random
             let l1 = f theta1
 
             // 2. Chain generator
@@ -1120,6 +1119,12 @@ module MonteCarlo =
               MinScaleChange: float
               BurnLength: EndCondition<'a> }
 
+            static member Default =
+                { TuneAfterChanges = 50
+                  MaxScaleChange = 100.00
+                  MinScaleChange = 0.0010
+                  BurnLength = EndConditions.afterIteration 2000 }
+
         let filzbach'
             settings
             (theta: float[])
@@ -1275,7 +1280,7 @@ module MonteCarlo =
 
                     filzbach' settings theta random writeOut endCon domain f
                 | None ->
-                    match tryGenerateTheta f domain random 10000 with
+                    match Initialise.tryGenerateTheta f domain random 10000 with
                     | Ok theta ->
                         writeOut <| GeneralEvent(sprintf "[Optimisation] Initial theta is %A" theta)
                         filzbach' settings theta random writeOut endCon domain f
@@ -1361,28 +1366,30 @@ module Amoeba =
                 else
                     shrink a f s
 
-        let initialize (d: Domain) (rng: System.Random) =
-            [| for (min, max, _) in d -> min + (max - min) * rng.NextDouble() |]
-
-        let solve settings rng writeOut (endWhen: EndCondition<float>) domain startPoint f =
+        let solve settings rng writeOut atEnd domain _ f =
             let dim = Array.length domain
 
             let start =
-                [| for _ in 1 .. settings.Size -> initialize domain rng |]
+                [| for _ in 1 .. settings.Size -> Initialise.tryGenerateTheta f domain rng 1000 |]
+                |> Array.map (fun r ->
+                    match r with
+                    | Ok r -> r
+                    | Error _ -> failwith "Could not generate theta")
                 |> Array.map (evaluate f)
                 |> Array.sortBy fst
 
             let amoeba = { Dim = dim; Solutions = start }
 
-            let rec search i (a: Amoeba) =
-                if i > 0 then
-                    // writeOut <| OptimisationEvent { Iteration = i; Likelihood = a; Theta = thetaAccepted }
-                    search (i - 1) (update a f settings) // TODO unify array vs list
+            let rec search i trace atEnd (a: Amoeba) =
+                if not <| atEnd trace i then
+                    printfn "i %i, val %A" i (trace |> List.tryHead)
+                    // writeOut <| OptimisationEvent { Iteration = i; Likelihood = trace; Theta = thetaAccepted }
+                    search (i + 1) (a.Best :: trace) atEnd (update a f settings)
                 else
                     writeOut <| GeneralEvent(sprintf "Solution: -L = %f" (fst a.Solutions.[0]))
                     a.Solutions |> Array.toList
 
-            search 50000 amoeba
+            search 0 [] atEnd amoeba
 
 
         let rec swarm
