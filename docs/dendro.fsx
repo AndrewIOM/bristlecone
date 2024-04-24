@@ -32,11 +32,8 @@ proxy records.
 The `Bristlecone.Dendro` package contains additional functions
 that can be usesful when conducting top-down mechanistic modelling
 with tree- and shrub-ring data, such as ring width and stable isotope
-records. You can reference it in an F# script as follows:
+records. You can reference it in an F# script with `#r "nuget: Bristlecone.Dendro"`.
 *)
-
-(*** do-not-eval ***)
-#r "nuget: Bristlecone.Dendro"
 
 (**
 ### Seasonal Cycles and Day Length
