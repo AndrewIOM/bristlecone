@@ -1,0 +1,961 @@
+<!DOCTYPE html>
+<html lang="en" data-root="https://acm.im/bristlecone/">
+<head>
+    <meta charset="UTF-8">
+    <meta content="IE=edge" http-equiv="X-UA-Compatible">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+    <meta content="Andrew Martin" name="author">
+    <!-- Opengraph properties (https://ogp.me/) -->
+    <meta property="og:site_name" content="bristlecone">
+    <meta property="og:title" content="Parameter (bristlecone)" />
+    <meta property="og:url" content="https://acm.im/bristlecone/{{fsdocs-source-basename}}.html">
+    <meta property="og:type" content="website" />
+    <!-- Twitter cards (https://developer.twitter.com/en/docs/twitter-for-websites/cards/overview/summary-card-with-large-image) -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:site" content="https://acm.im/bristlecone/">
+    <meta name="twitter:title" content="Parameter (bristlecone)">
+    
+    <title>Parameter (bristlecone) | bristlecone</title>
+    <link href="https://fonts.googleapis.com" rel="preconnect">
+    <link crossorigin href="https://fonts.gstatic.com" rel="preconnect">
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code&display=swap" rel="stylesheet">
+    <script src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js"></script>
+    <link href="https://acm.im/bristlecone/img/favicon.ico" rel="icon" sizes="32x32" type="image/png"/>
+    <script type="application/javascript" src="https://acm.im/bristlecone/content/fsdocs-theme-set-dark.js"></script>
+    <link href="https://acm.im/bristlecone/content/fsdocs-default.css" rel="stylesheet" type="text/css"/>
+    <link href="https://acm.im/bristlecone/content/fsdocs-theme.css" rel="stylesheet" type="text/css"/>
+    <script src="https://cdn.plot.ly/plotly-2.21.0.min.js"></script>
+    
+</head>
+<body class="api-docs">
+<header>
+    <div class="start">
+        <div id="menu-toggle">
+            <iconify-icon class="icon closed" height="22" icon="eva:menu-fill" width="22"></iconify-icon>
+            <iconify-icon class="icon open" height="22" icon="mi:close" width="22"></iconify-icon>
+            <input type="checkbox" name="mobile-menu" />
+            <ul class="menu">
+                <li class="nav-header">Links</li>
+                <li class="nav-item"><a class="nav-link" href="https://github.com/AndrewIOM/bristlecone/blob/master/LICENSE">License</a>
+                </li>
+                <li class="nav-item"><a class="nav-link"
+                                        href="https://github.com/AndrewIOM/bristlecone/blob/master/RELEASE_NOTES.MD">Release
+                    Notes</a></li>
+                <li class="nav-item"><a class="nav-link" href="https://github.com/AndrewIOM/bristlecone/">Source
+                    Repository</a></li>
+                <li class="nav-header ">
+  The Bristlecone Language
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/language.html">
+    Writing Models
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model.html">
+    Defining a Hypothesis (or Model System)
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/estimation-engine.html">
+    Defining a Model-Fitting Method (Estimation Engine)
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/composing-models.html">
+    Composing models into many hypotheses
+  </a>
+</li>             
+<li class="nav-header ">
+  Techniques
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model-fitting.html">
+    Model Fitting
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model-selection.html">
+    Model Selection
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/workflow.html">
+    Ensembles and Parallel Processing
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/confidence-intervals.html">
+    Calculating Confidence Intervals
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/diagnostics.html">
+    Diagnostics
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/data.html">
+    Loading and Saving Data
+  </a>
+</li>             
+<li class="nav-header ">
+  Bristlecone.Dendro
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/dendro.html">
+    Dendroecology
+  </a>
+</li>             
+<li class="nav-header ">
+  Examples
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/predator-prey.html">
+    Predator-Prey Dynamics
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/shrub-resource.html">
+    Shrub response to a single limiting resource
+  </a>
+</li>             
+<li class="nav-header ">
+  Components
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/optimisation.html">
+    Optimisation
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/integration.html">
+    Integration
+  </a>
+</li>
+                <li class="nav-header">
+  API Reference
+</li>             
+<li class="nav-item">
+  <a class="nav-link" href="https://acm.im/bristlecone/reference/index.html">
+    All Namespaces
+  </a>
+</li>
+            </ul>
+        </div>
+        <a href="https://acm.im/bristlecone/">
+            <img alt="Header menu logo" src="https://acm.im/bristlecone//img/logo.png">
+            <strong>bristlecone</strong>
+        </a>
+    </div>
+    <div class="end">
+        <a href="https://github.com/AndrewIOM/bristlecone/" target="_blank">
+            <iconify-icon icon="uil:github" width="26" height="26"></iconify-icon>
+        </a>
+        <iconify-icon id="search-btn" icon="carbon:search" class="search" width="24" height="24"></iconify-icon>
+        <fsdocs-theme-toggle></fsdocs-theme-toggle>
+    </div>
+</header>
+<aside id="fsdocs-main-menu">
+    <ul class="menu">
+        <li class="nav-header">Links</li>
+        <li class="nav-item"><a class="nav-link" href="https://github.com/AndrewIOM/bristlecone/blob/master/LICENSE">License</a>
+        </li>
+        <li class="nav-item"><a class="nav-link"
+                                href="https://github.com/AndrewIOM/bristlecone/blob/master/RELEASE_NOTES.MD">Release
+            Notes</a></li>
+        <li class="nav-item"><a class="nav-link" href="https://github.com/AndrewIOM/bristlecone/">Source
+            Repository</a></li>
+        <li class="nav-header ">
+  The Bristlecone Language
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/language.html">
+    Writing Models
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model.html">
+    Defining a Hypothesis (or Model System)
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/estimation-engine.html">
+    Defining a Model-Fitting Method (Estimation Engine)
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/composing-models.html">
+    Composing models into many hypotheses
+  </a>
+</li>             
+<li class="nav-header ">
+  Techniques
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model-fitting.html">
+    Model Fitting
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model-selection.html">
+    Model Selection
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/workflow.html">
+    Ensembles and Parallel Processing
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/confidence-intervals.html">
+    Calculating Confidence Intervals
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/diagnostics.html">
+    Diagnostics
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/data.html">
+    Loading and Saving Data
+  </a>
+</li>             
+<li class="nav-header ">
+  Bristlecone.Dendro
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/dendro.html">
+    Dendroecology
+  </a>
+</li>             
+<li class="nav-header ">
+  Examples
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/predator-prey.html">
+    Predator-Prey Dynamics
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/shrub-resource.html">
+    Shrub response to a single limiting resource
+  </a>
+</li>             
+<li class="nav-header ">
+  Components
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/optimisation.html">
+    Optimisation
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/integration.html">
+    Integration
+  </a>
+</li>
+        <li class="nav-header">
+  API Reference
+</li>             
+<li class="nav-item">
+  <a class="nav-link" href="https://acm.im/bristlecone/reference/index.html">
+    All Namespaces
+  </a>
+</li>
+    </ul>
+</aside>
+<main>
+    <div id="content">
+        <div>
+  <h2>
+    Parameter Module
+  </h2>
+  <dl class="fsdocs-metadata">
+    <dt>
+      Namespace: 
+      <a href="https://acm.im/bristlecone/reference/bristlecone.html">
+        Bristlecone
+      </a>
+    </dt>
+    <dt>
+      Assembly: Bristlecone.dll
+    </dt>
+  </dl>
+  <div class="fsdocs-xmldoc">
+    <div>
+      <p class="fsdocs-summary">
+        
+      </p>
+    </div>
+  </div>
+  <div>
+    <h3>
+      Types and nested modules
+    </h3>
+    <table class="table outer-list fsdocs-entity-list">
+      <thead>
+        <tr>
+          <td>
+            Type/Module
+          </td>
+          <td>
+            Description
+          </td>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="fsdocs-entity-name">
+            <p>
+              <a name="Pool">
+                <a href="https://acm.im/bristlecone/reference/bristlecone-parameter-poolmodule.html">
+                  Pool (Module)
+                </a>
+              </a>
+            </p>
+          </td>
+          <td class="fsdocs-entity-xmldoc">
+            <div>
+              <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('`cref:T:Bristlecone.Parameter.PoolModule`')">
+                <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+              </div>
+              <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'T:Bristlecone.Parameter.PoolModule\'/>')">
+                <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+              </div>
+              <a href="https://github.com/AndrewIOM/bristlecone/src/Bristlecone/Parameter.fs#L139-139" class="fsdocs-source-link" title="Source on GitHub">
+                <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+              </a>
+              <p class="fsdocs-summary">
+                 Contains the `ParameterPool` type, which represents the set of parameters
+ to be estimated within an analysis.
+              </p>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-entity-name">
+            <p>
+              <a name="Constraint">
+                <a href="https://acm.im/bristlecone/reference/bristlecone-parameter-constraint.html">
+                  Constraint
+                </a>
+              </a>
+            </p>
+          </td>
+          <td class="fsdocs-entity-xmldoc">
+            <div>
+              <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('`cref:T:Bristlecone.Parameter.Constraint`')">
+                <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+              </div>
+              <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'T:Bristlecone.Parameter.Constraint\'/>')">
+                <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+              </div>
+              <a href="https://github.com/AndrewIOM/bristlecone/src/Bristlecone/Parameter.fs#L20-20" class="fsdocs-source-link" title="Source on GitHub">
+                <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+              </a>
+              <p class="fsdocs-summary">
+                 Limits a `Parameter` to certain value ranges by
+ applying mathematical transformations when requested
+ for 'optimisation space'.
+              </p>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-entity-name">
+            <p>
+              <a name="ConstraintMode">
+                <a href="https://acm.im/bristlecone/reference/bristlecone-parameter-constraintmode.html">
+                  ConstraintMode
+                </a>
+              </a>
+            </p>
+          </td>
+          <td class="fsdocs-entity-xmldoc">
+            <div>
+              <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('`cref:T:Bristlecone.Parameter.ConstraintMode`')">
+                <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+              </div>
+              <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'T:Bristlecone.Parameter.ConstraintMode\'/>')">
+                <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+              </div>
+              <a href="https://github.com/AndrewIOM/bristlecone/src/Bristlecone/Parameter.fs#L13-13" class="fsdocs-source-link" title="Source on GitHub">
+                <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+              </a>
+              <p class="fsdocs-summary">
+                 The mode in which constraints are handled by the parameter.
+ In `Transform` mode, the parameter value is transformed
+ when requested in 'optimisation space'. Alternatively,
+ in `Detached` mode, the real parameter value is simply
+ returned when requested in 'optimisation space'.
+              </p>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-entity-name">
+            <p>
+              <a name="Estimation">
+                <a href="https://acm.im/bristlecone/reference/bristlecone-parameter-estimation.html">
+                  Estimation
+                </a>
+              </a>
+            </p>
+          </td>
+          <td class="fsdocs-entity-xmldoc">
+            <div>
+              <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('`cref:T:Bristlecone.Parameter.Estimation`')">
+                <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+              </div>
+              <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'T:Bristlecone.Parameter.Estimation\'/>')">
+                <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+              </div>
+              <a href="https://github.com/AndrewIOM/bristlecone/src/Bristlecone/Parameter.fs#L24-24" class="fsdocs-source-link" title="Source on GitHub">
+                <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+              </a>
+              <p class="fsdocs-summary">
+                
+              </p>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-entity-name">
+            <p>
+              <a name="Parameter">
+                <a href="https://acm.im/bristlecone/reference/bristlecone-parameter-parameter.html">
+                  Parameter
+                </a>
+              </a>
+            </p>
+          </td>
+          <td class="fsdocs-entity-xmldoc">
+            <div>
+              <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('`cref:T:Bristlecone.Parameter.Parameter`')">
+                <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+              </div>
+              <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'T:Bristlecone.Parameter.Parameter\'/>')">
+                <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+              </div>
+              <a href="https://github.com/AndrewIOM/bristlecone/src/Bristlecone/Parameter.fs#L28-28" class="fsdocs-source-link" title="Source on GitHub">
+                <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+              </a>
+              <p class="fsdocs-summary">
+                
+              </p>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-entity-name">
+            <p>
+              <a name="Pool">
+                <a href="https://acm.im/bristlecone/reference/bristlecone-parameter-pool.html">
+                  Pool (Type)
+                </a>
+              </a>
+            </p>
+          </td>
+          <td class="fsdocs-entity-xmldoc">
+            <div>
+              <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('`cref:T:Bristlecone.Parameter.Pool`')">
+                <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+              </div>
+              <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'T:Bristlecone.Parameter.Pool\'/>')">
+                <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+              </div>
+              <a href="https://github.com/AndrewIOM/bristlecone/src/Bristlecone/Parameter.fs#L248-248" class="fsdocs-source-link" title="Source on GitHub">
+                <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+              </a>
+              <p class="fsdocs-summary">
+                
+              </p>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div>
+    <h3>
+      Functions and values
+    </h3>
+    <table class="table outer-list fsdocs-member-list">
+      <thead>
+        <tr>
+          <td class="fsdocs-member-list-header">
+            Function or value
+          </td>
+          <td class="fsdocs-member-list-header">
+            Description
+          </td>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '77', 77)" onmouseover="showTip(event, '77', 77)">
+                <p>
+                  <a id="bounds">
+                    <a href="#bounds">
+                      <code><span>Parameter.bounds&#32;<span>p</span></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="77">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>Parameter.bounds&#32;<span>p</span></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        p
+                      </b>
+                      :
+                      <code><a href="https://acm.im/bristlecone/reference/bristlecone-parameter-parameter.html">Parameter</a></code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code><span><span>(<span>float&#32;*&#32;float</span>)</span>&#32;option</span></code>
+                  </span>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <details>
+              <summary>
+                <div class="fsdocs-summary">
+                  <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('`cref:M:Bristlecone.Parameter.bounds`')">
+                    <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+                  </div>
+                  <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'M:Bristlecone.Parameter.bounds\'/>')">
+                    <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+                  </div>
+                  <a href="https://github.com/AndrewIOM/bristlecone/src/Bristlecone/Parameter.fs#L91-91" class="fsdocs-source-link" title="Source on GitHub">
+                    <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                  </a>
+                  <p class="fsdocs-summary">
+                     Bounds are always stored in a parameter in raw form.
+                  </p>
+                </div>
+              </summary>
+              <dl class="fsdocs-params">
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    p
+                  </span>
+                  :
+                  <code><a href="https://acm.im/bristlecone/reference/bristlecone-parameter-parameter.html">Parameter</a></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+              </dl>
+              <dl class="fsdocs-returns">
+                <dt>
+                  <span class="fsdocs-return-name">
+                    Returns: 
+                  </span>
+                  <code><span><span>(<span>float&#32;*&#32;float</span>)</span>&#32;option</span></code>
+                </dt>
+                <dd class="fsdocs-return-docs"></dd>
+              </dl>
+            </details>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '78', 78)" onmouseover="showTip(event, '78', 78)">
+                <p>
+                  <a id="create">
+                    <a href="#create">
+                      <code><span>Parameter.create&#32;<span>con&#32;bound1&#32;bound2</span></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="78">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>Parameter.create&#32;<span>con&#32;bound1&#32;bound2</span></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        con
+                      </b>
+                      :
+                      <code><a href="https://acm.im/bristlecone/reference/bristlecone-parameter-constraint.html">Constraint</a></code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        bound1
+                      </b>
+                      :
+                      <code>float</code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        bound2
+                      </b>
+                      :
+                      <code>float</code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-parameter-parameter.html">Parameter</a>&#32;option</span></code>
+                  </span>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <details>
+              <summary>
+                <div class="fsdocs-summary">
+                  <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('`cref:M:Bristlecone.Parameter.create`')">
+                    <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+                  </div>
+                  <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'M:Bristlecone.Parameter.create\'/>')">
+                    <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+                  </div>
+                  <a href="https://github.com/AndrewIOM/bristlecone/src/Bristlecone/Parameter.fs#L61-61" class="fsdocs-source-link" title="Source on GitHub">
+                    <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                  </a>
+                  <p class="fsdocs-summary">
+                     Create an estimatable `Parameter` that may be constrained or
+ unconstrained to a certain value range. Bristlecone draws an
+ initial value from the given bounds. To retrieve the estimated
+ parameter value, use `Parameter.finalise`.
+                  </p>
+                </div>
+              </summary>
+              <dl class="fsdocs-params">
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    con
+                  </span>
+                  :
+                  <code><a href="https://acm.im/bristlecone/reference/bristlecone-parameter-constraint.html">Constraint</a></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    bound1
+                  </span>
+                  :
+                  <code>float</code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    bound2
+                  </span>
+                  :
+                  <code>float</code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+              </dl>
+              <dl class="fsdocs-returns">
+                <dt>
+                  <span class="fsdocs-return-name">
+                    Returns: 
+                  </span>
+                  <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-parameter-parameter.html">Parameter</a>&#32;option</span></code>
+                </dt>
+                <dd class="fsdocs-return-docs"></dd>
+              </dl>
+            </details>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '79', 79)" onmouseover="showTip(event, '79', 79)">
+                <p>
+                  <a id="detatchConstraint">
+                    <a href="#detatchConstraint">
+                      <code><span>Parameter.detatchConstraint&#32;<span>p</span></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="79">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>Parameter.detatchConstraint&#32;<span>p</span></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        p
+                      </b>
+                      :
+                      <code><a href="https://acm.im/bristlecone/reference/bristlecone-parameter-parameter.html">Parameter</a></code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-parameter-parameter.html">Parameter</a>&#32;*&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-parameter-constraint.html">Constraint</a></span></code>
+                  </span>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <details>
+              <summary>
+                <div class="fsdocs-summary">
+                  <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('`cref:M:Bristlecone.Parameter.detatchConstraint`')">
+                    <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+                  </div>
+                  <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'M:Bristlecone.Parameter.detatchConstraint\'/>')">
+                    <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+                  </div>
+                  <a href="https://github.com/AndrewIOM/bristlecone/src/Bristlecone/Parameter.fs#L129-129" class="fsdocs-source-link" title="Source on GitHub">
+                    <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                  </a>
+                  <p class="fsdocs-summary">
+                     Detaches any constraints such that the parameter's
+ transformed space equals normal space.
+                  </p>
+                </div>
+              </summary>
+              <dl class="fsdocs-params">
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    p
+                  </span>
+                  :
+                  <code><a href="https://acm.im/bristlecone/reference/bristlecone-parameter-parameter.html">Parameter</a></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+              </dl>
+              <dl class="fsdocs-returns">
+                <dt>
+                  <span class="fsdocs-return-name">
+                    Returns: 
+                  </span>
+                  <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-parameter-parameter.html">Parameter</a>&#32;*&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-parameter-constraint.html">Constraint</a></span></code>
+                </dt>
+                <dd class="fsdocs-return-docs"></dd>
+              </dl>
+            </details>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '80', 80)" onmouseover="showTip(event, '80', 80)">
+                <p>
+                  <a id="getEstimate">
+                    <a href="#getEstimate">
+                      <code><span>Parameter.getEstimate&#32;<span>parameter</span></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="80">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>Parameter.getEstimate&#32;<span>parameter</span></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        parameter
+                      </b>
+                      :
+                      <code><a href="https://acm.im/bristlecone/reference/bristlecone-parameter-parameter.html">Parameter</a></code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-fsharpresult-2">Result</a>&lt;<span>float,&#32;string</span>&gt;</span></code>
+                  </span>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <details>
+              <summary>
+                <div class="fsdocs-summary">
+                  <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('`cref:M:Bristlecone.Parameter.getEstimate`')">
+                    <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+                  </div>
+                  <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'M:Bristlecone.Parameter.getEstimate\'/>')">
+                    <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+                  </div>
+                  <a href="https://github.com/AndrewIOM/bristlecone/src/Bristlecone/Parameter.fs#L83-83" class="fsdocs-source-link" title="Source on GitHub">
+                    <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                  </a>
+                  <p class="fsdocs-summary">
+                     Retrieve the estimated parameter value for further analysis.
+ Will only be `Ok` if parameter has been estimated.
+                  </p>
+                </div>
+              </summary>
+              <dl class="fsdocs-params">
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    parameter
+                  </span>
+                  :
+                  <code><a href="https://acm.im/bristlecone/reference/bristlecone-parameter-parameter.html">Parameter</a></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+              </dl>
+              <dl class="fsdocs-returns">
+                <dt>
+                  <span class="fsdocs-return-name">
+                    Returns: 
+                  </span>
+                  <code><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-fsharpresult-2">Result</a>&lt;<span>float,&#32;string</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-return-docs"></dd>
+              </dl>
+            </details>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '81', 81)" onmouseover="showTip(event, '81', 81)">
+                <p>
+                  <a id="isEstimated">
+                    <a href="#isEstimated">
+                      <code><span>Parameter.isEstimated&#32;<span>parameter</span></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="81">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>Parameter.isEstimated&#32;<span>parameter</span></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        parameter
+                      </b>
+                      :
+                      <code><a href="https://acm.im/bristlecone/reference/bristlecone-parameter-parameter.html">Parameter</a></code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code>bool</code>
+                  </span>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <details>
+              <summary>
+                <div class="fsdocs-summary">
+                  <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('`cref:M:Bristlecone.Parameter.isEstimated`')">
+                    <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+                  </div>
+                  <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'M:Bristlecone.Parameter.isEstimated\'/>')">
+                    <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+                  </div>
+                  <a href="https://github.com/AndrewIOM/bristlecone/src/Bristlecone/Parameter.fs#L74-74" class="fsdocs-source-link" title="Source on GitHub">
+                    <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                  </a>
+                  <p class="fsdocs-summary">
+                     Determines if the parameter has been estimated or not.
+                  </p>
+                </div>
+              </summary>
+              <dl class="fsdocs-params">
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    parameter
+                  </span>
+                  :
+                  <code><a href="https://acm.im/bristlecone/reference/bristlecone-parameter-parameter.html">Parameter</a></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+              </dl>
+              <dl class="fsdocs-returns">
+                <dt>
+                  <span class="fsdocs-return-name">
+                    Returns: 
+                  </span>
+                  <code>bool</code>
+                </dt>
+                <dd class="fsdocs-return-docs"></dd>
+              </dl>
+            </details>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div></div>
+  <div></div>
+  <div></div>
+  <div></div>
+  <div></div>
+  <div></div>
+  <div></div>
+  <div></div>
+</div>
+        
+    </div>
+</main>
+<aside id="fsdocs-page-menu">
+    <p id="on-this-page">On this page</p>
+    <div class="empty"></div>
+</aside>
+<dialog>
+    <input type="search" placeholder="Search docs" />
+    <div class="results">
+        <ul></ul>
+        <p class="empty">Type something to start searching.</p>
+    </div>
+</dialog>
+<script type="module" src="https://acm.im/bristlecone/content/fsdocs-tips.js"></script>
+<script type="module" src="https://acm.im/bristlecone/content/fsdocs-theme-toggle.js"></script>
+<script type="module" src="https://acm.im/bristlecone/content/fsdocs-theme.js"></script>
+<script type="module" src="https://acm.im/bristlecone/content/fsdocs-search.js"></script>
+
+</body>
+</html>

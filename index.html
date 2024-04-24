@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en" data-root="https://acm.im/bristlecone/">
+<head>
+    <meta charset="UTF-8">
+    <meta content="IE=edge" http-equiv="X-UA-Compatible">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+    <meta content="Andrew Martin" name="author">
+    <!-- Opengraph properties (https://ogp.me/) -->
+    <meta property="og:site_name" content="bristlecone">
+    <meta property="og:title" content="Index" />
+    <meta property="og:url" content="https://acm.im/bristlecone/index.html">
+    <meta property="og:type" content="website" />
+    <!-- Twitter cards (https://developer.twitter.com/en/docs/twitter-for-websites/cards/overview/summary-card-with-large-image) -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:site" content="https://acm.im/bristlecone/">
+    <meta name="twitter:title" content="Index">
+    
+    <title>Index | bristlecone</title>
+    <link href="https://fonts.googleapis.com" rel="preconnect">
+    <link crossorigin href="https://fonts.gstatic.com" rel="preconnect">
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code&display=swap" rel="stylesheet">
+    <script src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js"></script>
+    <link href="https://acm.im/bristlecone/img/favicon.ico" rel="icon" sizes="32x32" type="image/png"/>
+    <script type="application/javascript" src="https://acm.im/bristlecone/content/fsdocs-theme-set-dark.js"></script>
+    <link href="https://acm.im/bristlecone/content/fsdocs-default.css" rel="stylesheet" type="text/css"/>
+    <link href="https://acm.im/bristlecone/content/fsdocs-theme.css" rel="stylesheet" type="text/css"/>
+    <script src="https://cdn.plot.ly/plotly-2.21.0.min.js"></script>
+    
+</head>
+<body class="content">
+<header>
+    <div class="start">
+        <div id="menu-toggle">
+            <iconify-icon class="icon closed" height="22" icon="eva:menu-fill" width="22"></iconify-icon>
+            <iconify-icon class="icon open" height="22" icon="mi:close" width="22"></iconify-icon>
+            <input type="checkbox" name="mobile-menu" />
+            <ul class="menu">
+                <li class="nav-header">Links</li>
+                <li class="nav-item"><a class="nav-link" href="https://github.com/AndrewIOM/bristlecone/blob/master/LICENSE">License</a>
+                </li>
+                <li class="nav-item"><a class="nav-link"
+                                        href="https://github.com/AndrewIOM/bristlecone/blob/master/RELEASE_NOTES.MD">Release
+                    Notes</a></li>
+                <li class="nav-item"><a class="nav-link" href="https://github.com/AndrewIOM/bristlecone/">Source
+                    Repository</a></li>
+                <li class="nav-header ">
+  The Bristlecone Language
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/language.html">
+    Writing Models
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model.html">
+    Defining a Hypothesis (or Model System)
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/estimation-engine.html">
+    Defining a Model-Fitting Method (Estimation Engine)
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/composing-models.html">
+    Composing models into many hypotheses
+  </a>
+</li>             
+<li class="nav-header ">
+  Techniques
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model-fitting.html">
+    Model Fitting
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model-selection.html">
+    Model Selection
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/workflow.html">
+    Ensembles and Parallel Processing
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/confidence-intervals.html">
+    Calculating Confidence Intervals
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/diagnostics.html">
+    Diagnostics
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/data.html">
+    Loading and Saving Data
+  </a>
+</li>             
+<li class="nav-header ">
+  Bristlecone.Dendro
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/dendro.html">
+    Dendroecology
+  </a>
+</li>             
+<li class="nav-header ">
+  Examples
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/predator-prey.html">
+    Predator-Prey Dynamics
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/shrub-resource.html">
+    Shrub response to a single limiting resource
+  </a>
+</li>             
+<li class="nav-header ">
+  Components
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/optimisation.html">
+    Optimisation
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/integration.html">
+    Integration
+  </a>
+</li>
+                <li class="nav-header">
+  API Reference
+</li>             
+<li class="nav-item">
+  <a class="nav-link" href="https://acm.im/bristlecone/reference/index.html">
+    All Namespaces
+  </a>
+</li>
+            </ul>
+        </div>
+        <a href="https://acm.im/bristlecone/">
+            <img alt="Header menu logo" src="https://acm.im/bristlecone//img/logo.png">
+            <strong>bristlecone</strong>
+        </a>
+    </div>
+    <div class="end">
+        <a href="https://github.com/AndrewIOM/bristlecone/" target="_blank">
+            <iconify-icon icon="uil:github" width="26" height="26"></iconify-icon>
+        </a>
+        <iconify-icon id="search-btn" icon="carbon:search" class="search" width="24" height="24"></iconify-icon>
+        <fsdocs-theme-toggle></fsdocs-theme-toggle>
+    </div>
+</header>
+<aside id="fsdocs-main-menu">
+    <ul class="menu">
+        <li class="nav-header">Links</li>
+        <li class="nav-item"><a class="nav-link" href="https://github.com/AndrewIOM/bristlecone/blob/master/LICENSE">License</a>
+        </li>
+        <li class="nav-item"><a class="nav-link"
+                                href="https://github.com/AndrewIOM/bristlecone/blob/master/RELEASE_NOTES.MD">Release
+            Notes</a></li>
+        <li class="nav-item"><a class="nav-link" href="https://github.com/AndrewIOM/bristlecone/">Source
+            Repository</a></li>
+        <li class="nav-header ">
+  The Bristlecone Language
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/language.html">
+    Writing Models
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model.html">
+    Defining a Hypothesis (or Model System)
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/estimation-engine.html">
+    Defining a Model-Fitting Method (Estimation Engine)
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/composing-models.html">
+    Composing models into many hypotheses
+  </a>
+</li>             
+<li class="nav-header ">
+  Techniques
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model-fitting.html">
+    Model Fitting
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model-selection.html">
+    Model Selection
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/workflow.html">
+    Ensembles and Parallel Processing
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/confidence-intervals.html">
+    Calculating Confidence Intervals
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/diagnostics.html">
+    Diagnostics
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/data.html">
+    Loading and Saving Data
+  </a>
+</li>             
+<li class="nav-header ">
+  Bristlecone.Dendro
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/dendro.html">
+    Dendroecology
+  </a>
+</li>             
+<li class="nav-header ">
+  Examples
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/predator-prey.html">
+    Predator-Prey Dynamics
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/shrub-resource.html">
+    Shrub response to a single limiting resource
+  </a>
+</li>             
+<li class="nav-header ">
+  Components
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/optimisation.html">
+    Optimisation
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/integration.html">
+    Integration
+  </a>
+</li>
+        <li class="nav-header">
+  API Reference
+</li>             
+<li class="nav-item">
+  <a class="nav-link" href="https://acm.im/bristlecone/reference/index.html">
+    All Namespaces
+  </a>
+</li>
+    </ul>
+</aside>
+<main>
+    <div id="content">
+        
+<p><a href="https://acm.im/bristlecone//index.fsx"><img src="https://acm.im/bristlecone//img/badge-script.svg" alt="Script" /></a>&emsp;
+<a href="https://acm.im/bristlecone//index.ipynb"><img src="https://acm.im/bristlecone//img/badge-notebook.svg" alt="Notebook" /></a></p>
+<h1><a name="Bristlecone" class="anchor" href="#Bristlecone">Bristlecone</a></h1>
+<p>Bristlecone is a library for easily <em>composing</em> theoretical models into larger systems, and
+subsequently conducting model-fitting and model-selection analyses on time-series data.
+Although originally designed for the investigation of non-linear dynamics within ecological
+and environmental sciences, the library can be used across finance, econometrics and
+other fields that apply non-linear modelling techniques.</p>
+<h2><a name="Quick-Start" class="anchor" href="#Quick-Start">Quick Start</a></h2>
+<p>Bristlecone is an F# .NET library. You can easily get started by installing
+<a href="https://dot.net">the latest .NET SDK</a>. You may then simply use the
+Bristlecone package in a script, application, or library.
+The nuget package <a href="https://nuget.org/packages/Bristlecone">is available here</a>.</p>
+<h3><a name="To-use-in-an-F-script" class="anchor" href="#To-use-in-an-F-script">To use in an F# script</a></h3>
+<p><img src="img/example.png" alt="img/example.png" /></p>
+<h2><a name="Example" class="anchor" href="#Example">Example</a></h2>
+<p>This example demonstrates the layout of a model when defined in Bristlecone.</p>
+<pre class="fssnip highlighted"><code lang="fsharp"><span class="k">open</span> <span onmouseout="hideTip(event, 'fs1', 1)" onmouseover="showTip(event, 'fs1', 1)" class="id">Bristlecone</span> <span class="c">// Opens Bristlecone core library and estimation engine</span>
+<span class="k">open</span> <span onmouseout="hideTip(event, 'fs1', 2)" onmouseover="showTip(event, 'fs1', 2)" class="m">Bristlecone</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs2', 3)" onmouseover="showTip(event, 'fs2', 3)" class="m">Language</span> <span class="c">// Open the language for writing Bristlecone models</span>
+
+<span class="k">let</span> <span onmouseout="hideTip(event, 'fs3', 4)" onmouseover="showTip(event, 'fs3', 4)" class="id">hypothesis</span> <span class="o">=</span>
+
+    <span class="k">let</span> <span onmouseout="hideTip(event, 'fs4', 5)" onmouseover="showTip(event, 'fs4', 5)" class="fn">vonBertalanffy</span> <span class="o">=</span> <span onmouseout="hideTip(event, 'fs5', 6)" onmouseover="showTip(event, 'fs5', 6)" class="uc">Parameter</span> <span class="s">&quot;η&quot;</span> <span class="o">*</span> <span onmouseout="hideTip(event, 'fs6', 7)" onmouseover="showTip(event, 'fs6', 7)" class="uc">This</span> <span class="o">**</span> <span onmouseout="hideTip(event, 'fs5', 8)" onmouseover="showTip(event, 'fs5', 8)" class="uc">Parameter</span> <span class="s">&quot;β&quot;</span> <span class="o">-</span> <span onmouseout="hideTip(event, 'fs5', 9)" onmouseover="showTip(event, 'fs5', 9)" class="uc">Parameter</span> <span class="s">&quot;κ&quot;</span> <span class="o">*</span> <span onmouseout="hideTip(event, 'fs6', 10)" onmouseover="showTip(event, 'fs6', 10)" class="uc">This</span>
+
+    <span onmouseout="hideTip(event, 'fs7', 11)" onmouseover="showTip(event, 'fs7', 11)" class="m">Model</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs8', 12)" onmouseover="showTip(event, 'fs8', 12)" class="id">empty</span>
+    <span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs7', 13)" onmouseover="showTip(event, 'fs7', 13)" class="m">Model</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs9', 14)" onmouseover="showTip(event, 'fs9', 14)" class="id">addEquation</span> <span class="s">&quot;mass&quot;</span> <span onmouseout="hideTip(event, 'fs4', 15)" onmouseover="showTip(event, 'fs4', 15)" class="fn">vonBertalanffy</span>
+    <span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs7', 16)" onmouseover="showTip(event, 'fs7', 16)" class="m">Model</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs10', 17)" onmouseover="showTip(event, 'fs10', 17)" class="id">estimateParameter</span> <span class="s">&quot;η&quot;</span> <span onmouseout="hideTip(event, 'fs11', 18)" onmouseover="showTip(event, 'fs11', 18)" class="id">noConstraints</span> <span class="n">0.50</span> <span class="n">1.50</span>
+    <span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs7', 19)" onmouseover="showTip(event, 'fs7', 19)" class="m">Model</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs10', 20)" onmouseover="showTip(event, 'fs10', 20)" class="id">estimateParameter</span> <span class="s">&quot;β&quot;</span> <span onmouseout="hideTip(event, 'fs11', 21)" onmouseover="showTip(event, 'fs11', 21)" class="id">noConstraints</span> <span class="n">0.01</span> <span class="n">1.00</span>
+    <span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs7', 22)" onmouseover="showTip(event, 'fs7', 22)" class="m">Model</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs10', 23)" onmouseover="showTip(event, 'fs10', 23)" class="id">estimateParameter</span> <span class="s">&quot;κ&quot;</span> <span onmouseout="hideTip(event, 'fs11', 24)" onmouseover="showTip(event, 'fs11', 24)" class="id">noConstraints</span> <span class="n">0.01</span> <span class="n">1.00</span>
+    <span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs7', 25)" onmouseover="showTip(event, 'fs7', 25)" class="m">Model</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs12', 26)" onmouseover="showTip(event, 'fs12', 26)" class="id">useLikelihoodFunction</span> <span class="pn">(</span><span onmouseout="hideTip(event, 'fs13', 27)" onmouseover="showTip(event, 'fs13', 27)" class="id">ModelLibrary</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs14', 28)" onmouseover="showTip(event, 'fs14', 28)" class="m">Likelihood</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs15', 29)" onmouseover="showTip(event, 'fs15', 29)" class="id">sumOfSquares</span> <span class="pn">[</span> <span class="s">&quot;mass&quot;</span> <span class="pn">]</span><span class="pn">)</span>
+    <span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs7', 30)" onmouseover="showTip(event, 'fs7', 30)" class="m">Model</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs16', 31)" onmouseover="showTip(event, 'fs16', 31)" class="id">compile</span>
+
+<span class="k">let</span> <span onmouseout="hideTip(event, 'fs17', 32)" onmouseover="showTip(event, 'fs17', 32)" class="id">engine</span> <span class="o">=</span>
+    <span onmouseout="hideTip(event, 'fs1', 33)" onmouseover="showTip(event, 'fs1', 33)" class="m">Bristlecone</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs18', 34)" onmouseover="showTip(event, 'fs18', 34)" class="id">mkContinuous</span>
+    <span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs1', 35)" onmouseover="showTip(event, 'fs1', 35)" class="m">Bristlecone</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs19', 36)" onmouseover="showTip(event, 'fs19', 36)" class="id">withCustomOptimisation</span> <span class="pn">(</span><span onmouseout="hideTip(event, 'fs20', 37)" onmouseover="showTip(event, 'fs20', 37)" class="id">Optimisation</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs21', 38)" onmouseover="showTip(event, 'fs21', 38)" class="m">Amoeba</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs22', 39)" onmouseover="showTip(event, 'fs22', 39)" class="id">swarm</span> <span class="n">5</span> <span class="n">20</span> <span onmouseout="hideTip(event, 'fs20', 40)" onmouseover="showTip(event, 'fs20', 40)" class="id">Optimisation</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs21', 41)" onmouseover="showTip(event, 'fs21', 41)" class="m">Amoeba</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs23', 42)" onmouseover="showTip(event, 'fs23', 42)" class="m">Solver</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs24', 43)" onmouseover="showTip(event, 'fs24', 43)" class="id">Default</span><span class="pn">)</span>
+
+<span class="k">let</span> <span onmouseout="hideTip(event, 'fs25', 44)" onmouseover="showTip(event, 'fs25', 44)" class="id">testSettings</span> <span class="o">=</span> <span onmouseout="hideTip(event, 'fs1', 45)" onmouseover="showTip(event, 'fs1', 45)" class="m">Bristlecone</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs26', 46)" onmouseover="showTip(event, 'fs26', 46)" class="m">Test</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs27', 47)" onmouseover="showTip(event, 'fs27', 47)" class="id">TestSettings</span><span class="pn">&lt;</span><span onmouseout="hideTip(event, 'fs28', 48)" onmouseover="showTip(event, 'fs28', 48)" class="vt">float</span><span class="pn">&gt;</span><span class="pn">.</span><span class="id">Default</span>
+<span class="k">let</span> <span onmouseout="hideTip(event, 'fs29', 49)" onmouseover="showTip(event, 'fs29', 49)" class="id">testResult</span> <span class="o">=</span> <span onmouseout="hideTip(event, 'fs1', 50)" onmouseover="showTip(event, 'fs1', 50)" class="m">Bristlecone</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs30', 51)" onmouseover="showTip(event, 'fs30', 51)" class="id">testModel</span> <span onmouseout="hideTip(event, 'fs17', 52)" onmouseover="showTip(event, 'fs17', 52)" class="id">engine</span> <span onmouseout="hideTip(event, 'fs25', 53)" onmouseover="showTip(event, 'fs25', 53)" class="id">testSettings</span> <span onmouseout="hideTip(event, 'fs3', 54)" onmouseover="showTip(event, 'fs3', 54)" class="id">hypothesis</span>
+</code></pre>
+<table class="pre"><tr><td><pre><code></code></pre></td></tr></table>
+<p>In the above snippet, a von Bertalanffy growth model is defined as a hypothesis to test. We then create an <code>EstimationEngine</code>, which defines the methodology for model-fitting. In Bristlecone, an <code>EstimationEngine</code> is created and customised using the F# forward pipe operator (for R users this may be familiar; this concept was adapted into the dplyr %&gt;% operator). The call to <code>testModel</code> generates random test data, and assesses whether the model-fitting method can accurately estimate known parameters.</p>
+<h2><a name="Samples-amp-documentation" class="anchor" href="#Samples-amp-documentation">Samples &amp; documentation</a></h2>
+<p>An API reference is automatically generated from XML comments in the library implementation.</p>
+<p>In addition, this documentation includes step-by-step example analyses. Each analysis may be downloaded
+as an F# script or Jupyter notebook using the buttons at the top of each example page.</p>
+<ul>
+<li><p><a href="examples/predator-prey.html">The predator-prey example</a> covers basic model-fitting with Bristlecone.</p></li>
+<li>
+<p><a href="examples/shrub-resource.html">The shrub-resource example</a> is a more
+comprehensive example that covers model-fitting and model-selection (MFMS) with Bristlecone.</p>
+</li>
+<li>
+<p>The <a href="reference/index.html">API Reference</a> contains automatically generated documentation for all types, modules
+and functions in the library. This includes additional brief samples on using most of the
+functions.</p>
+</li>
+</ul>
+<h2><a name="Contributing-and-copyright" class="anchor" href="#Contributing-and-copyright">Contributing and copyright</a></h2>
+<p>The project is hosted on <a href="https://github.com/AndrewIOM/Bristlecone">GitHub</a> where you can <a href="https://github.com/AndrewIOM/Bristlecone/issues">report issues</a>, fork
+the project and submit pull requests. If you're adding a new public API, please also
+consider adding <a href="https://github.com/AndrewIOM/Bristlecone/tree/master/docs/examples">samples</a> that can be turned into documentation (using fsdocs
+literal scripting).</p>
+<p>The library is available under an MIT license, which allows modification and
+redistribution for both commercial and non-commercial purposes. For more information see the
+<a href="https://github.com/AndrewIOM/Bristlecone/blob/master/LICENSE">License file</a> in the GitHub repository.</p>
+
+        <div class="fsdocs-tip" id="fs1">Multiple items<br />module Bristlecone
+
+from Bristlecone<br /><em>&lt;namespacedoc&gt;&lt;summary&gt;The core library of Bristlecone, containing model-fitting functions.&lt;/summary&gt;&lt;/namespacedoc&gt;<br />
+
+ Main functionality of Bristlecone, including functions to scaffold
+ `ModelSystem`s and for model-fitting (tests and real fits).
+</em><br /><br />--------------------<br />namespace Bristlecone</div>
+<div class="fsdocs-tip" id="fs2">module Language
+
+from Bristlecone<br /><em>&lt;summary&gt;
+ An F# Domain Specific Language (DSL) for scripting with
+ Bristlecone.
+&lt;/summary&gt;</em></div>
+<div class="fsdocs-tip" id="fs3">val hypothesis: ModelSystem.ModelSystem</div>
+<div class="fsdocs-tip" id="fs4">val vonBertalanffy: ModelExpression</div>
+<div class="fsdocs-tip" id="fs5">Multiple items<br />union case ModelExpression.Parameter: string -&gt; ModelExpression<br /><br />--------------------<br />module Parameter
+
+from Bristlecone</div>
+<div class="fsdocs-tip" id="fs6">union case ModelExpression.This: ModelExpression</div>
+<div class="fsdocs-tip" id="fs7">module Model
+
+from Bristlecone.Language<br /><em>&lt;summary&gt;
+ Terms for scaffolding a model system for use with Bristlecone.
+&lt;/summary&gt;</em></div>
+<div class="fsdocs-tip" id="fs8">val empty: ModelBuilder.ModelBuilder</div>
+<div class="fsdocs-tip" id="fs9">val addEquation: name: string -&gt; eq: ModelExpression -&gt; builder: ModelBuilder.ModelBuilder -&gt; ModelBuilder.ModelBuilder</div>
+<div class="fsdocs-tip" id="fs10">val estimateParameter: name: string -&gt; constraintMode: Parameter.Constraint -&gt; lower: float -&gt; upper: float -&gt; builder: ModelBuilder.ModelBuilder -&gt; ModelBuilder.ModelBuilder</div>
+<div class="fsdocs-tip" id="fs11">val noConstraints: Parameter.Constraint</div>
+<div class="fsdocs-tip" id="fs12">val useLikelihoodFunction: likelihoodFn: ModelSystem.LikelihoodFn -&gt; builder: ModelBuilder.ModelBuilder -&gt; ModelBuilder.ModelBuilder</div>
+<div class="fsdocs-tip" id="fs13">namespace Bristlecone.ModelLibrary</div>
+<div class="fsdocs-tip" id="fs14">module Likelihood
+
+from Bristlecone.ModelLibrary<br /><em>&lt;summary&gt;Likelihood functions to represent a variety of distributions and data types.&lt;/summary&gt;<br />&lt;namespacedoc&gt;&lt;summary&gt;Pre-built model parts for use in Bristlecone&lt;/summary&gt;&lt;/namespacedoc&gt;</em></div>
+<div class="fsdocs-tip" id="fs15">val sumOfSquares: keys: string list -&gt; ModelSystem.ParameterValueAccessor -&gt; data: CodedMap&lt;ModelSystem.PredictedSeries&gt; -&gt; float<br /><em>&lt;summary&gt;
+ Residual sum of squares. Provides a simple metric of distance between
+ observed data and model predictions.
+&lt;/summary&gt;</em></div>
+<div class="fsdocs-tip" id="fs16">val compile: (ModelBuilder.ModelBuilder -&gt; ModelSystem.ModelSystem)</div>
+<div class="fsdocs-tip" id="fs17">val engine: EstimationEngine.EstimationEngine&lt;float,float&gt;</div>
+<div class="fsdocs-tip" id="fs18">val mkContinuous: EstimationEngine.EstimationEngine&lt;float,float&gt;<br /><em>&lt;summary&gt;A basic estimation engine for ordinary differential equations, using a Nelder-Mead optimiser.&lt;/summary&gt;</em></div>
+<div class="fsdocs-tip" id="fs19">val withCustomOptimisation: optim: EstimationEngine.Optimiser&lt;&#39;a&gt; -&gt; engine: EstimationEngine.EstimationEngine&lt;&#39;a,&#39;b&gt; -&gt; EstimationEngine.EstimationEngine&lt;&#39;a,&#39;b&gt;</div>
+<div class="fsdocs-tip" id="fs20">namespace Bristlecone.Optimisation</div>
+<div class="fsdocs-tip" id="fs21">module Amoeba
+
+from Bristlecone.Optimisation<br /><em>&lt;summary&gt;
+ Nelder Mead implementation
+ Adapted from original at: https://github.com/mathias-brandewinder/Amoeba
+&lt;/summary&gt;</em></div>
+<div class="fsdocs-tip" id="fs22">val swarm: levels: int -&gt; amoebaAtLevel: int -&gt; settings: Optimisation.Amoeba.Solver.Settings -&gt; EstimationEngine.Optimiser&lt;float&gt;<br /><em>&lt;summary&gt;
+ Optimisation heuristic that creates a swarm of amoeba (Nelder-Mead) solvers.
+ The swarm proceeds for `numberOfLevels` levels, constraining the starting bounds
+ at each level to the 80th percentile of the current set of best likelihoods.
+&lt;/summary&gt;</em></div>
+<div class="fsdocs-tip" id="fs23">module Solver
+
+from Bristlecone.Optimisation.Amoeba</div>
+<div class="fsdocs-tip" id="fs24">val Default: Optimisation.Amoeba.Solver.Settings</div>
+<div class="fsdocs-tip" id="fs25">val testSettings: Test.TestSettings&lt;float&gt;</div>
+<div class="fsdocs-tip" id="fs26">module Test
+
+from Bristlecone</div>
+<div class="fsdocs-tip" id="fs27">type TestSettings&lt;&#39;a&gt; =
+  {
+    TimeSeriesLength: int
+    StartValues: CodedMap&lt;&#39;a&gt;
+    EndCondition: EndCondition&lt;&#39;a&gt;
+    GenerationRules: GenerationRule list
+    NoiseGeneration: (Random -&gt; Pool -&gt; CodedMap&lt;TimeSeries&lt;&#39;a&gt;&gt; -&gt; Result&lt;CodedMap&lt;TimeSeries&lt;&#39;a&gt;&gt;,string&gt;)
+    EnvironmentalData: CodedMap&lt;TimeSeries&lt;&#39;a&gt;&gt;
+    Resolution: FixedTemporalResolution
+    Random: Random
+    StartDate: DateTime
+    Attempts: int
+  }
+  static member Default: TestSettings&lt;float&gt;</div>
+<div class="fsdocs-tip" id="fs28">Multiple items<br />val float: value: &#39;T -&gt; float (requires member op_Explicit)<br /><br />--------------------<br />type float = System.Double<br /><br />--------------------<br />type float&lt;&#39;Measure&gt; =
+  float</div>
+<div class="fsdocs-tip" id="fs29">val testResult: Test.TestResult</div>
+<div class="fsdocs-tip" id="fs30">val testModel: engine: EstimationEngine.EstimationEngine&lt;float,float&gt; -&gt; settings: Test.TestSettings&lt;float&gt; -&gt; model: ModelSystem.ModelSystem -&gt; Test.TestResult<br /><em>&lt;summary&gt;Test that the specified estimation engine can correctly
+ estimate known parameters. Random parameter sets are generated
+ from the given model system.&lt;/summary&gt;<br />&lt;param name=&quot;engine&quot;&gt;An estimation engine containing the method used for model-fitting.&lt;/param&gt;<br />&lt;param name=&quot;settings&quot;&gt;Test settings that define how the test will be conducted.&lt;/param&gt;<br />&lt;param name=&quot;model&quot;&gt;The model system to test against the estimation engine.&lt;/param&gt;<br />&lt;returns&gt;A test result that indicates differences between the expected and actual fit.&lt;/returns&gt;</em></div>
+
+    </div>
+</main>
+<aside id="fsdocs-page-menu">
+    <p id="on-this-page">On this page</p>
+    <ul>
+  <li class="level-1">
+    <a href="#Bristlecone">
+      Bristlecone
+    </a>
+  </li>
+  <li class="level-2">
+    <a href="#Quick-Start">
+      Quick Start
+    </a>
+  </li>
+  <li class="level-3">
+    <a href="#To-use-in-an-F-script">
+      To use in an F# script
+    </a>
+  </li>
+  <li class="level-2">
+    <a href="#Example">
+      Example
+    </a>
+  </li>
+  <li class="level-2">
+    <a href="#Samples-amp-documentation">
+      Samples &amp; documentation
+    </a>
+  </li>
+  <li class="level-2">
+    <a href="#Contributing-and-copyright">
+      Contributing and copyright
+    </a>
+  </li>
+</ul>
+</aside>
+<dialog>
+    <input type="search" placeholder="Search docs" />
+    <div class="results">
+        <ul></ul>
+        <p class="empty">Type something to start searching.</p>
+    </div>
+</dialog>
+<script type="module" src="https://acm.im/bristlecone/content/fsdocs-tips.js"></script>
+<script type="module" src="https://acm.im/bristlecone/content/fsdocs-theme-toggle.js"></script>
+<script type="module" src="https://acm.im/bristlecone/content/fsdocs-theme.js"></script>
+<script type="module" src="https://acm.im/bristlecone/content/fsdocs-search.js"></script>
+
+</body>
+</html>

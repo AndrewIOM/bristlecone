@@ -1,0 +1,1868 @@
+<!DOCTYPE html>
+<html lang="en" data-root="https://acm.im/bristlecone/">
+<head>
+    <meta charset="UTF-8">
+    <meta content="IE=edge" http-equiv="X-UA-Compatible">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+    <meta content="Andrew Martin" name="author">
+    <!-- Opengraph properties (https://ogp.me/) -->
+    <meta property="og:site_name" content="bristlecone">
+    <meta property="og:title" content="ModelExpression (bristlecone)" />
+    <meta property="og:url" content="https://acm.im/bristlecone/{{fsdocs-source-basename}}.html">
+    <meta property="og:type" content="website" />
+    <!-- Twitter cards (https://developer.twitter.com/en/docs/twitter-for-websites/cards/overview/summary-card-with-large-image) -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:site" content="https://acm.im/bristlecone/">
+    <meta name="twitter:title" content="ModelExpression (bristlecone)">
+    
+    <title>ModelExpression (bristlecone) | bristlecone</title>
+    <link href="https://fonts.googleapis.com" rel="preconnect">
+    <link crossorigin href="https://fonts.gstatic.com" rel="preconnect">
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code&display=swap" rel="stylesheet">
+    <script src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js"></script>
+    <link href="https://acm.im/bristlecone/img/favicon.ico" rel="icon" sizes="32x32" type="image/png"/>
+    <script type="application/javascript" src="https://acm.im/bristlecone/content/fsdocs-theme-set-dark.js"></script>
+    <link href="https://acm.im/bristlecone/content/fsdocs-default.css" rel="stylesheet" type="text/css"/>
+    <link href="https://acm.im/bristlecone/content/fsdocs-theme.css" rel="stylesheet" type="text/css"/>
+    <script src="https://cdn.plot.ly/plotly-2.21.0.min.js"></script>
+    
+</head>
+<body class="api-docs">
+<header>
+    <div class="start">
+        <div id="menu-toggle">
+            <iconify-icon class="icon closed" height="22" icon="eva:menu-fill" width="22"></iconify-icon>
+            <iconify-icon class="icon open" height="22" icon="mi:close" width="22"></iconify-icon>
+            <input type="checkbox" name="mobile-menu" />
+            <ul class="menu">
+                <li class="nav-header">Links</li>
+                <li class="nav-item"><a class="nav-link" href="https://github.com/AndrewIOM/bristlecone/blob/master/LICENSE">License</a>
+                </li>
+                <li class="nav-item"><a class="nav-link"
+                                        href="https://github.com/AndrewIOM/bristlecone/blob/master/RELEASE_NOTES.MD">Release
+                    Notes</a></li>
+                <li class="nav-item"><a class="nav-link" href="https://github.com/AndrewIOM/bristlecone/">Source
+                    Repository</a></li>
+                <li class="nav-header ">
+  The Bristlecone Language
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/language.html">
+    Writing Models
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model.html">
+    Defining a Hypothesis (or Model System)
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/estimation-engine.html">
+    Defining a Model-Fitting Method (Estimation Engine)
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/composing-models.html">
+    Composing models into many hypotheses
+  </a>
+</li>             
+<li class="nav-header ">
+  Techniques
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model-fitting.html">
+    Model Fitting
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model-selection.html">
+    Model Selection
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/workflow.html">
+    Ensembles and Parallel Processing
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/confidence-intervals.html">
+    Calculating Confidence Intervals
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/diagnostics.html">
+    Diagnostics
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/data.html">
+    Loading and Saving Data
+  </a>
+</li>             
+<li class="nav-header ">
+  Bristlecone.Dendro
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/dendro.html">
+    Dendroecology
+  </a>
+</li>             
+<li class="nav-header ">
+  Examples
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/predator-prey.html">
+    Predator-Prey Dynamics
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/shrub-resource.html">
+    Shrub response to a single limiting resource
+  </a>
+</li>             
+<li class="nav-header ">
+  Components
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/optimisation.html">
+    Optimisation
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/integration.html">
+    Integration
+  </a>
+</li>
+                <li class="nav-header">
+  API Reference
+</li>             
+<li class="nav-item">
+  <a class="nav-link" href="https://acm.im/bristlecone/reference/index.html">
+    All Namespaces
+  </a>
+</li>
+            </ul>
+        </div>
+        <a href="https://acm.im/bristlecone/">
+            <img alt="Header menu logo" src="https://acm.im/bristlecone//img/logo.png">
+            <strong>bristlecone</strong>
+        </a>
+    </div>
+    <div class="end">
+        <a href="https://github.com/AndrewIOM/bristlecone/" target="_blank">
+            <iconify-icon icon="uil:github" width="26" height="26"></iconify-icon>
+        </a>
+        <iconify-icon id="search-btn" icon="carbon:search" class="search" width="24" height="24"></iconify-icon>
+        <fsdocs-theme-toggle></fsdocs-theme-toggle>
+    </div>
+</header>
+<aside id="fsdocs-main-menu">
+    <ul class="menu">
+        <li class="nav-header">Links</li>
+        <li class="nav-item"><a class="nav-link" href="https://github.com/AndrewIOM/bristlecone/blob/master/LICENSE">License</a>
+        </li>
+        <li class="nav-item"><a class="nav-link"
+                                href="https://github.com/AndrewIOM/bristlecone/blob/master/RELEASE_NOTES.MD">Release
+            Notes</a></li>
+        <li class="nav-item"><a class="nav-link" href="https://github.com/AndrewIOM/bristlecone/">Source
+            Repository</a></li>
+        <li class="nav-header ">
+  The Bristlecone Language
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/language.html">
+    Writing Models
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model.html">
+    Defining a Hypothesis (or Model System)
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/estimation-engine.html">
+    Defining a Model-Fitting Method (Estimation Engine)
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/composing-models.html">
+    Composing models into many hypotheses
+  </a>
+</li>             
+<li class="nav-header ">
+  Techniques
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model-fitting.html">
+    Model Fitting
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model-selection.html">
+    Model Selection
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/workflow.html">
+    Ensembles and Parallel Processing
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/confidence-intervals.html">
+    Calculating Confidence Intervals
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/diagnostics.html">
+    Diagnostics
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/data.html">
+    Loading and Saving Data
+  </a>
+</li>             
+<li class="nav-header ">
+  Bristlecone.Dendro
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/dendro.html">
+    Dendroecology
+  </a>
+</li>             
+<li class="nav-header ">
+  Examples
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/predator-prey.html">
+    Predator-Prey Dynamics
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/shrub-resource.html">
+    Shrub response to a single limiting resource
+  </a>
+</li>             
+<li class="nav-header ">
+  Components
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/optimisation.html">
+    Optimisation
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/integration.html">
+    Integration
+  </a>
+</li>
+        <li class="nav-header">
+  API Reference
+</li>             
+<li class="nav-item">
+  <a class="nav-link" href="https://acm.im/bristlecone/reference/index.html">
+    All Namespaces
+  </a>
+</li>
+    </ul>
+</aside>
+<main>
+    <div id="content">
+        <div>
+  <h2>
+    ModelExpression Type
+  </h2>
+  <dl class="fsdocs-metadata">
+    <dt>
+      Namespace: 
+      <a href="https://acm.im/bristlecone/reference/bristlecone.html">
+        Bristlecone
+      </a>
+    </dt>
+    <dt>
+      Assembly: Bristlecone.dll
+    </dt>
+    <dt>
+      Parent Module: 
+      <a href="https://acm.im/bristlecone/reference/bristlecone-language.html">
+        Language
+      </a>
+    </dt>
+    <dt>
+      Base Type: 
+      <code>obj</code>
+    </dt>
+  </dl>
+  <div class="fsdocs-xmldoc">
+    <div>
+      <p class="fsdocs-summary">
+         A model or model fragment that can be interpreted to a mathematical
+ expression by Bristlecone.
+      </p>
+    </div>
+  </div>
+  <div></div>
+  <div></div>
+  <div></div>
+  <div>
+    <h3>
+      Union cases
+    </h3>
+    <table class="table outer-list fsdocs-member-list">
+      <thead>
+        <tr>
+          <td class="fsdocs-member-list-header">
+            Union case
+          </td>
+          <td class="fsdocs-member-list-header">
+            Description
+          </td>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '375', 375)" onmouseover="showTip(event, '375', 375)">
+                <p>
+                  <a id="Add">
+                    <a href="#Add">
+                      <code><span>Add&#32;<span><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a>&#32;list</span></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="375">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>Add&#32;<span><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a>&#32;list</span></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        Item
+                      </b>
+                      :
+                      <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a>&#32;list</span></code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <dl class="fsdocs-params">
+              <dt class="fsdocs-param">
+                <span class="fsdocs-param-name">
+                  Item
+                </span>
+                :
+                <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a>&#32;list</span></code>
+              </dt>
+              <dd class="fsdocs-param-docs"></dd>
+            </dl>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '376', 376)" onmouseover="showTip(event, '376', 376)">
+                <p>
+                  <a id="Arbitrary">
+                    <a href="#Arbitrary">
+                      <code><span>Arbitrary(<span><span>float&#32;->&#32;float&#32;->&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-parameter-pool.html">Pool</a>&#32;->&#32;<span><a href="https://acm.im/bristlecone/reference/bristlecone-codedmap-1.html">CodedMap</a>&lt;float&gt;</span>&#32;->&#32;float</span>,&#32;<span><a href="https://acm.im/bristlecone/reference/bristlecone-language-arbitraryrequirement.html">ArbitraryRequirement</a>&#32;list</span></span>)</span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="376">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>Arbitrary(<span><span>float&#32;->&#32;float&#32;->&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-parameter-pool.html">Pool</a>&#32;->&#32;<span><a href="https://acm.im/bristlecone/reference/bristlecone-codedmap-1.html">CodedMap</a>&lt;float&gt;</span>&#32;->&#32;float</span>,&#32;<span><a href="https://acm.im/bristlecone/reference/bristlecone-language-arbitraryrequirement.html">ArbitraryRequirement</a>&#32;list</span></span>)</span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        Item1
+                      </b>
+                      :
+                      <code><span>float&#32;->&#32;float&#32;->&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-parameter-pool.html">Pool</a>&#32;->&#32;<span><a href="https://acm.im/bristlecone/reference/bristlecone-codedmap-1.html">CodedMap</a>&lt;float&gt;</span>&#32;->&#32;float</span></code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        Item2
+                      </b>
+                      :
+                      <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-language-arbitraryrequirement.html">ArbitraryRequirement</a>&#32;list</span></code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <dl class="fsdocs-params">
+              <dt class="fsdocs-param">
+                <span class="fsdocs-param-name">
+                  Item1
+                </span>
+                :
+                <code><span>float&#32;->&#32;float&#32;->&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-parameter-pool.html">Pool</a>&#32;->&#32;<span><a href="https://acm.im/bristlecone/reference/bristlecone-codedmap-1.html">CodedMap</a>&lt;float&gt;</span>&#32;->&#32;float</span></code>
+              </dt>
+              <dd class="fsdocs-param-docs"></dd>
+              <dt class="fsdocs-param">
+                <span class="fsdocs-param-name">
+                  Item2
+                </span>
+                :
+                <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-language-arbitraryrequirement.html">ArbitraryRequirement</a>&#32;list</span></code>
+              </dt>
+              <dd class="fsdocs-param-docs"></dd>
+            </dl>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '377', 377)" onmouseover="showTip(event, '377', 377)">
+                <p>
+                  <a id="Conditional">
+                    <a href="#Conditional">
+                      <code><span>Conditional&#32;<span><span>(<span><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a>&#32;->&#32;float</span>)</span>&#32;->&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></span></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="377">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>Conditional&#32;<span><span>(<span><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a>&#32;->&#32;float</span>)</span>&#32;->&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></span></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        Item
+                      </b>
+                      :
+                      <code><span><span>(<span><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a>&#32;->&#32;float</span>)</span>&#32;->&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></span></code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <dl class="fsdocs-params">
+              <dt class="fsdocs-param">
+                <span class="fsdocs-param-name">
+                  Item
+                </span>
+                :
+                <code><span><span>(<span><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a>&#32;->&#32;float</span>)</span>&#32;->&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></span></code>
+              </dt>
+              <dd class="fsdocs-param-docs"></dd>
+            </dl>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '378', 378)" onmouseover="showTip(event, '378', 378)">
+                <p>
+                  <a id="Constant">
+                    <a href="#Constant">
+                      <code><span>Constant&#32;float</span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="378">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>Constant&#32;float</span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        Item
+                      </b>
+                      :
+                      <code>float</code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <dl class="fsdocs-params">
+              <dt class="fsdocs-param">
+                <span class="fsdocs-param-name">
+                  Item
+                </span>
+                :
+                <code>float</code>
+              </dt>
+              <dd class="fsdocs-param-docs"></dd>
+            </dl>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '379', 379)" onmouseover="showTip(event, '379', 379)">
+                <p>
+                  <a id="Divide">
+                    <a href="#Divide">
+                      <code><span>Divide(<span><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a>,&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></span>)</span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="379">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>Divide(<span><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a>,&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></span>)</span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        Item1
+                      </b>
+                      :
+                      <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        Item2
+                      </b>
+                      :
+                      <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <dl class="fsdocs-params">
+              <dt class="fsdocs-param">
+                <span class="fsdocs-param-name">
+                  Item1
+                </span>
+                :
+                <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+              </dt>
+              <dd class="fsdocs-param-docs"></dd>
+              <dt class="fsdocs-param">
+                <span class="fsdocs-param-name">
+                  Item2
+                </span>
+                :
+                <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+              </dt>
+              <dd class="fsdocs-param-docs"></dd>
+            </dl>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '380', 380)" onmouseover="showTip(event, '380', 380)">
+                <p>
+                  <a id="Environment">
+                    <a href="#Environment">
+                      <code><span>Environment&#32;string</span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="380">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>Environment&#32;string</span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        Item
+                      </b>
+                      :
+                      <code>string</code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <dl class="fsdocs-params">
+              <dt class="fsdocs-param">
+                <span class="fsdocs-param-name">
+                  Item
+                </span>
+                :
+                <code>string</code>
+              </dt>
+              <dd class="fsdocs-param-docs"></dd>
+            </dl>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '381', 381)" onmouseover="showTip(event, '381', 381)">
+                <p>
+                  <a id="Exponential">
+                    <a href="#Exponential">
+                      <code><span>Exponential&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="381">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>Exponential&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        Item
+                      </b>
+                      :
+                      <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <dl class="fsdocs-params">
+              <dt class="fsdocs-param">
+                <span class="fsdocs-param-name">
+                  Item
+                </span>
+                :
+                <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+              </dt>
+              <dd class="fsdocs-param-docs"></dd>
+            </dl>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '382', 382)" onmouseover="showTip(event, '382', 382)">
+                <p>
+                  <a id="Invalid">
+                    <a href="#Invalid">
+                      <code><span>Invalid</span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="382">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>Invalid</span></code>
+                  <br/>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <div class="fsdocs-summary">
+              <a href="https://github.com/AndrewIOM/bristlecone/src/Bristlecone/Language.fs#L54-54" class="fsdocs-source-link" title="Source on GitHub">
+                <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+              </a>
+              <p class="fsdocs-summary">
+                
+              </p>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '383', 383)" onmouseover="showTip(event, '383', 383)">
+                <p>
+                  <a id="Label">
+                    <a href="#Label">
+                      <code><span>Label(<span>string,&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></span>)</span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="383">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>Label(<span>string,&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></span>)</span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        Item1
+                      </b>
+                      :
+                      <code>string</code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        Item2
+                      </b>
+                      :
+                      <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <dl class="fsdocs-params">
+              <dt class="fsdocs-param">
+                <span class="fsdocs-param-name">
+                  Item1
+                </span>
+                :
+                <code>string</code>
+              </dt>
+              <dd class="fsdocs-param-docs"></dd>
+              <dt class="fsdocs-param">
+                <span class="fsdocs-param-name">
+                  Item2
+                </span>
+                :
+                <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+              </dt>
+              <dd class="fsdocs-param-docs"></dd>
+            </dl>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '384', 384)" onmouseover="showTip(event, '384', 384)">
+                <p>
+                  <a id="Logarithm">
+                    <a href="#Logarithm">
+                      <code><span>Logarithm&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="384">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>Logarithm&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        Item
+                      </b>
+                      :
+                      <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <dl class="fsdocs-params">
+              <dt class="fsdocs-param">
+                <span class="fsdocs-param-name">
+                  Item
+                </span>
+                :
+                <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+              </dt>
+              <dd class="fsdocs-param-docs"></dd>
+            </dl>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '385', 385)" onmouseover="showTip(event, '385', 385)">
+                <p>
+                  <a id="Mod">
+                    <a href="#Mod">
+                      <code><span>Mod(<span><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a>,&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></span>)</span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="385">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>Mod(<span><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a>,&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></span>)</span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        Item1
+                      </b>
+                      :
+                      <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        Item2
+                      </b>
+                      :
+                      <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <dl class="fsdocs-params">
+              <dt class="fsdocs-param">
+                <span class="fsdocs-param-name">
+                  Item1
+                </span>
+                :
+                <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+              </dt>
+              <dd class="fsdocs-param-docs"></dd>
+              <dt class="fsdocs-param">
+                <span class="fsdocs-param-name">
+                  Item2
+                </span>
+                :
+                <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+              </dt>
+              <dd class="fsdocs-param-docs"></dd>
+            </dl>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '386', 386)" onmouseover="showTip(event, '386', 386)">
+                <p>
+                  <a id="Multiply">
+                    <a href="#Multiply">
+                      <code><span>Multiply&#32;<span><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a>&#32;list</span></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="386">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>Multiply&#32;<span><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a>&#32;list</span></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        Item
+                      </b>
+                      :
+                      <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a>&#32;list</span></code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <dl class="fsdocs-params">
+              <dt class="fsdocs-param">
+                <span class="fsdocs-param-name">
+                  Item
+                </span>
+                :
+                <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a>&#32;list</span></code>
+              </dt>
+              <dd class="fsdocs-param-docs"></dd>
+            </dl>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '387', 387)" onmouseover="showTip(event, '387', 387)">
+                <p>
+                  <a id="Parameter">
+                    <a href="#Parameter">
+                      <code><span>Parameter&#32;string</span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="387">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>Parameter&#32;string</span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        Item
+                      </b>
+                      :
+                      <code>string</code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <dl class="fsdocs-params">
+              <dt class="fsdocs-param">
+                <span class="fsdocs-param-name">
+                  Item
+                </span>
+                :
+                <code>string</code>
+              </dt>
+              <dd class="fsdocs-param-docs"></dd>
+            </dl>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '388', 388)" onmouseover="showTip(event, '388', 388)">
+                <p>
+                  <a id="Power">
+                    <a href="#Power">
+                      <code><span>Power(<span><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a>,&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></span>)</span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="388">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>Power(<span><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a>,&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></span>)</span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        Item1
+                      </b>
+                      :
+                      <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        Item2
+                      </b>
+                      :
+                      <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <dl class="fsdocs-params">
+              <dt class="fsdocs-param">
+                <span class="fsdocs-param-name">
+                  Item1
+                </span>
+                :
+                <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+              </dt>
+              <dd class="fsdocs-param-docs"></dd>
+              <dt class="fsdocs-param">
+                <span class="fsdocs-param-name">
+                  Item2
+                </span>
+                :
+                <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+              </dt>
+              <dd class="fsdocs-param-docs"></dd>
+            </dl>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '389', 389)" onmouseover="showTip(event, '389', 389)">
+                <p>
+                  <a id="Subtract">
+                    <a href="#Subtract">
+                      <code><span>Subtract(<span><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a>,&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></span>)</span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="389">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>Subtract(<span><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a>,&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></span>)</span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        Item1
+                      </b>
+                      :
+                      <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        Item2
+                      </b>
+                      :
+                      <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <dl class="fsdocs-params">
+              <dt class="fsdocs-param">
+                <span class="fsdocs-param-name">
+                  Item1
+                </span>
+                :
+                <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+              </dt>
+              <dd class="fsdocs-param-docs"></dd>
+              <dt class="fsdocs-param">
+                <span class="fsdocs-param-name">
+                  Item2
+                </span>
+                :
+                <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+              </dt>
+              <dd class="fsdocs-param-docs"></dd>
+            </dl>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '390', 390)" onmouseover="showTip(event, '390', 390)">
+                <p>
+                  <a id="This">
+                    <a href="#This">
+                      <code><span>This</span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="390">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>This</span></code>
+                  <br/>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <div class="fsdocs-summary">
+              <a href="https://github.com/AndrewIOM/bristlecone/src/Bristlecone/Language.fs#L38-38" class="fsdocs-source-link" title="Source on GitHub">
+                <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+              </a>
+              <p class="fsdocs-summary">
+                
+              </p>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '391', 391)" onmouseover="showTip(event, '391', 391)">
+                <p>
+                  <a id="Time">
+                    <a href="#Time">
+                      <code><span>Time</span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="391">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>Time</span></code>
+                  <br/>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <div class="fsdocs-summary">
+              <a href="https://github.com/AndrewIOM/bristlecone/src/Bristlecone/Language.fs#L39-39" class="fsdocs-source-link" title="Source on GitHub">
+                <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+              </a>
+              <p class="fsdocs-summary">
+                
+              </p>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div></div>
+  <div></div>
+  <div></div>
+  <div></div>
+  <div>
+    <h3>
+      Static members
+    </h3>
+    <table class="table outer-list fsdocs-member-list">
+      <thead>
+        <tr>
+          <td class="fsdocs-member-list-header">
+            Static member
+          </td>
+          <td class="fsdocs-member-list-header">
+            Description
+          </td>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '392', 392)" onmouseover="showTip(event, '392', 392)">
+                <p>
+                  <a id="(%)">
+                    <a href="#(%)">
+                      <code><span>e1&#32;%&#32;remainder</span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="392">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>e1&#32;%&#32;remainder</span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        e1
+                      </b>
+                      :
+                      <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        remainder
+                      </b>
+                      :
+                      <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+                  </span>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <dl class="fsdocs-params">
+              <dt class="fsdocs-param">
+                <span class="fsdocs-param-name">
+                  e1
+                </span>
+                :
+                <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+              </dt>
+              <dd class="fsdocs-param-docs"></dd>
+              <dt class="fsdocs-param">
+                <span class="fsdocs-param-name">
+                  remainder
+                </span>
+                :
+                <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+              </dt>
+              <dd class="fsdocs-param-docs"></dd>
+            </dl>
+            <dl class="fsdocs-returns">
+              <dt>
+                <span class="fsdocs-return-name">
+                  Returns: 
+                </span>
+                <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+              </dt>
+              <dd class="fsdocs-return-docs"></dd>
+            </dl>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '393', 393)" onmouseover="showTip(event, '393', 393)">
+                <p>
+                  <a id="(*)">
+                    <a href="#(*)">
+                      <code><span>e1&#32;*&#32;e2</span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="393">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>e1&#32;*&#32;e2</span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        e1
+                      </b>
+                      :
+                      <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        e2
+                      </b>
+                      :
+                      <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+                  </span>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <dl class="fsdocs-params">
+              <dt class="fsdocs-param">
+                <span class="fsdocs-param-name">
+                  e1
+                </span>
+                :
+                <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+              </dt>
+              <dd class="fsdocs-param-docs"></dd>
+              <dt class="fsdocs-param">
+                <span class="fsdocs-param-name">
+                  e2
+                </span>
+                :
+                <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+              </dt>
+              <dd class="fsdocs-param-docs"></dd>
+            </dl>
+            <dl class="fsdocs-returns">
+              <dt>
+                <span class="fsdocs-return-name">
+                  Returns: 
+                </span>
+                <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+              </dt>
+              <dd class="fsdocs-return-docs"></dd>
+            </dl>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '394', 394)" onmouseover="showTip(event, '394', 394)">
+                <p>
+                  <a id="(+)">
+                    <a href="#(+)">
+                      <code><span>e1&#32;+&#32;e2</span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="394">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>e1&#32;+&#32;e2</span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        e1
+                      </b>
+                      :
+                      <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        e2
+                      </b>
+                      :
+                      <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+                  </span>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <dl class="fsdocs-params">
+              <dt class="fsdocs-param">
+                <span class="fsdocs-param-name">
+                  e1
+                </span>
+                :
+                <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+              </dt>
+              <dd class="fsdocs-param-docs"></dd>
+              <dt class="fsdocs-param">
+                <span class="fsdocs-param-name">
+                  e2
+                </span>
+                :
+                <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+              </dt>
+              <dd class="fsdocs-param-docs"></dd>
+            </dl>
+            <dl class="fsdocs-returns">
+              <dt>
+                <span class="fsdocs-return-name">
+                  Returns: 
+                </span>
+                <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+              </dt>
+              <dd class="fsdocs-return-docs"></dd>
+            </dl>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '395', 395)" onmouseover="showTip(event, '395', 395)">
+                <p>
+                  <a id="(-)">
+                    <a href="#(-)">
+                      <code><span>e1&#32;-&#32;e2</span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="395">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>e1&#32;-&#32;e2</span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        e1
+                      </b>
+                      :
+                      <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        e2
+                      </b>
+                      :
+                      <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+                  </span>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <dl class="fsdocs-params">
+              <dt class="fsdocs-param">
+                <span class="fsdocs-param-name">
+                  e1
+                </span>
+                :
+                <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+              </dt>
+              <dd class="fsdocs-param-docs"></dd>
+              <dt class="fsdocs-param">
+                <span class="fsdocs-param-name">
+                  e2
+                </span>
+                :
+                <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+              </dt>
+              <dd class="fsdocs-param-docs"></dd>
+            </dl>
+            <dl class="fsdocs-returns">
+              <dt>
+                <span class="fsdocs-return-name">
+                  Returns: 
+                </span>
+                <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+              </dt>
+              <dd class="fsdocs-return-docs"></dd>
+            </dl>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '396', 396)" onmouseover="showTip(event, '396', 396)">
+                <p>
+                  <a id="(/)">
+                    <a href="#(/)">
+                      <code><span>e1&#32;/&#32;e2</span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="396">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>e1&#32;/&#32;e2</span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        e1
+                      </b>
+                      :
+                      <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        e2
+                      </b>
+                      :
+                      <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+                  </span>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <dl class="fsdocs-params">
+              <dt class="fsdocs-param">
+                <span class="fsdocs-param-name">
+                  e1
+                </span>
+                :
+                <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+              </dt>
+              <dd class="fsdocs-param-docs"></dd>
+              <dt class="fsdocs-param">
+                <span class="fsdocs-param-name">
+                  e2
+                </span>
+                :
+                <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+              </dt>
+              <dd class="fsdocs-param-docs"></dd>
+            </dl>
+            <dl class="fsdocs-returns">
+              <dt>
+                <span class="fsdocs-return-name">
+                  Returns: 
+                </span>
+                <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+              </dt>
+              <dd class="fsdocs-return-docs"></dd>
+            </dl>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '397', 397)" onmouseover="showTip(event, '397', 397)">
+                <p>
+                  <a id="(~-)">
+                    <a href="#(~-)">
+                      <code><span>~-e</span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="397">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>~-e</span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        e
+                      </b>
+                      :
+                      <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+                  </span>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <dl class="fsdocs-params">
+              <dt class="fsdocs-param">
+                <span class="fsdocs-param-name">
+                  e
+                </span>
+                :
+                <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+              </dt>
+              <dd class="fsdocs-param-docs"></dd>
+            </dl>
+            <dl class="fsdocs-returns">
+              <dt>
+                <span class="fsdocs-return-name">
+                  Returns: 
+                </span>
+                <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+              </dt>
+              <dd class="fsdocs-return-docs"></dd>
+            </dl>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '398', 398)" onmouseover="showTip(event, '398', 398)">
+                <p>
+                  <a id="Exp">
+                    <a href="#Exp">
+                      <code><span>ModelExpression.Exp<span><span>(<span>e</span>)</span></span></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="398">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>ModelExpression.Exp<span><span>(<span>e</span>)</span></span></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        e
+                      </b>
+                      :
+                      <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+                  </span>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <dl class="fsdocs-params">
+              <dt class="fsdocs-param">
+                <span class="fsdocs-param-name">
+                  e
+                </span>
+                :
+                <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+              </dt>
+              <dd class="fsdocs-param-docs"></dd>
+            </dl>
+            <dl class="fsdocs-returns">
+              <dt>
+                <span class="fsdocs-return-name">
+                  Returns: 
+                </span>
+                <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+              </dt>
+              <dd class="fsdocs-return-docs"></dd>
+            </dl>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '399', 399)" onmouseover="showTip(event, '399', 399)">
+                <p>
+                  <a id="Log">
+                    <a href="#Log">
+                      <code><span>ModelExpression.Log<span><span>(<span>e</span>)</span></span></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="399">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>ModelExpression.Log<span><span>(<span>e</span>)</span></span></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        e
+                      </b>
+                      :
+                      <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+                  </span>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <dl class="fsdocs-params">
+              <dt class="fsdocs-param">
+                <span class="fsdocs-param-name">
+                  e
+                </span>
+                :
+                <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+              </dt>
+              <dd class="fsdocs-param-docs"></dd>
+            </dl>
+            <dl class="fsdocs-returns">
+              <dt>
+                <span class="fsdocs-return-name">
+                  Returns: 
+                </span>
+                <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+              </dt>
+              <dd class="fsdocs-return-docs"></dd>
+            </dl>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '400', 400)" onmouseover="showTip(event, '400', 400)">
+                <p>
+                  <a id="Pow">
+                    <a href="#Pow">
+                      <code><span>ModelExpression.Pow<span><span>(<span>e1,&#32;pow</span>)</span></span></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="400">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>ModelExpression.Pow<span><span>(<span>e1,&#32;pow</span>)</span></span></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        e1
+                      </b>
+                      :
+                      <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        pow
+                      </b>
+                      :
+                      <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+                  </span>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <dl class="fsdocs-params">
+              <dt class="fsdocs-param">
+                <span class="fsdocs-param-name">
+                  e1
+                </span>
+                :
+                <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+              </dt>
+              <dd class="fsdocs-param-docs"></dd>
+              <dt class="fsdocs-param">
+                <span class="fsdocs-param-name">
+                  pow
+                </span>
+                :
+                <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+              </dt>
+              <dd class="fsdocs-param-docs"></dd>
+            </dl>
+            <dl class="fsdocs-returns">
+              <dt>
+                <span class="fsdocs-return-name">
+                  Returns: 
+                </span>
+                <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelexpression.html">ModelExpression</a></code>
+              </dt>
+              <dd class="fsdocs-return-docs"></dd>
+            </dl>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+        
+    </div>
+</main>
+<aside id="fsdocs-page-menu">
+    <p id="on-this-page">On this page</p>
+    <div class="empty"></div>
+</aside>
+<dialog>
+    <input type="search" placeholder="Search docs" />
+    <div class="results">
+        <ul></ul>
+        <p class="empty">Type something to start searching.</p>
+    </div>
+</dialog>
+<script type="module" src="https://acm.im/bristlecone/content/fsdocs-tips.js"></script>
+<script type="module" src="https://acm.im/bristlecone/content/fsdocs-theme-toggle.js"></script>
+<script type="module" src="https://acm.im/bristlecone/content/fsdocs-theme.js"></script>
+<script type="module" src="https://acm.im/bristlecone/content/fsdocs-search.js"></script>
+
+</body>
+</html>

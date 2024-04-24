@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en" data-root="https://acm.im/bristlecone/">
+<head>
+    <meta charset="UTF-8">
+    <meta content="IE=edge" http-equiv="X-UA-Compatible">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+    <meta content="Andrew Martin" name="author">
+    <!-- Opengraph properties (https://ogp.me/) -->
+    <meta property="og:site_name" content="bristlecone">
+    <meta property="og:title" content="TimeSeries<'T> (bristlecone)" />
+    <meta property="og:url" content="https://acm.im/bristlecone/{{fsdocs-source-basename}}.html">
+    <meta property="og:type" content="website" />
+    <!-- Twitter cards (https://developer.twitter.com/en/docs/twitter-for-websites/cards/overview/summary-card-with-large-image) -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:site" content="https://acm.im/bristlecone/">
+    <meta name="twitter:title" content="TimeSeries<'T> (bristlecone)">
+    
+    <title>TimeSeries<'T> (bristlecone) | bristlecone</title>
+    <link href="https://fonts.googleapis.com" rel="preconnect">
+    <link crossorigin href="https://fonts.gstatic.com" rel="preconnect">
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code&display=swap" rel="stylesheet">
+    <script src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js"></script>
+    <link href="https://acm.im/bristlecone/img/favicon.ico" rel="icon" sizes="32x32" type="image/png"/>
+    <script type="application/javascript" src="https://acm.im/bristlecone/content/fsdocs-theme-set-dark.js"></script>
+    <link href="https://acm.im/bristlecone/content/fsdocs-default.css" rel="stylesheet" type="text/css"/>
+    <link href="https://acm.im/bristlecone/content/fsdocs-theme.css" rel="stylesheet" type="text/css"/>
+    <script src="https://cdn.plot.ly/plotly-2.21.0.min.js"></script>
+    
+</head>
+<body class="api-docs">
+<header>
+    <div class="start">
+        <div id="menu-toggle">
+            <iconify-icon class="icon closed" height="22" icon="eva:menu-fill" width="22"></iconify-icon>
+            <iconify-icon class="icon open" height="22" icon="mi:close" width="22"></iconify-icon>
+            <input type="checkbox" name="mobile-menu" />
+            <ul class="menu">
+                <li class="nav-header">Links</li>
+                <li class="nav-item"><a class="nav-link" href="https://github.com/AndrewIOM/bristlecone/blob/master/LICENSE">License</a>
+                </li>
+                <li class="nav-item"><a class="nav-link"
+                                        href="https://github.com/AndrewIOM/bristlecone/blob/master/RELEASE_NOTES.MD">Release
+                    Notes</a></li>
+                <li class="nav-item"><a class="nav-link" href="https://github.com/AndrewIOM/bristlecone/">Source
+                    Repository</a></li>
+                <li class="nav-header ">
+  The Bristlecone Language
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/language.html">
+    Writing Models
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model.html">
+    Defining a Hypothesis (or Model System)
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/estimation-engine.html">
+    Defining a Model-Fitting Method (Estimation Engine)
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/composing-models.html">
+    Composing models into many hypotheses
+  </a>
+</li>             
+<li class="nav-header ">
+  Techniques
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model-fitting.html">
+    Model Fitting
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model-selection.html">
+    Model Selection
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/workflow.html">
+    Ensembles and Parallel Processing
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/confidence-intervals.html">
+    Calculating Confidence Intervals
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/diagnostics.html">
+    Diagnostics
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/data.html">
+    Loading and Saving Data
+  </a>
+</li>             
+<li class="nav-header ">
+  Bristlecone.Dendro
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/dendro.html">
+    Dendroecology
+  </a>
+</li>             
+<li class="nav-header ">
+  Examples
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/predator-prey.html">
+    Predator-Prey Dynamics
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/shrub-resource.html">
+    Shrub response to a single limiting resource
+  </a>
+</li>             
+<li class="nav-header ">
+  Components
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/optimisation.html">
+    Optimisation
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/integration.html">
+    Integration
+  </a>
+</li>
+                <li class="nav-header">
+  API Reference
+</li>             
+<li class="nav-item">
+  <a class="nav-link" href="https://acm.im/bristlecone/reference/index.html">
+    All Namespaces
+  </a>
+</li>
+            </ul>
+        </div>
+        <a href="https://acm.im/bristlecone/">
+            <img alt="Header menu logo" src="https://acm.im/bristlecone//img/logo.png">
+            <strong>bristlecone</strong>
+        </a>
+    </div>
+    <div class="end">
+        <a href="https://github.com/AndrewIOM/bristlecone/" target="_blank">
+            <iconify-icon icon="uil:github" width="26" height="26"></iconify-icon>
+        </a>
+        <iconify-icon id="search-btn" icon="carbon:search" class="search" width="24" height="24"></iconify-icon>
+        <fsdocs-theme-toggle></fsdocs-theme-toggle>
+    </div>
+</header>
+<aside id="fsdocs-main-menu">
+    <ul class="menu">
+        <li class="nav-header">Links</li>
+        <li class="nav-item"><a class="nav-link" href="https://github.com/AndrewIOM/bristlecone/blob/master/LICENSE">License</a>
+        </li>
+        <li class="nav-item"><a class="nav-link"
+                                href="https://github.com/AndrewIOM/bristlecone/blob/master/RELEASE_NOTES.MD">Release
+            Notes</a></li>
+        <li class="nav-item"><a class="nav-link" href="https://github.com/AndrewIOM/bristlecone/">Source
+            Repository</a></li>
+        <li class="nav-header ">
+  The Bristlecone Language
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/language.html">
+    Writing Models
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model.html">
+    Defining a Hypothesis (or Model System)
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/estimation-engine.html">
+    Defining a Model-Fitting Method (Estimation Engine)
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/composing-models.html">
+    Composing models into many hypotheses
+  </a>
+</li>             
+<li class="nav-header ">
+  Techniques
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model-fitting.html">
+    Model Fitting
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model-selection.html">
+    Model Selection
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/workflow.html">
+    Ensembles and Parallel Processing
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/confidence-intervals.html">
+    Calculating Confidence Intervals
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/diagnostics.html">
+    Diagnostics
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/data.html">
+    Loading and Saving Data
+  </a>
+</li>             
+<li class="nav-header ">
+  Bristlecone.Dendro
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/dendro.html">
+    Dendroecology
+  </a>
+</li>             
+<li class="nav-header ">
+  Examples
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/predator-prey.html">
+    Predator-Prey Dynamics
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/shrub-resource.html">
+    Shrub response to a single limiting resource
+  </a>
+</li>             
+<li class="nav-header ">
+  Components
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/optimisation.html">
+    Optimisation
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/integration.html">
+    Integration
+  </a>
+</li>
+        <li class="nav-header">
+  API Reference
+</li>             
+<li class="nav-item">
+  <a class="nav-link" href="https://acm.im/bristlecone/reference/index.html">
+    All Namespaces
+  </a>
+</li>
+    </ul>
+</aside>
+<main>
+    <div id="content">
+        <div>
+  <h2>
+    TimeSeries<'T> Type
+  </h2>
+  <dl class="fsdocs-metadata">
+    <dt>
+      Namespace: 
+      <a href="https://acm.im/bristlecone/reference/bristlecone.html">
+        Bristlecone
+      </a>
+    </dt>
+    <dt>
+      Assembly: Bristlecone.dll
+    </dt>
+    <dt>
+      Parent Module: 
+      <a href="https://acm.im/bristlecone/reference/bristlecone-time.html">
+        Time
+      </a>
+    </dt>
+    <dt>
+      Abbreviation For: 
+      <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-1.html">TimeSeries</a>&lt;'T&gt;</span></code>
+    </dt>
+    <dt>
+      Base Type: 
+      <code>obj</code>
+    </dt>
+    <dt>
+      All Interfaces: 
+      <code><span><a href="https://learn.microsoft.com/dotnet/api/system.iequatable-1">IEquatable</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-1.html">TimeSeries</a>&lt;'T&gt;</span>&gt;</span></code>
+      , 
+      <code><a href="https://learn.microsoft.com/dotnet/api/system.collections.istructuralequatable">IStructuralEquatable</a></code>
+      , 
+      <code><span><a href="https://learn.microsoft.com/dotnet/api/system.icomparable-1">IComparable</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-1.html">TimeSeries</a>&lt;'T&gt;</span>&gt;</span></code>
+      , 
+      <code><a href="https://learn.microsoft.com/dotnet/api/system.icomparable">IComparable</a></code>
+      , 
+      <code><a href="https://learn.microsoft.com/dotnet/api/system.collections.istructuralcomparable">IStructuralComparable</a></code>
+    </dt>
+  </dl>
+  <div class="fsdocs-xmldoc">
+    <div>
+      <p class="fsdocs-summary">
+        
+      </p>
+    </div>
+  </div>
+  <div></div>
+  <div></div>
+  <div></div>
+  <div></div>
+  <div></div>
+  <div></div>
+  <div></div>
+  <div>
+    <h3>
+      Instance members
+    </h3>
+    <table class="table outer-list fsdocs-member-list">
+      <thead>
+        <tr>
+          <td class="fsdocs-member-list-header">
+            Instance member
+          </td>
+          <td class="fsdocs-member-list-header">
+            Description
+          </td>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '490', 490)" onmouseover="showTip(event, '490', 490)">
+                <p>
+                  <a id="Head">
+                    <a href="#Head">
+                      <code><span>this.Head</span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="490">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>this.Head</span></code>
+                  <br/>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-epoch-1.html">Epoch</a>&lt;'T&gt;</span></code>
+                  </span>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <dl class="fsdocs-returns">
+              <dt>
+                <span class="fsdocs-return-name">
+                  Returns: 
+                </span>
+                <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-epoch-1.html">Epoch</a>&lt;'T&gt;</span></code>
+              </dt>
+              <dd class="fsdocs-return-docs"></dd>
+            </dl>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '491', 491)" onmouseover="showTip(event, '491', 491)">
+                <p>
+                  <a id="Length">
+                    <a href="#Length">
+                      <code><span>this.Length</span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="491">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>this.Length</span></code>
+                  <br/>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code>int</code>
+                  </span>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <dl class="fsdocs-returns">
+              <dt>
+                <span class="fsdocs-return-name">
+                  Returns: 
+                </span>
+                <code>int</code>
+              </dt>
+              <dd class="fsdocs-return-docs"></dd>
+            </dl>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '492', 492)" onmouseover="showTip(event, '492', 492)">
+                <p>
+                  <a id="Resolution">
+                    <a href="#Resolution">
+                      <code><span>this.Resolution</span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="492">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>this.Resolution</span></code>
+                  <br/>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code><a href="https://acm.im/bristlecone/reference/bristlecone-time-resolution-temporalresolution.html">TemporalResolution</a></code>
+                  </span>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <dl class="fsdocs-returns">
+              <dt>
+                <span class="fsdocs-return-name">
+                  Returns: 
+                </span>
+                <code><a href="https://acm.im/bristlecone/reference/bristlecone-time-resolution-temporalresolution.html">TemporalResolution</a></code>
+              </dt>
+              <dd class="fsdocs-return-docs"></dd>
+            </dl>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '493', 493)" onmouseover="showTip(event, '493', 493)">
+                <p>
+                  <a id="StartDate">
+                    <a href="#StartDate">
+                      <code><span>this.StartDate</span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="493">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>this.StartDate</span></code>
+                  <br/>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-observation-1.html">Observation</a>&lt;'T&gt;</span></code>
+                  </span>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <dl class="fsdocs-returns">
+              <dt>
+                <span class="fsdocs-return-name">
+                  Returns: 
+                </span>
+                <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-observation-1.html">Observation</a>&lt;'T&gt;</span></code>
+              </dt>
+              <dd class="fsdocs-return-docs"></dd>
+            </dl>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '494', 494)" onmouseover="showTip(event, '494', 494)">
+                <p>
+                  <a id="TimeSteps">
+                    <a href="#TimeSteps">
+                      <code><span>this.TimeSteps</span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="494">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>this.TimeSteps</span></code>
+                  <br/>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code><span><a href="https://learn.microsoft.com/dotnet/api/system.timespan">TimeSpan</a>[]</span></code>
+                  </span>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <dl class="fsdocs-returns">
+              <dt>
+                <span class="fsdocs-return-name">
+                  Returns: 
+                </span>
+                <code><span><a href="https://learn.microsoft.com/dotnet/api/system.timespan">TimeSpan</a>[]</span></code>
+              </dt>
+              <dd class="fsdocs-return-docs"></dd>
+            </dl>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '495', 495)" onmouseover="showTip(event, '495', 495)">
+                <p>
+                  <a id="Values">
+                    <a href="#Values">
+                      <code><span>this.Values</span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="495">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>this.Values</span></code>
+                  <br/>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code><span>'T&#32;seq</span></code>
+                  </span>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <dl class="fsdocs-returns">
+              <dt>
+                <span class="fsdocs-return-name">
+                  Returns: 
+                </span>
+                <code><span>'T&#32;seq</span></code>
+              </dt>
+              <dd class="fsdocs-return-docs"></dd>
+            </dl>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div></div>
+</div>
+        
+    </div>
+</main>
+<aside id="fsdocs-page-menu">
+    <p id="on-this-page">On this page</p>
+    <div class="empty"></div>
+</aside>
+<dialog>
+    <input type="search" placeholder="Search docs" />
+    <div class="results">
+        <ul></ul>
+        <p class="empty">Type something to start searching.</p>
+    </div>
+</dialog>
+<script type="module" src="https://acm.im/bristlecone/content/fsdocs-tips.js"></script>
+<script type="module" src="https://acm.im/bristlecone/content/fsdocs-theme-toggle.js"></script>
+<script type="module" src="https://acm.im/bristlecone/content/fsdocs-theme.js"></script>
+<script type="module" src="https://acm.im/bristlecone/content/fsdocs-search.js"></script>
+
+</body>
+</html>

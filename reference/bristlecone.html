@@ -1,0 +1,942 @@
+<!DOCTYPE html>
+<html lang="en" data-root="https://acm.im/bristlecone/">
+<head>
+    <meta charset="UTF-8">
+    <meta content="IE=edge" http-equiv="X-UA-Compatible">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+    <meta content="Andrew Martin" name="author">
+    <!-- Opengraph properties (https://ogp.me/) -->
+    <meta property="og:site_name" content="bristlecone">
+    <meta property="og:title" content="Bristlecone" />
+    <meta property="og:url" content="https://acm.im/bristlecone/{{fsdocs-source-basename}}.html">
+    <meta property="og:type" content="website" />
+    <!-- Twitter cards (https://developer.twitter.com/en/docs/twitter-for-websites/cards/overview/summary-card-with-large-image) -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:site" content="https://acm.im/bristlecone/">
+    <meta name="twitter:title" content="Bristlecone">
+    
+    <title>Bristlecone | bristlecone</title>
+    <link href="https://fonts.googleapis.com" rel="preconnect">
+    <link crossorigin href="https://fonts.gstatic.com" rel="preconnect">
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code&display=swap" rel="stylesheet">
+    <script src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js"></script>
+    <link href="https://acm.im/bristlecone/img/favicon.ico" rel="icon" sizes="32x32" type="image/png"/>
+    <script type="application/javascript" src="https://acm.im/bristlecone/content/fsdocs-theme-set-dark.js"></script>
+    <link href="https://acm.im/bristlecone/content/fsdocs-default.css" rel="stylesheet" type="text/css"/>
+    <link href="https://acm.im/bristlecone/content/fsdocs-theme.css" rel="stylesheet" type="text/css"/>
+    <script src="https://cdn.plot.ly/plotly-2.21.0.min.js"></script>
+    
+</head>
+<body class="api-docs">
+<header>
+    <div class="start">
+        <div id="menu-toggle">
+            <iconify-icon class="icon closed" height="22" icon="eva:menu-fill" width="22"></iconify-icon>
+            <iconify-icon class="icon open" height="22" icon="mi:close" width="22"></iconify-icon>
+            <input type="checkbox" name="mobile-menu" />
+            <ul class="menu">
+                <li class="nav-header">Links</li>
+                <li class="nav-item"><a class="nav-link" href="https://github.com/AndrewIOM/bristlecone/blob/master/LICENSE">License</a>
+                </li>
+                <li class="nav-item"><a class="nav-link"
+                                        href="https://github.com/AndrewIOM/bristlecone/blob/master/RELEASE_NOTES.MD">Release
+                    Notes</a></li>
+                <li class="nav-item"><a class="nav-link" href="https://github.com/AndrewIOM/bristlecone/">Source
+                    Repository</a></li>
+                <li class="nav-header ">
+  The Bristlecone Language
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/language.html">
+    Writing Models
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model.html">
+    Defining a Hypothesis (or Model System)
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/estimation-engine.html">
+    Defining a Model-Fitting Method (Estimation Engine)
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/composing-models.html">
+    Composing models into many hypotheses
+  </a>
+</li>             
+<li class="nav-header ">
+  Techniques
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model-fitting.html">
+    Model Fitting
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model-selection.html">
+    Model Selection
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/workflow.html">
+    Ensembles and Parallel Processing
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/confidence-intervals.html">
+    Calculating Confidence Intervals
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/diagnostics.html">
+    Diagnostics
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/data.html">
+    Loading and Saving Data
+  </a>
+</li>             
+<li class="nav-header ">
+  Bristlecone.Dendro
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/dendro.html">
+    Dendroecology
+  </a>
+</li>             
+<li class="nav-header ">
+  Examples
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/predator-prey.html">
+    Predator-Prey Dynamics
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/shrub-resource.html">
+    Shrub response to a single limiting resource
+  </a>
+</li>             
+<li class="nav-header ">
+  Components
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/optimisation.html">
+    Optimisation
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/integration.html">
+    Integration
+  </a>
+</li>
+                <li class="nav-header">
+  API Reference
+</li>             
+<li class="nav-item">
+  <a class="nav-link" href="https://acm.im/bristlecone/reference/index.html">
+    All Namespaces
+  </a>
+</li>
+            </ul>
+        </div>
+        <a href="https://acm.im/bristlecone/">
+            <img alt="Header menu logo" src="https://acm.im/bristlecone//img/logo.png">
+            <strong>bristlecone</strong>
+        </a>
+    </div>
+    <div class="end">
+        <a href="https://github.com/AndrewIOM/bristlecone/" target="_blank">
+            <iconify-icon icon="uil:github" width="26" height="26"></iconify-icon>
+        </a>
+        <iconify-icon id="search-btn" icon="carbon:search" class="search" width="24" height="24"></iconify-icon>
+        <fsdocs-theme-toggle></fsdocs-theme-toggle>
+    </div>
+</header>
+<aside id="fsdocs-main-menu">
+    <ul class="menu">
+        <li class="nav-header">Links</li>
+        <li class="nav-item"><a class="nav-link" href="https://github.com/AndrewIOM/bristlecone/blob/master/LICENSE">License</a>
+        </li>
+        <li class="nav-item"><a class="nav-link"
+                                href="https://github.com/AndrewIOM/bristlecone/blob/master/RELEASE_NOTES.MD">Release
+            Notes</a></li>
+        <li class="nav-item"><a class="nav-link" href="https://github.com/AndrewIOM/bristlecone/">Source
+            Repository</a></li>
+        <li class="nav-header ">
+  The Bristlecone Language
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/language.html">
+    Writing Models
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model.html">
+    Defining a Hypothesis (or Model System)
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/estimation-engine.html">
+    Defining a Model-Fitting Method (Estimation Engine)
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/composing-models.html">
+    Composing models into many hypotheses
+  </a>
+</li>             
+<li class="nav-header ">
+  Techniques
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model-fitting.html">
+    Model Fitting
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model-selection.html">
+    Model Selection
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/workflow.html">
+    Ensembles and Parallel Processing
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/confidence-intervals.html">
+    Calculating Confidence Intervals
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/diagnostics.html">
+    Diagnostics
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/data.html">
+    Loading and Saving Data
+  </a>
+</li>             
+<li class="nav-header ">
+  Bristlecone.Dendro
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/dendro.html">
+    Dendroecology
+  </a>
+</li>             
+<li class="nav-header ">
+  Examples
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/predator-prey.html">
+    Predator-Prey Dynamics
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/shrub-resource.html">
+    Shrub response to a single limiting resource
+  </a>
+</li>             
+<li class="nav-header ">
+  Components
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/optimisation.html">
+    Optimisation
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/integration.html">
+    Integration
+  </a>
+</li>
+        <li class="nav-header">
+  API Reference
+</li>             
+<li class="nav-item">
+  <a class="nav-link" href="https://acm.im/bristlecone/reference/index.html">
+    All Namespaces
+  </a>
+</li>
+    </ul>
+</aside>
+<main>
+    <div id="content">
+        <div>
+  <h2 id="bristlecone">
+    Bristlecone Namespace
+  </h2>
+  <div class="fsdocs-xmldoc">
+    <p>
+      The core library of Bristlecone, containing model-fitting functions.
+    </p>
+  </div>
+  <table class="table outer-list fsdocs-entity-list">
+    <thead>
+      <tr>
+        <td>
+          Type/Module
+        </td>
+        <td>
+          Description
+        </td>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="fsdocs-entity-name">
+          <p>
+            <a name="Bristlecone">
+              <a href="https://acm.im/bristlecone/reference/bristlecone-bristlecone.html">
+                Bristlecone (Module)
+              </a>
+            </a>
+          </p>
+        </td>
+        <td class="fsdocs-entity-xmldoc">
+          <div>
+            <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('`cref:T:Bristlecone.Bristlecone`')">
+              <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+            </div>
+            <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'T:Bristlecone.Bristlecone\'/>')">
+              <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+            </div>
+            <a href="https://github.com/AndrewIOM/bristlecone/src/Bristlecone/Library.fs#L13-13" class="fsdocs-source-link" title="Source on GitHub">
+              <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+            </a>
+            <p class="fsdocs-summary">
+              
+
+ Main functionality of Bristlecone, including functions to scaffold
+ `ModelSystem`s and for model-fitting (tests and real fits).
+
+            </p>
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <td class="fsdocs-entity-name">
+          <p>
+            <a name="Bristlecone">
+              <a href="https://acm.im/bristlecone/reference/bristlecone-bristlecone-0.html">
+                Bristlecone (Module)
+              </a>
+            </a>
+          </p>
+        </td>
+        <td class="fsdocs-entity-xmldoc">
+          <div>
+            <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('`cref:T:Bristlecone.Bristlecone`')">
+              <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+            </div>
+            <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'T:Bristlecone.Bristlecone\'/>')">
+              <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+            </div>
+            <a href="https://github.com/AndrewIOM/bristlecone/src/Bristlecone.Dendro/Library.fs#L6-6" class="fsdocs-source-link" title="Source on GitHub">
+              <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+            </a>
+            <p class="fsdocs-summary">
+              
+            </p>
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <td class="fsdocs-entity-name">
+          <p>
+            <a name="Conditioning">
+              <a href="https://acm.im/bristlecone/reference/bristlecone-conditioning.html">
+                Conditioning
+              </a>
+            </a>
+          </p>
+        </td>
+        <td class="fsdocs-entity-xmldoc">
+          <div>
+            <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('`cref:T:Bristlecone.Conditioning`')">
+              <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+            </div>
+            <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'T:Bristlecone.Conditioning\'/>')">
+              <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+            </div>
+            <a href="https://github.com/AndrewIOM/bristlecone/src/Bristlecone/Types.fs#L66-66" class="fsdocs-source-link" title="Source on GitHub">
+              <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+            </a>
+            <p class="fsdocs-summary">
+              
+            </p>
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <td class="fsdocs-entity-name">
+          <p>
+            <a name="Diagnostics">
+              <a href="https://acm.im/bristlecone/reference/bristlecone-diagnostics.html">
+                Diagnostics
+              </a>
+            </a>
+          </p>
+        </td>
+        <td class="fsdocs-entity-xmldoc">
+          <div>
+            <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('`cref:T:Bristlecone.Diagnostics`')">
+              <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+            </div>
+            <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'T:Bristlecone.Diagnostics\'/>')">
+              <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+            </div>
+            <a href="https://github.com/AndrewIOM/bristlecone/src/Bristlecone/Diagnostics.fs#L3-3" class="fsdocs-source-link" title="Source on GitHub">
+              <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+            </a>
+            <pre>Diagnostic techniques for determining the suitability of
+ results obtained with Bristlecone.</pre>
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <td class="fsdocs-entity-name">
+          <p>
+            <a name="EstimationEngine">
+              <a href="https://acm.im/bristlecone/reference/bristlecone-estimationengine.html">
+                EstimationEngine
+              </a>
+            </a>
+          </p>
+        </td>
+        <td class="fsdocs-entity-xmldoc">
+          <div>
+            <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('`cref:T:Bristlecone.EstimationEngine`')">
+              <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+            </div>
+            <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'T:Bristlecone.EstimationEngine\'/>')">
+              <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+            </div>
+            <a href="https://github.com/AndrewIOM/bristlecone/src/Bristlecone/EstimationEngine.fs#L54-54" class="fsdocs-source-link" title="Source on GitHub">
+              <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+            </a>
+            <p class="fsdocs-summary">
+              
+            </p>
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <td class="fsdocs-entity-name">
+          <p>
+            <a name="Language">
+              <a href="https://acm.im/bristlecone/reference/bristlecone-language.html">
+                Language
+              </a>
+            </a>
+          </p>
+        </td>
+        <td class="fsdocs-entity-xmldoc">
+          <div>
+            <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('`cref:T:Bristlecone.Language`')">
+              <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+            </div>
+            <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'T:Bristlecone.Language\'/>')">
+              <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+            </div>
+            <a href="https://github.com/AndrewIOM/bristlecone/src/Bristlecone/Language.fs#L5-5" class="fsdocs-source-link" title="Source on GitHub">
+              <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+            </a>
+            <p class="fsdocs-summary">
+               An F# Domain Specific Language (DSL) for scripting with
+ Bristlecone.
+            </p>
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <td class="fsdocs-entity-name">
+          <p>
+            <a name="List">
+              <a href="https://acm.im/bristlecone/reference/bristlecone-list.html">
+                List
+              </a>
+            </a>
+          </p>
+        </td>
+        <td class="fsdocs-entity-xmldoc">
+          <div>
+            <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('`cref:T:Bristlecone.List`')">
+              <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+            </div>
+            <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'T:Bristlecone.List\'/>')">
+              <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+            </div>
+            <a href="https://github.com/AndrewIOM/bristlecone/src/Bristlecone/Types.fs#L133-133" class="fsdocs-source-link" title="Source on GitHub">
+              <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+            </a>
+            <p class="fsdocs-summary">
+              
+            </p>
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <td class="fsdocs-entity-name">
+          <p>
+            <a name="ListExtensions">
+              <a href="https://acm.im/bristlecone/reference/bristlecone-listextensions.html">
+                ListExtensions
+              </a>
+            </a>
+          </p>
+        </td>
+        <td class="fsdocs-entity-xmldoc">
+          <div>
+            <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('`cref:T:Bristlecone.ListExtensions`')">
+              <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+            </div>
+            <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'T:Bristlecone.ListExtensions\'/>')">
+              <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+            </div>
+            <a href="https://github.com/AndrewIOM/bristlecone/src/Bristlecone/Types.fs#L313-313" class="fsdocs-source-link" title="Source on GitHub">
+              <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+            </a>
+            <p class="fsdocs-summary">
+              
+            </p>
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <td class="fsdocs-entity-name">
+          <p>
+            <a name="Map">
+              <a href="https://acm.im/bristlecone/reference/bristlecone-map.html">
+                Map
+              </a>
+            </a>
+          </p>
+        </td>
+        <td class="fsdocs-entity-xmldoc">
+          <div>
+            <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('`cref:T:Bristlecone.Map`')">
+              <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+            </div>
+            <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'T:Bristlecone.Map\'/>')">
+              <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+            </div>
+            <a href="https://github.com/AndrewIOM/bristlecone/src/Bristlecone/Types.fs#L116-116" class="fsdocs-source-link" title="Source on GitHub">
+              <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+            </a>
+            <p class="fsdocs-summary">
+              
+            </p>
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <td class="fsdocs-entity-name">
+          <p>
+            <a name="ModelSelection">
+              <a href="https://acm.im/bristlecone/reference/bristlecone-modelselection.html">
+                ModelSelection
+              </a>
+            </a>
+          </p>
+        </td>
+        <td class="fsdocs-entity-xmldoc">
+          <div>
+            <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('`cref:T:Bristlecone.ModelSelection`')">
+              <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+            </div>
+            <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'T:Bristlecone.ModelSelection\'/>')">
+              <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+            </div>
+            <a href="https://github.com/AndrewIOM/bristlecone/src/Bristlecone/ModelSelection.fs#L3-3" class="fsdocs-source-link" title="Source on GitHub">
+              <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+            </a>
+            <pre>Contains tools for conducting Model Selection across
+ individual subjects and hypotheses.</pre>
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <td class="fsdocs-entity-name">
+          <p>
+            <a name="ModelSystem">
+              <a href="https://acm.im/bristlecone/reference/bristlecone-modelsystem.html">
+                ModelSystem
+              </a>
+            </a>
+          </p>
+        </td>
+        <td class="fsdocs-entity-xmldoc">
+          <div>
+            <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('`cref:T:Bristlecone.ModelSystem`')">
+              <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+            </div>
+            <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'T:Bristlecone.ModelSystem\'/>')">
+              <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+            </div>
+            <a href="https://github.com/AndrewIOM/bristlecone/src/Bristlecone/EstimationEngine.fs#L7-7" class="fsdocs-source-link" title="Source on GitHub">
+              <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+            </a>
+            <p class="fsdocs-summary">
+               Represents an ordinary differential equation model system and
+ its likelihood as as objective function that may be optimised.
+            </p>
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <td class="fsdocs-entity-name">
+          <p>
+            <a name="Objective">
+              <a href="https://acm.im/bristlecone/reference/bristlecone-objective.html">
+                Objective
+              </a>
+            </a>
+          </p>
+        </td>
+        <td class="fsdocs-entity-xmldoc">
+          <div>
+            <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('`cref:T:Bristlecone.Objective`')">
+              <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+            </div>
+            <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'T:Bristlecone.Objective\'/>')">
+              <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+            </div>
+            <a href="https://github.com/AndrewIOM/bristlecone/src/Bristlecone/Objective.fs#L6-6" class="fsdocs-source-link" title="Source on GitHub">
+              <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+            </a>
+            <p class="fsdocs-summary">
+               Configures a single function that represents a model and its likelihood
+ when fit to time-series data.
+            </p>
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <td class="fsdocs-entity-name">
+          <p>
+            <a name="Parameter">
+              <a href="https://acm.im/bristlecone/reference/bristlecone-parameter.html">
+                Parameter
+              </a>
+            </a>
+          </p>
+        </td>
+        <td class="fsdocs-entity-xmldoc">
+          <div>
+            <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('`cref:T:Bristlecone.Parameter`')">
+              <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+            </div>
+            <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'T:Bristlecone.Parameter\'/>')">
+              <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+            </div>
+            <a href="https://github.com/AndrewIOM/bristlecone/src/Bristlecone/Parameter.fs#L6-6" class="fsdocs-source-link" title="Source on GitHub">
+              <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+            </a>
+            <p class="fsdocs-summary">
+              
+            </p>
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <td class="fsdocs-entity-name">
+          <p>
+            <a name="PositiveInt">
+              <a href="https://acm.im/bristlecone/reference/bristlecone-positiveintmodule.html">
+                PositiveInt (Module)
+              </a>
+            </a>
+          </p>
+        </td>
+        <td class="fsdocs-entity-xmldoc">
+          <div>
+            <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('`cref:T:Bristlecone.PositiveIntModule`')">
+              <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+            </div>
+            <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'T:Bristlecone.PositiveIntModule\'/>')">
+              <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+            </div>
+            <a href="https://github.com/AndrewIOM/bristlecone/src/Bristlecone/Types.fs#L9-9" class="fsdocs-source-link" title="Source on GitHub">
+              <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+            </a>
+            <p class="fsdocs-summary">
+              
+            </p>
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <td class="fsdocs-entity-name">
+          <p>
+            <a name="PositiveInt">
+              <a href="https://acm.im/bristlecone/reference/bristlecone-positiveint.html">
+                PositiveInt (Type)
+              </a>
+            </a>
+          </p>
+        </td>
+        <td class="fsdocs-entity-xmldoc">
+          <div>
+            <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('`cref:T:Bristlecone.PositiveInt`')">
+              <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+            </div>
+            <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'T:Bristlecone.PositiveInt\'/>')">
+              <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+            </div>
+            <a href="https://github.com/AndrewIOM/bristlecone/src/Bristlecone/Types.fs#L63-63" class="fsdocs-source-link" title="Source on GitHub">
+              <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+            </a>
+            <p class="fsdocs-summary">
+              
+            </p>
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <td class="fsdocs-entity-name">
+          <p>
+            <a name="RealTimeSpan">
+              <a href="https://acm.im/bristlecone/reference/bristlecone-realtimespanmodule.html">
+                RealTimeSpan (Module)
+              </a>
+            </a>
+          </p>
+        </td>
+        <td class="fsdocs-entity-xmldoc">
+          <div>
+            <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('`cref:T:Bristlecone.RealTimeSpanModule`')">
+              <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+            </div>
+            <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'T:Bristlecone.RealTimeSpanModule\'/>')">
+              <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+            </div>
+            <a href="https://github.com/AndrewIOM/bristlecone/src/Bristlecone/Types.fs#L29-29" class="fsdocs-source-link" title="Source on GitHub">
+              <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+            </a>
+            <p class="fsdocs-summary">
+              
+            </p>
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <td class="fsdocs-entity-name">
+          <p>
+            <a name="RealTimeSpan">
+              <a href="https://acm.im/bristlecone/reference/bristlecone-realtimespan.html">
+                RealTimeSpan (Type)
+              </a>
+            </a>
+          </p>
+        </td>
+        <td class="fsdocs-entity-xmldoc">
+          <div>
+            <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('`cref:T:Bristlecone.RealTimeSpan`')">
+              <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+            </div>
+            <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'T:Bristlecone.RealTimeSpan\'/>')">
+              <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+            </div>
+            <a href="https://github.com/AndrewIOM/bristlecone/src/Bristlecone/Types.fs#L62-62" class="fsdocs-source-link" title="Source on GitHub">
+              <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+            </a>
+            <p class="fsdocs-summary">
+              
+            </p>
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <td class="fsdocs-entity-name">
+          <p>
+            <a name="Result">
+              <a href="https://acm.im/bristlecone/reference/bristlecone-result.html">
+                Result
+              </a>
+            </a>
+          </p>
+        </td>
+        <td class="fsdocs-entity-xmldoc">
+          <div>
+            <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('`cref:T:Bristlecone.Result`')">
+              <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+            </div>
+            <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'T:Bristlecone.Result\'/>')">
+              <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+            </div>
+            <a href="https://github.com/AndrewIOM/bristlecone/src/Bristlecone/Types.fs#L190-190" class="fsdocs-source-link" title="Source on GitHub">
+              <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+            </a>
+            <p class="fsdocs-summary">
+              
+            </p>
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <td class="fsdocs-entity-name">
+          <p>
+            <a name="Seq">
+              <a href="https://acm.im/bristlecone/reference/bristlecone-seq.html">
+                Seq
+              </a>
+            </a>
+          </p>
+        </td>
+        <td class="fsdocs-entity-xmldoc">
+          <div>
+            <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('`cref:T:Bristlecone.Seq`')">
+              <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+            </div>
+            <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'T:Bristlecone.Seq\'/>')">
+              <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+            </div>
+            <a href="https://github.com/AndrewIOM/bristlecone/src/Bristlecone/Types.fs#L74-74" class="fsdocs-source-link" title="Source on GitHub">
+              <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+            </a>
+            <p class="fsdocs-summary">
+              
+            </p>
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <td class="fsdocs-entity-name">
+          <p>
+            <a name="ShortCode">
+              <a href="https://acm.im/bristlecone/reference/bristlecone-shortcode.html">
+                ShortCode
+              </a>
+            </a>
+          </p>
+        </td>
+        <td class="fsdocs-entity-xmldoc">
+          <div>
+            <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('`cref:T:Bristlecone.ShortCode`')">
+              <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+            </div>
+            <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'T:Bristlecone.ShortCode\'/>')">
+              <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+            </div>
+            <a href="https://github.com/AndrewIOM/bristlecone/src/Bristlecone/Types.fs#L48-48" class="fsdocs-source-link" title="Source on GitHub">
+              <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+            </a>
+            <p class="fsdocs-summary">
+              
+            </p>
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <td class="fsdocs-entity-name">
+          <p>
+            <a name="Solver">
+              <a href="https://acm.im/bristlecone/reference/bristlecone-solver.html">
+                Solver
+              </a>
+            </a>
+          </p>
+        </td>
+        <td class="fsdocs-entity-xmldoc">
+          <div>
+            <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('`cref:T:Bristlecone.Solver`')">
+              <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+            </div>
+            <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'T:Bristlecone.Solver\'/>')">
+              <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+            </div>
+            <a href="https://github.com/AndrewIOM/bristlecone/src/Bristlecone/Solver.fs#L5-5" class="fsdocs-source-link" title="Source on GitHub">
+              <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+            </a>
+            <p class="fsdocs-summary">
+               Helper functions for the creation of `Solver` functions, which apply time-series models
+ to time-series data (when using Bristlecone time-series types).
+            </p>
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <td class="fsdocs-entity-name">
+          <p>
+            <a name="Test">
+              <a href="https://acm.im/bristlecone/reference/bristlecone-test.html">
+                Test
+              </a>
+            </a>
+          </p>
+        </td>
+        <td class="fsdocs-entity-xmldoc">
+          <div>
+            <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('`cref:T:Bristlecone.Test`')">
+              <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+            </div>
+            <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'T:Bristlecone.Test\'/>')">
+              <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+            </div>
+            <a href="https://github.com/AndrewIOM/bristlecone/src/Bristlecone/Test.fs#L3-3" class="fsdocs-source-link" title="Source on GitHub">
+              <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+            </a>
+            <p class="fsdocs-summary">
+              
+            </p>
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <td class="fsdocs-entity-name">
+          <p>
+            <a name="Time">
+              <a href="https://acm.im/bristlecone/reference/bristlecone-time.html">
+                Time
+              </a>
+            </a>
+          </p>
+        </td>
+        <td class="fsdocs-entity-xmldoc">
+          <div>
+            <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('`cref:T:Bristlecone.Time`')">
+              <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+            </div>
+            <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'T:Bristlecone.Time\'/>')">
+              <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+            </div>
+            <a href="https://github.com/AndrewIOM/bristlecone/src/Bristlecone/Time.fs#L1-1" class="fsdocs-source-link" title="Source on GitHub">
+              <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+            </a>
+            <p class="fsdocs-summary">
+              
+            </p>
+          </div>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+        
+    </div>
+</main>
+<aside id="fsdocs-page-menu">
+    <p id="on-this-page">On this page</p>
+    <div class="empty"></div>
+</aside>
+<dialog>
+    <input type="search" placeholder="Search docs" />
+    <div class="results">
+        <ul></ul>
+        <p class="empty">Type something to start searching.</p>
+    </div>
+</dialog>
+<script type="module" src="https://acm.im/bristlecone/content/fsdocs-tips.js"></script>
+<script type="module" src="https://acm.im/bristlecone/content/fsdocs-theme-toggle.js"></script>
+<script type="module" src="https://acm.im/bristlecone/content/fsdocs-theme.js"></script>
+<script type="module" src="https://acm.im/bristlecone/content/fsdocs-search.js"></script>
+
+</body>
+</html>
