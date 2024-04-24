@@ -1,6 +1,13 @@
-#### 2.0.0-alpha2 - unreleased
+#### 2.0.0 - 2024-04-24
+* FEATURE: Domain Specific Language (DSL) for scaffolding models.
+* FEATURE: User-definable RNG seeds.
+* FEATURE: Scaffold many models into competing hypotheses.
+* FEATURE: One-step-ahead analysis of model performance.
 * FEATURE: Benchmark suite of common test functions for optimisation routines
 * FEATURE: Performance tuning of optimisers. For example, Filzbach 94% faster.
+* FEATURE: Documentation website uses latest fsdocs and includes fully worked examples.
+* BREAKING: We recommend using the DSL to construct models. Underlying F# record type signatures have changed and will break version 1.x scripts.
+* BUGFIX: Amoeba functions respect end conditions.
 
 #### 2.0.0-alpha2 - 2022-04-27
 * FEATURE: Add univariate gaussian -log likelihood function

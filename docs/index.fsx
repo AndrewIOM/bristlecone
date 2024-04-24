@@ -99,16 +99,15 @@ Contributing and copyright
 
 The project is hosted on [GitHub][gh] where you can [report issues][issues], fork 
 the project and submit pull requests. If you're adding a new public API, please also 
-consider adding [samples][content] that can be turned into a documentation. You might
-also want to read the [library design notes][readme] to understand how it works.
+consider adding [samples][content] that can be turned into documentation (using fsdocs
+literal scripting).
 
 The library is available under an MIT license, which allows modification and 
 redistribution for both commercial and non-commercial purposes. For more information see the 
 [License file][license] in the GitHub repository. 
 
-  [content]: https://github.com/AndrewIOM/Bristlecone/tree/master/docs/content
+  [content]: https://github.com/AndrewIOM/Bristlecone/tree/master/docs/examples
   [gh]: https://github.com/AndrewIOM/Bristlecone
   [issues]: https://github.com/AndrewIOM/Bristlecone/issues
-  [readme]: https://github.com/AndrewIOM/Bristlecone/blob/master/README.md
   [license]: https://github.com/AndrewIOM/Bristlecone/blob/master/LICENSE
 *)
