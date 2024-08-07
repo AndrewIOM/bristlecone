@@ -403,8 +403,14 @@ module Language =
 
         open Writer
 
+        /// Takes n first letters from a string. If there are n or more words,
+        /// takes the first letters of each word, else takes the letters from the
+        /// first word.
         let internal nFirstLetters n (s: string) =
-            (s.Split(' ') |> Seq.map (fun s -> s |> Seq.truncate n) |> string).ToUpper()
+            let s = System.Text.RegularExpressions.Regex.Replace(s, @"[^A-Za-z0-9 ]+", "")
+            if s.Split(' ').Length >= n
+            then ((s.Split(' ') |> Array.map (fun s -> s |> Seq.head) |> Seq.truncate n) |> System.String.Concat).ToUpper()
+            else (s |> Seq.truncate n |> System.String.Concat).ToUpper()
 
         /// <summary>Represents the name of a swappable component in a model
         /// and the name of its implementation in a specific case.</summary>
