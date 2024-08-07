@@ -63,6 +63,14 @@ let timeSeries =
                   (original |> Seq.map f)
                   "map behaved differently between Seq.map and TimeSeries.map"
 
+          testPropertyWithConfig config ".Length is correct"
+          <| fun (observations: TimeSeries.Observation<float> list) f ->
+              let ts: TimeSeries<float> = observations |> TimeSeries.fromObservations
+              Expect.equal
+                  observations.Length
+                  ts.Length
+                  "Time-series length was not the same as input data points"
+
           testList
               "Bounding functions"
               [ testPropertyWithConfig config "Trimming start removes all time points before specified date"

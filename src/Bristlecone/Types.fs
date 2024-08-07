@@ -67,8 +67,12 @@ module Conditioning =
 
     type Conditioning<'a> =
         | NoConditioning
-        | RepeatFirstDataPoint
-        | Custom of CodedMap<'a>
+        | RepeatFirstDataPoint of ConditionTimeline
+        | Custom of CodedMap<'a> * ConditionTimeline
+
+    and ConditionTimeline =
+        | EnvironmentalData
+        | ObservedData
 
 [<RequireQualifiedAccess>]
 module Seq =
@@ -86,11 +90,24 @@ module Seq =
 
         a |> Seq.append b |> Seq.groupBy fst |> Seq.map simplifyEntry |> Seq.toList
 
+    /// Take every `n`th record in a sequence.
+    /// For example, if n = 3, then the third item
+    /// will be the first returned.
     let everyNth n seq =
         seq
-        |> Seq.mapi (fun i el -> el, i) // Add index to element
-        |> Seq.filter (fun (el, i) -> i % n = n - 1) // Take every nth element
-        |> Seq.map fst // Drop index from the result
+        |> Seq.mapi (fun i el -> el, i)
+        |> Seq.filter (fun (el, i) -> i % n = n - 1)
+        |> Seq.map fst
+
+    /// Takes every `n`th record in a sequence, starting
+    /// such that the first item returned will be the first
+    /// item in `seq`.
+    let everyNthFromHead n seq =
+        seq
+        |> Seq.mapi (fun i el -> el, i)
+        |> Seq.filter (fun (el, i) ->  i % n = 0)
+        |> Seq.map fst
+
 
 
     ///**Description**

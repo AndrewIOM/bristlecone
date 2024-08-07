@@ -31,7 +31,7 @@ module Bristlecone =
           OptimiseWith = Optimisation.Amoeba.single Optimisation.Amoeba.Solver.Default
           LogTo = Bristlecone.Logging.Console.logger (1000)
           Random = MathNet.Numerics.Random.MersenneTwister(true)
-          Conditioning = Conditioning.RepeatFirstDataPoint }
+          Conditioning = Conditioning.RepeatFirstDataPoint Conditioning.ConditionTimeline.ObservedData }
 
     /// <summary>Substitute a specific logger into</summary>
     /// <param name="out"></param>
@@ -194,7 +194,7 @@ module Bristlecone =
                 return solver
             }
 
-        let discreteSolver = Solver.Discrete.solve t0
+        let discreteSolver = Solver.Discrete.solve (fst t0) // TODO conditioning to observation timestep
 
         let data = timeSeriesData |> Map.map (fun _ ts -> ts.Values |> Seq.toArray)
 
@@ -436,7 +436,7 @@ module Bristlecone =
                 fit
                     (engine
                      |> withCustomOptimisation Optimisation.None.none
-                     |> withConditioning Conditioning.RepeatFirstDataPoint)
+                     |> withConditioning (Conditioning.RepeatFirstDataPoint Conditioning.ConditionTimeline.ObservedData)) // TODO should this be observed or environmental?
                     (Optimisation.EndConditions.afterIteration 0)
                     d
                     hypothesisMle

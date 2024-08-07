@@ -14,9 +14,9 @@
     <Compile Include="Time.fs" />
     <Compile Include="Parameter.fs" />
     <Compile Include="Optimisation.fs" />
+    <Compile Include="Solver.fs" />
     <Compile Include="ModelSelection.fs" />
     <Compile Include="Workflow.fs" />
-    <Compile Include="Test.fs" />
     <Compile Include="Bristlecone.fs" />
     <Compile Include="Language.fs" />
     <Compile Include="Program.fs" />

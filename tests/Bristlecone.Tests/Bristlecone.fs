@@ -4,6 +4,7 @@ open Bristlecone
 open Expecto
 open FsCheck
 open Bristlecone.EstimationEngine
+open Bristlecone.Time
 
 // Checks floats are equal, but accounting for nan <> nan
 let expectSameFloat a b message =
@@ -33,12 +34,21 @@ module TestModels =
         |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ "x"; "y" ])
         |> Model.compile
 
+    let logistic kMax rMax environmentMultiplier =
+        Model.empty
+        |> Model.addEquation "x" (environmentMultiplier * Parameter "r" * This * (Constant 1. - (This / Parameter "K")))
+        |> Model.estimateParameter "K" notNegative 30.0 kMax
+        |> Model.estimateParameter "r" notNegative 0.75 rMax
+        |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ "x" ])
+        |> Model.compile
+
+
 let defaultEngine =
     { TimeHandling = Continuous <| Integration.MathNet.integrate
       OptimiseWith = Optimisation.None.none
       LogTo = ignore
       Random = MathNet.Numerics.Random.MersenneTwister(1000, true)
-      Conditioning = Conditioning.RepeatFirstDataPoint }
+      Conditioning = Conditioning.RepeatFirstDataPoint Conditioning.ConditionTimeline.ObservedData }
 
 let defaultEndCon = Optimisation.EndConditions.afterIteration 1000
 
@@ -111,20 +121,17 @@ module ``Fit`` =
 
               testPropertyWithConfig Config.config "Repeating first data point sets t0 as t1"
               <| fun time resolution (data: float list) ->
-                  if data.IsEmpty || data.Length = 1 then
-                      ()
-                  else
-                      let data =
-                          [ (Language.code "x").Value,
-                            Time.TimeSeries.fromSeq time (Time.FixedTemporalResolution.Years resolution) data ]
-                          |> Map.ofList
+                    let data =
+                        [ (Language.code "x").Value,
+                        Time.TimeSeries.fromSeq time (Time.FixedTemporalResolution.Years resolution) data ]
+                        |> Map.ofList
 
-                      let result = Bristlecone.Fit.t0 data Conditioning.RepeatFirstDataPoint ignore
+                    let result = Bristlecone.Fit.t0 data (Conditioning.RepeatFirstDataPoint Conditioning.ConditionTimeline.ObservedData) ignore
 
-                      expectSameFloatList
-                          (result)
-                          (data |> Map.map (fun k v -> v.Values |> Seq.head))
-                          "t0 did not equal t1"
+                    expectSameFloatList
+                        (fst result)
+                        (data |> Map.map (fun k v -> v.Values |> Seq.head))
+                        "t0 did not equal t1"
 
               // testProperty "t0 is set as a custom point when specified" <| fun () ->
               //     false
@@ -133,8 +140,46 @@ module ``Fit`` =
     [<Tests>]
     let fitTests =
         testList
-            "Model-fitting"
+            "Bristlecone.fit"
             [
+
+              testList
+                "Scenarios" [
+
+                    testPropertyWithConfig Config.config "Estimation result applying high-res environmental data"
+                    <| fun date (data: TimeSeries.Observation<float> list) (dailyResolution:PositiveInt.PositiveInt) ->
+
+                        // Otherwise computation gets too much for a simple test:
+                        let data = data |> List.map fst |> List.truncate 50
+
+                        let actualData = data |> TimeSeries.fromSeq date (Resolution.Days dailyResolution)
+                        let c = ShortCode.create "x" |> Option.get
+                        let allData = 
+                            [ (ShortCode.create "env-val").Value, 
+                                TimeSeries.fromSeq (date.AddDays(-dailyResolution.Value)) (FixedTemporalResolution.Days ((PositiveInt.create 1).Value)) 
+                                    ([ 1. .. float (dailyResolution.Value + (data.Length * dailyResolution.Value)) ] |> List.map(fun d -> d * 0.05)) ]
+                            |> Map.ofList
+                            |> Map.add c actualData
+
+                        let result =
+                            Expect.wantOk
+                                (Bristlecone.tryFit defaultEngine (Optimisation.EndConditions.afterIteration 1) allData (TestModels.logistic 40.0 2.0 (Language.Environment "env-val")))
+                                "Fitting did not happen successfully."
+
+                        Expect.equal result.Series.[c].Length actualData.Length
+                            "The output time-series does not have the same length as the input"
+
+                        Expect.isSome result.InternalDynamics
+                            "There should be internal dynamics, as high-resolution environmental data was input"
+
+                        let daysInTimeline = (actualData.EndDate - (snd actualData.StartDate)).Days
+                        Expect.equal (result.InternalDynamics.Value.[c].Length - 1) daysInTimeline // TODO WHY -1??
+                            "The output (internal) time-series does not have the correct number of days"
+
+                        Expect.sequenceEqual (result.Series.[c].Values |> Seq.map(fun m -> m.Obs)) actualData.Values
+                            "The output time-series was not the input time-series"
+
+                ]
 
               testList
                   "Establish common timelines"
@@ -170,13 +215,13 @@ module ``Fit`` =
                                         defaultEndCon
                                         data
                                         (TestModels.constant b1 b2))
-                                    ""
+                                    "Fitting did not happen successfully."
 
                             expectSameFloat result.Likelihood result2.Likelihood "Different likelihoods"
 
                             expectSameFloat
                                 result.InternalDynamics
-                                result.InternalDynamics
+                                result2.InternalDynamics
                                 "Different internal dynamics"
 
                             expectSameFloat result.Parameters result2.Parameters "Different parameters"

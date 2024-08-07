@@ -306,7 +306,7 @@ module TimeSeries =
 
 
     type TimeSeries<'T> with
-        member this.Length = this |> innerSeries |> Array.length
+        member this.Length = (this |> innerSeries |> Array.length) + 1
 
         member this.Head = this |> innerSeries |> Array.head
 
@@ -315,6 +315,10 @@ module TimeSeries =
         member this.Values = this |> toObservations |> Seq.map fst
 
         member this.Resolution = this |> resolution
+
+        member this.EndDate =
+            this |> toObservations |> Seq.last |> snd
+
 
 type TimeSeries<'T> = TimeSeries.TimeSeries<'T>
 

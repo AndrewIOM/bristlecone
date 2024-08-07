@@ -19,13 +19,15 @@ module Solver =
 
     /// Step the solver using high resolution, and output at low resolution.
     /// External steps are of a fixed width.
-    let fixedStep logTo timeHandling tStart tEnd initialState forcings =
+    /// Removes the 'conditioned' start time period by skipping `conditioningLength` time-points.
+    let fixedStep logTo timeHandling tStart tEnd initialState forcings conditioningLength =
         match timeHandling with
         | Discrete -> invalidOp "Not configured"
         | Continuous i ->
             fun eqs ->
                 i logTo tStart tEnd 1. initialState forcings eqs
-                |> Map.map (fun _ v -> v |> Array.tail |> Seq.toArray)
+                |> Map.map (fun _ v ->
+                    v |> Array.skip conditioningLength |> Seq.toArray)
 
     /// Step the solver using the high resolution, and output at low resolution.
     /// External steps can be variable in size.
@@ -54,7 +56,7 @@ module Solver =
         (dynamicSeries: TimeFrame.TimeFrame<'a>)
         (environment: TimeFrame.TimeFrame<'a> option)
         engine
-        t0
+        (t0, t0OnExternalStepping)
         =
         let timeline, forcings =
             match environment with
@@ -97,6 +99,10 @@ module Solver =
         let startIndex = timeline |> Seq.head
         let endIndex = timeline |> Seq.last
 
+        engine.LogTo
+        <| DebugEvent (sprintf "%f - %f" startIndex endIndex)
+
+
         let externalSteps =
             timeline
             |> Seq.pairwise
@@ -107,8 +113,13 @@ module Solver =
         if externalSteps.Length <> 1 then
             failwithf "Encountered uneven timesteps: %A" externalSteps
 
+        let tStartOffset = 
+            match t0OnExternalStepping with
+            | Conditioning.ConditionTimeline.ObservedData -> externalSteps.Head
+            | Conditioning.ConditionTimeline.EnvironmentalData -> 1.
+
         let solve =
-            fixedStep engine.LogTo engine.TimeHandling (startIndex - externalSteps.Head) endIndex t0 forcings
+            fixedStep engine.LogTo engine.TimeHandling (startIndex - tStartOffset) endIndex t0 forcings (int tStartOffset)
 
         fun ode ->
             match stepType with
@@ -116,7 +127,8 @@ module Solver =
             | External ->
                 // Filter the results so that only results that match low-res data in time are included
                 solve ode
-                |> Map.map (fun _ v -> v |> Seq.everyNth (int externalSteps.Head) |> Seq.toArray) //TODO proper lookup
+                |> Map.map (fun _ v -> 
+                    v |> Seq.everyNthFromHead (int externalSteps.Head) |> Seq.toArray)
 
 
     /// Create a solver that applies time-series models to time-series data.
@@ -126,7 +138,7 @@ module Solver =
         (dynamicSeries: TimeFrame.TimeFrame<'a>)
         (environment: TimeFrame.TimeFrame<'a> option)
         engine
-        t0
+        (t0:CodedMap<float> * Conditioning.ConditionTimeline)
         : Solver<'a> =
         match dynamicSeries.Resolution with
         | Resolution.Fixed fRes ->
@@ -150,7 +162,7 @@ module Solver =
                     (dynamicSeries.Series |> Seq.head).Value.TimeSteps |> Seq.map (fun t -> t.Days)
 
                 let timeSteps = timeline |> Seq.pairwise |> Seq.map (fun (a, b) -> b - a |> float)
-                variableExternalStep engine.LogTo engine.TimeHandling timeSteps t0
+                variableExternalStep engine.LogTo engine.TimeHandling timeSteps (fst t0) // TODO t0 step
 
 
     module Discrete =
@@ -185,5 +197,5 @@ module Solver =
         let startPoint conditioning (series: CodedMap<TimeSeries<'a>>) =
             match conditioning with
             | Conditioning.NoConditioning -> None
-            | Conditioning.RepeatFirstDataPoint -> series |> Map.map (fun _ v -> v.Values |> Seq.head) |> Some
-            | Conditioning.Custom precomputed -> precomputed |> Some
+            | Conditioning.RepeatFirstDataPoint timeline -> (series |> Map.map (fun _ v -> v.Values |> Seq.head), timeline) |> Some
+            | Conditioning.Custom (precomputed, timeline) -> (precomputed, timeline) |> Some
