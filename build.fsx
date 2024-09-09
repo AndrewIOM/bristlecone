@@ -2,10 +2,6 @@
 // FAKE build script
 // --------------------------------------------------------------------------------------
 
-#if FAKE
-#r "paket: groupref Build //"
-#load "./.fake/build.fsx/intellisense.fsx"
-#else
 #r "nuget: FAKE.Core.Target"
 #r "nuget: FAKE.Core.ReleaseNotes"
 #r "nuget: FAKE.DotNet.Cli"
@@ -13,17 +9,19 @@
 #r "nuget: FAKE.DotNet.AssemblyInfoFile"
 #r "nuget: FAKE.Tools.Git"
 #r "nuget: FAKE.DotNet.Testing.XUnit2"
-#r "nuget: System.Reactive"
-#r "nuget: MSBuild.StructuredLogger, 2.1.820"
-
-let execContext = Fake.Core.Context.FakeExecutionContext.Create false "build.fsx" []
-Fake.Core.Context.setExecutionContext (Fake.Core.Context.RuntimeContext.Fake execContext)
-#endif
+#r "nuget: MSBuild.StructuredLogger"
 
 open Fake.Core
 open Fake.Core.TargetOperators
 open Fake.IO.FileSystemOperators
 open Fake.DotNet
+
+System.Environment.GetCommandLineArgs()
+|> Array.skip 2 // skip fsi.exe; build.fsx
+|> Array.toList
+|> Fake.Core.Context.FakeExecutionContext.Create false __SOURCE_FILE__
+|> Fake.Core.Context.RuntimeContext.Fake
+|> Fake.Core.Context.setExecutionContext
 
 // --------------------------------------------------------------------------------------
 // Information about the project to be used at NuGet and in AssemblyInfo files

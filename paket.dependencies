@@ -10,7 +10,7 @@ nuget FSharp.Data
 nuget MathNet.Numerics
 nuget MathNet.Numerics.FSharp
 nuget Accord.Statistics
-nuget RProvider 2.1.0
+nuget RProvider ~> 2.1.0
 
 group Test
     source https://nuget.org/api/v2
@@ -19,22 +19,3 @@ group Test
     nuget Expecto.BenchmarkDotNet
     nuget Expecto.FsCheck
     nuget Expecto.Hopac
-
-group Build
-  source https://api.nuget.org/v3/index.json
-  framework: net6.0
-  storage: none
-  
-  nuget Microsoft.Build 17.3.2
-  nuget Microsoft.Build.Framework 17.3.2
-  nuget Microsoft.Build.Tasks.Core 17.3.2
-  nuget Microsoft.Build.Utilities.Core 17.3.2
-
-  nuget FAKE.Core.Target
-  nuget FAKE.Core.ReleaseNotes
-  nuget FAKE.DotNet.Cli
-  nuget FAKE.DotNet.Fsi
-  nuget FAKE.DotNet.AssemblyInfoFile
-  nuget FAKE.Tools.Git
-  nuget FAKE.DotNet.Testing.XUnit2
-  nuget MSBuild.StructuredLogger

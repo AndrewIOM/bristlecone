@@ -11,7 +11,7 @@ module TimeExtensions =
 
     type DateTime with
         static member Create day month year =
-            let d = DateTime(year, month, day)
+            let d = DateTime(year = year, month = month, day = day)
             DateTime.SpecifyKind(d, DateTimeKind.Utc)
 
 [<RequireQualifiedAccess>]
@@ -316,8 +316,7 @@ module TimeSeries =
 
         member this.Resolution = this |> resolution
 
-        member this.EndDate =
-            this |> toObservations |> Seq.last |> snd
+        member this.EndDate = this |> toObservations |> Seq.last |> snd
 
 
 type TimeSeries<'T> = TimeSeries.TimeSeries<'T>
