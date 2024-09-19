@@ -8,8 +8,13 @@ do ()
 module internal Units =
 
     let removeUnitFromInt (v: int<_>) = int v
+    let removeUnitFromFloat (v: float<_>) = float v
     let floatToInt (x:float<'u>) : int<'u> =
         x |> int |> LanguagePrimitives.Int32WithMeasure
+    let intToFloat (x:int<'u>) : float<'u> =
+        x |> float |> LanguagePrimitives.FloatWithMeasure
+
+    let round<[<Measure>]'u>(x: float<'u>): float<'u> = System.Math.Round(float x) |> LanguagePrimitives.FloatWithMeasure
 
 
 [<RequireQualifiedAccess>]

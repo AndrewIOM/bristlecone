@@ -5,6 +5,7 @@ open System
 [<Measure>] type day
 [<Measure>] type month
 [<Measure>] type year
+[<Measure>] type ticks
 
 // Support the following dating methods:
 [<Measure>] type ``cal yr BP`` // calibrated calendar years before present
@@ -19,10 +20,15 @@ type TimeDifference = {
     DayFraction: float<day>
     MonthFraction: float<month>
     YearFraction: float<year>
+    Ticks: float<ticks>
 }
 
 // Unit conversions:
 let internal convertYearsToMonths (x : float<year>) = x * 12.<month/year>
+let internal convertYearsToMonthsInt (x : int<year>) = x * 12<month/year>
+let internal convertMonthsToYears (x : float<month>) = x / 12.<month/year>
+let internal convertMonthsToYearsInt (x : int<month>) = x / 12<month/year>
+let internal monthsPerYear = 12<month year^-1>
 
 
 /// <summary>Contains F#-friendly extension methods for .NET time types.</summary>
@@ -117,6 +123,7 @@ module DateTime =
         YearFraction = totalYearsElapsed d1 d2
         MonthFraction = totalMonthsElapsed d1 d2
         DayFraction = (d2 - d1).TotalDays * 1.<day>
+        Ticks = (d2 - d1).Ticks |> float |> (*) 1.<ticks>
     }
 
 
@@ -151,6 +158,13 @@ module DatingMethods =
         static member (+) (e1, e2) =
             (e1 |> Radiocarbon.Unwrap) + e2 |> Radiocarbon
 
+        static member AddYears date (years:int<year>) =
+            date 
+            |> Radiocarbon.Unwrap 
+            |> (+) (years |> Units.removeUnitFromInt 
+            |> (*) 1<``BP (radiocarbon)``>) 
+            |> Radiocarbon
+
         static member TotalYearsElapsed d1 d2 =
             if d2 > d1 then Radiocarbon.Unwrap d2 - Radiocarbon.Unwrap d1
             else Radiocarbon.Unwrap d1 - Radiocarbon.Unwrap d2
@@ -161,6 +175,7 @@ module DatingMethods =
                 YearFraction = yearFraction
                 MonthFraction = convertYearsToMonths yearFraction
                 DayFraction = yearFraction * daysPerYearInOldDates
+                Ticks = 0.<ticks>
             }
 
 
@@ -168,27 +183,34 @@ module DateMode =
     
     open DatingMethods
 
+    let internal sort sortBackwards this other =
+        if sortBackwards
+        then (other :> IComparable<_>).CompareTo this
+        else (this :> IComparable<_>).CompareTo other
+
+
     /// <summary>Represents the configuration for handling the specific
     /// date type `'T` in a time series.</summary>
-    [<CustomComparison>]
     type DateMode<'T, 'timeunits, 'timespan> = {
         Resolution: MaximumResolution<'T>
         GetYear: 'T -> 'timeunits
-        AddYears : 'T -> 'timeunits -> 'T
+        AddYears : 'T -> int<year> -> 'T
         AddMonths : 'T -> int<month> -> 'T
         AddDays : 'T -> int<day> -> 'T
         AddTime : 'T -> 'timespan -> 'T
         Difference : 'T -> 'T -> TimeDifference
-        SortBackwards: bool
+        SortOldestFirst: 'T -> 'T -> int
         ZeroSpan: 'timespan
         TotalDays: 'timespan -> float<day>
+        Minus: 'T -> 'T -> 'timespan
     }
-    with
-        interface IComparable<DateMode<'T, 'timeunits, 'timespan>> with
-            member this.CompareTo other =
-                if this.SortBackwards
-                then (other :> IComparable<_>).CompareTo this
-                else (this :> IComparable<_>).CompareTo other
+    // with
+    //     interface IComparable<DateMode<'T, 'timeunits, 'timespan>> with
+    //         member this.CompareTo other =
+    //             if this.SortBackwards
+    //             then (other :> IComparable<_>).CompareTo this
+    //             else (this :> IComparable<_>).CompareTo other
+
 
     /// <summary>Represents the maximum resolution possible
     /// given a date type representation.</summary>
@@ -196,36 +218,38 @@ module DateMode =
         | Ticks of days:('T -> int<day>) * months:('T -> int<month>)
         | Year
 
-    let calendarDateMode : DateMode<DateTime, int, TimeSpan> = {
+    let calendarDateMode : DateMode<DateTime, int<year>, TimeSpan> = {
         Resolution = Ticks((fun d -> d.Day * 1<day>), (fun d -> d.Month * 1<month>))
-        GetYear = fun d -> d.Year
-        AddYears = fun d years -> d.AddYears years
+        GetYear = fun d -> d.Year * 1<year>
+        AddYears = fun d years -> d.AddYears (years |> Units.removeUnitFromInt)
         AddMonths = fun d months -> months |> Units.removeUnitFromInt |> d.AddMonths
         AddDays = fun d days -> days |> Units.removeUnitFromInt |> d.AddDays
         AddTime = fun d timeSpan -> d + timeSpan
         Difference = DateTime.fractionalDifference
-        SortBackwards = false
         ZeroSpan = TimeSpan.Zero
         TotalDays = fun ts -> ts.TotalDays * 1.<day>
+        Minus = fun d1 d2 -> d1 - d2
+        SortOldestFirst = fun d1 d2 -> if d1 < d2 then -1 else 1
     }
 
     let radiocarbonDateMode : DateMode<Radiocarbon, int<``BP (radiocarbon)``>, int<``BP (radiocarbon)``>> = {
         Resolution = Year
         GetYear = fun d -> d |> Radiocarbon.Unwrap
-        AddYears = fun d years -> d + years
+        AddYears = Radiocarbon.AddYears
         AddMonths = fun d months -> d
         AddDays = fun d days -> d
         AddTime = fun d timeSpan -> d + timeSpan
         Difference = fun d1 d2 -> Radiocarbon.FractionalDifference d1 d2
-        SortBackwards = true
+        SortOldestFirst = fun d1 d2 -> if d1 > d2 then -1 else 1
         ZeroSpan = 0<``BP (radiocarbon)``>
         TotalDays = fun ts -> (ts |> Units.removeUnitFromInt |> float |> LanguagePrimitives.FloatWithMeasure) * daysPerYearInOldDates
+        Minus = fun d1 d2 -> d1 - d2
     }
 
 module TimePoint =
 
     /// Increment time by an increment defined as a fixed temporal resolution.
-    let increment<'date, 'timespan> res (mode: DateMode.DateMode<'date,_,'timespan>) (date:'date) =
+    let increment<'date, 'timespan, 'cool> res (mode: DateMode.DateMode<'date,'cool,'timespan>) (date:'date) =
         match res with
         | Resolution.Years i -> mode.AddYears date i.Value
         | Resolution.Months i -> mode.AddMonths date i.Value
@@ -233,6 +257,8 @@ module TimePoint =
         | Resolution.CustomEpoch ticks -> mode.AddTime date ticks
 
 
+/// <summary>Contains functions and types to create and manipulate
+/// `TimeSeries` values, which represent observations ordered in time.</summary>
 [<RequireQualifiedAccess>]
 module TimeSeries =
 
@@ -249,7 +275,7 @@ module TimeSeries =
     /// where the sampling intervals occur following a fixed start observation.
     type TimeSeries<'T, 'date, 'timeunit, 'timespan> = //when 'date : (member TimeUnitProperties : TimeUnitProperties<'timespan>)> =
         private
-        | FixedTimeSeries of DateMode.DateMode<DatingMethods.Radiocarbon, 'timeunit, int<``BP (radiocarbon)``>> * Observation<'T, DatingMethods.Radiocarbon> * FloatingTimeSeries<'T, int<``BP (radiocarbon)``>>
+        | FixedTimeSeries of DateMode.DateMode<'date, 'timeunit, 'timespan> * Observation<'T, 'date> * FloatingTimeSeries<'T, 'timespan>
 
         member this.StartDate =
             let startPoint (FixedTimeSeries(_,s, _)) = s
@@ -261,14 +287,24 @@ module TimeSeries =
     let private innerSeries (FixedTimeSeries(_,s, TimeSteps ts)) = ts
     let private unwrap (FixedTimeSeries(_,s, TimeSteps ts)) = (s, ts)
     let private createFixedSeries dateType start series = (dateType, start, series) |> FixedTimeSeries
+    
+    let internal checkMoreThanEqualTo n seq =
+        if seq |> Seq.length >= n then Some seq else None
 
-    /// Arrange existing observations as a bristlecone `TimeSeries`.
-    /// Observations become ordered and indexed by time.
-    let fromObservations (dateType:DateMode.DateMode<'date,'dateUnit,'timespan>) (dataset: seq<Observation<'T, 'date>>) =
+    /// <summary>Arrange existing observations as a bristlecone `TimeSeries`.
+    /// Observations become ordered and indexed by time.</summary>
+    /// <param name="dateType">A `DateMode` that handles the dating mode of choosing.</param>
+    /// <param name="dataset">A sequence of observations, which consist of data and dates / times</param>
+    /// <typeparam name="'T">The data type of the observations</typeparam>
+    /// <typeparam name="'date">The representaion of dates to use</typeparam>
+    /// <typeparam name="'dateUnit">The unit in which the dates are represented</typeparam>
+    /// <typeparam name="'timespan">The representation of timespans for `'date`</typeparam>
+    /// <returns>A time-series of observations ordered in time from oldest to newest.</returns>
+    let fromObservations<'T, 'date, 'dateUnit, 'timespan> (dateType:DateMode.DateMode<'date,'dateUnit,'timespan>) (dataset: seq<Observation<'T, 'date>>) =
         if dataset |> Seq.length < 2 then
             invalidArg "dataset" "The data must be at least two elements long"
 
-        let sorted = dataset |> Seq.sortBy snd
+        let sorted: Observation<'T,'date> seq = dataset |> Seq.sortWith (fun t1 t2 -> dateType.SortOldestFirst (snd t1) (snd t2))
         let baseline : Observation<'T, 'date> = sorted |> Seq.head
 
         let timePoints =
@@ -276,43 +312,96 @@ module TimeSeries =
             |> Seq.tail // The first time point is used as initial state in the scan
             |> Seq.scan
                 (fun (_, d1: 'date, _) (v2, d2: 'date) ->
-                    (v2, d2, Some (d2 - d1)))
+                    (v2, d2, Some (dateType.Minus d2 d1)))
                 (baseline |> fst, baseline |> snd, None)
             |> Seq.tail // The first time point is removed (it forms the baseline instead)
-            |> Seq.map (fun (v, _, ts) -> (v, ts.Value))
+            |> Seq.map (fun (v, d:'date, ts:'timespan option) -> (v, ts.Value))
             |> Seq.toArray
             |> TimeSteps
 
         FixedTimeSeries(dateType, baseline, timePoints)
+    
+    /// <summary>Create a time-series where time is represented by uncalibrated
+    /// radiocarbon dates (BP dates).</summary>
+    /// <param name="dataset">A sequence of observations, which consist of data and dates / times</param>
+    /// <typeparam name="'a">The type of the data in the series</typeparam>
+    /// <returns>A time-series of BP date observations ordered oldest to newest.</returns>
+    let fromRadiocarbonObservations dataset =
+        fromObservations DateMode.radiocarbonDateMode dataset
 
-    /// Create a time series from a sequence of existing data, where each
-    /// observation is equally spaced in time.
-    let fromSeq (timeUnitMode:DateMode.DateMode<'date,'b,'timespan>) t1 resolution (data: seq<'a>) =
+    /// <summary>Create a time-series where time is represented by standard
+    /// (modern) calendars and dates and times through the built-in .NET
+    /// DateTime type.</summary>
+    /// <param name="dataset">A sequence of observations, which consist of data and dates / times</param>
+    /// <typeparam name="'a">The type of the data in the series</typeparam>
+    /// <returns>A time-series of DateTime observations ordered oldest to newest.</returns>
+    let fromNeoObservations dataset =
+        fromObservations DateMode.calendarDateMode dataset
+
+    /// <summary>Create a time series from a sequence of existing data, where each
+    /// observation is equally spaced in time.</summary>
+    /// <param name="timeUnitMode">A `DateMode` that handles the dating mode of choosing.</param>
+    /// <param name="t1">The time to fix to the initial observation</param>
+    /// <param name="resolution">The temporal resolution of the time-series</param>
+    /// <param name="data">The underlying data points</param>
+    /// <typeparam name="'date">The representaion of dates to use</typeparam>
+    /// <typeparam name="'dateUnit">The unit in which the dates are represented</typeparam>
+    /// <typeparam name="'timespan">The representation of timespans for `'date`</typeparam>
+    /// <typeparam name="'a">The data type of the observations</typeparam>
+    /// <returns></returns>
+    let fromSeq (timeUnitMode:DateMode.DateMode<'date,'timeunit,'timespan>) t1 resolution (data: seq<'a>) =
         data
         |> Seq.tail // The first time point is used as initial state for the scan
         |> Seq.scan (fun (_, t) v -> (v, t |> TimePoint.increment resolution timeUnitMode)) (data |> Seq.head, t1)
         |> fromObservations timeUnitMode
 
-    /// Turn a time series into a sequence of observations
-    let toObservations (series:TimeSeries<'a,'b,'c,'d>) =
+    /// <summary>Turn a time series into a sequence of observations</summary>
+    /// <param name="series">A time-series</param>
+    /// <typeparam name="'a">The underlying data type</typeparam>
+    /// <typeparam name="'b">The date/time representation</typeparam>
+    /// <returns></returns>
+    let toObservations series =
         let baseline, ts = unwrap series
-        ts |> Seq.scan (fun (_, lastDate) (v, ts) -> (v, lastDate + ts)) baseline
+        ts |> Seq.scan (fun (_, lastDate) (v, ts) -> (v, series.DateMode.AddTime lastDate ts)) baseline
 
-    /// Map a function to each value in the time series.
-    let map f series =
+    /// <summary>Apply a function to each observation in the time series.</summary>
+    /// <param name="f">A function that takes an observation and returns a transformed data value</param>
+    /// <param name="series">A time-series to transform</param>
+    /// <typeparam name="'T">The original data type</typeparam>
+    /// <typeparam name="'T2">The new data type</typeparam>
+    /// <typeparam name="'timespan">The representation of timespans for `'date`</typeparam>
+    /// <typeparam name="'date">The representaion of dates to use</typeparam>
+    /// <typeparam name="'dateUnit">The unit in which the dates are represented</typeparam>
+    /// <returns>A new time-series in which the data values have been transformed</returns>
+    let map f (series: TimeSeries<'T, 'date, 'dateUnit, 'timespan>) : TimeSeries<'T2, 'date, 'dateUnit, 'timespan> =
         series
         |> innerSeries
         |> Array.map (fun (v, ts) -> (f (v, ts), ts))
         |> TimeSteps
         |> createFixedSeries series.DateMode (f (series.StartDate |> fst, series.DateMode.ZeroSpan), series.StartDate |> snd)
 
-    /// The time intervals - or *epochs* - that form the time series.
+    /// <summary>The time intervals - or epochs - that form the time series, where the baseline
+    /// time is that defined in the time-series.</summary>
     let epochs series = series |> innerSeries |> Array.map snd
 
-    let checkMoreThanEqualTo n seq =
-        if seq |> Seq.length >= n then Some seq else None
+    /// <summary>The date of the last observation within a time series.</summary>
+    let endDate series =
+        series |> toObservations |> Seq.last |> snd
 
-    /// Remove all time points that occur before the desired start date.
+    /// <summary>The times at which observations that form the time-series were made.</summary>
+    let dates series = series |> toObservations |> Seq.map snd
+
+    /// Find an observation by its exact time of occurrence.
+    let findExact time series =
+        series |> toObservations |> Seq.find (fun (v, t) -> t = time)
+
+    /// <summary>Remove all time points that occur before the desired start date,
+    /// still including the specified start date if present.</summary>
+    /// <param name="startDate">A start date to clip from</param>
+    /// <param name="series">A time-series</param>
+    /// <typeparam name="'a">The data type</typeparam>
+    /// <typeparam name="'b">The dating method type</typeparam>
+    /// <returns>A new time-series with the clipped observations removed</returns>
     let trimStart startDate series =
         let obs = series |> toObservations
 
@@ -326,7 +415,11 @@ module TimeSeries =
             |> Option.map (fromObservations series.DateMode)
         | None -> None
 
-    /// Remove all time points that occur after the desired end date.
+    /// <summary>Remove all time points that occur after the desired end date.</summary>
+    /// <param name="endDate">An end date to clip beyond</param>
+    /// <param name="series">A time-series</param>
+    /// <typeparam name="'a">The data type</typeparam>
+    /// <typeparam name="'b">The dating method type</typeparam>
     let trimEnd endDate series =
         series
         |> toObservations
@@ -334,7 +427,15 @@ module TimeSeries =
         |> checkMoreThanEqualTo 2
         |> Option.map (fromObservations series.DateMode)
 
-    /// Bound a time series inclusively
+    /// <summary>Bound a time series inclusively of the specified
+    /// start and end date (if either are present, they will
+    /// be included in the new time series).</summary>
+    /// <param name="startDate">A start date to clip from</param>
+    /// <param name="endDate">An end date to clip beyond</param>
+    /// <param name="series">A time-series</param>
+    /// <typeparam name="'a">The data type</typeparam>
+    /// <typeparam name="'b">The dating method type</typeparam>
+    /// <returns></returns>
     let bound startDate endDate series =
         series
         |> toObservations
@@ -343,19 +444,12 @@ module TimeSeries =
         |> checkMoreThanEqualTo 2
         |> Option.map (fromObservations series.DateMode)
 
-    /// Date of the last observation within the time series.
-    let endDate series =
-        series |> toObservations |> Seq.last |> snd
-
-    /// Time points of sampling within the time series.
-    let dates series = series |> toObservations |> Seq.map snd
-
-    /// Find an observation by its exact time of occurrence.
-    let findExact time series =
-        series |> toObservations |> Seq.find (fun (v, t) -> t = time)
-
-    /// Calculates the temporal resolution of a time series
-    let resolution series =
+    /// <summary>Calculates the temporal resolution of a time series.</summary>
+    /// <param name="series">A time-series of observations</param>
+    /// <typeparam name="'a"></typeparam>
+    /// <returns>A temporal resolution in days, months, years, or a custom epoch;
+    /// the most precise will be returned (e.g. 2 months rather than 61 days).</returns>
+    let resolution (series: TimeSeries<'T, 'date, 'dateUnit, 'timespan>) =
         let epochs = series |> epochs
 
         if epochs |> Seq.distinct |> Seq.length = 1 then // There is a fixed time period.
@@ -371,46 +465,43 @@ module TimeSeries =
                 Resolution.Fixed
                 <| Resolution.FixedTemporalResolution.CustomEpoch fixedEpoch
         else // A variable time interval exists. This could be months, years, or some other unit.
-            let observations = series |> toObservations
-            let startDate = observations |> Seq.head |> snd
 
             match series.DateMode.Resolution with
             | DateMode.MaximumResolution.Ticks (_, getMonth) ->
 
                 let monthDifferences =
-                    observations
-                    |> Seq.map snd
-                    |> Seq.tail
-                    |> Seq.scan
-                        (fun (t1, m) t2 -> (t2, (series.DateMode.GetYear t2 * 12) + getMonth t2))
-                        (startDate, (series.DateMode.GetYear startDate * 12) + getMonth startDate)
+                    series 
+                    |> toObservations
                     |> Seq.map snd
                     |> Seq.pairwise
-                    |> Seq.map (fun (m1, m2) -> m2 - m1)
+                    |> Seq.map(fun (d1, d2) -> (series.DateMode.Difference d2 d1).MonthFraction)
 
                 if monthDifferences |> Seq.distinct |> Seq.length = 1 then // There is a fixed monthly stepping
                     let fixedMonths = monthDifferences |> Seq.head
 
-                    if fixedMonths % 12 = 0 then
+                    if fixedMonths % 12.<month> = 0.<month> then
                         Resolution.Fixed
-                        <| Resolution.FixedTemporalResolution.Years(PositiveInt.create (fixedMonths / 12) |> Option.get)
+                        <| Resolution.FixedTemporalResolution.Years(PositiveInt.create (convertMonthsToYears fixedMonths |> Units.floatToInt) |> Option.get)
                     else
                         Resolution.Fixed
-                        <| Resolution.FixedTemporalResolution.Months(PositiveInt.create fixedMonths |> Option.get)
+                        <| Resolution.FixedTemporalResolution.Months(PositiveInt.create (fixedMonths |> Units.floatToInt) |> Option.get)
                 else // The time series has variable increments not on day or month cycle
                     Resolution.Variable
             | DateMode.MaximumResolution.Year ->
 
                 let yearDifferences =
-                    observations
-                    |> Seq.map(fun t -> t |> snd |> series.DateMode.GetYear)
+                    series 
+                    |> toObservations
                     |> Seq.pairwise
-                    |> Seq.map (fun (m1, m2) -> m2 - m1)
+                    |> Seq.map (fun ((_,d1), (_,d2)) -> (series.DateMode.Difference d2 d1).YearFraction)
 
                 if yearDifferences |> Seq.distinct |> Seq.length = 1 then
-                    let fixedYears = (yearDifferences |> Seq.head) * 1<year>
-                    Resolution.Fixed
-                    <| Resolution.FixedTemporalResolution.Years(PositiveInt.create fixedYears |> Option.get)
+                    let fixedYears = (yearDifferences |> Seq.head)
+                    if fixedYears = (Units.round fixedYears)
+                    then
+                        Resolution.Fixed
+                        <| Resolution.FixedTemporalResolution.Years(PositiveInt.create (fixedYears |> Units.floatToInt) |> Option.get)
+                    else Resolution.Variable
                 else Resolution.Variable
 
 
@@ -460,9 +551,14 @@ module TimeSeries =
             | Resolution.FixedTemporalResolution.CustomEpoch _ ->
                 invalidArg "series" "Generalising a monthly or custom-epoch series is currently unsupported"
 
-    /// Interpolates missing values in a time series, where missing values
-    /// are represented as an `Option` type.
-    let interpolate (series: TimeSeries<'T,'a,'b,'c>) =
+    /// <summary>Interpolates missing values in a time series, where missing values
+    /// are represented as an `Option` type.</summary>
+    /// <param name="series">A time-series of option values to interpolate</param>
+    /// <typeparam name="'date">A dating method used in the time-series</typeparam>
+    /// <typeparam name="'timeunit">A unit of time as used by the dating method</typeparam>
+    /// <typeparam name="'timespan">The timespan representation for the dating method</typeparam>
+    /// <returns></returns>
+    let interpolateFloats (series: TimeSeries<float option,'date,'timeunit,'timespan>) =
         let observations = series |> toObservations |> Seq.toArray
 
         observations
@@ -487,17 +583,20 @@ module TimeSeries =
             else
                 let lastValue = (observations.[last] |> fst).Value
                 let nextValue = (observations.[next] |> fst).Value
-
                 (lastValue
-                 + ((nextValue - lastValue) / (float next - float last)) * (float i - float last)),
+                + ((nextValue - lastValue) / (float next - float last)) * (float i - float last)),
                 (obs |> snd))
         |> fromObservations series.DateMode
 
     /// <summary>Determines if multiple time series have the same temporal extent and time steps.</summary>
-    /// <param name="series">A sequence of `TimeSeries`</param>
-    /// <returns>A `TimeSpan [] option` containing the epochs of the common timeline, 
+    /// <param name="series">A sequence of time-series to assess for commonality</param>
+    /// <typeparam name="'T">The data type of the observations</typeparam>
+    /// <typeparam name="'date">The representaion of dates to use</typeparam>
+    /// <typeparam name="'timeunit">The unit in which the dates are represented</typeparam>
+    /// <typeparam name="'timespan">The representation of timespans for `'date`</typeparam>
+    /// <returns>An array of 'timespan containing the epochs of the common timeline, 
     /// or `None` if there is no common timeline.</returns>
-    let commonTimeline series =
+    let commonTimeline (series: TimeSeries<'T,'date,'timeunit,'timespan> seq) =
         let timeSteps = series |> Seq.map (toObservations >> Seq.map snd >> Seq.toList) |> Seq.toList
 
         match timeSteps with
@@ -516,7 +615,7 @@ module TimeSeries =
         /// <param name="i"></param>
         /// <param name="series"></param>
         /// <returns>A time series that has the observation at position i removed</returns>
-        let bootstrapFixedStep stepping i series =
+        let bootstrapFixedStep stepping i (series: TimeSeries<'T,'date,'timeunit,'timespan>) =
             let start, _ = series |> unwrap
 
             let newData =
@@ -535,9 +634,10 @@ module TimeSeries =
 
         /// <summary>Randomly remove a single time point from a time-series.</summary>
         /// <param name="random">A random instance to use</param>
-        /// <param name="data">A map where the values correspond to time series, with at least one entry.</param>
-        /// <returns></returns>
-        let removeSingle (random: System.Random) data =
+        /// <param name="data">A map of time-series values with at least one entry.</param>
+        /// <returns>A new map of time-series values with the index entry i removed, and
+        /// all time-points after shifted forward in time by one stepping.</returns>
+        let removeSingle (random: System.Random) stepping data =
             let commonTimeSeries =
                 commonTimeline (data |> Map.toList |> List.map snd)
 
@@ -550,11 +650,12 @@ module TimeSeries =
                     let selection = random.Next(0, ts.Length - 1)
 
                     data
-                    |> Map.map (fun _ v -> v |> bootstrapFixedStep (TimeSpan.FromDays(366.)) selection)
+                    |> Map.map (fun _ v -> v |> bootstrapFixedStep stepping selection)
 
 
+    // Extensions to add convenience methods to time-series
     type TimeSeries<'T, 'date, 'timeunit, 'timespan> with
-        member this.Resolution = this |> resolution
+
         member this.Length = this |> innerSeries |> Array.length
 
         member this.Head = this |> innerSeries |> Array.head
@@ -567,6 +668,9 @@ module TimeSeries =
 type TimeSeries<'T, 'date, 'timeunit, 'timespan> = TimeSeries.TimeSeries<'T, 'date, 'timeunit, 'timespan>
 
 
+/// <summary>Functions to index individual time-series to a common
+/// timeline, where time is represented in 'time index' units.</summary>
+[<RequireQualifiedAccess>]
 module TimeIndex =
 
     /// When using a time index, if a value is requested within the bounds
@@ -577,47 +681,55 @@ module TimeIndex =
         | Interpolate of ((float<``time index``> * 'T) -> (float<``time index``> * 'T) -> float<``time index``> -> 'T)
         | Exact
 
-    /// Indexes the time series in accordance with a `baselineTime` and fixed `resolution`.
-    /// Where the time series is of a lower resolution
-    let indexSeries (t0: DatingMethods.Radiocarbon) targetResolution (series: TimeSeries<'T, 'date, 'timeunit, 'timespan>) : seq<float<``time index``> * 'a> =
+    /// <summary>Index a single time series in accordance with the baseline 0<``time index``> set as
+    /// the specified t0 date.</summary>
+    /// <remarks>The temporal index 'time index' values will correspond to the specified
+    /// target resolution. For example, if a resolution of two-yearly is specified, an
+    /// observation one year after t0 would be indexed as t 0.5, and at three years
+    /// t 1.5.</remarks>
+    /// <param name="t0">The date to fix as time = 0</param>
+    /// <param name="targetResolution">A target resolution that scales the resultant time index values.</param>
+    /// <param name="series">A time-series to index.</param>
+    /// <typeparam name="'T">The underlying data type of the time-series</typeparam>
+    /// <returns>A temporal index </returns>
+    let create (t0: 'date) targetResolution (series: TimeSeries.TimeSeries<'T, 'date, 'timeunit, 'timespan>) : seq<float<``time index``> * 'T> =
         let obs = series |> TimeSeries.toObservations
 
         match series.DateMode.Resolution with
-        | DateMode.MaximumResolution.Ticks (getDay, getMonth) ->
+        | DateMode.MaximumResolution.Ticks _ ->
             match targetResolution with
             | Resolution.FixedTemporalResolution.Years y ->
                 obs 
                 |> Seq.map (fun (v, tn) ->
-                    (((DateTime.totalYearsElapsed t0 tn) / y.Value), v))
+                    (((series.DateMode.Difference t0 tn).YearFraction / Units.intToFloat y.Value) |> float |> (*) 1.0<``time index``>, v))
             | Resolution.FixedTemporalResolution.Months m ->
                 obs
-                |> Seq.map (fun (v, tn) -> (((DateTime.totalMonthsElapsed t0 tn) / float m.Value), v))
-            | Resolution.FixedTemporalResolution.Days d -> obs |> Seq.map (fun (v, tn) -> (((tn - t0).TotalDays / float d.Value), v))
-            | Resolution.FixedTemporalResolution.CustomEpoch t ->
+                |> Seq.map (fun (v, tn) -> (((series.DateMode.Difference t0 tn).MonthFraction / Units.intToFloat m.Value |> float |> (*) 1.0<``time index``>), v))
+            | Resolution.FixedTemporalResolution.Days d -> obs |> Seq.map (fun (v, tn) -> (((series.DateMode.Difference t0 tn).DayFraction / Units.intToFloat d.Value) |> float |> (*) 1.<``time index``>, v))
+            | Resolution.FixedTemporalResolution.CustomEpoch (t: float<ticks>) ->
                 obs
-                |> Seq.map (fun (v, tn) -> ((((tn - t0).Ticks / t.Value.Ticks) |> float), v))
+                |> Seq.map (fun (v, tn) ->
+                    ((series.DateMode.Difference tn t0).Ticks / t) |> Units.removeUnitFromFloat |> (*) 1.0<``time index``>, v
+                )
 
         | DateMode.MaximumResolution.Year ->
             match targetResolution with
             | Resolution.FixedTemporalResolution.Years y ->
                 obs 
                 |> Seq.map (fun (value, tn) -> 
-                    ((float (tn - t0) / float y.Value) * 1.0<``time index``>, value))
+                    (((series.DateMode.Difference tn t0).YearFraction / Units.intToFloat y.Value) * 1.0<``time index``>, value))
             | Resolution.FixedTemporalResolution.CustomEpoch t ->
-                obs 
-                |> Seq.map (fun (value, tn) -> 
-                    ((float (tn - t0) / t) * 1.0<``time index``>, value))
+                failwith "Cannot use a custom epoch when the date unit has a maximum resolution of annual"
             | Resolution.FixedTemporalResolution.Months _
             | Resolution.FixedTemporalResolution.Days _ ->
                 failwith "Cannot index timeseries that has a maximum resolution of annual by month / day."
 
-
-
     /// <summary>A representation of temporal data as fractions of a common fixed temporal resolution,
     /// from a given baseline. The baseline must be greater than or equal to the baseline
     /// of the time series.</summary>
-    type TimeIndex<'T>(baseDate: 'date, resolution, mode: IndexMode<'T>, series: TimeSeries<'T, 'date, 'timeunit, 'timespan>) =
-        let table = series |> indexSeries baseDate resolution |> Map.ofSeq
+    type TimeIndex<'T, 'date, 'timeunit, 'timespan> (baseDate: 'date, resolution, mode: IndexMode<'T>, series: TimeSeries.TimeSeries<'T, 'date, 'timeunit, 'timespan>) =
+
+        let table = series |> create baseDate resolution |> Map.ofSeq
         let tablePairwise = table |> Map.toArray |> Array.pairwise // Ordered in time
 
         member __.Item
@@ -651,9 +763,19 @@ module TimeIndex =
 [<RequireQualifiedAccess>]
 module TimeFrame =
 
+    /// <summary>A 'data frame' that contains multiple time-series
+    /// that are aligned and indexed in time.</summary>
     type TimeFrame<'T, 'date, 'timeunit, 'timespan> = private TimeFrame of CodedMap<TimeSeries.TimeSeries<'T, 'date, 'timeunit, 'timespan>>
 
-    let tryCreate series =
+    /// <summary>Create a timeframe from one or more individual time-series.</summary>
+    /// <param name="series"></param>
+    /// <typeparam name="'T">The data type of the observations</typeparam>
+    /// <typeparam name="'date">The representaion of dates to use</typeparam>
+    /// <typeparam name="'timeunit">The unit in which the dates are represented</typeparam>
+    /// <typeparam name="'timespan">The representation of timespans for `'date`</typeparam>
+    /// <returns>Returns None if the time-series are not on a common timeline.
+    /// Otherwise, returns a timeframe containing all of the input time-series</returns>
+    let tryCreate (series: CodedMap<TimeSeries.TimeSeries<'T, 'date, 'timeunit, 'timespan>>) =
         let commonTimeline =
             series |> Map.toList |> List.map snd |> TimeSeries.commonTimeline
 
@@ -663,8 +785,13 @@ module TimeFrame =
 
     let private inner (TimeFrame frame) = frame
 
+    /// <summary>Identifies the temporal resolution of the data in a timeframe.</summary>
+    /// <param name="frame">A timeframe to get the resolution for.</param>
+    /// <returns>The temporal resolution of the timeframe.</returns>
+    let resolution frame =
+        (frame |> inner |> Seq.head).Value |> TimeSeries.resolution
+
     type TimeFrame<'T, 'date, 'timeunit, 'timespan> with
-        member this.Resolution = (this |> inner |> Seq.head).Value.Resolution
         member this.StartDate = (this |> inner |> Seq.head).Value.StartDate |> snd
         member this.Series = this |> inner
 
