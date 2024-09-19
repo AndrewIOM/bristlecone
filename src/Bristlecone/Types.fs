@@ -5,14 +5,21 @@ open System.Runtime.CompilerServices
 [<assembly: InternalsVisibleTo("Bristlecone.Tests")>]
 do ()
 
+module internal Units =
+
+    let removeUnitFromInt (v: int<_>) = int v
+    let floatToInt (x:float<'u>) : int<'u> =
+        x |> int |> LanguagePrimitives.Int32WithMeasure
+
+
 [<RequireQualifiedAccess>]
 module PositiveInt =
 
-    type PositiveInt = private PositiveInt of int
+    type PositiveInt<[<Measure>] 'm> = private PositiveInt of int<'m>
 
-    let private (|Positive|Negative|Zero|) num =
-        if num > 0 then Positive
-        elif num < 0 then Negative
+    let private (|Positive|Negative|Zero|) (num:int<_>) =
+        if num > 0<_> then Positive
+        elif num < 0<_> then Negative
         else Zero
 
     let create i =
@@ -22,8 +29,9 @@ module PositiveInt =
 
     let private unwrap (PositiveInt p) = p
 
-    type PositiveInt with
+    type PositiveInt<'u> with
         member this.Value = unwrap this
+
 
 [<RequireQualifiedAccess>]
 module RealTimeSpan =
@@ -60,7 +68,6 @@ module ShortCode =
 
 
 type RealTimeSpan = RealTimeSpan.RealTimeSpan
-type PositiveInt = PositiveInt.PositiveInt
 type CodedMap<'T> = Map<ShortCode.ShortCode, 'T>
 
 module Conditioning =
