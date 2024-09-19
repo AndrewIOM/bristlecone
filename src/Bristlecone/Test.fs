@@ -12,7 +12,11 @@ module Test =
     module Noise =
 
         /// Adds noise to a time-series 'seriesName', based on the given distribution function.
-        let tryAddNoise seriesName noiseDistributionFn (data: CodedMap<TimeSeries.TimeSeries<'a>>) =
+        let tryAddNoise
+            seriesName
+            noiseDistributionFn
+            (data: CodedMap<TimeSeries.TimeSeries<'T, 'date, 'timeunit, 'timespan>>)
+            =
             data
             |> Map.tryFindKey (fun c _ -> c.Value = seriesName)
             |> Option.map (fun k ->
@@ -58,21 +62,24 @@ module Test =
                 |> Seq.map (fun (x1, x2) -> (x2 - x1) > 0.)
                 |> Seq.contains false
 
-    type TestSettings<'a> =
+    type TestSettings<'T, 'date, 'timeunit, 'timespan> =
         { TimeSeriesLength: int
-          StartValues: CodedMap<'a>
-          EndCondition: EndCondition<'a>
+          StartValues: CodedMap<'T>
+          EndCondition: EndCondition<'T>
           GenerationRules: GenerationRule list
           NoiseGeneration:
-              System.Random -> Parameter.Pool -> CodedMap<TimeSeries<'a>> -> Result<CodedMap<TimeSeries<'a>>, string>
-          EnvironmentalData: CodedMap<TimeSeries<'a>>
-          Resolution: FixedTemporalResolution
-          Random: System.Random
+              Random
+                  -> Parameter.Pool
+                  -> CodedMap<TimeSeries<'T, 'date, 'timeunit, 'timespan>>
+                  -> Result<CodedMap<TimeSeries<'T, 'date, 'timeunit, 'timespan>>, string>
+          EnvironmentalData: CodedMap<TimeSeries<'T, 'date, 'timeunit, 'timespan>>
+          Resolution: Resolution.FixedTemporalResolution<'timespan>
+          Random: Random
           StartDate: DateTime
           Attempts: int }
 
         static member Default =
-            { Resolution = FixedTemporalResolution.Years (PositiveInt.create 1).Value
+            { Resolution = Resolution.FixedTemporalResolution.Years (PositiveInt.create 1<year>).Value
               TimeSeriesLength = 30
               StartValues = Map.empty
               EndCondition = Optimisation.EndConditions.afterIteration 1000
@@ -88,16 +95,16 @@ module Test =
           RealValue: float
           EstimatedValue: float }
 
-    and TestResult =
+    and TestResult<'timeunit, 'timespan> =
         { Parameters: ParameterTestResult list
-          Series: Map<string, FitSeries>
+          Series: Map<string, FitSeries<float, 'timeunit, 'timespan>>
           ErrorStructure: Map<string, seq<float>>
           RealLikelihood: float
           EstimatedLikelihood: float }
 
     /// Ensures settings are valid for a test, by ensuring that
     /// start values have been set for each equation.
-    let isValidSettings (model: ModelSystem.ModelSystem) testSettings =
+    let isValidSettings (model: ModelSystem.ModelSystem<'data>) testSettings =
         let equationKeys = model.Equations |> Map.toList |> List.map fst
 
         if
@@ -108,7 +115,7 @@ module Test =
             Error
             <| sprintf "You must specify a start point for the following equations: %A" equationKeys
 
-    let create = TestSettings<float>.Default
+    let create = TestSettings<_, _, _, _>.Default
 
     /// Add noise to a particular time-series when generating fake time-series.
     /// Built-in noise functions are in the `Noise` module.
@@ -139,7 +146,7 @@ module Test =
     let withTimeSeriesLength n settings = { settings with TimeSeriesLength = n }
     let withFixedTemporalResolution res settings = { settings with Resolution = res }
     let endWhen goal settings = { settings with EndCondition = goal }
-    let useRandom rnd (settings: TestSettings<'a>) = { settings with Random = rnd }
+    let useRandom rnd (settings: TestSettings<_, _, _, _>) = { settings with Random = rnd }
     let useStartTime time settings = { settings with StartDate = time }
 
     module Compute =

@@ -9,20 +9,26 @@ module internal Units =
 
     let removeUnitFromInt (v: int<_>) = int v
     let removeUnitFromFloat (v: float<_>) = float v
-    let floatToInt (x:float<'u>) : int<'u> =
+
+    let floatToInt (x: float<'u>) : int<'u> =
         x |> int |> LanguagePrimitives.Int32WithMeasure
-    let intToFloat (x:int<'u>) : float<'u> =
+
+    let intToFloat (x: int<'u>) : float<'u> =
         x |> float |> LanguagePrimitives.FloatWithMeasure
 
-    let round<[<Measure>]'u>(x: float<'u>): float<'u> = System.Math.Round(float x) |> LanguagePrimitives.FloatWithMeasure
+    let round<[<Measure>] 'u> (x: float<'u>) : float<'u> =
+        System.Math.Round(float x) |> LanguagePrimitives.FloatWithMeasure
 
+
+[<Measure>]
+type iteration
 
 [<RequireQualifiedAccess>]
 module PositiveInt =
 
     type PositiveInt<[<Measure>] 'm> = private PositiveInt of int<'m>
 
-    let private (|Positive|Negative|Zero|) (num:int<_>) =
+    let private (|Positive|Negative|Zero|) (num: int<_>) =
         if num > 0<_> then Positive
         elif num < 0<_> then Negative
         else Zero

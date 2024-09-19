@@ -24,13 +24,13 @@ module Solver =
         | Discrete -> invalidOp "Not configured"
         | Continuous i ->
             fun eqs ->
-                i logTo tStart tEnd 1. initialState forcings eqs
+                i logTo tStart tEnd 1.<``time index``> initialState forcings eqs
                 |> Map.map (fun _ v -> v |> Array.tail |> Seq.toArray)
 
     /// Step the solver using the high resolution, and output at low resolution.
     /// External steps can be variable in size.
     /// Each time jump is integrated individually.
-    let variableExternalStep logTo timeHandling timeSteps (initialPoint: CodedMap<float>) =
+    let variableExternalStep logTo timeHandling timeSteps (initialPoint: CodedMap<'T>) =
         match timeHandling with
         | Discrete -> invalidOp "Not configured"
         | Continuous i ->
@@ -39,7 +39,7 @@ module Solver =
                     timeSteps
                     |> Seq.pairwise
                     |> Seq.scan
-                        (fun (state: CodedMap<float>) (t0: float, t1: float) ->
+                        (fun (state: CodedMap<float>) (t0, t1) ->
                             i logTo t0 t1 (t1 - t0) state Map.empty eqs |> Map.map (fun k v -> v.[0]))
                         initialPoint
 
@@ -51,15 +51,15 @@ module Solver =
     let fixedResolutionSolver
         fRes
         stepType
-        (dynamicSeries: TimeFrame.TimeFrame<'a>)
-        (environment: TimeFrame.TimeFrame<'a> option)
+        (dynamicSeries: TimeFrame.TimeFrame<'T, 'date, 'timeunit, 'timespan>)
+        (environment: TimeFrame.TimeFrame<'T, 'date, 'timeunit, 'timespan> option)
         engine
         t0
         =
         let timeline, forcings =
             match environment with
             | Some f ->
-                match f.Resolution with
+                match f |> TimeFrame.resolution with
                 | Resolution.Variable -> failwith "Variable-time environmental forcing data is not supported."
                 | Resolution.Fixed efRes ->
                     engine.LogTo
@@ -67,7 +67,7 @@ module Solver =
 
                     let timeline =
                         (dynamicSeries.Series |> Seq.head).Value
-                        |> TimeIndex.indexSeries dynamicSeries.StartDate efRes
+                        |> TimeIndex.create dynamicSeries.StartDate efRes
                         |> Seq.map fst
 
                     let envIndex =
@@ -87,7 +87,7 @@ module Solver =
 
                 let timeline =
                     (dynamicSeries.Series |> Seq.head).Value
-                    |> TimeIndex.indexSeries dynamicSeries.StartDate fRes
+                    |> TimeIndex.create dynamicSeries.StartDate fRes
                     |> Seq.map fst
 
                 (timeline, Map.empty)
@@ -123,12 +123,12 @@ module Solver =
     /// Takes a `TimeFrame` of dynamic time-series
     let solver
         stepType
-        (dynamicSeries: TimeFrame.TimeFrame<'a>)
-        (environment: TimeFrame.TimeFrame<'a> option)
+        (dynamicSeries: TimeFrame.TimeFrame<'T, 'date, 'timeunit, 'timespan>)
+        (environment: TimeFrame.TimeFrame<'T, 'date, 'timeunit, 'timespan> option)
         engine
         t0
-        : Solver<'a> =
-        match dynamicSeries.Resolution with
+        : Solver<'T> =
+        match dynamicSeries |> TimeFrame.resolution with
         | Resolution.Fixed fRes ->
             engine.LogTo
             <| DebugEvent(sprintf "Observations occur on a fixed temporal resolution: %A." fRes)
@@ -144,25 +144,21 @@ module Solver =
                 engine.LogTo <| DebugEvent "Solving over time-series with uneven time steps."
 
                 engine.LogTo
-                <| DebugEvent "Solving in time units of years. This is not configurable at present."
+                <| DebugEvent "Solving in time units of ticks. This is not configurable at present."
 
                 let timeline =
-                    (dynamicSeries.Series |> Seq.head).Value.TimeSteps |> Seq.map (fun t -> t.Days)
+                    (dynamicSeries.Series |> Seq.head).Value.TimeSteps |> Seq.map (fun t -> t)
 
-                let timeSteps = timeline |> Seq.pairwise |> Seq.map (fun (a, b) -> b - a |> float)
+                let timeSteps = timeline |> Seq.pairwise |> Seq.map (fun (a, b) -> b - a)
                 variableExternalStep engine.LogTo engine.TimeHandling timeSteps t0
 
 
     module Discrete =
 
-        /// A continuation representing a transform of pre-computed data
-        /// float = previous state
-        type Measurement<'a> = 'a -> ModelSystem.Environment -> ModelSystem.Environment -> 'a
-
         /// Finds the solution of a discretised model system, given time-series data.
         /// `startPoint` - a preconditioned point to represent time-zero.
-        let solve startPoint : ShortCode.ShortCode -> Measurement<'a> -> CodedMap<'a[]> -> 'a[] =
-            fun (c: ShortCode.ShortCode) (m: Measurement<'a>) (expected: CodedMap<'a[]>) ->
+        let solve startPoint : ShortCode.ShortCode -> ModelSystem.Measurement<'a> -> CodedMap<'a[]> -> 'a[] =
+            fun (c: ShortCode.ShortCode) (m: ModelSystem.Measurement<'a>) (expected: CodedMap<'a[]>) ->
                 expected
                 |> Map.toList
                 |> List.map (fun (c, d) -> d |> Array.map (fun x -> (c, x)) |> Seq.toList) // Add shortcode to each time point's value
@@ -182,7 +178,7 @@ module Solver =
         open Bristlecone.Time
 
         /// Strategy for assigning a start time - `t0` - to a time series.
-        let startPoint conditioning (series: CodedMap<TimeSeries<'a>>) =
+        let startPoint conditioning (series: CodedMap<TimeSeries<'T, 'date, 'timeunit, 'timespan>>) =
             match conditioning with
             | Conditioning.NoConditioning -> None
             | Conditioning.RepeatFirstDataPoint -> series |> Map.map (fun _ v -> v.Values |> Seq.head) |> Some

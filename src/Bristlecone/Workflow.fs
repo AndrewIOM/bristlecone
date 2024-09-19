@@ -9,10 +9,10 @@ module Orchestration =
     open Bristlecone.ModelSystem
     open System.Collections.Generic
 
-    type OrchestrationMessage =
-        | StartWorkPackage of Async<EstimationResult>
-        | StartDependentWorkPackages of Async<EstimationResult>
-        | Finished of EstimationResult
+    type OrchestrationMessage<'date, 'timeunit, 'timespan> =
+        | StartWorkPackage of Async<EstimationResult<'date, 'timeunit, 'timespan>>
+        | StartDependentWorkPackages of Async<EstimationResult<'date, 'timeunit, 'timespan>>
+        | Finished of EstimationResult<'date, 'timeunit, 'timespan>
         | WorkFailed of exn
         | WorkCancelled
 

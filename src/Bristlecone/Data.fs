@@ -103,7 +103,7 @@ module Trace =
 
     module internal Row =
 
-        let fromEstimate thinBy subject modelId (result: EstimationResult) : seq<BristleconeTrace.Row> =
+        let fromEstimate thinBy subject modelId result : seq<BristleconeTrace.Row> =
             result.Trace
             |> Seq.rev
             |> Seq.mapi (fun iterationNumber (likelihood, values) ->
@@ -156,7 +156,7 @@ module MLE =
 
     module internal Row =
 
-        let fromResult subject hypothesisId (result: EstimationResult) =
+        let fromResult subject hypothesisId result =
             result.Parameters
             |> Parameter.Pool.toList
             |> Seq.map (fun (name, v) ->
@@ -244,7 +244,7 @@ module Series =
 
     module internal Row =
 
-        let fromResult subject hypothesisId (result: EstimationResult) =
+        let fromResult subject hypothesisId result =
             result.Series
             |> Map.toList
             |> Seq.collect (fun (name, series) ->
@@ -253,7 +253,7 @@ module Series =
                 |> Seq.map (fun (v, t) ->
                     IndividualSeries.Row(subject, hypothesisId, name.Value, t, v.Fit, v.Obs, result.Likelihood)))
 
-        let toSeries (data: IndividualSeries) : CodedMap<FitSeries> =
+        let toSeries (data: IndividualSeries) =
             data.Rows
             |> Seq.groupBy (fun r -> r.Variable)
             |> Seq.choose (fun (g, r) ->

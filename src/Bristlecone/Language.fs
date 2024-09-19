@@ -44,7 +44,9 @@ module Language =
         | Subtract of ModelExpression * ModelExpression
         | Multiply of ModelExpression list // List must not be an empty list?
         | Divide of ModelExpression * ModelExpression
-        | Arbitrary of (float -> float -> Parameter.Pool -> CodedMap<float> -> float) * list<ArbitraryRequirement>
+        | Arbitrary of
+            (float -> float<Time.``time index``> -> Parameter.Pool -> ModelSystem.Environment<float> -> float) *
+            list<ArbitraryRequirement>
         | Mod of ModelExpression * ModelExpression
         | Power of ModelExpression * ModelExpression
         | Logarithm of ModelExpression
@@ -75,10 +77,10 @@ module Language =
 
     /// Computes a `ModelExpression` given the current time, value,
     /// environment, and parameter pool.
-    let rec compute x t (pool: Parameter.Pool) (environment: CodedMap<float>) ex : float =
+    let rec compute x (t: float<Time.``time index``>) (pool: Parameter.Pool) (environment: CodedMap<float>) ex : float =
         match ex with
         | This -> x
-        | Time -> t
+        | Time -> t |> Units.removeUnitFromFloat
         | Environment name ->
             match environment |> Map.tryFindBy (fun n -> n.Value = name) with
             | Some i -> i
@@ -225,15 +227,16 @@ module Language =
     /// Scaffolds a `ModelSystem` for fitting with Bristlecone.
     module ModelBuilder =
 
-        type ModelFragment =
+        type ModelFragment<'data> =
             | EquationFragment of ModelExpression
             | ParameterFragment of Parameter.Parameter
-            | LikelihoodFragment of ModelSystem.LikelihoodFn
-            | MeasureFragment of ModelSystem.MeasureEquation
+            | LikelihoodFragment of ModelSystem.LikelihoodFn<'data>
+            | MeasureFragment of ModelSystem.Measurement<'data>
 
-        type ModelBuilder = private ModelBuilder of Map<ShortCode.ShortCode, ModelFragment>
+        type ModelBuilder<'data> = private ModelBuilder of Map<ShortCode.ShortCode, ModelFragment<'data>>
 
-        let create = Map.empty<ShortCode.ShortCode, ModelFragment> |> ModelBuilder
+        let create: ModelBuilder<float> =
+            Map.empty<ShortCode.ShortCode, ModelFragment<'data>> |> ModelBuilder
 
         let private unwrap (ModelBuilder m) = m
 
@@ -247,7 +250,7 @@ module Language =
                 | Some c -> map |> Map.add c comp |> ModelBuilder
                 | None -> failwithf "The text '%s' cannot be used to make a short code identifier." name
 
-        let compile builder : ModelSystem.ModelSystem =
+        let compile builder : ModelSystem.ModelSystem<'data> =
             // Ensure only single likelihood function
             // Find all parameters
 
@@ -356,10 +359,11 @@ module Language =
     /// Terms for designing tests for model systems.
     module Test =
 
-        let defaultSettings = Bristlecone.Test.TestSettings<float>.Default
+        let defaultSettings =
+            Bristlecone.Test.TestSettings<float, 'date, 'dateunit, 'timespan>.Default
 
         /// If the start value has already been set, it will be overwritten with the new value.
-        let withStartValue code value (settings: Bristlecone.Test.TestSettings<float>) =
+        let withStartValue code value (settings: Bristlecone.Test.TestSettings<float, _, _, _>) =
             match ShortCode.create code with
             | Some c ->
                 { settings with
@@ -421,8 +425,8 @@ module Language =
 
         /// <summary>A hypothesis consists of a model system and the names of the
         /// swappable components within it, alongside the name of their current implementation.</summary>
-        type Hypothesis =
-            | Hypothesis of ModelSystem.ModelSystem * list<ComponentName>
+        type Hypothesis<'data> =
+            | Hypothesis of ModelSystem.ModelSystem<'data> * list<ComponentName>
 
             member private this.unwrap = this |> fun (Hypothesis(h1, h2)) -> (h1, h2)
 
@@ -484,7 +488,10 @@ module Language =
 
         /// <summary>Adds parameters from model components into the base model builder.</summary>
         let internal addParameters
-            ((modelBuilder, newParams): ModelBuilder.ModelBuilder * List<ComponentName * CodedMap<Parameter.Parameter>>)
+            (
+                (modelBuilder, newParams):
+                    ModelBuilder.ModelBuilder<'data> * List<ComponentName * CodedMap<Parameter.Parameter>>
+            )
             =
             newParams
             |> List.collect (snd >> Map.toList)
@@ -497,7 +504,9 @@ module Language =
         /// and combines all labels into a single model identifier.</summary>
         /// <param name="builder">A builder started with `createFromComponent`</param>
         /// <returns>A list of compiled hypotheses for this model system and specified components.</returns>
-        let compile (builder: Writer<ModelBuilder.ModelBuilder, ComponentName * CodedMap<Parameter.Parameter>> list) =
+        let compile
+            (builder: Writer<ModelBuilder.ModelBuilder<'data>, ComponentName * CodedMap<Parameter.Parameter>> list)
+            =
             if builder |> List.isEmpty then
                 failwith "No hypotheses specified"
 

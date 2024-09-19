@@ -26,7 +26,7 @@ module Distributions =
     [<RequireQualifiedAccess>]
     module MutlivariateNormal =
 
-        let mapply (m: Matrix<float>) f =
+        let internal mapply (m: Matrix<float>) f =
             m.EnumerateIndexed() |> Seq.iter (fun struct (i, j, v) -> m.[i, j] <- f v)
             m
 
@@ -63,14 +63,17 @@ module Distributions =
 
 module Interpolate =
 
+    open Bristlecone.Time
+
     /// Interpolates between two data points, for a given time `t`.
-    let bilinear ((t1, v1): float * float) ((t2, v2): float * float) t = v1 + (t - t1) * ((v2 - v1) / (t2 - t1))
+    let bilinear ((t1: float<``time index``>, v1)) ((t2: float<``time index``>, v2)) t =
+        v1 + (t - t1) * ((v2 - v1) / (t2 - t1))
 
     /// Use the previous point
-    let lower ((t1, v1): float * float) ((t2, v2): float * float) t = v1
+    let lower ((t1: float<``time index``>, v1)) ((t2: float<``time index``>, v2)) t = v1
 
     /// Use the next point
-    let upper ((t1, v1): float * float) ((t2, v2): float * float) t = v2
+    let upper ((t1: float<``time index``>, v1)) ((t2: float<``time index``>, v2)) t = v2
 
 
 module Regression =
@@ -93,7 +96,7 @@ module TrendAnalysis =
     open Bristlecone.Time
 
     /// TODO Finish implementation
-    let theilSen (timeDiff: System.TimeSpan -> 'a) (ts: TimeSeries<'a>) =
+    let theilSen (timeDiff: System.TimeSpan -> 'a) (ts: TimeSeries<'a, 'date, 'timeunit, 'timespan>) =
         let allPoints = ts |> TimeSeries.toObservations
 
         let allSlopes =
