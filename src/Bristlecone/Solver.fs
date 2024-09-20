@@ -30,7 +30,7 @@ module Solver =
     /// Step the solver using the high resolution, and output at low resolution.
     /// External steps can be variable in size.
     /// Each time jump is integrated individually.
-    let variableExternalStep logTo timeHandling timeSteps (initialPoint: CodedMap<'T>) =
+    let variableExternalStep logTo timeHandling timeSteps (initialPoint: CodedMap<'data>) =
         match timeHandling with
         | Discrete -> invalidOp "Not configured"
         | Continuous i ->
@@ -39,7 +39,7 @@ module Solver =
                     timeSteps
                     |> Seq.pairwise
                     |> Seq.scan
-                        (fun (state: CodedMap<float>) (t0, t1) ->
+                        (fun state (t0, t1) ->
                             i logTo t0 t1 (t1 - t0) state Map.empty eqs |> Map.map (fun k v -> v.[0]))
                         initialPoint
 
@@ -142,15 +142,28 @@ module Solver =
                 <| DebugEvent "No environmental forcing data was supplied. Solving using time points of observations."
 
                 engine.LogTo <| DebugEvent "Solving over time-series with uneven time steps."
+                
+                let medianTimespan =
+                    dynamicSeries.Series 
+                    |> Seq.collect(fun ts -> ts.Value.TimeSteps) 
+                    |> Seq.sort
+                    |> Seq.splitInto 2
+                    |> Seq.skip 1
+                    |> Seq.head
+                    |> Seq.head
 
                 engine.LogTo
-                <| DebugEvent "Solving in time units of ticks. This is not configurable at present."
+                <| DebugEvent (sprintf "Setting temporal resolution of solver as the median timestep (%A)." medianTimespan)
 
-                let timeline =
-                    (dynamicSeries.Series |> Seq.head).Value.TimeSteps |> Seq.map (fun t -> t)
+                let startDate = (dynamicSeries.Series |> Seq.head).Value.StartDate |> snd
+                let timeIndex = TimeIndex.TimeIndex(
+                    startDate,
+                    Resolution.FixedTemporalResolution.CustomEpoch medianTimespan,
+                    TimeIndex.IndexMode.Exact, // TODO interpolate?
+                    (dynamicSeries.Series |> Seq.head).Value
+                )
 
-                let timeSteps = timeline |> Seq.pairwise |> Seq.map (fun (a, b) -> b - a)
-                variableExternalStep engine.LogTo engine.TimeHandling timeSteps t0
+                variableExternalStep engine.LogTo engine.TimeHandling timeIndex.Index t0
 
 
     module Discrete =

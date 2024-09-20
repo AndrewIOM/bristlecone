@@ -168,7 +168,7 @@ module MLE =
                  v |> Parameter.getTransformedValue)
                 |> IndividualMLE.Row)
 
-        let toResult (modelSystem: ModelSystem) (data: IndividualMLE) =
+        let toResult (modelSystem: ModelSystem<'data>) (data: IndividualMLE) =
             if data.Rows |> Seq.isEmpty then
                 Error "An MLE file is corrupt"
             else
@@ -207,7 +207,7 @@ module MLE =
     /// <param name="modelId">An identifier for the model that was fit</param>
     /// <returns>A sequence of tuples which contain the analysis ID followed by another tuple
     /// that contains the likelihood and theta (parameter set)</returns>
-    let load directory subject (modelSystem: ModelSystem) modelId =
+    let load directory subject (modelSystem: ModelSystem<'data>) modelId =
         let files = Config.fileMatch directory subject modelId Config.DataType.MLE
 
         files
@@ -260,7 +260,7 @@ module Series =
                 let ts =
                     r
                     |> Seq.map (fun r -> ({ Fit = r.Expected; Obs = r.Observed }, r.Time))
-                    |> TimeSeries.fromObservations
+                    |> TimeSeries.fromObservations DateMode.calendarDateMode
 
                 ShortCode.create g |> Option.map (fun c -> c, ts))
             |> Map.ofSeq
@@ -303,7 +303,7 @@ module EstimationResult =
     /// Load an `EstimationResult` that has previously been saved as
     /// three seperate dataframes. Results will only be reconstructed
     /// when file names and formats are in original Bristlecone format.
-    let loadAll directory subject (modelSystem: ModelSystem) modelId =
+    let loadAll directory subject (modelSystem: ModelSystem<'data>) modelId =
         let mles =
             MLE.load directory subject modelSystem modelId
             |> Seq.map (fun (k, v) -> k.ToString(), v)
@@ -361,7 +361,7 @@ module ModelSelection =
 
     module Row =
 
-        let fromResult (result: seq<string * string * EstimationResult * AkaikeWeight>) =
+        let fromResult (result: seq<string * string * EstimationResult<'data, 'timeunit, 'timespan> * AkaikeWeight>) =
             result
             |> Seq.map (fun (subject, hypothesisId, r, aic) ->
                 (subject, hypothesisId, r.ResultId, aic.Likelihood, aic.AIC, aic.AICc, aic.Weight)
@@ -400,7 +400,7 @@ module NStepAhead =
         hypothesisId
         analysisId
         nSteps
-        (result: CodedMap<FitSeries * Statistics.NStepStatistics>)
+        (result: CodedMap<FitSeries<System.DateTime,'timeunit,'timespan> * Statistics.NStepStatistics>)
         =
         result
         |> Seq.collect (fun r ->
@@ -411,7 +411,7 @@ module NStepAhead =
                 NStepAhead.Row(subjectId, hypothesisId, analysisId, t, fit.Obs, nSteps, fit.Fit)))
 
     let internal toStatCsvRows
-        (results: seq<string * string * CodedMap<ModelSystem.FitSeries * Statistics.NStepStatistics>>)
+        (results: seq<string * string * CodedMap<ModelSystem.FitSeries<'date,'timeunit,'timespan> * Statistics.NStepStatistics>>)
         =
         results
         |> Seq.collect (fun (s, h, r) ->

@@ -74,7 +74,7 @@ module EstimationEngine =
 
     type State = float
 
-    type ODE = float<``time index``> -> State -> Environment -> State
+    type ODE = float<``time index``> -> State -> ModelSystem.Environment<State> -> State
 
     type WriteOut = LogEvent -> unit
 

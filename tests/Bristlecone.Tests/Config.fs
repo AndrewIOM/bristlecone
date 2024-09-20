@@ -37,7 +37,7 @@ type BristleconeTypesGen() =
     static member EquationList = genStrings 1 10 |> genTuple<ModelExpression> |> Arb.fromGen
 
     static member MeasureList =
-        genStrings 1 10 |> genTuple<ModelSystem.MeasureEquation> |> Arb.fromGen
+        genStrings 1 10 |> genTuple<ModelSystem.Measurement<float>> |> Arb.fromGen
 
     static member Pool =
         gen {
@@ -63,7 +63,7 @@ type BristleconeTypesGen() =
 
     static member Floats() : Arbitrary<float list> = genMultiList 2 1000 |> Arb.fromGen
 
-    static member PositveInt: Arbitrary<PositiveInt.PositiveInt> =
+    static member PositveInt: Arbitrary<PositiveInt.PositiveInt<1>> =
         Gen.choose (1, 5) //Int32.MaxValue)
         |> Gen.map (PositiveInt.create >> Option.get)
         |> Arb.fromGen

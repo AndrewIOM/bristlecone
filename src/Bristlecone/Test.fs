@@ -15,7 +15,7 @@ module Test =
         let tryAddNoise
             seriesName
             noiseDistributionFn
-            (data: CodedMap<TimeSeries.TimeSeries<'T, 'date, 'timeunit, 'timespan>>)
+            (data: CodedMap<TimeSeries.TimeSeries<float, 'date, 'timeunit, 'timespan>>)
             =
             data
             |> Map.tryFindKey (fun c _ -> c.Value = seriesName)
@@ -75,7 +75,8 @@ module Test =
           EnvironmentalData: CodedMap<TimeSeries<'T, 'date, 'timeunit, 'timespan>>
           Resolution: Resolution.FixedTemporalResolution<'timespan>
           Random: Random
-          StartDate: DateTime
+          StartDate: 'date
+          DateMode: DateMode.DateMode<'date, 'timeunit, 'timespan>
           Attempts: int }
 
         static member Default =
@@ -88,6 +89,7 @@ module Test =
               EnvironmentalData = Map.empty
               Random = MathNet.Numerics.Random.MersenneTwister()
               StartDate = DateTime(1970, 01, 01)
+              DateMode = DateMode.calendarDateMode
               Attempts = 50000 }
 
     type ParameterTestResult =
@@ -149,6 +151,10 @@ module Test =
     let useRandom rnd (settings: TestSettings<_, _, _, _>) = { settings with Random = rnd }
     let useStartTime time settings = { settings with StartDate = time }
 
+    let useDateMode dateMode startDate settings = {
+        settings with StartDate = startDate; DateMode = dateMode
+    }
+
     module Compute =
 
         /// Draw a random set of parameters
@@ -167,21 +173,22 @@ module Test =
                 | Error e -> failwith e)
 
         /// Generate a fixed-resolution time-series for testing model fits
-        let generateFixedSeries writeOut equations timeMode seriesLength startPoint startDate resolution env theta =
+        let generateFixedSeries writeOut equations timeMode seriesLength startPoint dateMode startDate resolution env theta =
             let applyFakeTime s =
-                TimeSeries.fromSeq startDate resolution s
+                TimeSeries.fromSeq dateMode startDate resolution s
 
             let eqs = equations |> Map.map (fun _ v -> v theta)
 
             match timeMode with
             | Discrete -> invalidOp "Not supported at this time"
             | Continuous i ->
-                i writeOut 0. (seriesLength |> float) 1. startPoint env eqs
+                i writeOut 0.<``time index``> (seriesLength |> float |> (*) 1.<``time index``>) 1.<``time index``> startPoint env eqs
                 |> Map.map (fun _ v -> applyFakeTime v)
 
         /// A test procedure for computing measures given time series data.
-        let generateMeasures measures startValues (expected: CodedMap<TimeSeries<'a>>) : CodedMap<TimeSeries<'a>> =
+        let generateMeasures measures startValues (expected: CodedMap<TimeSeries<'T, 'date, 'timeunit, 'timespan>>) : CodedMap<TimeSeries<'T, 'date, 'timeunit, 'timespan>> =
             let time = (expected |> Seq.head).Value |> TimeSeries.toObservations |> Seq.map snd
+            let dateMode = (expected |> Seq.head).Value.DateMode
 
             measures
             |> Map.map (fun key measure ->
@@ -191,7 +198,7 @@ module Test =
                     measure
                     (expected |> Map.map (fun _ t -> t.Values |> Seq.toArray)))
             |> Map.fold
-                (fun acc key value -> Map.add key (time |> Seq.zip value |> TimeSeries.fromObservations) acc)
+                (fun acc key value -> Map.add key (time |> Seq.zip value |> TimeSeries.fromObservations dateMode) acc)
                 expected
 
         /// Generate data
@@ -213,6 +220,7 @@ module Test =
                 engine.TimeHandling
                 testSettings.TimeSeriesLength
                 testSettings.StartValues
+                testSettings.DateMode
                 testSettings.StartDate
                 testSettings.Resolution
                 envIndex
@@ -222,9 +230,9 @@ module Test =
         /// Generate data and check that it complies with the
         /// given ruleset.
         let rec tryGenerateData
-            (engine: EstimationEngine.EstimationEngine<'a, 'b>)
+            (engine: EstimationEngine.EstimationEngine<float, 'b, 'c, 'd>)
             settings
-            (model: ModelSystem.ModelSystem)
+            (model: ModelSystem.ModelSystem<float>)
             attempts
             =
             let theta = drawParameterSet engine.Random model.Parameters

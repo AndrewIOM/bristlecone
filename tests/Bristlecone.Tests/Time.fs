@@ -11,29 +11,29 @@ let config = Config.config
 [<Tests>]
 let timeSeries =
     testList
-        "Time series"
+        "Time series (calendar dates)"
         [
 
           testPropertyWithConfig config "Resolution is always the same as creation-time"
           <| fun date (data: float list) resolution ->
-              let ts = data |> TimeSeries.fromSeq date resolution
-              Expect.equal ts.Resolution (Resolution.Fixed resolution) "Resolution was transformed during processing"
+              let ts = data |> TimeSeries.fromSeq DateMode.calendarDateMode date resolution
+              Expect.equal (TimeSeries.resolution ts) (Resolution.Fixed resolution) "Resolution was transformed during processing"
 
           testPropertyWithConfig config "Start time is always the same as creation-time"
           <| fun date (data: float list) resolution ->
-              let ts = data |> TimeSeries.fromSeq date resolution
+              let ts = data |> TimeSeries.fromSeq DateMode.calendarDateMode date resolution
               ts.StartDate.Deconstruct() |> snd = date
 
           testPropertyWithConfig config "Create from observations fails without 2+ observations"
-          <| fun (data: TimeSeries.Observation<float> list) ->
+          <| fun (data: TimeSeries.Observation<float, DateTime> list) ->
               if data |> List.length < 2 then
                   Expect.throws
-                      (fun () -> TimeSeries.fromObservations data |> ignore)
+                      (fun () -> TimeSeries.fromNeoObservations data |> ignore)
                       "Did not fail with less than two observations"
 
           testPropertyWithConfig config "Create from observations orders data by time"
-          <| fun (data: TimeSeries.Observation<float> list) ->
-              let ts = TimeSeries.fromObservations data
+          <| fun (data: TimeSeries.Observation<float, DateTime> list) ->
+              let ts = TimeSeries.fromNeoObservations data
 
               Expect.sequenceEqual
                   ts.Values
@@ -44,9 +44,9 @@ let timeSeries =
               config
               "Transforming observations to time series and back again has the same 
             observations, but not necessarily in the same order"
-          <| fun (observations: TimeSeries.Observation<float> list) ->
+          <| fun (observations: TimeSeries.Observation<float, DateTime> list) ->
               let transformed =
-                  observations |> TimeSeries.fromObservations |> TimeSeries.toObservations
+                  observations |> TimeSeries.fromNeoObservations |> TimeSeries.toObservations
 
               Expect.sequenceEqual
                   (transformed |> Seq.sort)
@@ -54,8 +54,8 @@ let timeSeries =
                   "Observations were transformed by TimeSeries functions"
 
           testPropertyWithConfig config "'map' transforms all values"
-          <| fun (observations: TimeSeries.Observation<float> list) f ->
-              let ts: TimeSeries<float> = observations |> TimeSeries.fromObservations
+          <| fun (observations: TimeSeries.Observation<float, DateTime> list) f ->
+              let ts = observations |> TimeSeries.fromNeoObservations
               let original = ts.Values
 
               Expect.sequenceEqual
@@ -66,9 +66,9 @@ let timeSeries =
           testList
               "Bounding functions"
               [ testPropertyWithConfig config "Trimming start removes all time points before specified date"
-                <| fun startDate (observations: TimeSeries.Observation<float> list) ->
+                <| fun startDate (observations: TimeSeries.Observation<float, DateTime> list) ->
                     let trimmed =
-                        observations |> TimeSeries.fromObservations |> TimeSeries.trimStart startDate
+                        observations |> TimeSeries.fromNeoObservations |> TimeSeries.trimStart startDate
 
                     let x = observations |> Seq.filter (fun (_, d) -> d > startDate) |> Seq.map fst
 
@@ -88,8 +88,8 @@ let timeSeries =
                             "Values differed between seq and TimeSeries"
 
                 testPropertyWithConfig config "Trimming end removes all time points after specified date"
-                <| fun date (obs: TimeSeries.Observation<float> list) ->
-                    let trimmed = obs |> TimeSeries.fromObservations |> TimeSeries.trimEnd date
+                <| fun date (obs: TimeSeries.Observation<float, DateTime> list) ->
+                    let trimmed = obs |> TimeSeries.fromNeoObservations |> TimeSeries.trimEnd date
                     let x = obs |> Seq.filter (fun (_, d) -> d < date) |> Seq.map fst
 
                     if x |> Seq.length < 2 then
@@ -108,9 +108,9 @@ let timeSeries =
                             "Values differed between seq and TimeSeries"
 
                 testPropertyWithConfig config "Start date cannot be before given start date when bounding"
-                <| fun startDate endDate (obs: TimeSeries.Observation<float> list) ->
+                <| fun startDate endDate (obs: TimeSeries.Observation<float, DateTime> list) ->
                     let bounded =
-                        obs |> TimeSeries.fromObservations |> TimeSeries.bound startDate endDate
+                        obs |> TimeSeries.fromNeoObservations |> TimeSeries.bound startDate endDate
 
                     match bounded with
                     | Some ts ->
@@ -121,9 +121,9 @@ let timeSeries =
                     | None -> ()
 
                 testPropertyWithConfig config "Bounding removes time points before and after dates"
-                <| fun startDate endDate (obs: TimeSeries.Observation<float> list) ->
+                <| fun startDate endDate (obs: TimeSeries.Observation<float, DateTime> list) ->
                     let trimmed =
-                        obs |> TimeSeries.fromObservations |> TimeSeries.bound startDate endDate
+                        obs |> TimeSeries.fromNeoObservations |> TimeSeries.bound startDate endDate
 
                     let x =
                         obs |> Seq.filter (fun (_, d) -> d >= startDate && d <= endDate) |> Seq.map fst
@@ -154,23 +154,23 @@ let timeIndex =
           testProperty "Years elapsed are whole numbers when same day is used"
           <| fun (date: DateTime) (yearDiff: NormalFloat) ->
               let date2 = date.AddYears(int yearDiff.Get)
-              let diff = TimeIndex.totalYearsElapsed date date2
-              Expect.equal (diff % 1.) 0. "The year difference was not an integer"
+              let diff = DateTime.totalYearsElapsed date date2
+              Expect.equal (diff % 1.<year>) 0.<year> "The year difference was not a round number"
 
           testProperty "Months elapsed are whole numbers when same day of year"
           <| fun (date: DateTime) (monthDiff: NormalFloat) ->
               let date2 = date.AddMonths(int monthDiff.Get)
-              let diff = TimeIndex.totalMonthsElapsed date date2
-              Expect.equal (diff % 1.) 0. "The month difference was not an integer"
+              let diff = DateTime.totalMonthsElapsed date date2
+              Expect.equal (diff % 1.<month>) 0.<month> "The month difference was not a round number"
 
           testPropertyWithConfig config "Time series created at a specific resolution indexes as whole numbers"
           <| fun startDate (data: float list) resolution ->
-              let ts = TimeSeries.fromSeq startDate resolution data
+              let ts = TimeSeries.fromSeq DateMode.calendarDateMode startDate resolution data
 
               let index =
                   TimeIndex.TimeIndex(startDate, resolution, TimeIndex.IndexMode.Exact, ts)
 
               let timeSteps = index.Values |> Seq.map fst
-              Expect.all timeSteps (fun s -> s % 1. = 0.) "The time steps contained decimal places"
+              Expect.all timeSteps (fun s -> s % 1.<``time index``> = 0.<``time index``>) "The time steps contained decimal places"
 
           ]

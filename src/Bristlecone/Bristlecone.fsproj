@@ -8,9 +8,9 @@
     <Compile Include="Time.fs" />
     <Compile Include="Logging.fs" />
     <Compile Include="Statistics.fs" />
-    <Compile Include="Integration.fs" />
     <Compile Include="Parameter.fs" />
     <Compile Include="EstimationEngine.fs" />
+    <Compile Include="Integration.fs" />
     <Compile Include="Optimisation.fs" />
     <Compile Include="Confidence.fs" />
     <Compile Include="ModelSelection.fs" />
@@ -32,7 +32,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="../../docs/img/logo.png" Pack="true" PackagePath="/">
-        <PackageCopyToOutput>true</PackageCopyToOutput>
+      <PackageCopyToOutput>true</PackageCopyToOutput>
     </None>
   </ItemGroup>
   <Import Project="..\..\.paket\Paket.Restore.targets" />

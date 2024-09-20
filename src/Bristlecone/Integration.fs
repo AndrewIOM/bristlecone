@@ -18,7 +18,7 @@ module Base =
 
         variableCodes |> Array.map (fun k -> (k, fakeSeries)) |> Map.ofArray
 
-    let applyDynamicVariables newValues newValueKeys environment =
+    let internal applyDynamicVariables newValues newValueKeys environment =
         let newEnv = newValues |> Array.zip newValueKeys
 
         environment
@@ -29,7 +29,7 @@ module Base =
             | Some u -> snd u
             | None -> value)
 
-    let applyExternalEnvironment
+    let internal applyExternalEnvironment
         (time: float<``time index``>)
         (externalEnv: Map<'a, TimeIndex.TimeIndex<'T, 'date, 'timeunit, 'timespan>>)
         (currentEnv: Map<'a, 'T>)
@@ -50,8 +50,8 @@ module Base =
         tStep
         initialConditions
         externalEnvironment
-        modelMap
-        : Map<'a, float[]> =
+        (modelMap: CodedMap<EstimationEngine.ODE>)
+        : CodedMap<float[]> =
 
         // A. Setup initial vector
         let modelKeys, modelEqs = modelMap |> Map.toArray |> Array.unzip
@@ -59,13 +59,14 @@ module Base =
         let vectorKeys, initialVector =
             modelMap
             |> Map.toArray
-            |> Array.map (fun (k, _) -> (k, initialConditions |> Map.find k))
+            |> Array.map (fun (k, _) -> (k, initialConditions |> Map.find k |> Units.removeUnitFromFloat))
             |> Array.unzip
 
         // B. Setup composite function to integrate
         let mutable iteration = 1<iteration>
 
-        let rp t x =
+        let rp (t: float) x =
+            let t = t * 1.<``time index``>
             if iteration % 5000<iteration> = 0<iteration> then
                 log <| GeneralEvent(sprintf "[Integration] Slow for %f - %A" t x)
 
@@ -122,7 +123,7 @@ module Oslo =
             )
 
 
-    let integrate'
+    let internal integrate'
         options
         (tInitial: float<``time index``>)
         (tEnd: float<``time index``>)
@@ -146,33 +147,38 @@ module Oslo =
         |> Seq.map (fun x -> x.X.ToArray())
         |> Seq.toArray
 
-    let integrate options log tInitial tEnd tStep initialConditions modelMap =
-        Base.solve log (integrate' options) tInitial tEnd tStep initialConditions modelMap
+    let integrate options : EstimationEngine.Integrate<float, 'date, 'timeunit, 'timespan> =
+        fun log tInitial tEnd tStep initialConditions externalEnvironment modelMap ->
+            Base.solve log (integrate' options) tInitial tEnd tStep initialConditions externalEnvironment modelMap
 
     /// On integration errors, assigns the maximum float value to every data point.
-    let integrateWithErrorHandling options log tInitial tEnd tStep initialConditions externalEnvironment modelMap =
-        try
-            integrate options log tInitial tEnd tStep initialConditions externalEnvironment modelMap
-        with _ ->
-            Base.nanResult tInitial tEnd tStep modelMap
+    let integrateWithErrorHandling options : EstimationEngine.Integrate<float, 'date, 'timeunit, 'timespan> =
+        fun log tInitial tEnd tStep initialConditions externalEnvironment modelMap ->
+            try
+                integrate options log tInitial tEnd tStep initialConditions externalEnvironment modelMap
+            with _ ->
+                Base.nanResult tInitial tEnd tStep modelMap
 
 
 module MathNet =
 
+    open Bristlecone
+    open Bristlecone.Time
     open MathNet.Numerics.LinearAlgebra
     open MathNet.Numerics.OdeSolvers
 
-    let integrate' tInitial tEnd tStep initialVector rp =
-        let n = (tEnd - tInitial + 1.) / tStep |> int
+    let internal integrate' (tInitial: float<``time index``>) tEnd tStep initialVector rp =
+        let n = (tEnd - tInitial + 1.<``time index``>) / tStep |> int
 
         let f =
             System.Func<float, Vector<float>, Vector<float>>(fun i e -> rp i (e.ToArray()) |> vector)
 
-        RungeKutta.FourthOrder(initialVector |> vector, tInitial, tEnd, n, f)
+        RungeKutta.FourthOrder(initialVector |> vector, tInitial |> Units.removeUnitFromFloat, tEnd |> Units.removeUnitFromFloat, n, f)
         |> Array.map Vector.toArray
 
-    let integrate log tInitial tEnd tStep initialConditions externalEnvironment modelMap =
-        Base.solve log integrate' tInitial tEnd tStep initialConditions externalEnvironment modelMap
+    let integrate : EstimationEngine.Integrate<float, 'date, 'timeunit, 'timespan> =
+        fun log tInitial tEnd tStep initialConditions externalEnvironment (modelMap:CodedMap<EstimationEngine.ODE>) ->
+            Base.solve log integrate' tInitial tEnd tStep initialConditions externalEnvironment modelMap
 
 
 module Simple =

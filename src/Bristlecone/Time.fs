@@ -39,10 +39,11 @@ type AD
 [<Measure>]
 type ``time index``
 
-type TimeDifference =
+type TimeDifference<'timespan> =
     { DayFraction: float<day>
       MonthFraction: float<month>
       YearFraction: float<year>
+      RealDifference: 'timespan
       Ticks: float<ticks> }
 
 // Unit conversions:
@@ -145,6 +146,7 @@ module DateTime =
         { YearFraction = totalYearsElapsed d1 d2
           MonthFraction = totalMonthsElapsed d1 d2
           DayFraction = (d2 - d1).TotalDays * 1.<day>
+          RealDifference = d2 - d1
           Ticks = (d2 - d1).Ticks |> float |> (*) 1.<ticks> }
 
 
@@ -202,6 +204,7 @@ module DatingMethods =
             { YearFraction = yearFraction
               MonthFraction = convertYearsToMonths yearFraction
               DayFraction = yearFraction * daysPerYearInOldDates
+              RealDifference = d2 - d1
               Ticks = 0.<ticks> }
 
 
@@ -225,10 +228,11 @@ module DateMode =
           AddMonths: 'T -> int<month> -> 'T
           AddDays: 'T -> int<day> -> 'T
           AddTime: 'T -> 'timespan -> 'T
-          Difference: 'T -> 'T -> TimeDifference
+          Difference: 'T -> 'T -> TimeDifference<'timespan>
           SortOldestFirst: 'T -> 'T -> int
           ZeroSpan: 'timespan
           TotalDays: 'timespan -> float<day>
+          Divide: 'timespan -> 'timespan -> float
           Minus: 'T -> 'T -> 'timespan }
     // with
     //     interface IComparable<DateMode<'T, 'timeunits, 'timespan>> with
@@ -255,6 +259,7 @@ module DateMode =
           ZeroSpan = TimeSpan.Zero
           TotalDays = fun ts -> ts.TotalDays * 1.<day>
           Minus = fun d1 d2 -> d1 - d2
+          Divide = fun ts1 ts2 -> ts1.TotalSeconds / ts2.TotalSeconds
           SortOldestFirst = fun d1 d2 -> if d1 < d2 then -1 else 1 }
 
     let radiocarbonDateMode: DateMode<Radiocarbon, int<``BP (radiocarbon)``>, int<``BP (radiocarbon)``>> =
@@ -271,12 +276,13 @@ module DateMode =
             fun ts ->
                 (ts |> Units.removeUnitFromInt |> float |> LanguagePrimitives.FloatWithMeasure)
                 * daysPerYearInOldDates
+          Divide = fun ts1 ts2 -> ts1 / ts2 |> float
           Minus = fun d1 d2 -> d1 - d2 }
 
 module TimePoint =
 
     /// Increment time by an increment defined as a fixed temporal resolution.
-    let increment<'date, 'timespan, 'cool> res (mode: DateMode.DateMode<'date, 'cool, 'timespan>) (date: 'date) =
+    let increment<'date, 'timespan, 'timeunits> res (mode: DateMode.DateMode<'date, 'timeunits, 'timespan>) (date: 'date) =
         match res with
         | Resolution.Years i -> mode.AddYears date i.Value
         | Resolution.Months i -> mode.AddMonths date i.Value
@@ -784,10 +790,10 @@ module TimeIndex =
                      |> float
                      |> (*) 1.<``time index``>,
                      v))
-            | Resolution.FixedTemporalResolution.CustomEpoch(t: float<ticks>) ->
+            | Resolution.FixedTemporalResolution.CustomEpoch(t: 'timespan) ->
                 obs
                 |> Seq.map (fun (v, tn) ->
-                    ((series.DateMode.Difference tn t0).Ticks / t)
+                    (series.DateMode.Divide (series.DateMode.Difference tn t0).RealDifference t)
                     |> Units.removeUnitFromFloat
                     |> (*) 1.0<``time index``>,
                     v)
@@ -845,6 +851,8 @@ module TimeIndex =
         member __.Baseline = baseDate
 
         member __.Values = table |> Map.toSeq
+
+        member __.Index = table |> Map.keys
 
 
 /// A `TimeFrame` contains multiple time-series that use the same

@@ -49,7 +49,7 @@ let modelExpressions =
           <| fun (x: NormalFloat) t pool env -> This |> compute x.Get t pool env = x.Get
 
           testProperty "'Time' equals the current time"
-          <| fun x (t: NormalFloat) pool env -> Time |> compute x t.Get pool env = t.Get
+          <| fun x (t: NormalFloat) pool env -> Time |> compute x (t.Get * 1.<Time.``time index``>) pool env = t.Get
 
           testProperty "A constant is purely represented"
           <| fun (c: NormalFloat) x t pool env -> Constant c.Get |> compute x t pool env = c.Get
@@ -117,7 +117,7 @@ let modelBuilder =
         [
 
           testProperty "Does not compile when more than one likelihood function"
-          <| fun (likelihoodFns: ModelSystem.LikelihoodFn list) ->
+          <| fun (likelihoodFns: ModelSystem.LikelihoodFn<float> list) ->
               let f () =
                   likelihoodFns
                   |> Seq.fold (fun mb l -> mb |> Model.useLikelihoodFunction l) Model.empty
@@ -168,7 +168,7 @@ let modelBuilder =
                       mb |> Model.compile |> ignore
 
           testPropertyWithConfig Config.config "Compiles whether measures are present or not"
-          <| fun likelihood (measures: CodedMap<ModelSystem.MeasureEquation>) ->
+          <| fun likelihood (measures: CodedMap<ModelSystem.Measurement<float>>) ->
               if measures.Keys |> Seq.hasDuplicates then
                   ()
               else
@@ -186,7 +186,7 @@ let modelBuilder =
           <| fun
                  likelihood
                  (eqs: ShortCode.ShortCode list)
-                 (measures: (ShortCode.ShortCode * ModelSystem.MeasureEquation) list) ->
+                 (measures: (ShortCode.ShortCode * ModelSystem.Measurement<float>) list) ->
               if eqs.IsEmpty then
                   ()
               else
