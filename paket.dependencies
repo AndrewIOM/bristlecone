@@ -5,7 +5,12 @@ framework: auto-detect
 source https://nuget.org/api/v2
 storage: none
 
-nuget FSharp.Core ~> 5
+nuget FSharp.Core >= 5.0.0
+
+# These lines are used by Paket to get the latest version of the Type Provider SDK files
+github fsprojects/FSharp.TypeProviders.SDK src/ProvidedTypes.fsi
+github fsprojects/FSharp.TypeProviders.SDK src/ProvidedTypes.fs
+
 nuget FSharp.Data
 nuget MathNet.Numerics
 nuget MathNet.Numerics.FSharp

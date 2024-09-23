@@ -126,6 +126,53 @@ module Bristlecone =
             //     fixedStep engine.LogTo engine.TimeHandling (startIndex - externalSteps.Head) endIndex t0 forcings
             )
 
+        /// Assesses if there is at least one time-series present that corresponds to
+        /// either an equation or measure.
+        let hasRequiredData model (timeSeriesData: CodedMap<TimeSeries<float>>) =
+            let keys = [ model.Equations |> Map.keys; model.Measures |> Map.keys ] |> Seq.concat
+
+            if timeSeriesData.IsEmpty then
+                Error "No time-series data was specified"
+            else if Set.isSubset (timeSeriesData |> Map.keys |> set) (keys |> set) then
+                Ok timeSeriesData
+            else
+                Error(
+                    sprintf
+                        "At least one time-series should be specified for an equation or measure from the following list: %s"
+                        (keys |> Seq.map (fun k -> k.Value) |> String.concat " + ")
+                )
+
+        /// Create a continuous-time solver that outputs a float array
+        /// containing only the values for the dynamic variable resolution.
+        let continuousSolver (hasRequiredData: Result<CodedMap<TimeSeries<float>>, string>) model engine t0 =
+            result {
+
+                let! timeSeriesData = hasRequiredData
+
+                // 1. Set time-series into common timeline
+                let! commonDynamicTimeFrame = observationsToCommonTimeFrame model.Equations timeSeriesData
+
+                let! commonForcingsTimeFrame =
+                    environmentDataToCommonTimeFrame (Map.keys model.Equations) (Map.keys model.Measures) timeSeriesData
+
+                engine.LogTo
+                <| GeneralEvent(
+                    sprintf
+                        "Time-series start at %s with resolution %A."
+                        (commonDynamicTimeFrame.StartDate.ToString "yyyy/MM/dd")
+                        commonDynamicTimeFrame.Resolution
+                )
+
+                // 2. Ensure that dynamic variables is an exact or subset of environmental variables
+                let! _ = exactSubsetOf commonDynamicTimeFrame commonForcingsTimeFrame
+
+                let solver outputStep =
+                    Solver.solver outputStep commonDynamicTimeFrame commonForcingsTimeFrame engine t0
+
+                return solver
+            }
+
+
 
     /// <summary>
     /// Fit a time-series model to data.
@@ -149,53 +196,11 @@ module Bristlecone =
         let t0 = Fit.t0 timeSeriesData engine.Conditioning engine.LogTo
 
         // Check there is time-series data actually included and corresponding to correct equations.
-        let hasRequiredData =
-            if timeSeriesData.IsEmpty then
-                Error "No time-series data was specified"
-            else if Set.isSubset (model.Equations |> Map.keys |> set) (timeSeriesData |> Map.keys |> set) then
-                Ok timeSeriesData
-            else
-                Error(
-                    sprintf
-                        "Required time-series data were missing. Need: %A"
-                        (model.Equations |> Map.keys |> Seq.map (fun k -> k.Value) |> String.concat " + ")
-                )
+        let hasRequiredData = Fit.hasRequiredData model timeSeriesData
 
-        // B. Create a continuous-time that outputs float[]
-        // containing only the values for the dynamic variable resolution.
-        let continuousSolver =
-            result {
-
-                let! timeSeriesData = hasRequiredData
-
-                // 1. Set time-series into common timeline
-                let! commonDynamicTimeFrame = Fit.observationsToCommonTimeFrame model.Equations timeSeriesData
-
-                let! commonForcingsTimeFrame =
-                    Fit.environmentDataToCommonTimeFrame
-                        (Map.keys model.Equations)
-                        (Map.keys model.Measures)
-                        timeSeriesData
-
-                engine.LogTo
-                <| GeneralEvent(
-                    sprintf
-                        "Time-series start at %s with resolution %A."
-                        (commonDynamicTimeFrame.StartDate.ToString "yyyy/MM/dd")
-                        commonDynamicTimeFrame.Resolution
-                )
-
-                // 2. Ensure that dynamic variables is an exact or subset of environmental variables
-                let! _ = Fit.exactSubsetOf commonDynamicTimeFrame commonForcingsTimeFrame
-
-                let solver outputStep =
-                    Solver.solver outputStep commonDynamicTimeFrame commonForcingsTimeFrame engine t0
-
-                return solver
-            }
-
+        // Setup solvers
+        let continuousSolver = Fit.continuousSolver hasRequiredData model engine t0
         let discreteSolver = Solver.Discrete.solve (fst t0) // TODO conditioning to observation timestep
-
         let data = timeSeriesData |> Map.map (fun _ ts -> ts.Values |> Seq.toArray)
 
         // Setup optimisation algorithm given the parameter constraint mode.
@@ -436,7 +441,9 @@ module Bristlecone =
                 fit
                     (engine
                      |> withCustomOptimisation Optimisation.None.none
-                     |> withConditioning (Conditioning.RepeatFirstDataPoint Conditioning.ConditionTimeline.ObservedData)) // TODO should this be observed or environmental?
+                     |> withConditioning (
+                         Conditioning.RepeatFirstDataPoint Conditioning.ConditionTimeline.ObservedData
+                     )) // TODO should this be observed or environmental?
                     (Optimisation.EndConditions.afterIteration 0)
                     d
                     hypothesisMle

@@ -84,8 +84,9 @@ module Language =
             | Some i -> i
             | None ->
                 failwithf
-                    "The equation could not be calculated. The environmental data '%s' has not been configured."
+                    "The equation could not be calculated. The environmental data '%s' was not available at time-step %f."
                     name
+                    t
         | Parameter name ->
             match pool |> Parameter.Pool.tryGetRealValue name with
             | Some est -> est
@@ -408,9 +409,13 @@ module Language =
         /// first word.
         let internal nFirstLetters n (s: string) =
             let s = System.Text.RegularExpressions.Regex.Replace(s, @"[^A-Za-z0-9 ]+", "")
-            if s.Split(' ').Length >= n
-            then ((s.Split(' ') |> Array.map (fun s -> s |> Seq.head) |> Seq.truncate n) |> System.String.Concat).ToUpper()
-            else (s |> Seq.truncate n |> System.String.Concat).ToUpper()
+
+            if s.Split(' ').Length >= n then
+                ((s.Split(' ') |> Array.map (fun s -> s |> Seq.head) |> Seq.truncate n)
+                 |> System.String.Concat)
+                    .ToUpper()
+            else
+                (s |> Seq.truncate n |> System.String.Concat).ToUpper()
 
         /// <summary>Represents the name of a swappable component in a model
         /// and the name of its implementation in a specific case.</summary>

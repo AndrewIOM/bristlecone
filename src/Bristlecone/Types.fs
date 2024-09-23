@@ -52,7 +52,7 @@ module ShortCode =
 
     let create str =
         if System.String.IsNullOrEmpty(str) then None
-        else if str.Length > 10 then None
+        else if str.Length > 20 then None
         else str |> ShortCode |> Some
 
     type ShortCode with
@@ -105,7 +105,7 @@ module Seq =
     let everyNthFromHead n seq =
         seq
         |> Seq.mapi (fun i el -> el, i)
-        |> Seq.filter (fun (el, i) ->  i % n = 0)
+        |> Seq.filter (fun (el, i) -> i % n = 0)
         |> Seq.map fst
 
 

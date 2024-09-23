@@ -8,7 +8,7 @@ open Bristlecone.Language
 open Expecto
 
 [<Tests>]
-let shortCode =
+let fixedResolution =
     testList
         "Fixed-resolution solver"
         [

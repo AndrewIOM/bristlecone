@@ -19,6 +19,13 @@ module TestModels =
 
     open Bristlecone.Language
 
+    let stub equations measures =
+        Model.empty
+        |> fun m -> Seq.fold(fun m (c:ShortCode.ShortCode) -> Model.addEquation c.Value (Constant 1.0) m) m equations
+        |> fun m -> Seq.fold(fun m (c:ShortCode.ShortCode) -> Model.includeMeasure c.Value (fun _ _ _ -> 1.) m) m measures
+        |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares (equations |> List.map(fun v -> v.Value)))
+        |> Model.compile
+
     let constant bound1 bound2 =
         Model.empty
         |> Model.addEquation "x" (Parameter "a")
@@ -54,17 +61,56 @@ let defaultEndCon = Optimisation.EndConditions.afterIteration 1000
 
 module ``Objective creation`` =
 
+    open Bristlecone.ModelSystem
+
     [<Tests>]
-    let initialBounds =
+    let objective =
         testList
             "Objective"
             [
 
-              // testProperty "Time-series are paired to correct years" <| fun x ->
-              //     false
+              testPropertyWithConfig Config.config "Likelihood calculated based on correct pairing of observed-expected values" 
+              <| fun (code:ShortCode.ShortCode) obs1 obs2 (obs: NormalFloat list) resolution start ->
+                
+                    let likelihoodFn = ModelLibrary.Likelihood.sumOfSquares [ code.Value ]
+                    let model =
+                        Language.Model.empty
+                        |> Language.Model.addEquation code.Value (Language.Constant 1.0)
+                        |> Language.Model.useLikelihoodFunction likelihoodFn
+                        |> Language.Model.compile
 
-              // testProperty "Throws when time-series are not the same length" <| fun x ->
-              //     false
+                    let obs = obs |> List.append [obs1; obs2 ] |> List.map(fun o -> o.Get)
+                    let ts =
+                        [ code, TimeSeries.fromSeq start resolution obs ]
+                        |> Map.ofList
+
+                    let integrate =
+                        Expect.wantOk
+                            (Bristlecone.Fit.continuousSolver (Ok ts) model defaultEngine ([ code, 0.0 ] |> Map.ofList, Conditioning.ConditionTimeline.ObservedData))
+                            "Integration could not be set up"
+
+                    let testObjective =
+                        Objective.create
+                            model
+                            (integrate Solver.StepType.External)
+                            (fun _ _ _ -> [| 2.0 |])
+                            (ts |> Map.map(fun _ t -> t |> TimeSeries.toObservations |> Seq.map fst |> Seq.toArray))
+
+                    let expectedLikelihood =
+                        [ code, { Expected = [| 1. .. (Seq.length obs) |]; Observed = obs |> Seq.toArray } ]
+                        |> Map.ofList
+                        |> likelihoodFn (ParameterValueAccessor <| fun _ -> infinity)
+
+                    let actualLikelihood = testObjective [||] // No parameters
+
+                    if System.Double.IsNaN actualLikelihood || System.Double.IsNaN expectedLikelihood
+                    then
+                        Expect.isTrue (System.Double.IsNaN actualLikelihood) "Mismatch in NaN between actual and expected"
+                        Expect.isTrue (System.Double.IsNaN expectedLikelihood) "Mismatch in NaN between actual and expected"
+                    else
+                        Expect.equal actualLikelihood expectedLikelihood
+                            "The data is likely not paired correctly, as the likelihood value was incorrect"
+
 
               testPropertyWithConfig Config.config "Likelihood functions use 'real' parameter values"
               <| fun shouldTransform (data: float list) (b1: NormalFloat) (b2: NormalFloat) ->
@@ -120,21 +166,29 @@ module ``Fit`` =
             [
 
               testPropertyWithConfig Config.config "Repeating first data point sets t0 as t1"
-              <| fun time resolution (data: float list) ->
+              <| fun time resolution (data: float list) conditionMode ->
                     let data =
                         [ (Language.code "x").Value,
                         Time.TimeSeries.fromSeq time (Time.FixedTemporalResolution.Years resolution) data ]
                         |> Map.ofList
 
-                    let result = Bristlecone.Fit.t0 data (Conditioning.RepeatFirstDataPoint Conditioning.ConditionTimeline.ObservedData) ignore
+                    let result = Bristlecone.Fit.t0 data (Conditioning.RepeatFirstDataPoint conditionMode) ignore
 
                     expectSameFloatList
                         (fst result)
                         (data |> Map.map (fun k v -> v.Values |> Seq.head))
                         "t0 did not equal t1"
 
-              // testProperty "t0 is set as a custom point when specified" <| fun () ->
-              //     false
+              testPropertyWithConfig Config.config "Custom start point is used"
+              <| fun code (data: TimeSeries.Observation<float> list) (customStart:NormalFloat) conditionMode ->
+                    let data =
+                        [ code, Time.TimeSeries.fromObservations data ]
+                        |> Map.ofList
+                    let start = [ code, customStart.Get ] |> Map.ofList
+                    let result = Bristlecone.Fit.t0 data (Conditioning.Custom (start, conditionMode)) ignore
+                    Expect.equal result (start, conditionMode)
+                        "t0 was not the expected custom point"
+
               ]
 
     [<Tests>]
@@ -146,7 +200,7 @@ module ``Fit`` =
               testList
                 "Scenarios" [
 
-                    testPropertyWithConfig Config.config "Estimation result applying high-res environmental data"
+                    testPropertyWithConfig Config.config "Estimation result outputs are correct format (w/ high-res environment data)"
                     <| fun date (data: TimeSeries.Observation<float> list) (dailyResolution:PositiveInt.PositiveInt) ->
 
                         // Otherwise computation gets too much for a simple test:
@@ -235,6 +289,18 @@ module ``Fit`` =
 
                             expectSameFloat result.Trace result2.Trace "Different traces"
 
+                    testPropertyWithConfig Config.config "Requires at least one overlapping time-series with equations / measures, but not a full subset"
+                    <| fun eqCode measureCode addAnEq addAMeasure (obs: TimeSeries.Observation<float> list) ->
+                        let ts =
+                            [ if addAnEq then (eqCode, TimeSeries.fromObservations obs)
+                              if addAMeasure then (measureCode, TimeSeries.fromObservations obs)
+                            ] |> Map.ofList
+                        let model = TestModels.stub [ eqCode ] [ measureCode ]
+                        let result = Bristlecone.Fit.hasRequiredData model ts
+                        if addAnEq || addAMeasure then
+                            Expect.isOk result "Errored despite at least one measure / eq data being set up"
+                        else Expect.isError result "Should have errored when no data was entered"
+
                     // testProperty "Time-series relating to model equations must overlap"
                     // <| fun t1 t2 resolution data1 data2 ->
                     //     let ts =
@@ -308,36 +374,3 @@ module ``Fit`` =
                                 "The lower bound was not transformed inside the optimiser" ]
 
               ]
-
-
-//     [<Tests>]
-//     let fitTests =
-//         testList "Time-invariant models" [
-
-//             testProperty "MLE cannot fall outside given parameter constraints" <| fun x ->
-//                 false
-
-//             testProperty "It works" <| fun x ->
-
-//                 let fit =
-//                     Bristlecone.Invariant.fitWithoutTime
-//                         Optimisation.None.passThrough
-//                         NoConditioning
-//                         Detached
-//                         ignore
-//                         (Optimisation.EndConditions.afterIteration 1000)
-
-//                 let f x = 2.
-
-//                 let model = {
-//                     Equations = [ shortCode "f"; f ]
-//                 }
-
-//                 let r = fit model
-//                 printfn "R is %A" r
-//                 ()
-
-
-
-
-//         ]

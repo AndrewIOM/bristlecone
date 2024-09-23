@@ -26,8 +26,7 @@ module Solver =
         | Continuous i ->
             fun eqs ->
                 i logTo tStart tEnd 1. initialState forcings eqs
-                |> Map.map (fun _ v ->
-                    v |> Array.skip conditioningLength |> Seq.toArray)
+                |> Map.map (fun _ v -> v |> Array.skip conditioningLength |> Seq.toArray)
 
     /// Step the solver using the high resolution, and output at low resolution.
     /// External steps can be variable in size.
@@ -99,8 +98,7 @@ module Solver =
         let startIndex = timeline |> Seq.head
         let endIndex = timeline |> Seq.last
 
-        engine.LogTo
-        <| DebugEvent (sprintf "%f - %f" startIndex endIndex)
+        engine.LogTo <| DebugEvent(sprintf "%f - %f" startIndex endIndex)
 
 
         let externalSteps =
@@ -113,13 +111,20 @@ module Solver =
         if externalSteps.Length <> 1 then
             failwithf "Encountered uneven timesteps: %A" externalSteps
 
-        let tStartOffset = 
+        let tStartOffset =
             match t0OnExternalStepping with
             | Conditioning.ConditionTimeline.ObservedData -> externalSteps.Head
             | Conditioning.ConditionTimeline.EnvironmentalData -> 1.
 
         let solve =
-            fixedStep engine.LogTo engine.TimeHandling (startIndex - tStartOffset) endIndex t0 forcings (int tStartOffset)
+            fixedStep
+                engine.LogTo
+                engine.TimeHandling
+                (startIndex - tStartOffset)
+                endIndex
+                t0
+                forcings
+                (int tStartOffset)
 
         fun ode ->
             match stepType with
@@ -127,8 +132,7 @@ module Solver =
             | External ->
                 // Filter the results so that only results that match low-res data in time are included
                 solve ode
-                |> Map.map (fun _ v -> 
-                    v |> Seq.everyNthFromHead (int externalSteps.Head) |> Seq.toArray)
+                |> Map.map (fun _ v -> v |> Seq.everyNthFromHead (int externalSteps.Head) |> Seq.toArray)
 
 
     /// Create a solver that applies time-series models to time-series data.
@@ -138,7 +142,7 @@ module Solver =
         (dynamicSeries: TimeFrame.TimeFrame<'a>)
         (environment: TimeFrame.TimeFrame<'a> option)
         engine
-        (t0:CodedMap<float> * Conditioning.ConditionTimeline)
+        (t0: CodedMap<float> * Conditioning.ConditionTimeline)
         : Solver<'a> =
         match dynamicSeries.Resolution with
         | Resolution.Fixed fRes ->
@@ -197,5 +201,6 @@ module Solver =
         let startPoint conditioning (series: CodedMap<TimeSeries<'a>>) =
             match conditioning with
             | Conditioning.NoConditioning -> None
-            | Conditioning.RepeatFirstDataPoint timeline -> (series |> Map.map (fun _ v -> v.Values |> Seq.head), timeline) |> Some
-            | Conditioning.Custom (precomputed, timeline) -> (precomputed, timeline) |> Some
+            | Conditioning.RepeatFirstDataPoint timeline ->
+                (series |> Map.map (fun _ v -> v.Values |> Seq.head), timeline) |> Some
+            | Conditioning.Custom(precomputed, timeline) -> (precomputed, timeline) |> Some
