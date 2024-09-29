@@ -67,6 +67,7 @@ module Base =
 
         let rp (t: float) x =
             let t = t * 1.<``time index``>
+
             if iteration % 5000<iteration> = 0<iteration> then
                 log <| GeneralEvent(sprintf "[Integration] Slow for %f - %A" t x)
 
@@ -173,11 +174,17 @@ module MathNet =
         let f =
             System.Func<float, Vector<float>, Vector<float>>(fun i e -> rp i (e.ToArray()) |> vector)
 
-        RungeKutta.FourthOrder(initialVector |> vector, tInitial |> Units.removeUnitFromFloat, tEnd |> Units.removeUnitFromFloat, n, f)
+        RungeKutta.FourthOrder(
+            initialVector |> vector,
+            tInitial |> Units.removeUnitFromFloat,
+            tEnd |> Units.removeUnitFromFloat,
+            n,
+            f
+        )
         |> Array.map Vector.toArray
 
-    let integrate : EstimationEngine.Integrate<float, 'date, 'timeunit, 'timespan> =
-        fun log tInitial tEnd tStep initialConditions externalEnvironment (modelMap:CodedMap<EstimationEngine.ODE>) ->
+    let integrate: EstimationEngine.Integrate<float, 'date, 'timeunit, 'timespan> =
+        fun log tInitial tEnd tStep initialConditions externalEnvironment (modelMap: CodedMap<EstimationEngine.ODE>) ->
             Base.solve log integrate' tInitial tEnd tStep initialConditions externalEnvironment modelMap
 
 

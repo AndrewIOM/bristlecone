@@ -297,7 +297,11 @@ module Bristlecone =
     /// <returns>A test result that indicates the error structure.
     /// It is wrapped in an F# Result, indicating if the procedure
     /// was successful or not.</returns>
-    let tryTestModel engine (settings: Test.TestSettings<float, 'date, 'timeunit, 'timespan>) (model: ModelSystem<float>) =
+    let tryTestModel
+        engine
+        (settings: Test.TestSettings<float, 'date, 'timeunit, 'timespan>)
+        (model: ModelSystem<float>)
+        =
         engine.LogTo <| GeneralEvent "Attempting to generate parameter set."
 
         engine.LogTo
@@ -377,7 +381,13 @@ module Bristlecone =
     /// <param name="model">A model system / hypothesis to fit</param>
     /// <param name="series">Time-series to fit with model</param>
     /// <returns>A list of estimation results (one for each bootstrap) for further analysis</returns>
-    let bootstrap (engine: EstimationEngine.EstimationEngine<float, 'date, 'timeunit, 'timespan>) endCondition bootstrapCount model series =
+    let bootstrap
+        (engine: EstimationEngine.EstimationEngine<float, 'date, 'timeunit, 'timespan>)
+        endCondition
+        bootstrapCount
+        model
+        series
+        =
         let rec bootstrap s numberOfTimes solutions =
             if (numberOfTimes > 0) then
                 let subset = TimeSeries.Bootstrap.removeSingle engine.Random () s // TODO STEPPING
@@ -405,7 +415,9 @@ module Bristlecone =
     let oneStepAhead
         engine
         hypothesis
-        (preTransform: CodedMap<TimeSeries<float, 'date, 'timeunit, 'timespan>> -> CodedMap<TimeSeries<float, 'date, 'timeunit, 'timespan>>)
+        (preTransform:
+            CodedMap<TimeSeries<float, 'date, 'timeunit, 'timespan>>
+                -> CodedMap<TimeSeries<float, 'date, 'timeunit, 'timespan>>)
         (timeSeries)
         (estimatedTheta: Parameter.Pool)
         : CodedMap<FitSeries<'date, 'timeunit, 'timespan> * NStepStatistics> =
@@ -419,7 +431,9 @@ module Bristlecone =
                 fitSeries
                 |> TimeSeries.toObservations
                 |> Seq.pairwise
-                |> Seq.map (fun (t1, t2) -> TimeSeries.fromObservations fitSeries.DateMode [ t1; t2 ] |> TimeSeries.map (fun (x, y) -> x)))
+                |> Seq.map (fun (t1, t2) ->
+                    TimeSeries.fromObservations fitSeries.DateMode [ t1; t2 ]
+                    |> TimeSeries.map (fun (x, y) -> x)))
 
         let dateMode = (timeSeries |> Seq.head).Value.DateMode
 
@@ -461,7 +475,12 @@ module Bristlecone =
         |> Seq.groupBy (fun (k, _, _) -> k)
         |> Seq.map (fun (tsName, values) ->
             let sos = values |> Seq.averageBy (fun (_, x, _) -> (x.Obs - x.Fit) ** 2.)
-            tsName, (values |> Seq.map (fun (_, v, t) -> (v, t)) |> TimeSeries.fromObservations dateMode, { RMSE = sqrt sos }))
+
+            tsName,
+            (values
+             |> Seq.map (fun (_, v, t) -> (v, t))
+             |> TimeSeries.fromObservations dateMode,
+             { RMSE = sqrt sos }))
         |> Map.ofSeq
 
 

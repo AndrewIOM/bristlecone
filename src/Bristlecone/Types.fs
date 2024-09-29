@@ -45,25 +45,6 @@ module PositiveInt =
 
 
 [<RequireQualifiedAccess>]
-module RealTimeSpan =
-
-    open System
-
-    type RealTimeSpan = private RealTimeSpan of TimeSpan
-
-    let create t =
-        if t = TimeSpan.Zero then
-            None
-        else
-            t |> RealTimeSpan |> Some
-
-    let private unwrap (RealTimeSpan t) = t
-
-    type RealTimeSpan with
-        member this.Value = unwrap this
-
-
-[<RequireQualifiedAccess>]
 module ShortCode =
 
     type ShortCode = private ShortCode of string
@@ -78,7 +59,6 @@ module ShortCode =
         member this.Value = unwrap this
 
 
-type RealTimeSpan = RealTimeSpan.RealTimeSpan
 type CodedMap<'T> = Map<ShortCode.ShortCode, 'T>
 
 module Conditioning =

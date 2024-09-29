@@ -20,13 +20,16 @@ type ``cal yr BP`` // calibrated calendar years before present
 
 
 
+
 [<Measure>]
 type ``BP (radiocarbon)`` // uncalibrated years before present
 
 
 
+
 [<Measure>]
 type CE // common era
+
 
 
 
@@ -150,6 +153,26 @@ module DateTime =
           Ticks = (d2 - d1).Ticks |> float |> (*) 1.<ticks> }
 
 
+/// <summary>Represents a realistic timespan between two dates when
+/// working with observational data and model-fitting. The timespan
+/// is limited to being non-zero and below 200 years.</summary>
+[<RequireQualifiedAccess>]
+module ObservationalTimeSpan =
+
+    type ObservationalTimeSpan = private ObservationalTimeSpan of TimeSpan
+
+    let create t =
+        if t = TimeSpan.Zero || t > TimeSpan.FromDays(365. * 200.) then
+            None
+        else
+            t |> ObservationalTimeSpan |> Some
+
+    let private unwrap (ObservationalTimeSpan t) = t
+
+    type ObservationalTimeSpan with
+        member this.Value = unwrap this
+
+
 [<RequireQualifiedAccess>]
 module Resolution =
 
@@ -165,6 +188,13 @@ module Resolution =
         | Fixed of FixedTemporalResolution<'timespan>
         | Variable
 
+    let map fn res =
+        match res with
+        | Years i -> Years i
+        | Months i -> Months i
+        | Days i -> Days i
+        | CustomEpoch ts -> fn ts |> CustomEpoch
+
 /// Contains types representing common dating methods in
 /// long term data analysis.
 module DatingMethods =
@@ -178,6 +208,8 @@ module DatingMethods =
         | Radiocarbon of int<``BP (radiocarbon)``>
 
         static member Unwrap(Radiocarbon bp) = bp
+
+        member this.Value = Radiocarbon.Unwrap this
 
         static member (-)(e1, e2) =
             (e1 |> Radiocarbon.Unwrap) - (e2 |> Radiocarbon.Unwrap)
@@ -234,13 +266,6 @@ module DateMode =
           TotalDays: 'timespan -> float<day>
           Divide: 'timespan -> 'timespan -> float
           Minus: 'T -> 'T -> 'timespan }
-    // with
-    //     interface IComparable<DateMode<'T, 'timeunits, 'timespan>> with
-    //         member this.CompareTo other =
-    //             if this.SortBackwards
-    //             then (other :> IComparable<_>).CompareTo this
-    //             else (this :> IComparable<_>).CompareTo other
-
 
     /// <summary>Represents the maximum resolution possible
     /// given a date type representation.</summary>
@@ -259,7 +284,7 @@ module DateMode =
           ZeroSpan = TimeSpan.Zero
           TotalDays = fun ts -> ts.TotalDays * 1.<day>
           Minus = fun d1 d2 -> d1 - d2
-          Divide = fun ts1 ts2 -> ts1.TotalSeconds / ts2.TotalSeconds
+          Divide = fun ts1 ts2 -> float ts1.Ticks / float ts2.Ticks
           SortOldestFirst = fun d1 d2 -> if d1 < d2 then -1 else 1 }
 
     let radiocarbonDateMode: DateMode<Radiocarbon, int<``BP (radiocarbon)``>, int<``BP (radiocarbon)``>> =
@@ -279,10 +304,15 @@ module DateMode =
           Divide = fun ts1 ts2 -> ts1 / ts2 |> float
           Minus = fun d1 d2 -> d1 - d2 }
 
+
 module TimePoint =
 
     /// Increment time by an increment defined as a fixed temporal resolution.
-    let increment<'date, 'timespan, 'timeunits> res (mode: DateMode.DateMode<'date, 'timeunits, 'timespan>) (date: 'date) =
+    let increment<'date, 'timespan, 'timeunits>
+        res
+        (mode: DateMode.DateMode<'date, 'timeunits, 'timespan>)
+        (date: 'date)
+        =
         match res with
         | Resolution.Years i -> mode.AddYears date i.Value
         | Resolution.Months i -> mode.AddMonths date i.Value
@@ -338,12 +368,15 @@ module TimeSeries =
     /// <typeparam name="'dateUnit">The unit in which the dates are represented</typeparam>
     /// <typeparam name="'timespan">The representation of timespans for `'date`</typeparam>
     /// <returns>A time-series of observations ordered in time from oldest to newest.</returns>
-    let fromObservations<'T, 'date, 'dateUnit, 'timespan>
+    let fromObservations<'T, 'date, 'dateUnit, 'timespan when 'date: equality>
         (dateType: DateMode.DateMode<'date, 'dateUnit, 'timespan>)
         (dataset: seq<Observation<'T, 'date>>)
         =
         if dataset |> Seq.length < 2 then
             invalidArg "dataset" "The data must be at least two elements long"
+
+        if dataset |> Seq.map snd |> Seq.hasDuplicates then
+            invalidArg "dataset" "The data cannot have multiple values at the same point in time"
 
         let sorted: Observation<'T, 'date> seq =
             dataset
@@ -523,7 +556,7 @@ module TimeSeries =
                     |> toObservations
                     |> Seq.map snd
                     |> Seq.pairwise
-                    |> Seq.map (fun (d1, d2) -> (series.DateMode.Difference d2 d1).MonthFraction)
+                    |> Seq.map (fun (d1, d2) -> (series.DateMode.Difference d1 d2).MonthFraction)
 
                 if monthDifferences |> Seq.distinct |> Seq.length = 1 then // There is a fixed monthly stepping
                     let fixedMonths = monthDifferences |> Seq.head

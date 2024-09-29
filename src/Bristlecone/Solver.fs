@@ -142,10 +142,10 @@ module Solver =
                 <| DebugEvent "No environmental forcing data was supplied. Solving using time points of observations."
 
                 engine.LogTo <| DebugEvent "Solving over time-series with uneven time steps."
-                
+
                 let medianTimespan =
-                    dynamicSeries.Series 
-                    |> Seq.collect(fun ts -> ts.Value.TimeSteps) 
+                    dynamicSeries.Series
+                    |> Seq.collect (fun ts -> ts.Value.TimeSteps)
                     |> Seq.sort
                     |> Seq.splitInto 2
                     |> Seq.skip 1
@@ -153,15 +153,19 @@ module Solver =
                     |> Seq.head
 
                 engine.LogTo
-                <| DebugEvent (sprintf "Setting temporal resolution of solver as the median timestep (%A)." medianTimespan)
+                <| DebugEvent(
+                    sprintf "Setting temporal resolution of solver as the median timestep (%A)." medianTimespan
+                )
 
                 let startDate = (dynamicSeries.Series |> Seq.head).Value.StartDate |> snd
-                let timeIndex = TimeIndex.TimeIndex(
-                    startDate,
-                    Resolution.FixedTemporalResolution.CustomEpoch medianTimespan,
-                    TimeIndex.IndexMode.Exact, // TODO interpolate?
-                    (dynamicSeries.Series |> Seq.head).Value
-                )
+
+                let timeIndex =
+                    TimeIndex.TimeIndex(
+                        startDate,
+                        Resolution.FixedTemporalResolution.CustomEpoch medianTimespan,
+                        TimeIndex.IndexMode.Exact, // TODO interpolate?
+                        (dynamicSeries.Series |> Seq.head).Value
+                    )
 
                 variableExternalStep engine.LogTo engine.TimeHandling timeIndex.Index t0
 

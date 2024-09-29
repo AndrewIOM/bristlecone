@@ -400,7 +400,7 @@ module NStepAhead =
         hypothesisId
         analysisId
         nSteps
-        (result: CodedMap<FitSeries<System.DateTime,'timeunit,'timespan> * Statistics.NStepStatistics>)
+        (result: CodedMap<FitSeries<System.DateTime, 'timeunit, 'timespan> * Statistics.NStepStatistics>)
         =
         result
         |> Seq.collect (fun r ->
@@ -411,7 +411,12 @@ module NStepAhead =
                 NStepAhead.Row(subjectId, hypothesisId, analysisId, t, fit.Obs, nSteps, fit.Fit)))
 
     let internal toStatCsvRows
-        (results: seq<string * string * CodedMap<ModelSystem.FitSeries<'date,'timeunit,'timespan> * Statistics.NStepStatistics>>)
+        (results:
+            seq<
+                string *
+                string *
+                CodedMap<ModelSystem.FitSeries<'date, 'timeunit, 'timespan> * Statistics.NStepStatistics>
+             >)
         =
         results
         |> Seq.collect (fun (s, h, r) ->

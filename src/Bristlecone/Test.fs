@@ -151,9 +151,10 @@ module Test =
     let useRandom rnd (settings: TestSettings<_, _, _, _>) = { settings with Random = rnd }
     let useStartTime time settings = { settings with StartDate = time }
 
-    let useDateMode dateMode startDate settings = {
-        settings with StartDate = startDate; DateMode = dateMode
-    }
+    let useDateMode dateMode startDate settings =
+        { settings with
+            StartDate = startDate
+            DateMode = dateMode }
 
     module Compute =
 
@@ -173,7 +174,18 @@ module Test =
                 | Error e -> failwith e)
 
         /// Generate a fixed-resolution time-series for testing model fits
-        let generateFixedSeries writeOut equations timeMode seriesLength startPoint dateMode startDate resolution env theta =
+        let generateFixedSeries
+            writeOut
+            equations
+            timeMode
+            seriesLength
+            startPoint
+            dateMode
+            startDate
+            resolution
+            env
+            theta
+            =
             let applyFakeTime s =
                 TimeSeries.fromSeq dateMode startDate resolution s
 
@@ -182,11 +194,22 @@ module Test =
             match timeMode with
             | Discrete -> invalidOp "Not supported at this time"
             | Continuous i ->
-                i writeOut 0.<``time index``> (seriesLength |> float |> (*) 1.<``time index``>) 1.<``time index``> startPoint env eqs
+                i
+                    writeOut
+                    0.<``time index``>
+                    (seriesLength |> float |> (*) 1.<``time index``>)
+                    1.<``time index``>
+                    startPoint
+                    env
+                    eqs
                 |> Map.map (fun _ v -> applyFakeTime v)
 
         /// A test procedure for computing measures given time series data.
-        let generateMeasures measures startValues (expected: CodedMap<TimeSeries<'T, 'date, 'timeunit, 'timespan>>) : CodedMap<TimeSeries<'T, 'date, 'timeunit, 'timespan>> =
+        let generateMeasures
+            measures
+            startValues
+            (expected: CodedMap<TimeSeries<'T, 'date, 'timeunit, 'timespan>>)
+            : CodedMap<TimeSeries<'T, 'date, 'timeunit, 'timespan>> =
             let time = (expected |> Seq.head).Value |> TimeSeries.toObservations |> Seq.map snd
             let dateMode = (expected |> Seq.head).Value.DateMode
 
