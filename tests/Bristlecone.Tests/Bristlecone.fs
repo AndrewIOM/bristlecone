@@ -120,7 +120,11 @@ module ``Fit`` =
                   else
                       let data =
                           [ (Language.code "x").Value,
-                            Time.TimeSeries.fromSeq Time.DateMode.calendarDateMode time (Time.Resolution.FixedTemporalResolution.Years resolution) data ]
+                            Time.TimeSeries.fromSeq
+                                Time.DateMode.calendarDateMode
+                                time
+                                (Time.Resolution.FixedTemporalResolution.Years resolution)
+                                data ]
                           |> Map.ofList
 
                       let result = Bristlecone.Fit.t0 data Conditioning.RepeatFirstDataPoint ignore
@@ -158,7 +162,11 @@ module ``Fit`` =
                         else
                             let data =
                                 [ (Language.code "x").Value,
-                                  Time.TimeSeries.fromSeq Time.DateMode.calendarDateMode startDate (Time.Resolution.FixedTemporalResolution.Months months) obs ]
+                                  Time.TimeSeries.fromSeq
+                                      Time.DateMode.calendarDateMode
+                                      startDate
+                                      (Time.Resolution.FixedTemporalResolution.Months months)
+                                      obs ]
                                 |> Map.ofList
 
                             let result =
@@ -253,7 +261,11 @@ module ``Fit`` =
                                 [ (ShortCode.create "x").Value; (ShortCode.create "y").Value ]
                                 |> Seq.map (fun c ->
                                     c,
-                                    Time.TimeSeries.fromSeq Time.DateMode.calendarDateMode startDate (Time.Resolution.FixedTemporalResolution.Months months) data)
+                                    Time.TimeSeries.fromSeq
+                                        Time.DateMode.calendarDateMode
+                                        startDate
+                                        (Time.Resolution.FixedTemporalResolution.Months months)
+                                        data)
                                 |> Map.ofSeq
 
                             let result =

@@ -8,10 +8,6 @@ open FsCheck
 
 let config = Config.config
 
-type DateModeToUse =
-    | CalendarDates
-    | Radiocarbon
-
 [<Tests>]
 let timeSeries =
     testList
@@ -20,13 +16,24 @@ let timeSeries =
 
           testPropertyWithConfig config "Resolution is always the same as creation-time"
           <| fun date (data: float list) resolution ->
-              let resolution = Resolution.map (fun (x:ObservationalTimeSpan.ObservationalTimeSpan) -> x.Value) resolution
+              let resolution =
+                  Resolution.map (fun (x: ObservationalTimeSpan.ObservationalTimeSpan) -> x.Value) resolution
+
               let ts = data |> TimeSeries.fromSeq DateMode.calendarDateMode date resolution
-              Expect.equal (TimeSeries.resolution ts) (Resolution.Fixed resolution) "Resolution was transformed during processing"
+
+              Expect.equal
+                  (TimeSeries.resolution ts)
+                  (Resolution.Fixed resolution)
+                  "Resolution was transformed during processing"
 
           testPropertyWithConfig config "Start time is always the same as creation-time"
-          <| fun date (data: float list) (resolution: Resolution.FixedTemporalResolution<ObservationalTimeSpan.ObservationalTimeSpan>) ->
-              let resolution = Resolution.map (fun (x:ObservationalTimeSpan.ObservationalTimeSpan) -> x.Value) resolution
+          <| fun
+                 date
+                 (data: float list)
+                 (resolution: Resolution.FixedTemporalResolution<ObservationalTimeSpan.ObservationalTimeSpan>) ->
+              let resolution =
+                  Resolution.map (fun (x: ObservationalTimeSpan.ObservationalTimeSpan) -> x.Value) resolution
+
               let ts = data |> TimeSeries.fromSeq DateMode.calendarDateMode date resolution
               Expect.equal (ts.StartDate.Deconstruct() |> snd) date "The start dates were different"
 
@@ -157,32 +164,34 @@ let oldDateTimeSeriesTests =
         "Time series (old dates)"
         [
 
-            testPropertyWithConfig config "BP dates are ordered oldest to youngest"
-            <| fun (data: TimeSeries.Observation<float, int<``BP (radiocarbon)``>> list) ->
-                let radiocarbonDates = data |> Seq.map(fun (d,r) -> d, DatingMethods.Radiocarbon r)
-                if data |> Seq.map snd |> Seq.hasDuplicates
-                then Expect.throws (fun _ -> TimeSeries.fromRadiocarbonObservations radiocarbonDates |> ignore) "Dates contained duplicates; should have thrown"
-                else
-                    let ts = TimeSeries.fromRadiocarbonObservations radiocarbonDates
-                    let orderedInTime = data |> Seq.sortByDescending snd |> Seq.map fst
-                    Expect.sequenceEqual ts.Values orderedInTime "BP Dates were not ordered with largest BP values first"
+          testPropertyWithConfig config "BP dates are ordered oldest to youngest"
+          <| fun (data: TimeSeries.Observation<float, int<``BP (radiocarbon)``>> list) ->
+              let radiocarbonDates =
+                  data |> Seq.map (fun (d, r) -> d, DatingMethods.Radiocarbon r)
 
+              if data |> Seq.map snd |> Seq.hasDuplicates then
+                  Expect.throws
+                      (fun _ -> TimeSeries.fromRadiocarbonObservations radiocarbonDates |> ignore)
+                      "Dates contained duplicates; should have thrown"
+              else
+                  let ts = TimeSeries.fromRadiocarbonObservations radiocarbonDates
+                  let orderedInTime = data |> Seq.sortByDescending snd |> Seq.map fst
+                  Expect.sequenceEqual ts.Values orderedInTime "BP Dates were not ordered with largest BP values first"
 
-        //   testProperty "Years elapsed are whole numbers when same day is used"
-        //   <| fun (date: DateTime) (yearDiff: NormalFloat) ->
-        //       let date2 = date.AddYears(int yearDiff.Get)
-        //       let diff = DateTime.totalYearsElapsed date date2
-        //       Expect.equal (diff % 1.<year>) 0.<year> "The year difference was not a round number"
-
-        //   testPropertyWithConfig config "Time series created at a specific resolution indexes as whole numbers"
-        //   <| fun startDate (data: float list) resolution ->
-        //       let ts = TimeSeries.fromSeq DateMode.calendarDateMode startDate resolution data
-
-        //       let index =
-        //           TimeIndex.TimeIndex(startDate, resolution, TimeIndex.IndexMode.Exact, ts)
-
-        //       let timeSteps = index.Values |> Seq.map fst
-        //       Expect.all timeSteps (fun s -> s % 1.<``time index``> = 0.<``time index``>) "The time steps contained decimal places"
+          testPropertyWithConfig config "Only works when resolution is greater than or equal to annual"
+            <| fun startDate (data: float list) resolution ->                
+                let test () =
+                    let ts = TimeSeries.fromSeq DateMode.radiocarbonDateMode startDate resolution data
+                    Expect.equal (TimeSeries.resolution ts) (Resolution.Fixed resolution)
+                        "Resolution of resultant time-series did not match input resolution"
+                match resolution with
+                | Resolution.Months m when m.Value >= 12<month> -> test ()
+                | Resolution.Days d when d.Value >= 365<day> -> test ()
+                | Resolution.CustomEpoch e when e > 0<``BP (radiocarbon)``> -> test ()
+                | Resolution.Years _ -> test ()
+                | _ ->
+                    Expect.throws (fun _ -> test () |> ignore) "Should have thrown with lower than annual resolution"
+                
 
           ]
 
@@ -194,27 +203,34 @@ module TemporalIndex =
             "Time index (calendar dates)"
             [
 
-            testProperty "Years elapsed are whole numbers when same day is used"
-            <| fun (date: DateTime) (yearDiff: NormalFloat) ->
-                let date2 = date.AddYears(int yearDiff.Get)
-                let diff = DateTime.totalYearsElapsed date date2
-                Expect.equal (diff % 1.<year>) 0.<year> "The year difference was not a round number"
+              testProperty "Years elapsed are whole numbers when same day is used"
+              <| fun (date: DateTime) (yearDiff: NormalFloat) ->
+                  let date2 = date.AddYears(int yearDiff.Get)
+                  let diff = DateTime.totalYearsElapsed date date2
+                  Expect.equal (diff % 1.<year>) 0.<year> "The year difference was not a round number"
 
-            testProperty "Months elapsed are whole numbers when same day of year"
-            <| fun (date: DateTime) (monthDiff: NormalFloat) ->
-                let date2 = date.AddMonths(int monthDiff.Get)
-                let diff = DateTime.totalMonthsElapsed date date2
-                Expect.equal (diff % 1.<month>) 0.<month> "The month difference was not a round number"
+              testProperty "Months elapsed are whole numbers when same day of year"
+              <| fun (date: DateTime) (monthDiff: NormalFloat) ->
+                  let date2 = date.AddMonths(int monthDiff.Get)
+                  let diff = DateTime.totalMonthsElapsed date date2
+                  Expect.equal (diff % 1.<month>) 0.<month> "The month difference was not a round number"
 
-            testPropertyWithConfig config "Time series of specific resolution indexes as whole numbers"
-            <| fun startDate (data: float list) resolution ->
-                    let resolution = Resolution.map (fun (x:ObservationalTimeSpan.ObservationalTimeSpan) -> x.Value) resolution
-                    let ts = TimeSeries.fromSeq DateMode.calendarDateMode startDate resolution data
-                    let index =
-                        TimeIndex.TimeIndex(startDate, resolution, TimeIndex.IndexMode.Exact, ts)
-                    let timeSteps = index.Values |> Seq.map fst
-                    Expect.all timeSteps (fun s -> abs s % 1.<``time index``> = 0.<``time index``>) "The time steps contained decimal places"
-            ]
+              testPropertyWithConfig config "Time series of specific resolution indexes as whole numbers"
+              <| fun startDate (data: float list) resolution ->
+                  let resolution =
+                      Resolution.map (fun (x: ObservationalTimeSpan.ObservationalTimeSpan) -> x.Value) resolution
+
+                  let ts = TimeSeries.fromSeq DateMode.calendarDateMode startDate resolution data
+
+                  let index =
+                      TimeIndex.TimeIndex(startDate, resolution, TimeIndex.IndexMode.Exact, ts)
+
+                  let timeSteps = index.Values |> Seq.map fst
+
+                  Expect.all
+                      timeSteps
+                      (fun s -> abs s % 1.<``time index``> = 0.<``time index``>)
+                      "The time steps contained decimal places" ]
 
 
     [<Tests>]
@@ -223,36 +239,57 @@ module TemporalIndex =
             "Time index (old dates)"
             [
 
-            testPropertyWithConfig config "Does not allow monthly resolution for old dates" 
-            <| fun startDate months (data:float list) ->
-                    let mkTs () = TimeSeries.fromSeq DateMode.radiocarbonDateMode startDate (Resolution.Months months) data
-                    if months.Value < 12<month>
-                    then Expect.throws(fun _ -> mkTs () |> ignore) "Should throw when monthly timestep is zero - 12 months"
-                    else 
-                        Expect.throws(fun _ ->
-                            TimeIndex.TimeIndex(startDate, Resolution.Months months, TimeIndex.IndexMode.Exact, mkTs()) |> ignore
-                            )
-                            "Should not allow monthly resolution"
+              testPropertyWithConfig config "Does not allow monthly resolution for old dates"
+              <| fun startDate months (data: float list) ->
+                  let mkTs () =
+                      TimeSeries.fromSeq DateMode.radiocarbonDateMode startDate (Resolution.Months months) data
 
-            testProperty "Years elapsed correctly calculates (as whole numbers)"
-            <| fun (initialYear:NormalFloat) (yearDiff: NormalFloat) ->
-                let date1 = int initialYear.Get * 1<``BP (radiocarbon)``> |> DatingMethods.Radiocarbon
-                let date2 = DateMode.radiocarbonDateMode.AddYears date1 (int yearDiff.Get * 1<year>)
-                let diff = DateMode.radiocarbonDateMode.Difference date1 date2
-                Expect.equal (diff.YearFraction % 1.<year>) 0.<year> "The year difference was not a round number"
+                  if months.Value < 12<month> then
+                      Expect.throws
+                          (fun _ -> mkTs () |> ignore)
+                          "Should throw when monthly timestep is zero - 12 months"
+                  else
+                      Expect.throws
+                          (fun _ ->
+                              TimeIndex.TimeIndex(
+                                  startDate,
+                                  Resolution.Months months,
+                                  TimeIndex.IndexMode.Exact,
+                                  mkTs ()
+                              )
+                              |> ignore)
+                          "Should not allow monthly resolution"
 
-            testPropertyWithConfig config "Time series indexes as whole numbers when resolutions match"
-            <| fun startDate (data: float list) resolution ->
-                let runTest res =
-                    let ts = TimeSeries.fromSeq DateMode.radiocarbonDateMode startDate resolution data
-                    let index = TimeIndex.TimeIndex(startDate, resolution, TimeIndex.IndexMode.Exact, ts)
-                    let timeSteps = index.Values |> Seq.map fst
-                    Expect.all timeSteps (fun s -> abs s % 1.<``time index``> = 0.<``time index``>) "The time steps contained decimal places"
-                match resolution with
-                | Resolution.Months m when m.Value >= 12<month> -> runTest resolution
-                | Resolution.Days d when d.Value >= 365<day> -> runTest resolution
-                // | Resolution.CustomEpoch e when e > 0<``BP (radiocarbon)``> -> runTest resolution
-                | Resolution.Years _ -> runTest resolution
-                | _ ->
-                    Expect.throws (fun _ -> runTest resolution) "Did not throw when resolution was outside permitted range"
-            ]
+              testProperty "Years elapsed correctly calculates (as whole numbers)"
+              <| fun (initialYear: NormalFloat) (yearDiff: NormalFloat) ->
+                  let date1 =
+                      int initialYear.Get * 1<``BP (radiocarbon)``> |> DatingMethods.Radiocarbon
+
+                  let date2 = DateMode.radiocarbonDateMode.AddYears date1 (int yearDiff.Get * 1<year>)
+                  let diff = DateMode.radiocarbonDateMode.Difference date1 date2
+                  Expect.equal (diff.YearFraction % 1.<year>) 0.<year> "The year difference was not a round number"
+
+              testPropertyWithConfig config "Time series indexes as whole numbers when resolutions match"
+              <| fun startDate (data: float list) resolution ->
+                  let runTest res =
+                      let ts = TimeSeries.fromSeq DateMode.radiocarbonDateMode startDate resolution data
+
+                      let index =
+                          TimeIndex.TimeIndex(startDate, resolution, TimeIndex.IndexMode.Exact, ts)
+
+                      let timeSteps = index.Values |> Seq.map fst
+
+                      Expect.all
+                          timeSteps
+                          (fun s -> abs s % 1.<``time index``> = 0.<``time index``>)
+                          "The time steps contained decimal places"
+
+                  match resolution with
+                  | Resolution.Months m when m.Value >= 12<month> -> runTest resolution
+                  | Resolution.Days d when d.Value >= 365<day> -> runTest resolution
+                  // | Resolution.CustomEpoch e when e > 0<``BP (radiocarbon)``> -> runTest resolution
+                  | Resolution.Years _ -> runTest resolution
+                  | _ ->
+                      Expect.throws
+                          (fun _ -> runTest resolution)
+                          "Did not throw when resolution was outside permitted range" ]

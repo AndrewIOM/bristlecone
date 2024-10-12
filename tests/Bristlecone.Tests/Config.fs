@@ -69,7 +69,7 @@ type BristleconeTypesGen() =
         |> Arb.fromGen
 
     static member ObservationalTimeSpan =
-        Gen.choose (1, TimeSpan.TicksPerDay * int64 (365*200) |> int)
+        Gen.choose (1, TimeSpan.TicksPerDay * int64 (365 * 200) |> int)
         |> Gen.map (int64 >> TimeSpan.FromTicks >> Time.ObservationalTimeSpan.create >> Option.get)
         |> Arb.fromGen
 
