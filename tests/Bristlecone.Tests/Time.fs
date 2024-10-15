@@ -164,6 +164,14 @@ let oldDateTimeSeriesTests =
         "Time series (old dates)"
         [
 
+          testPropertyWithConfig config "Observation data from time-series matches input data sequence"
+          <| fun startDate (data: NormalFloat list) years ->
+              if data.Length >= 2 then
+                let data = data |> List.map(fun d -> d.Get)
+                let ts = TimeSeries.fromSeq DateMode.radiocarbonDateMode startDate (Resolution.FixedTemporalResolution.Years years) data
+                let obs = ts |> TimeSeries.toObservations
+                Expect.sequenceEqual (obs |> Seq.map fst) data "Data were different after being in time-series"
+
           testPropertyWithConfig config "BP dates are ordered oldest to youngest"
           <| fun (data: TimeSeries.Observation<float, int<``BP (radiocarbon)``>> list) ->
               let radiocarbonDates =
@@ -187,13 +195,13 @@ let oldDateTimeSeriesTests =
                 match resolution with
                 | Resolution.Months m when m.Value >= 12<month> -> test ()
                 | Resolution.Days d when d.Value >= 365<day> -> test ()
-                | Resolution.CustomEpoch e when e > 0<``BP (radiocarbon)``> -> test ()
                 | Resolution.Years _ -> test ()
                 | _ ->
                     Expect.throws (fun _ -> test () |> ignore) "Should have thrown with lower than annual resolution"
                 
 
           ]
+
 
 module TemporalIndex =
 

@@ -146,6 +146,7 @@ module DateTime =
         (d2.Month - d1.Month) + (d2.Year - d1.Year) * 12 |> float |> (*) 1.<month>
 
     let fractionalDifference d1 d2 =
+        let d1, d2 = if d1 < d2 then d1, d2 else d2, d1
         { YearFraction = totalYearsElapsed d1 d2
           MonthFraction = totalMonthsElapsed d1 d2
           DayFraction = (d2 - d1).TotalDays * 1.<day>
@@ -203,6 +204,14 @@ module DatingMethods =
     /// 365 days per year.
     let daysPerYearInOldDates = 365.<day / year>
 
+    /// Converts 'old years' (i.e. with 365 days per year) into
+    /// a temporal resolution.
+    let internal oldYearsToResolution fixedEpoch =
+        Resolution.FixedTemporalResolution.Years(
+            PositiveInt.create ((fixedEpoch |> Units.removeUnitFromInt) * 1<year>)
+            |> Option.get
+        )
+
     /// <summary>Represents a date made by radiocarbon measurement</summary>
     type Radiocarbon =
         | Radiocarbon of int<``BP (radiocarbon)``>
@@ -220,7 +229,7 @@ module DatingMethods =
         static member AddYears date (years: int<year>) =
             date
             |> Radiocarbon.Unwrap
-            |> (+) (years |> Units.removeUnitFromInt |> (*) 1<``BP (radiocarbon)``>)
+            |> fun date -> date - (years |> Units.removeUnitFromInt |> (*) 1<``BP (radiocarbon)``>)
             |> Radiocarbon
 
         static member TotalYearsElapsed d1 d2 =
@@ -230,6 +239,7 @@ module DatingMethods =
                 Radiocarbon.Unwrap d1 - Radiocarbon.Unwrap d2
 
         static member FractionalDifference d1 d2 =
+            let d1, d2 = if d1 < d2 then d1, d2 else d2, d1
             let yearFraction =
                 Radiocarbon.Unwrap d2 - Radiocarbon.Unwrap d1 |> float |> (*) 1.<year>
 
@@ -264,6 +274,7 @@ module DateMode =
           SortOldestFirst: 'T -> 'T -> int
           ZeroSpan: 'timespan
           TotalDays: 'timespan -> float<day>
+          SpanToResolution: 'timespan -> Resolution.FixedTemporalResolution<'timespan>
           Divide: 'timespan -> 'timespan -> float
           Minus: 'T -> 'T -> 'timespan }
 
@@ -283,6 +294,8 @@ module DateMode =
           Difference = DateTime.fractionalDifference
           ZeroSpan = TimeSpan.Zero
           TotalDays = fun ts -> ts.TotalDays * 1.<day>
+          SpanToResolution = fun epoch ->
+            epoch.Days |> (*) 1<day> |> PositiveInt.create |> Option.get |> Resolution.FixedTemporalResolution.Days
           Minus = fun d1 d2 -> d1 - d2
           Divide = fun ts1 ts2 -> float ts1.Ticks / float ts2.Ticks
           SortOldestFirst = fun d1 d2 -> if d1 < d2 then -1 else 1 }
@@ -298,9 +311,10 @@ module DateMode =
           SortOldestFirst = fun d1 d2 -> if d1 > d2 then -1 else 1
           ZeroSpan = 0<``BP (radiocarbon)``>
           TotalDays =
-            fun ts ->
-                (ts |> Units.removeUnitFromInt |> float |> LanguagePrimitives.FloatWithMeasure)
+            fun years ->
+                (years |> Units.removeUnitFromInt |> float |> LanguagePrimitives.FloatWithMeasure)
                 * daysPerYearInOldDates
+          SpanToResolution = fun epoch -> oldYearsToResolution epoch
           Divide = fun ts1 ts2 -> ts1 / ts2 |> float
           Minus = fun d1 d2 -> d1 - d2 }
 
@@ -388,7 +402,7 @@ module TimeSeries =
             sorted
             |> Seq.tail // The first time point is used as initial state in the scan
             |> Seq.scan
-                (fun (_, d1: 'date, _) (v2, d2: 'date) -> (v2, d2, Some(dateType.Minus d2 d1)))
+                (fun (_, d1: 'date, _) (v2, d2: 'date) -> (v2, d2, (dateType.Difference d2 d1).RealDifference |> Some))
                 (baseline |> fst, baseline |> snd, None)
             |> Seq.tail // The first time point is removed (it forms the baseline instead)
             |> Seq.map (fun (v, d: 'date, ts: 'timespan option) -> (v, ts.Value))
@@ -429,6 +443,7 @@ module TimeSeries =
         data
         |> Seq.tail // The first time point is used as initial state for the scan
         |> Seq.scan (fun (_, t) v -> (v, t |> TimePoint.increment resolution timeUnitMode)) (data |> Seq.head, t1)
+        // |> fun x -> printfn "intermediate %A" x; x
         |> fromObservations timeUnitMode
 
     /// <summary>Turn a time series into a sequence of observations</summary>
@@ -539,11 +554,9 @@ module TimeSeries =
                 failwith "Cannot have a resolution of zero"
 
             if (series.DateMode.TotalDays fixedEpoch) % 1.<day> = 0.<day> then
-                Resolution.Fixed
-                <| Resolution.FixedTemporalResolution.Days(
-                    PositiveInt.create (series.DateMode.TotalDays fixedEpoch |> Units.floatToInt)
-                    |> Option.get
-                )
+                fixedEpoch
+                |> series.DateMode.SpanToResolution
+                |> Resolution.Fixed
             else
                 Resolution.Fixed <| Resolution.FixedTemporalResolution.CustomEpoch fixedEpoch
         else // A variable time interval exists. This could be months, years, or some other unit.
