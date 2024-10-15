@@ -97,9 +97,9 @@ module Test =
           RealValue: float
           EstimatedValue: float }
 
-    and TestResult<'timeunit, 'timespan> =
+    and TestResult<'date, 'timeunit, 'timespan> =
         { Parameters: ParameterTestResult list
-          Series: Map<string, FitSeries<float, 'timeunit, 'timespan>>
+          Series: Map<string, FitSeries<'date, 'timeunit, 'timespan>>
           ErrorStructure: Map<string, seq<float>>
           RealLikelihood: float
           EstimatedLikelihood: float }

@@ -211,7 +211,7 @@ module TimeSeriesTests =
         |> Bristlecone.Language.Test.withStartValue "lynx" 1.0
         |> Bristlecone.Language.Test.withStartValue "hare" 1.0
 
-    let summarise modelName optimName (results: (Result<Bristlecone.Test.TestResult, string> * int) seq) =
+    let summarise modelName optimName (results: (Result<Bristlecone.Test.TestResult<'a, 'b, 'c>, string> * int) seq) =
         let successes =
             results
             |> Seq.toList
@@ -276,7 +276,7 @@ let optimFunctions =
       "random walk w/ tuning",
       MonteCarlo.randomWalk [ MonteCarlo.TuneMethod.CovarianceWithScale 0.25, 500, EndConditions.afterIteration 10000 ] ]
 
-let timeModels =
+let timeModels: (string * Bristlecone.ModelSystem.ModelSystem<float> * (Bristlecone.Test.TestSettings<float,obj,obj,obj> -> Bristlecone.Test.TestSettings<float,obj,obj,obj>)) list =
     [ "predator-prey (with gaussian noise)",
       TestFunctions.Timeseries.``predator-prey [with noise]``,
       Bristlecone.Test.addStartValues [ "lynx", 1.0; "hare", 1.0 ]

@@ -275,6 +275,7 @@ module DateMode =
           ZeroSpan: 'timespan
           TotalDays: 'timespan -> float<day>
           SpanToResolution: 'timespan -> Resolution.FixedTemporalResolution<'timespan>
+          ResolutionToSpan: Resolution.FixedTemporalResolution<'timespan> -> 'timespan
           Divide: 'timespan -> 'timespan -> float
           Minus: 'T -> 'T -> 'timespan }
 
@@ -296,6 +297,7 @@ module DateMode =
           TotalDays = fun ts -> ts.TotalDays * 1.<day>
           SpanToResolution = fun epoch ->
             epoch.Days |> (*) 1<day> |> PositiveInt.create |> Option.get |> Resolution.FixedTemporalResolution.Days
+          ResolutionToSpan = fun res -> failwith "not finished"
           Minus = fun d1 d2 -> d1 - d2
           Divide = fun ts1 ts2 -> float ts1.Ticks / float ts2.Ticks
           SortOldestFirst = fun d1 d2 -> if d1 < d2 then -1 else 1 }
@@ -315,6 +317,7 @@ module DateMode =
                 (years |> Units.removeUnitFromInt |> float |> LanguagePrimitives.FloatWithMeasure)
                 * daysPerYearInOldDates
           SpanToResolution = fun epoch -> oldYearsToResolution epoch
+          ResolutionToSpan = fun res -> failwith "not finished"
           Divide = fun ts1 ts2 -> ts1 / ts2 |> float
           Minus = fun d1 d2 -> d1 - d2 }
 
@@ -443,7 +446,6 @@ module TimeSeries =
         data
         |> Seq.tail // The first time point is used as initial state for the scan
         |> Seq.scan (fun (_, t) v -> (v, t |> TimePoint.increment resolution timeUnitMode)) (data |> Seq.head, t1)
-        // |> fun x -> printfn "intermediate %A" x; x
         |> fromObservations timeUnitMode
 
     /// <summary>Turn a time series into a sequence of observations</summary>

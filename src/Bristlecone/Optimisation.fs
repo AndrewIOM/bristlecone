@@ -1382,7 +1382,6 @@ module Amoeba =
 
             let rec search i trace atEnd (a: Amoeba) =
                 if not <| atEnd trace i then
-                    printfn "i %i, val %A" i (trace |> List.tryHead)
                     // writeOut <| OptimisationEvent { Iteration = i; Likelihood = trace; Theta = thetaAccepted }
                     search (i + 1) (a.Best :: trace) atEnd (update a f settings)
                 else
