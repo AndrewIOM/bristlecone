@@ -3,6 +3,7 @@ namespace Bristlecone
 open System.Runtime.CompilerServices
 
 [<assembly: InternalsVisibleTo("Bristlecone.Tests")>]
+[<assembly: InternalsVisibleTo("Bristlecone.Dendro")>]
 do ()
 
 module internal Units =

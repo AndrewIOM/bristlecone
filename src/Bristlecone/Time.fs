@@ -249,6 +249,43 @@ module DatingMethods =
               RealDifference = d2 - d1
               Ticks = 0.<ticks> }
 
+    type Annual =
+        | Annual of int<year>
+
+        static member Unwrap(Annual bp) = bp
+
+        member this.Value = Annual.Unwrap this
+
+        static member (-)(e1, e2) =
+            (e1 |> Annual.Unwrap) - (e2 |> Annual.Unwrap)
+
+        static member (+)(e1, e2) =
+            (e1 |> Annual.Unwrap) + e2 |> Annual
+
+        static member AddYears date (years: int<year>) =
+            date
+            |> Annual.Unwrap
+            |> fun date -> date - years
+            |> Annual
+
+        static member TotalYearsElapsed d1 d2 =
+            if d2 > d1 then
+                Annual.Unwrap d2 - Annual.Unwrap d1
+            else
+                Annual.Unwrap d1 - Annual.Unwrap d2
+
+        static member FractionalDifference d1 d2 =
+            let d1, d2 = if d1 < d2 then d1, d2 else d2, d1
+            let yearFraction =
+                Annual.Unwrap d2 - Annual.Unwrap d1 |> float |> (*) 1.<year>
+
+            { YearFraction = yearFraction
+              MonthFraction = convertYearsToMonths yearFraction
+              DayFraction = (DateTime(d2.Value |> Units.removeUnitFromInt,01,01) - DateTime(d1.Value |> Units.removeUnitFromInt,01,01)).TotalDays * 1.<day>
+              RealDifference = d2 - d1
+              Ticks = 0.<ticks> }
+
+
 
 module DateMode =
 
@@ -301,6 +338,25 @@ module DateMode =
           Minus = fun d1 d2 -> d1 - d2
           Divide = fun ts1 ts2 -> float ts1.Ticks / float ts2.Ticks
           SortOldestFirst = fun d1 d2 -> if d1 < d2 then -1 else 1 }
+
+    let annualDateMode: DateMode<Annual, int<year>, int<year>> =
+        { Resolution = Year
+          GetYear = fun d -> d |> Annual.Unwrap
+          AddYears = Annual.AddYears
+          AddMonths = fun d _ -> d
+          AddDays = fun d _ -> d
+          AddTime = fun d timeSpan -> d + timeSpan
+          Difference = fun d1 d2 -> Annual.FractionalDifference d1 d2
+          SortOldestFirst = fun d1 d2 -> if d1 < d2 then -1 else 1
+          ZeroSpan = 0<year>
+          TotalDays =
+            fun years ->
+                (years |> Units.removeUnitFromInt |> float |> LanguagePrimitives.FloatWithMeasure)
+                * daysPerYearInOldDates
+          SpanToResolution = fun epoch -> oldYearsToResolution epoch
+          ResolutionToSpan = fun res -> failwith "not finished"
+          Divide = fun ts1 ts2 -> ts1 / ts2 |> float
+          Minus = fun d1 d2 -> d1 - d2 }
 
     let radiocarbonDateMode: DateMode<Radiocarbon, int<``BP (radiocarbon)``>, int<``BP (radiocarbon)``>> =
         { Resolution = Year
@@ -947,10 +1003,68 @@ module TimeFrame =
 [<RequireQualifiedAccess>]
 module GrowthSeries =
 
-    [<Measure>]
-    type mm
-
     type GrowthSeries<[<Measure>] 'u, [<Measure>] 'time, 'date, 'timeunit, 'timespan> =
         | Cumulative of TimeSeries<float<'u>, 'date, 'timeunit, 'timespan>
         | Absolute of TimeSeries<float<'u / 'time>, 'date, 'timeunit, 'timespan>
         | Relative of TimeSeries<float<'u / 'u>, 'date, 'timeunit, 'timespan>
+
+    let internal dates growth =        
+        match growth with
+        | Absolute ts -> ts |> TimeSeries.dates
+        | Cumulative ts -> ts |> TimeSeries.dates
+        | Relative ts -> ts |> TimeSeries.dates
+
+    let bound d1 d2 growth =        
+        match growth with
+        | Absolute ts -> ts |> TimeSeries.bound d1 d2 |> Option.map Absolute
+        | Cumulative ts -> ts |>  TimeSeries.bound d1 d2 |> Option.map Cumulative
+        | Relative ts -> ts |>  TimeSeries.bound d1 d2 |> Option.map Relative
+
+    /// <summary>Filter a growth series to only contain observations at the specified dates.</summary>
+    let filter times growth =
+        let filter' ts =
+            times |> Seq.map (fun t -> ((ts |> TimeSeries.findExact t)))
+            |> TimeSeries.fromObservations ts.DateMode
+        match growth with
+        | Absolute ts -> filter' ts |> Absolute
+        | Cumulative ts -> filter' ts |> Cumulative
+        | Relative ts -> filter' ts |> Relative
+
+    /// <summary>Converts the given growth series into its
+    /// cumulative representation (i.e. added over time).</summary>
+    let cumulative (growth: GrowthSeries<'u,'time,'date,'timeunit,'timespan>)
+        : TimeSeries<float<'u>, 'date, 'timeunit, 'timespan> =
+        match growth with
+        | Absolute g ->
+            let time = g |> TimeSeries.toObservations |> Seq.map snd
+            let agr = g |> TimeSeries.toObservations |> Seq.map fst
+            let biomass = agr |> Seq.scan (+) 0.<_> |> Seq.tail |> Seq.toList
+            TimeSeries.fromObservations g.DateMode (Seq.zip biomass time)
+        | Relative _ -> failwith "Not implemented"
+        | Cumulative g -> g
+
+    /// <summary>Converts the given growth series into its
+    /// relative representation (i.e. current growth rate divided
+    /// by current cumulative size).</summary>
+    let relative (growth: GrowthSeries<'u,'v,'date,'timeunit,'timespan>)
+        : TimeSeries<float<'u / 'u>, 'date, 'timeunit, 'timespan> =
+        match growth with
+        | Absolute g ->
+            let time = g |> TimeSeries.toObservations |> Seq.map snd
+            let agr = g |> TimeSeries.toObservations |> Seq.map fst
+            let biomass = agr |> Seq.scan (+) 0.<_> |> Seq.tail |> Seq.toList
+            let rgr = agr |> Seq.mapi (fun i a -> a / biomass.[i])
+            TimeSeries.fromObservations g.DateMode (Seq.zip rgr time)
+        | Relative g -> g
+        | Cumulative g ->
+            // Calculate agr and divide agr by biomass
+            failwith "Not implemented"
+
+    let asCumulative plant = plant |> cumulative |> Cumulative
+    let asRelative plant = plant |> relative |> Relative
+
+    let internal stripUnits growth =
+        match growth with
+        | Absolute ts -> ts |> TimeSeries.map(fun (t,v) -> Units.removeUnitFromFloat t)
+        | Cumulative ts -> ts |> TimeSeries.map(fun (t,v) -> Units.removeUnitFromFloat t)
+        | Relative ts -> ts |> TimeSeries.map(fun (t,v) -> Units.removeUnitFromFloat t)
