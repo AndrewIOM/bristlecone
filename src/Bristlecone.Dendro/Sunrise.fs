@@ -1,6 +1,10 @@
 namespace Bristlecone.Dendro
 
 open System
+open Bristlecone.Units
+
+[<Measure>] type latitude
+[<Measure>] type longitude
 
 /// <summary>Provides functions for converting to and from dates in the Julian calendar</summary>
 module JulianDate =
@@ -111,21 +115,21 @@ module Sunrise =
     let declinationOfSun oc al =
         degrees (asin (sin (radians (oc)) * sin (radians (al))))
 
-    let cosHourAngle declinationOfSun northLatitude =
+    let cosHourAngle declinationOfSun (northLatitude: float<latitude>) =
         (sin (radians (-0.83))
-         - (sin (radians (northLatitude)) * sin (radians (declinationOfSun))))
-        / (cos (radians (northLatitude)) * cos (radians (declinationOfSun)))
+         - (sin (radians (removeUnitFromFloat northLatitude)) * sin (radians (declinationOfSun))))
+        / (cos (radians (removeUnitFromFloat northLatitude)) * cos (radians (declinationOfSun)))
 
-    let hourAngleSunrise lat d =
+    let hourAngleSunrise (lat: float<latitude>) d =
         degrees (
             acos (
-                cos (radians (90.833)) / (cos (radians (lat)) * cos (radians (d)))
-                - tan (radians (lat)) * tan (radians (d))
+                cos (radians (90.833)) / (cos (radians (Bristlecone.Units.removeUnitFromFloat lat)) * cos (radians (d)))
+                - tan (radians (Bristlecone.Units.removeUnitFromFloat lat)) * tan (radians (d))
             )
         )
 
-    let solarNoon lng eot tzoff =
-        (720. - 4. * lng - eot + tzoff * 60.) / (float JulianDate.minutesInDay)
+    let solarNoon (lng: float<longitude>) eot tzoff =
+        (720. - 4. * removeUnitFromFloat lng - eot + tzoff * 60.) / (float JulianDate.minutesInDay)
 
     let sunrise sn ha =
         sn - ha * 4. / (float JulianDate.minutesInDay)
@@ -133,7 +137,7 @@ module Sunrise =
     let sunset sn ha =
         sn + ha * 4. / (float JulianDate.minutesInDay)
 
-    let calculate year month day latitude longitude timeZoneId =
+    let calculate year month day (latitude: float<latitude>) (longitude: float<longitude>) timeZoneId =
 
         let lat = latitude
         let lng = longitude

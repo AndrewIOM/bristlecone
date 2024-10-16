@@ -8,6 +8,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/Bristlecone/Bristlecone.fsproj" />
+    <ProjectReference Include="../../src/Bristlecone.Dendro/Bristlecone.Dendro.fsproj" />
     <Compile Include="Config.fs" />
     <Compile Include="Time.fs" />
     <Compile Include="Parameter.fs" />
@@ -17,6 +18,7 @@
     <Compile Include="Test.fs" />
     <Compile Include="Bristlecone.fs" />
     <Compile Include="Language.fs" />
+    <Compile Include="Dendro.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <Import Project="..\..\.paket\Paket.Restore.targets" />

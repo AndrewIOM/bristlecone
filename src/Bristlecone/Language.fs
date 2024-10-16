@@ -236,7 +236,7 @@ module Language =
         type ModelBuilder<'data> = private ModelBuilder of Map<ShortCode.ShortCode, ModelFragment<'data>>
 
         let create: ModelBuilder<float> =
-            Map.empty<ShortCode.ShortCode, ModelFragment<'data>> |> ModelBuilder
+            Map.empty<ShortCode.ShortCode, ModelFragment<float>> |> ModelBuilder
 
         let private unwrap (ModelBuilder m) = m
 
@@ -250,7 +250,7 @@ module Language =
                 | Some c -> map |> Map.add c comp |> ModelBuilder
                 | None -> failwithf "The text '%s' cannot be used to make a short code identifier." name
 
-        let compile builder : ModelSystem.ModelSystem<'data> =
+        let compile builder : ModelSystem.ModelSystem<float> =
             // Ensure only single likelihood function
             // Find all parameters
 
@@ -360,7 +360,7 @@ module Language =
     module Test =
 
         let defaultSettings =
-            Bristlecone.Test.TestSettings<float, 'date, 'dateunit, 'timespan>.Default
+            Bristlecone.Test.TestSettings<_,_,_,_>.Default
 
         /// If the start value has already been set, it will be overwritten with the new value.
         let withStartValue code value (settings: Bristlecone.Test.TestSettings<float, _, _, _>) =
@@ -505,7 +505,7 @@ module Language =
         /// <param name="builder">A builder started with `createFromComponent`</param>
         /// <returns>A list of compiled hypotheses for this model system and specified components.</returns>
         let compile
-            (builder: Writer<ModelBuilder.ModelBuilder<'data>, ComponentName * CodedMap<Parameter.Parameter>> list)
+            (builder: Writer<ModelBuilder.ModelBuilder<float>, ComponentName * CodedMap<Parameter.Parameter>> list)
             =
             if builder |> List.isEmpty then
                 failwith "No hypotheses specified"

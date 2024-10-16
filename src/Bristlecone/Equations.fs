@@ -22,7 +22,7 @@ module Likelihood =
 
     /// Residual sum of squares. Provides a simple metric of distance between
     /// observed data and model predictions.
-    let sumOfSquares keys : LikelihoodFn<'data> =
+    let sumOfSquares keys : LikelihoodFn<float> =
         fun _ (data: CodedMap<PredictedSeries>) ->
             keys
             |> List.sumBy (fun k ->
@@ -39,7 +39,7 @@ module Likelihood =
     /// Log likelihood function for single equation system, assuming Gaussian error for x.
     /// Requires a parameter 'σ[x]' to be included in any `ModelSystem` that uses it.
     /// </summary>
-    let gaussian key : LikelihoodFn<'data> =
+    let gaussian key : LikelihoodFn<float> =
         fun paramAccessor data ->
             let x = data |> getData key
             let sigmax = paramAccessor.Get "σ[x]"
@@ -63,7 +63,7 @@ module Likelihood =
     /// Log likelihood function for dual simultaneous system, assuming Gaussian error for both x and y.
     /// Requires parameters 'σ[x]', 'σ[y]' and 'ρ' to be included in any `ModelSystem` that uses it.
     /// </summary>
-    let bivariateGaussian key1 key2 : LikelihoodFn<'data> =
+    let bivariateGaussian key1 key2 : LikelihoodFn<float> =
         fun paramAccessor data ->
             let x = data |> getData key1
             let y = data |> getData key2
