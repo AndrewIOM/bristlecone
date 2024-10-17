@@ -129,7 +129,7 @@ module Allometric =
     module Allometrics =
 
         open Götmark2016_ShrubModel
-        open Bristlecone.Dendro
+        open Bristlecone.Dendro.Units
 
         let private removeUnit (x: float<_>) = float x
 
@@ -137,7 +137,7 @@ module Allometric =
 
         let massToVolume woodDensity mass = mass / woodDensity
 
-        let shrubBiomass b a rtip p lmin k5 k6 n woodDensity (radius: float<mm>) =
+        let shrubBiomass b a rtip p lmin k5 k6 n woodDensity (radius: float<millimetre>) =
             radius
             |> removeUnit
             |> NiklasAndSpatz_Allometry.stemLength k5 k6
@@ -163,10 +163,10 @@ module Allometric =
 
     module Proxies =
 
-        open Bristlecone.Dendro
+        open Bristlecone.Dendro.Units
 
         /// Radius in millimetres
-        let toBiomassMM (radius: float<mm>) =
+        let toBiomassMM (radius: float<millimetre>) =
             radius / 10.
             |> Allometrics.shrubBiomass
                 Constants.b
@@ -492,7 +492,7 @@ let testSettings =
           Test.GenerationRules.alwaysLessThan 20. "N"
           Test.GenerationRules.alwaysMoreThan 0. "bs"
           Test.GenerationRules.monotonicallyIncreasing "x" ] // There must be at least 10mm of wood production
-    |> Test.addStartValues [ "x", 5.0; "bs", 5.0<Dendro.mm> |> Allometric.Proxies.toBiomassMM; "N", 3.64 ]
+    |> Test.addStartValues [ "x", 5.0; "bs", 5.0<Dendro.Units.millimetre> |> Allometric.Proxies.toBiomassMM; "N", 3.64 ]
     |> Test.withTimeSeriesLength 30
     |> Test.endWhen (Optimisation.EndConditions.afterIteration 1000)
 
@@ -515,12 +515,12 @@ open Bristlecone.Dendro
 
 let dataset =
     let plants =
-        Data.PlantIndividual.loadRingWidths (__SOURCE_DIRECTORY__ + "/../data/yamal-rw.csv")
+        Data.PlantIndividual.Csv.loadRingWidths (__SOURCE_DIRECTORY__ + "/../data/yamal-rw.csv")
 
     let isotopeData =
-        Data.PlantIndividual.loadLocalEnvironmentVariable (__SOURCE_DIRECTORY__ + "/../data/yuribei-d15N-imputed.csv")
+        Data.PlantIndividual.Csv.loadPlantSpecificEnvironments (__SOURCE_DIRECTORY__ + "/../data/yuribei-d15N-imputed.csv")
 
-    plants |> PlantIndividual.zipEnvMany "N" isotopeData
+    plants |> PlantIndividual.zipEnvironments "N" isotopeData
 
 (**
 ### Model-fitting to real data
@@ -561,7 +561,7 @@ time-series but not the other. Because of this, we use a custom start
 point for each shrub individual.
 *)
 
-let startValues (startDate: System.DateTime) (plant: PlantIndividual.PlantIndividual) =
+let startValues (startDate: System.DateTime) (plant: PlantIndividual.PlantIndividual<_,_,_>) =
     let removeUnit (x: float<_>) = float x
 
     let initialRadius =
@@ -602,13 +602,13 @@ module Config =
 
 
 // Function to scaffold work packages
-let workPackages shrubs (hypotheses: Hypotheses.Hypothesis list) engine saveDirectory =
+let workPackages shrubs (hypotheses: Hypotheses.Hypothesis<float> list) engine saveDirectory =
     seq {
         for s in shrubs do
 
             // 1. Arrange the subject and settings
             let shrub = s |> PlantIndividual.toCumulativeGrowth
-            let common = shrub |> PlantIndividual.keepCommonYears
+            let common = shrub |> PlantIndividual.commonTimeline
             let startDate = (common.Environment.[(code "N").Value]).StartDate |> snd
             let startConditions = startValues startDate shrub
             let e = engine |> Bristlecone.withConditioning (Conditioning.Custom startConditions)
@@ -620,7 +620,7 @@ let workPackages shrubs (hypotheses: Hypotheses.Hypothesis list) engine saveDire
                         async {
                             // A. Compute result
                             let result =
-                                Bristlecone.tryFit e Config.endWhen (Bristlecone.fromDendro common) h.Model
+                                Bristlecone.tryFit e Config.endWhen (PlantIndividual.toTimeSeries common) h.Model
                             // B. Save to file
                             match result with
                             | Ok r ->
@@ -660,7 +660,7 @@ let saveDiagnostics () =
 
     // 1. Get all results sliced by plant and hypothesis
     let results =
-        let get (subject: PlantIndividual.PlantIndividual) (hypothesis: Hypotheses.Hypothesis) =
+        let get (subject: PlantIndividual.PlantIndividual<_,_,_>) (hypothesis: Hypotheses.Hypothesis<float>) =
             Bristlecone.Data.EstimationResult.loadAll
                 Config.resultsDirectory
                 subject.Identifier.Value
@@ -673,8 +673,8 @@ let saveDiagnostics () =
     results
     |> Diagnostics.Convergence.gelmanRubinAll
         10000
-        (fun (s: PlantIndividual.PlantIndividual) -> s.Identifier.Value)
-        (fun (h: Hypotheses.Hypothesis) -> h.ReferenceCode)
+        (fun (s: PlantIndividual.PlantIndividual<_,_,_>) -> s.Identifier.Value)
+        (fun (h: Hypotheses.Hypothesis<float>) -> h.ReferenceCode)
     |> Data.Convergence.save Config.resultsDirectory
 
     // 3. Save Akaike weights to file
@@ -701,10 +701,10 @@ let saveDiagnostics () =
         |> Seq.map (fun (s, h, mle) ->
 
             // 0. Convert x into biomass
-            let preTransform (data: CodedMap<TimeSeries<float>>) =
+            let preTransform data =
                 data
                 |> Map.toList
-                |> List.collect (fun (k, v) ->
+                |> List.collect (fun (k: ShortCode.ShortCode, v) ->
                     if k.Value = "x" then
                         [ (k, v)
                           ((code "bs").Value,
@@ -715,7 +715,7 @@ let saveDiagnostics () =
 
             // 1. Arrange the subject and settings (same as in model-fitting)
             let shrub = s |> PlantIndividual.toCumulativeGrowth
-            let common = shrub |> PlantIndividual.keepCommonYears
+            let common = shrub |> PlantIndividual.commonTimeline
             let startDate = (common.Environment.[(code "N").Value]).StartDate |> snd
             let startConditions = startValues startDate shrub
 
@@ -724,7 +724,7 @@ let saveDiagnostics () =
                 |> Bristlecone.withConditioning (Bristlecone.Conditioning.Custom startConditions)
 
             let result =
-                Bristlecone.oneStepAhead e h.Model preTransform (Bristlecone.fromDendro common) (mle |> snd |> snd)
+                Bristlecone.oneStepAhead e h.Model preTransform (PlantIndividual.toTimeSeries common) (mle |> snd |> snd)
 
             // Save each n-step ahead result to a csv file
             Bristlecone.Data.NStepAhead.save
