@@ -386,18 +386,17 @@ module Bristlecone =
         endCondition
         bootstrapCount
         model
-        (series: Map<ShortCode.ShortCode,TimeSeries.TimeSeries<float,'date,'timeunit,'timespan>>)
+        (series: Map<ShortCode.ShortCode, TimeSeries.TimeSeries<float, 'date, 'timeunit, 'timespan>>)
         =
         let rec bootstrap s numberOfTimes solutions =
             if (numberOfTimes > 0) then
-                let resolution =
-                    series 
-                    |> Seq.head
-                    |> fun s -> s.Value |> TimeSeries.resolution
+                let resolution = series |> Seq.head |> (fun s -> s.Value |> TimeSeries.resolution)
+
                 let stepping =
                     match resolution with
                     | Resolution.Variable -> failwith "Cannot boostrap variable resolution data"
                     | Resolution.Fixed f -> (series |> Seq.head).Value.DateMode.ResolutionToSpan f
+
                 let subset = TimeSeries.Bootstrap.removeSingle engine.Random stepping s
                 let result = fit engine endCondition subset model
 

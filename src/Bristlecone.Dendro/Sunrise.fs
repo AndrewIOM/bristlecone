@@ -3,8 +3,11 @@ namespace Bristlecone.Dendro
 open System
 open Bristlecone.Units
 
-[<Measure>] type latitude
-[<Measure>] type longitude
+[<Measure>]
+type latitude
+
+[<Measure>]
+type longitude
 
 /// <summary>Provides functions for converting to and from dates in the Julian calendar</summary>
 module JulianDate =
@@ -117,19 +120,23 @@ module Sunrise =
 
     let cosHourAngle declinationOfSun (northLatitude: float<latitude>) =
         (sin (radians (-0.83))
-         - (sin (radians (removeUnitFromFloat northLatitude)) * sin (radians (declinationOfSun))))
-        / (cos (radians (removeUnitFromFloat northLatitude)) * cos (radians (declinationOfSun)))
+         - (sin (radians (removeUnitFromFloat northLatitude))
+            * sin (radians (declinationOfSun))))
+        / (cos (radians (removeUnitFromFloat northLatitude))
+           * cos (radians (declinationOfSun)))
 
     let hourAngleSunrise (lat: float<latitude>) d =
         degrees (
             acos (
-                cos (radians (90.833)) / (cos (radians (Bristlecone.Units.removeUnitFromFloat lat)) * cos (radians (d)))
+                cos (radians (90.833))
+                / (cos (radians (Bristlecone.Units.removeUnitFromFloat lat)) * cos (radians (d)))
                 - tan (radians (Bristlecone.Units.removeUnitFromFloat lat)) * tan (radians (d))
             )
         )
 
     let solarNoon (lng: float<longitude>) eot tzoff =
-        (720. - 4. * removeUnitFromFloat lng - eot + tzoff * 60.) / (float JulianDate.minutesInDay)
+        (720. - 4. * removeUnitFromFloat lng - eot + tzoff * 60.)
+        / (float JulianDate.minutesInDay)
 
     let sunrise sn ha =
         sn - ha * 4. / (float JulianDate.minutesInDay)

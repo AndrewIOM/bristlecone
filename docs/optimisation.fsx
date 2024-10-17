@@ -43,8 +43,7 @@ let myCustomOptimiser: EstimationEngine.Optimiser<float> =
     EstimationEngine.InDetachedSpace
     <| fun writeOut n domain f -> invalidOp "Doesn't actually do anything!"
 
-let engine =
-    Bristlecone.mkContinuous |> Bristlecone.withCustomOptimisation myCustomOptimiser
+Bristlecone.mkContinuous |> Bristlecone.withCustomOptimisation myCustomOptimiser
 
 (**
 ## Included optimisation methods

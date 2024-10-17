@@ -359,8 +359,7 @@ module Language =
     /// Terms for designing tests for model systems.
     module Test =
 
-        let defaultSettings =
-            Bristlecone.Test.TestSettings<_,_,_,_>.Default
+        let defaultSettings = Bristlecone.Test.TestSettings<_, _, _, _>.Default
 
         /// If the start value has already been set, it will be overwritten with the new value.
         let withStartValue code value (settings: Bristlecone.Test.TestSettings<float, _, _, _>) =

@@ -150,7 +150,7 @@ module Graphing =
 
     open Plotly.NET
 
-    let pairedFits (series: Map<string, ModelSystem.FitSeries>) =
+    let pairedFits (series: Map<string, ModelSystem.FitSeries<_,_,_>>) =
         match testResult with
         | Ok r ->
             series
@@ -177,17 +177,17 @@ module Graphing =
                 x
         | Error e -> sprintf "Cannot display data, as model fit did not run successfully (%s)" e
 
-    let pairedFitsForTestResult (testResult: Result<Bristlecone.Test.TestResult, string>) =
+    let pairedFitsForTestResult (testResult: Result<Bristlecone.Test.TestResult<_,_,_>, string>) =
         match testResult with
         | Ok r -> pairedFits r.Series
         | Error e -> sprintf "Cannot display data, as model fit did not run successfully (%s)" e
 
-    let pairedFitsForResult (testResult: Result<Bristlecone.ModelSystem.EstimationResult, string>) =
+    let pairedFitsForResult (testResult: Result<Bristlecone.ModelSystem.EstimationResult<_,_,_>, string>) =
         match testResult with
         | Ok r -> pairedFits (r.Series |> Seq.map (fun kv -> kv.Key.Value, kv.Value) |> Map.ofSeq)
         | Error e -> sprintf "Cannot display data, as model fit did not run successfully (%s)" e
 
-    let parameterTrace (result: Result<ModelSystem.EstimationResult, 'b>) =
+    let parameterTrace (result: Result<ModelSystem.EstimationResult<_,_,_>, 'b>) =
         match result with
         | Ok r ->
             r.Trace
@@ -223,8 +223,8 @@ type PopulationData = FSharp.Data.CsvProvider<"data/lynx-hare.csv", ResolutionFo
 let data =
     let csv = PopulationData.Load(__SOURCE_DIRECTORY__ + "/data/lynx-hare.csv")
 
-    [ (code "hare").Value, Time.TimeSeries.fromObservations (csv.Rows |> Seq.map (fun r -> float r.Hare, r.Year))
-      (code "lynx").Value, Time.TimeSeries.fromObservations (csv.Rows |> Seq.map (fun r -> float r.Lynx, r.Year)) ]
+    [ (code "hare").Value, Time.TimeSeries.fromNeoObservations (csv.Rows |> Seq.map (fun r -> float r.Hare, r.Year))
+      (code "lynx").Value, Time.TimeSeries.fromNeoObservations (csv.Rows |> Seq.map (fun r -> float r.Lynx, r.Year)) ]
     |> Map.ofList
 
 (*** include-value: data ***)

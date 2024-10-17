@@ -21,12 +21,6 @@ module Bristlecone =
     /// <param name="preTransform"></param>
     /// <param name="estimate"></param>
     /// <returns></returns>
-    let oneStepAheadDendro
-        engine
-        system
-        plant
-        preTransform
-        estimate
-        =
+    let oneStepAheadDendro engine system plant preTransform estimate =
         let predictors = PlantIndividual.toTimeSeries plant
         Bristlecone.oneStepAhead engine system preTransform predictors estimate

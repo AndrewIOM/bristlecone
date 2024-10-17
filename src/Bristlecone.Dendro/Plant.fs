@@ -10,10 +10,10 @@ module Units =
     [<Measure>]
     type millimetre
 
-    let mmPerMetre : float<millimetre/metre> = 1000.0<millimetre/metre>
+    let mmPerMetre: float<millimetre / metre> = 1000.0<millimetre / metre>
 
 
-// Environmental space contains 
+// Environmental space contains
 
 [<RequireQualifiedAccess>]
 module PlantIndividual =
@@ -24,9 +24,9 @@ module PlantIndividual =
 
         /// Represents a measurement of plant growth.
         type PlantGrowthMeasure<'date, 'timeunit, 'timespan> =
-            | RingWidth of GrowthSeries.GrowthSeries<millimetre,year,'date,'timeunit,'timespan>
-            | BasalArea of GrowthSeries.GrowthSeries<millimetre^2,year,'date,'timeunit,'timespan>
-            | StemVolume of GrowthSeries.GrowthSeries<millimetre^3,year,'date,'timeunit,'timespan>
+            | RingWidth of GrowthSeries.GrowthSeries<millimetre, year, 'date, 'timeunit, 'timespan>
+            | BasalArea of GrowthSeries.GrowthSeries<millimetre^2, year, 'date, 'timeunit, 'timespan>
+            | StemVolume of GrowthSeries.GrowthSeries<millimetre^3, year, 'date, 'timeunit, 'timespan>
 
         /// Get dates in the growth series
         let internal dates growth =
@@ -80,14 +80,24 @@ module PlantIndividual =
         match plant with
         | PlantGrowth.RingWidth rw ->
             match rw with
-            | GrowthSeries.Absolute rws -> rws |> TimeSeries.map (fun (x, t) -> removeUnitFromFloat x) |> GrowthSeries.Absolute
-            | GrowthSeries.Cumulative m -> m |> TimeSeries.map (fun (x, t) -> removeUnitFromFloat x) |> GrowthSeries.Cumulative
-            | GrowthSeries.Relative rws -> rws |> TimeSeries.map (fun (x, t) -> removeUnitFromFloat x) |> GrowthSeries.Relative
+            | GrowthSeries.Absolute rws ->
+                rws
+                |> TimeSeries.map (fun (x, t) -> removeUnitFromFloat x)
+                |> GrowthSeries.Absolute
+            | GrowthSeries.Cumulative m ->
+                m
+                |> TimeSeries.map (fun (x, t) -> removeUnitFromFloat x)
+                |> GrowthSeries.Cumulative
+            | GrowthSeries.Relative rws ->
+                rws
+                |> TimeSeries.map (fun (x, t) -> removeUnitFromFloat x)
+                |> GrowthSeries.Relative
         | _ -> invalidOp "Not implemented"
 
     let bound plant =
         let growthDates = plant.Growth |> PlantGrowth.dates
         let envSeries = plant.Environment |> Map.toList |> List.map snd
+
         let startDates, endDates =
             envSeries
             |> List.map (fun s -> (s.StartDate |> snd, TimeSeries.endDate s))
@@ -103,19 +113,16 @@ module PlantIndividual =
                 |> Map.toList
                 |> List.map (fun (x, y) -> x, y |> TimeSeries.bound startDate endDate |> Option.get)
                 |> Map.ofList
-            Growth =
-                plant.Growth
-                |> PlantGrowth.bound startDate endDate
-                |> Option.get
-        }
+            Growth = plant.Growth |> PlantGrowth.bound startDate endDate |> Option.get }
 
     /// <summary>Where a plant has associated environmental data, only keep observations
     /// where growth and environment time-series are present.</summary>
     let commonTimeline plant =
         let growthDates = plant.Growth |> PlantGrowth.dates |> Seq.toList
+
         let commonDates =
-            plant.Environment 
-            |> Map.toList 
+            plant.Environment
+            |> Map.toList
             |> List.map snd
             |> List.collect (TimeSeries.dates >> Seq.toList)
             |> List.append growthDates

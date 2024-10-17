@@ -21,14 +21,23 @@ type ``cal yr BP`` // calibrated calendar years before present
 
 
 
+
+
+
 [<Measure>]
 type ``BP (radiocarbon)`` // uncalibrated years before present
 
 
 
 
+
+
+
 [<Measure>]
 type CE // common era
+
+
+
 
 
 
@@ -147,6 +156,7 @@ module DateTime =
 
     let fractionalDifference d1 d2 =
         let d1, d2 = if d1 < d2 then d1, d2 else d2, d1
+
         { YearFraction = totalYearsElapsed d1 d2
           MonthFraction = totalMonthsElapsed d1 d2
           DayFraction = (d2 - d1).TotalDays * 1.<day>
@@ -240,6 +250,7 @@ module DatingMethods =
 
         static member FractionalDifference d1 d2 =
             let d1, d2 = if d1 < d2 then d1, d2 else d2, d1
+
             let yearFraction =
                 Radiocarbon.Unwrap d2 - Radiocarbon.Unwrap d1 |> float |> (*) 1.<year>
 
@@ -259,14 +270,10 @@ module DatingMethods =
         static member (-)(e1, e2) =
             (e1 |> Annual.Unwrap) - (e2 |> Annual.Unwrap)
 
-        static member (+)(e1, e2) =
-            (e1 |> Annual.Unwrap) + e2 |> Annual
+        static member (+)(e1, e2) = (e1 |> Annual.Unwrap) + e2 |> Annual
 
         static member AddYears date (years: int<year>) =
-            date
-            |> Annual.Unwrap
-            |> fun date -> date - years
-            |> Annual
+            date |> Annual.Unwrap |> (fun date -> date - years) |> Annual
 
         static member TotalYearsElapsed d1 d2 =
             if d2 > d1 then
@@ -276,12 +283,15 @@ module DatingMethods =
 
         static member FractionalDifference d1 d2 =
             let d1, d2 = if d1 < d2 then d1, d2 else d2, d1
-            let yearFraction =
-                Annual.Unwrap d2 - Annual.Unwrap d1 |> float |> (*) 1.<year>
+            let yearFraction = Annual.Unwrap d2 - Annual.Unwrap d1 |> float |> (*) 1.<year>
 
             { YearFraction = yearFraction
               MonthFraction = convertYearsToMonths yearFraction
-              DayFraction = (DateTime(d2.Value |> Units.removeUnitFromInt,01,01) - DateTime(d1.Value |> Units.removeUnitFromInt,01,01)).TotalDays * 1.<day>
+              DayFraction =
+                (DateTime(d2.Value |> Units.removeUnitFromInt, 01, 01)
+                 - DateTime(d1.Value |> Units.removeUnitFromInt, 01, 01))
+                    .TotalDays
+                * 1.<day>
               RealDifference = d2 - d1
               Ticks = 0.<ticks> }
 
@@ -332,8 +342,13 @@ module DateMode =
           Difference = DateTime.fractionalDifference
           ZeroSpan = TimeSpan.Zero
           TotalDays = fun ts -> ts.TotalDays * 1.<day>
-          SpanToResolution = fun epoch ->
-            epoch.Days |> (*) 1<day> |> PositiveInt.create |> Option.get |> Resolution.FixedTemporalResolution.Days
+          SpanToResolution =
+            fun epoch ->
+                epoch.Days
+                |> (*) 1<day>
+                |> PositiveInt.create
+                |> Option.get
+                |> Resolution.FixedTemporalResolution.Days
           ResolutionToSpan = fun res -> failwith "not finished"
           Minus = fun d1 d2 -> d1 - d2
           Divide = fun ts1 ts2 -> float ts1.Ticks / float ts2.Ticks
@@ -612,9 +627,7 @@ module TimeSeries =
                 failwith "Cannot have a resolution of zero"
 
             if (series.DateMode.TotalDays fixedEpoch) % 1.<day> = 0.<day> then
-                fixedEpoch
-                |> series.DateMode.SpanToResolution
-                |> Resolution.Fixed
+                fixedEpoch |> series.DateMode.SpanToResolution |> Resolution.Fixed
             else
                 Resolution.Fixed <| Resolution.FixedTemporalResolution.CustomEpoch fixedEpoch
         else // A variable time interval exists. This could be months, years, or some other unit.
@@ -1008,23 +1021,25 @@ module GrowthSeries =
         | Absolute of TimeSeries<float<'u / 'time>, 'date, 'timeunit, 'timespan>
         | Relative of TimeSeries<float<'u / 'u>, 'date, 'timeunit, 'timespan>
 
-    let internal dates growth =        
+    let internal dates growth =
         match growth with
         | Absolute ts -> ts |> TimeSeries.dates
         | Cumulative ts -> ts |> TimeSeries.dates
         | Relative ts -> ts |> TimeSeries.dates
 
-    let bound d1 d2 growth =        
+    let bound d1 d2 growth =
         match growth with
         | Absolute ts -> ts |> TimeSeries.bound d1 d2 |> Option.map Absolute
-        | Cumulative ts -> ts |>  TimeSeries.bound d1 d2 |> Option.map Cumulative
-        | Relative ts -> ts |>  TimeSeries.bound d1 d2 |> Option.map Relative
+        | Cumulative ts -> ts |> TimeSeries.bound d1 d2 |> Option.map Cumulative
+        | Relative ts -> ts |> TimeSeries.bound d1 d2 |> Option.map Relative
 
     /// <summary>Filter a growth series to only contain observations at the specified dates.</summary>
     let filter times growth =
         let filter' ts =
-            times |> Seq.map (fun t -> ((ts |> TimeSeries.findExact t)))
+            times
+            |> Seq.map (fun t -> ((ts |> TimeSeries.findExact t)))
             |> TimeSeries.fromObservations ts.DateMode
+
         match growth with
         | Absolute ts -> filter' ts |> Absolute
         | Cumulative ts -> filter' ts |> Cumulative
@@ -1032,7 +1047,8 @@ module GrowthSeries =
 
     /// <summary>Converts the given growth series into its
     /// cumulative representation (i.e. added over time).</summary>
-    let cumulative (growth: GrowthSeries<'u,'time,'date,'timeunit,'timespan>)
+    let cumulative
+        (growth: GrowthSeries<'u, 'time, 'date, 'timeunit, 'timespan>)
         : TimeSeries<float<'u>, 'date, 'timeunit, 'timespan> =
         match growth with
         | Absolute g ->
@@ -1046,7 +1062,8 @@ module GrowthSeries =
     /// <summary>Converts the given growth series into its
     /// relative representation (i.e. current growth rate divided
     /// by current cumulative size).</summary>
-    let relative (growth: GrowthSeries<'u,'v,'date,'timeunit,'timespan>)
+    let relative
+        (growth: GrowthSeries<'u, 'v, 'date, 'timeunit, 'timespan>)
         : TimeSeries<float<'u / 'u>, 'date, 'timeunit, 'timespan> =
         match growth with
         | Absolute g ->
@@ -1065,6 +1082,6 @@ module GrowthSeries =
 
     let internal stripUnits growth =
         match growth with
-        | Absolute ts -> ts |> TimeSeries.map(fun (t,v) -> Units.removeUnitFromFloat t)
-        | Cumulative ts -> ts |> TimeSeries.map(fun (t,v) -> Units.removeUnitFromFloat t)
-        | Relative ts -> ts |> TimeSeries.map(fun (t,v) -> Units.removeUnitFromFloat t)
+        | Absolute ts -> ts |> TimeSeries.map (fun (t, v) -> Units.removeUnitFromFloat t)
+        | Cumulative ts -> ts |> TimeSeries.map (fun (t, v) -> Units.removeUnitFromFloat t)
+        | Relative ts -> ts |> TimeSeries.map (fun (t, v) -> Units.removeUnitFromFloat t)

@@ -167,10 +167,17 @@ let oldDateTimeSeriesTests =
           testPropertyWithConfig config "Observation data from time-series matches input data sequence"
           <| fun startDate (data: NormalFloat list) years ->
               if data.Length >= 2 then
-                let data = data |> List.map(fun d -> d.Get)
-                let ts = TimeSeries.fromSeq DateMode.radiocarbonDateMode startDate (Resolution.FixedTemporalResolution.Years years) data
-                let obs = ts |> TimeSeries.toObservations
-                Expect.sequenceEqual (obs |> Seq.map fst) data "Data were different after being in time-series"
+                  let data = data |> List.map (fun d -> d.Get)
+
+                  let ts =
+                      TimeSeries.fromSeq
+                          DateMode.radiocarbonDateMode
+                          startDate
+                          (Resolution.FixedTemporalResolution.Years years)
+                          data
+
+                  let obs = ts |> TimeSeries.toObservations
+                  Expect.sequenceEqual (obs |> Seq.map fst) data "Data were different after being in time-series"
 
           testPropertyWithConfig config "BP dates are ordered oldest to youngest"
           <| fun (data: TimeSeries.Observation<float, int<``BP (radiocarbon)``>> list) ->
@@ -187,18 +194,21 @@ let oldDateTimeSeriesTests =
                   Expect.sequenceEqual ts.Values orderedInTime "BP Dates were not ordered with largest BP values first"
 
           testPropertyWithConfig config "Only works when resolution is greater than or equal to annual"
-            <| fun startDate (data: float list) resolution ->                
-                let test () =
-                    let ts = TimeSeries.fromSeq DateMode.radiocarbonDateMode startDate resolution data
-                    Expect.equal (TimeSeries.resolution ts) (Resolution.Fixed resolution)
-                        "Resolution of resultant time-series did not match input resolution"
-                match resolution with
-                | Resolution.Months m when m.Value >= 12<month> -> test ()
-                | Resolution.Days d when d.Value >= 365<day> -> test ()
-                | Resolution.Years _ -> test ()
-                | _ ->
-                    Expect.throws (fun _ -> test () |> ignore) "Should have thrown with lower than annual resolution"
-                
+          <| fun startDate (data: float list) resolution ->
+              let test () =
+                  let ts = TimeSeries.fromSeq DateMode.radiocarbonDateMode startDate resolution data
+
+                  Expect.equal
+                      (TimeSeries.resolution ts)
+                      (Resolution.Fixed resolution)
+                      "Resolution of resultant time-series did not match input resolution"
+
+              match resolution with
+              | Resolution.Months m when m.Value >= 12<month> -> test ()
+              | Resolution.Days d when d.Value >= 365<day> -> test ()
+              | Resolution.Years _ -> test ()
+              | _ -> Expect.throws (fun _ -> test () |> ignore) "Should have thrown with lower than annual resolution"
+
 
           ]
 

@@ -53,12 +53,12 @@ function to match the `EstimationEngine.Integration` type signature as follows:
 
 open Bristlecone
 
-let myCustomIntegrator: EstimationEngine.Integrate<'data, 'time> =
+let myCustomIntegrator: EstimationEngine.Integrate<'data, 'time, _, _> =
     fun writeOut tInitial tEnd tStep initialConditions externalEnvironment model ->
         invalidOp "Doesn't actually do anything!"
 
-let engine =
-    Bristlecone.mkContinuous |> Bristlecone.withContinuousTime myCustomIntegrator
+
+Bristlecone.mkContinuous |> Bristlecone.withContinuousTime myCustomIntegrator
 
 (**
 

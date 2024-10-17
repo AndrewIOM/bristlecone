@@ -57,7 +57,7 @@ If you are working with `ResultSet`s, calculating and saving the weights is easi
 be completed as below:
 *)
 
-fun (hypothesisResults: ModelSelection.ResultSet.ResultSet<string, Language.Hypotheses.Hypothesis> seq) ->
+fun (hypothesisResults: ModelSelection.ResultSet.ResultSet<string, Language.Hypotheses.Hypothesis<float>, _, _, _> seq) ->
     hypothesisResults
     |> ModelSelection.Akaike.akaikeWeightsForSet (fun h -> h.ReferenceCode)
     |> Bristlecone.Data.ModelSelection.save "/some/dir"

@@ -68,7 +68,7 @@ let engine =
     Bristlecone.mkContinuous
     |> Bristlecone.withCustomOptimisation (Optimisation.Amoeba.swarm 5 20 Optimisation.Amoeba.Solver.Default)
 
-let testSettings = Bristlecone.Test.TestSettings<float>.Default
+let testSettings = Bristlecone.Test.TestSettings<_,_,_,_>.Default
 let testResult = Bristlecone.testModel engine testSettings hypothesis
 
 (*** include-fsi-output ***)

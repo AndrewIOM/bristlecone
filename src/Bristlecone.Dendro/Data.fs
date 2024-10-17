@@ -28,7 +28,8 @@ module PlantIndividual =
                 let growth =
                     rows
                     |> Seq.sortBy (fun i -> i.Year)
-                    |> Seq.map (fun i -> (float i.``Increment (mm)`` * 1.<millimetre/year>, i.Year * 1<year> |> DatingMethods.Annual))
+                    |> Seq.map (fun i ->
+                        (float i.``Increment (mm)`` * 1.<millimetre / year>, i.Year * 1<year> |> DatingMethods.Annual))
                     |> TimeSeries.fromObservations DateMode.annualDateMode
                     |> GrowthSeries.Absolute
                     |> PlantIndividual.PlantGrowth.RingWidth
@@ -37,7 +38,7 @@ module PlantIndividual =
                   Growth = growth
                   InternalControls = [] |> Map.ofList
                   Environment = [] |> Map.ofList }
-                : PlantIndividual.PlantIndividual<DatingMethods.Annual,int<year>,int<year>>)
+                : PlantIndividual.PlantIndividual<DatingMethods.Annual, int<year>, int<year>>)
             |> Seq.toList
 
         /// <summary>Load plant-specific environmental time-series from

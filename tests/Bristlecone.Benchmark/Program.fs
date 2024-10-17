@@ -276,7 +276,10 @@ let optimFunctions =
       "random walk w/ tuning",
       MonteCarlo.randomWalk [ MonteCarlo.TuneMethod.CovarianceWithScale 0.25, 500, EndConditions.afterIteration 10000 ] ]
 
-let timeModels: (string * Bristlecone.ModelSystem.ModelSystem<float> * (Bristlecone.Test.TestSettings<float,obj,obj,obj> -> Bristlecone.Test.TestSettings<float,obj,obj,obj>)) list =
+let timeModels
+    : (string *
+      Bristlecone.ModelSystem.ModelSystem<float> *
+      (Bristlecone.Test.TestSettings<float, obj, obj, obj> -> Bristlecone.Test.TestSettings<float, obj, obj, obj>)) list =
     [ "predator-prey (with gaussian noise)",
       TestFunctions.Timeseries.``predator-prey [with noise]``,
       Bristlecone.Test.addStartValues [ "lynx", 1.0; "hare", 1.0 ]
