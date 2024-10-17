@@ -6,18 +6,23 @@ open Bristlecone.Time
 /// its likelihood as as objective function that may be optimised.
 module ModelSystem =
 
-    // Models
-    type Response = float
-    type Environment = CodedMap<float>
-    type Time = float
+    type Environment<'data> = CodedMap<'data>
+
+    // Time is defined as either:
+    // - Integration / internal model timesteps
+    // - External ('real') time (radiocarbon, date-time etc.)
+    // Here, we will define time as a float
+    type ModelTime = float<``time index``>
 
     /// An ordinary differential equation that may require fixed or free parameters,
     /// the current time t, the current response value, and / or external environmental time series.
-    type ModelEquation = Parameter.Pool -> Time -> Response -> Environment -> float
+    type ModelEquation<'data> = Parameter.Pool -> ModelTime -> 'data -> Environment<'data> -> 'data
 
     /// Paired time-series representing the true and modelled time-series.
     type PredictedSeries =
         { Expected: float[]; Observed: float[] }
+    // type PredictedSeries<'data,'date,'timeunit,'timespan> =
+    //     TimeSeries.TimeSeries<ModelFitToPoint<'data>, 'date, 'timeunit, 'timespan>
 
     /// A function that returns a parameter's current value by its name.
     type ParameterValueAccessor =
@@ -27,27 +32,27 @@ module ModelSystem =
             let (ParameterValueAccessor v) = this in v name
 
     /// A function that computes the likelihood of a set of parameters.
-    type LikelihoodFn = ParameterValueAccessor -> CodedMap<PredictedSeries> -> float
+    type LikelihoodFn<'data> = ParameterValueAccessor -> CodedMap<PredictedSeries> -> 'data
 
     /// A function that computes a measured system property given a
     /// current (time t) and previous (time t-1) system state.
-    type MeasureEquation = float -> Environment -> Environment -> float
+    type Measurement<'data> = 'data -> Environment<'data> -> Environment<'data> -> 'data
 
-    type ModelSystem =
+    type ModelSystem<'data> =
         { Parameters: Parameter.Pool
-          Equations: CodedMap<ModelEquation>
-          Measures: CodedMap<MeasureEquation>
-          NegLogLikelihood: LikelihoodFn }
+          Equations: CodedMap<ModelEquation<'data>>
+          Measures: CodedMap<Measurement<'data>>
+          NegLogLikelihood: LikelihoodFn<'data> }
 
     type FitValue = { Fit: float; Obs: float }
-    type FitSeries = TimeSeries<FitValue>
+    type FitSeries<'date, 'timeunit, 'timespan> = TimeSeries<FitValue, 'date, 'timeunit, 'timespan>
 
     /// An estimated model fit for a time-series model.
-    type EstimationResult =
+    type EstimationResult<'date, 'timeunit, 'timespan> =
         { ResultId: System.Guid
           Likelihood: float
           Parameters: Parameter.Pool
-          Series: CodedMap<FitSeries>
+          Series: CodedMap<FitSeries<'date, 'timeunit, 'timespan>>
           Trace: (float * float[]) list
           InternalDynamics: CodedMap<float[]> option }
 
@@ -67,19 +72,19 @@ module EstimationEngine =
     type EndCondition<'a> = (Solution<'a>) list -> int -> bool
     type Domain = (float * float * Parameter.Constraint)[]
 
-    type Time = float
     type State = float
-    type ODE = Time -> State -> Environment -> State
+
+    type ODE = float<``time index``> -> State -> ModelSystem.Environment<State> -> State
 
     type WriteOut = LogEvent -> unit
 
-    type Integrate<'data, 'time> =
+    type Integrate<'data, 'date, 'timeunit, 'timespan> =
         WriteOut
-            -> 'time
-            -> 'time
-            -> 'time
+            -> float<``time index``>
+            -> float<``time index``>
+            -> float<``time index``>
             -> CodedMap<'data>
-            -> CodedMap<TimeIndex.TimeIndex<'data>>
+            -> CodedMap<TimeIndex.TimeIndex<'data, 'date, 'timeunit, 'timespan>>
             -> CodedMap<ODE>
             -> CodedMap<'data[]>
 
@@ -100,12 +105,12 @@ module EstimationEngine =
         | InTransformedSpace of Optimise<'data>
         | InDetachedSpace of Optimise<'data>
 
-    type TimeMode<'data, 'time> =
+    type TimeMode<'data, 'date, 'timeunit, 'timespan> =
         | Discrete
-        | Continuous of Integrate<'data, 'time>
+        | Continuous of Integrate<'data, 'date, 'timeunit, 'timespan>
 
-    type EstimationEngine<'data, 'time> =
-        { TimeHandling: TimeMode<'data, 'time>
+    type EstimationEngine<'data, 'date, 'timeunit, 'timespan> =
+        { TimeHandling: TimeMode<'data, 'date, 'timeunit, 'timespan>
           OptimiseWith: Optimiser<'data>
           Conditioning: Conditioning<'data>
           LogTo: WriteOut

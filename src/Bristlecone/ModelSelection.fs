@@ -10,11 +10,11 @@ open Bristlecone.ModelSystem
 module ResultSet =
 
     /// <summary>A representation of all results for a particular subject and hypothesis</summary>
-    type ResultSet<'subject, 'hypothesis> =
+    type ResultSet<'subject, 'hypothesis, 'date, 'timeunit, 'timespan> =
         { Subject: 'subject
           Hypothesis: 'hypothesis
-          BestResult: EstimationResult option
-          AllResults: EstimationResult seq }
+          BestResult: EstimationResult<'date, 'timeunit, 'timespan> option
+          AllResults: EstimationResult<'date, 'timeunit, 'timespan> seq }
 
     /// <summary>Arrange estimation results into subject and hypothesis groups.</summary>
     /// <param name="subjects"></param>
@@ -52,7 +52,11 @@ module ResultSet =
 /// `ResultSet`s. Uses the best MLE for each subject * hypothesis group
 /// an runs `comparisonFn` across these results.</summary>
 /// <returns>The subject, hypothesis code, the original result, and the statistic.</returns>
-let internal comparisonStatistic comparisonFn getRefCode (results: ResultSet.ResultSet<'subject, 'hypothesis> seq) =
+let internal comparisonStatistic
+    comparisonFn
+    getRefCode
+    (results: ResultSet.ResultSet<'subject, 'hypothesis, 'date, 'timeunit, 'timespan> seq)
+    =
     results
     |> Seq.groupBy (fun resultSet -> getRefCode resultSet.Hypothesis)
     |> Seq.collect (fun (_, r) ->
@@ -120,7 +124,7 @@ module Akaike =
     /// <param name="models">The input model results</param>
     /// <returns>An (EstimationResult * float) sequence of estimation results paired to their Akaike weights.</returns>
     /// <exception name="ArgumentException">Occurs when there are no observations within an estimation result.</exception>
-    let akaikeWeights (models: seq<EstimationResult>) =
+    let akaikeWeights (models: seq<EstimationResult<'date, 'timeunit, 'timespan>>) =
         match models |> Seq.tryHead with
         | None -> seq []
         | Some m ->

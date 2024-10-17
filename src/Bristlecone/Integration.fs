@@ -4,20 +4,21 @@ namespace Bristlecone.Integration
 /// routine into a form that can be used within Bristlecone.
 module Base =
 
+    open Bristlecone
     open Bristlecone.Logging
     open Bristlecone.Time
 
     /// Generates a coded map of time-series where all values are NaN.
-    let nanResult tInitial tEnd tStep modelMap =
+    let nanResult tInitial tEnd (tStep: float<``time index``>) modelMap =
         let variableCodes = modelMap |> Map.toArray |> Array.unzip |> fst
 
         let fakeSeries =
-            let count = (tEnd - tInitial + 1.) / tStep |> int
+            let count = (tEnd - tInitial + 1.<``time index``>) / tStep |> int
             [ 1..count ] |> List.map (fun _ -> nan) |> List.toArray
 
         variableCodes |> Array.map (fun k -> (k, fakeSeries)) |> Map.ofArray
 
-    let applyDynamicVariables newValues newValueKeys environment =
+    let internal applyDynamicVariables newValues newValueKeys environment =
         let newEnv = newValues |> Array.zip newValueKeys
 
         environment
@@ -28,10 +29,10 @@ module Base =
             | Some u -> snd u
             | None -> value)
 
-    let applyExternalEnvironment
-        (time: float)
-        (externalEnv: Map<'a, TimeIndex.TimeIndex<'b>>)
-        (currentEnv: Map<'a, 'b>)
+    let internal applyExternalEnvironment
+        (time: float<``time index``>)
+        (externalEnv: Map<'a, TimeIndex.TimeIndex<'T, 'date, 'timeunit, 'timespan>>)
+        (currentEnv: Map<'a, 'T>)
         =
         currentEnv
         |> Map.map (fun k v ->
@@ -41,7 +42,16 @@ module Base =
             | Some index -> index.[time]
             | None -> v)
 
-    let solve log integrate tInitial tEnd tStep initialConditions externalEnvironment modelMap : Map<'a, float[]> =
+    let solve
+        log
+        integrate
+        (tInitial: float<``time index``>)
+        tEnd
+        tStep
+        initialConditions
+        externalEnvironment
+        (modelMap: CodedMap<EstimationEngine.ODE>)
+        : CodedMap<float[]> =
 
         // A. Setup initial vector
         let modelKeys, modelEqs = modelMap |> Map.toArray |> Array.unzip
@@ -49,17 +59,19 @@ module Base =
         let vectorKeys, initialVector =
             modelMap
             |> Map.toArray
-            |> Array.map (fun (k, _) -> (k, initialConditions |> Map.find k))
+            |> Array.map (fun (k, _) -> (k, initialConditions |> Map.find k |> Units.removeUnitFromFloat))
             |> Array.unzip
 
         // B. Setup composite function to integrate
-        let mutable iteration = 1
+        let mutable iteration = 1<iteration>
 
         let rp (t: float) x =
-            if iteration % 5000 = 0 then
+            let t = t * 1.<``time index``>
+
+            if iteration % 5000<iteration> = 0<iteration> then
                 log <| GeneralEvent(sprintf "[Integration] Slow for %f - %A" t x)
 
-            iteration <- iteration + 1
+            iteration <- iteration + 1<iteration>
 
             let environment =
                 if t < tInitial + tStep then
@@ -83,6 +95,8 @@ module Base =
 /// Oslo is an integration library provided by Microsoft Research Cambridge.
 module Oslo =
 
+    open Bristlecone
+    open Bristlecone.Time
     open Microsoft.Research.Oslo
 
     module Options =
@@ -110,46 +124,68 @@ module Oslo =
             )
 
 
-    let integrate' options tInitial tEnd tStep initialVector rp =
+    let internal integrate'
+        options
+        (tInitial: float<``time index``>)
+        (tEnd: float<``time index``>)
+        (tStep: float<``time index``>)
+        initialVector
+        rp
+        =
         let rk =
             Ode.RK547M(
-                tInitial,
+                tInitial |> Units.removeUnitFromFloat,
                 (initialVector |> Vector),
-                System.Func<double, Vector, Vector>(fun x y -> rp x (y.ToArray()) |> Vector),
+                System.Func<double, Vector, Vector>(fun (x: double) y -> rp x (y.ToArray()) |> Vector),
                 options
             )
 
-        rk.SolveFromToStep(tInitial, tEnd, tStep)
+        rk.SolveFromToStep(
+            tInitial |> Units.removeUnitFromFloat,
+            tEnd |> Units.removeUnitFromFloat,
+            tStep |> Units.removeUnitFromFloat
+        )
         |> Seq.map (fun x -> x.X.ToArray())
         |> Seq.toArray
 
-    let integrate options log tInitial tEnd tStep initialConditions modelMap =
-        Base.solve log (integrate' options) tInitial tEnd tStep initialConditions modelMap
+    let integrate options : EstimationEngine.Integrate<float, 'date, 'timeunit, 'timespan> =
+        fun log tInitial tEnd tStep initialConditions externalEnvironment modelMap ->
+            Base.solve log (integrate' options) tInitial tEnd tStep initialConditions externalEnvironment modelMap
 
     /// On integration errors, assigns the maximum float value to every data point.
-    let integrateWithErrorHandling options log tInitial tEnd tStep initialConditions externalEnvironment modelMap =
-        try
-            integrate options log tInitial tEnd tStep initialConditions externalEnvironment modelMap
-        with _ ->
-            Base.nanResult tInitial tEnd tStep modelMap
+    let integrateWithErrorHandling options : EstimationEngine.Integrate<float, 'date, 'timeunit, 'timespan> =
+        fun log tInitial tEnd tStep initialConditions externalEnvironment modelMap ->
+            try
+                integrate options log tInitial tEnd tStep initialConditions externalEnvironment modelMap
+            with _ ->
+                Base.nanResult tInitial tEnd tStep modelMap
 
 
 module MathNet =
 
+    open Bristlecone
+    open Bristlecone.Time
     open MathNet.Numerics.LinearAlgebra
     open MathNet.Numerics.OdeSolvers
 
-    let integrate' tInitial tEnd tStep initialVector rp =
-        let n = (tEnd - tInitial + 1.) / tStep |> int
+    let internal integrate' (tInitial: float<``time index``>) tEnd tStep initialVector rp =
+        let n = (tEnd - tInitial + 1.<``time index``>) / tStep |> int
 
         let f =
             System.Func<float, Vector<float>, Vector<float>>(fun i e -> rp i (e.ToArray()) |> vector)
 
-        RungeKutta.FourthOrder(initialVector |> vector, tInitial, tEnd, n, f)
+        RungeKutta.FourthOrder(
+            initialVector |> vector,
+            tInitial |> Units.removeUnitFromFloat,
+            tEnd |> Units.removeUnitFromFloat,
+            n,
+            f
+        )
         |> Array.map Vector.toArray
 
-    let integrate log tInitial tEnd tStep initialConditions externalEnvironment modelMap =
-        Base.solve log integrate' tInitial tEnd tStep initialConditions externalEnvironment modelMap
+    let integrate: EstimationEngine.Integrate<float, 'date, 'timeunit, 'timespan> =
+        fun log tInitial tEnd tStep initialConditions externalEnvironment (modelMap: CodedMap<EstimationEngine.ODE>) ->
+            Base.solve log integrate' tInitial tEnd tStep initialConditions externalEnvironment modelMap
 
 
 module Simple =

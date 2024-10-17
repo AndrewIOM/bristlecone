@@ -37,7 +37,7 @@ type BristleconeTypesGen() =
     static member EquationList = genStrings 1 10 |> genTuple<ModelExpression> |> Arb.fromGen
 
     static member MeasureList =
-        genStrings 1 10 |> genTuple<ModelSystem.MeasureEquation> |> Arb.fromGen
+        genStrings 1 10 |> genTuple<ModelSystem.Measurement<float>> |> Arb.fromGen
 
     static member Pool =
         gen {
@@ -63,20 +63,29 @@ type BristleconeTypesGen() =
 
     static member Floats() : Arbitrary<float list> = genMultiList 2 1000 |> Arb.fromGen
 
-    static member PositveInt: Arbitrary<PositiveInt.PositiveInt> =
+    static member PositveInt: Arbitrary<PositiveInt.PositiveInt<1>> =
         Gen.choose (1, 5) //Int32.MaxValue)
         |> Gen.map (PositiveInt.create >> Option.get)
         |> Arb.fromGen
 
-    static member RealTimeSpan =
-        Gen.choose (1, Int32.MaxValue)
-        |> Gen.map (int64 >> TimeSpan.FromTicks >> RealTimeSpan.create >> Option.get)
+    static member ObservationalTimeSpan =
+        Gen.choose (1, TimeSpan.TicksPerDay * int64 (365 * 200) |> int)
+        |> Gen.map (int64 >> TimeSpan.FromTicks >> Time.ObservationalTimeSpan.create >> Option.get)
         |> Arb.fromGen
 
     static member Observations: Arbitrary<(float * DateTime) list> =
         gen {
             let! length = Gen.choose (2, 100)
             let! list1 = Gen.listOfLength length Arb.generate<DateTime>
+            let! list2 = Gen.listOfLength length (Arb.generate<NormalFloat> |> Gen.map (fun f -> f.Get))
+            return List.zip list2 list1
+        }
+        |> Arb.fromGen
+
+    static member ObservationsBP: Arbitrary<(float * int<Time.``BP (radiocarbon)``>) list> =
+        gen {
+            let! length = Gen.choose (2, 100)
+            let! list1 = Gen.listOfLength length Arb.generate<int<Time.``BP (radiocarbon)``>>
             let! list2 = Gen.listOfLength length (Arb.generate<NormalFloat> |> Gen.map (fun f -> f.Get))
             return List.zip list2 list1
         }

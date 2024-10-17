@@ -51,8 +51,8 @@ location on any day of the year, we can use the `Sunrise.calculate` function.
 
 open Bristlecone.Dendro
 
-let latitude = 54.2
-let longitude = -4.2
+let latitude = 54.2<latitude>
+let longitude = -4.2<longitude>
 
 Sunrise.calculate 2024 04 20 latitude longitude "Europe/London"
 (*** include-it ***)
@@ -61,5 +61,5 @@ Sunrise.calculate 2024 04 20 latitude longitude "Europe/London"
 As an illustration, if we looked at Tromsø in January we would see far less available light:
 *)
 
-Sunrise.calculate 2024 01 10 69.64961 18.95702 "Europe/London"
+Sunrise.calculate 2024 01 10 69.64961<latitude> 18.95702<longitude> "Europe/London"
 (*** include-it ***)

@@ -1,3 +1,3 @@
-Date,Plant Code,Predictor,Uncertainty
-1976-01-01,YUSL01A,-2.3,0.1
-1977-01-01,YUSL01A,1.1,0.1
+Year,Plant Code,Predictor
+1976,YUSL01A,-2.3
+1977,YUSL01A,1.1

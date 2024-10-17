@@ -4,6 +4,6 @@ open RProvider
 open RProvider.``base``
 open RProvider.zoo
 
-R.c(1.,2.,3)
+R.c (1., 2., 3)
 
-R.as_zoo(R.c(1,2,3))
+R.as_zoo (R.c (1, 2, 3))

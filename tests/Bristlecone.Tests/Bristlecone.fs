@@ -60,7 +60,7 @@ module ``Objective creation`` =
               <| fun shouldTransform (data: float list) (b1: NormalFloat) (b2: NormalFloat) ->
 
                   // Returns the parameter value
-                  let fakeLikelihood: Bristlecone.ModelSystem.LikelihoodFn =
+                  let fakeLikelihood: Bristlecone.ModelSystem.LikelihoodFn<float> =
                       fun paramAccessor data -> paramAccessor.Get "a"
 
                   if b1.Get = b2.Get || b1.Get = 0. || b2.Get = 0. then
@@ -101,6 +101,10 @@ module ``Objective creation`` =
 
               ]
 
+type TimeModeToTest =
+    | TestCalendarDate
+    | TestRadiocarbon
+
 module ``Fit`` =
 
     [<Tests>]
@@ -116,7 +120,11 @@ module ``Fit`` =
                   else
                       let data =
                           [ (Language.code "x").Value,
-                            Time.TimeSeries.fromSeq time (Time.FixedTemporalResolution.Years resolution) data ]
+                            Time.TimeSeries.fromSeq
+                                Time.DateMode.calendarDateMode
+                                time
+                                (Time.Resolution.FixedTemporalResolution.Years resolution)
+                                data ]
                           |> Map.ofList
 
                       let result = Bristlecone.Fit.t0 data Conditioning.RepeatFirstDataPoint ignore
@@ -152,9 +160,13 @@ module ``Fit`` =
                         then
                             ()
                         else
-                            let data: CodedMap<Time.TimeSeries.TimeSeries<float>> =
+                            let data =
                                 [ (Language.code "x").Value,
-                                  Time.TimeSeries.fromSeq startDate (Time.FixedTemporalResolution.Months months) obs ]
+                                  Time.TimeSeries.fromSeq
+                                      Time.DateMode.calendarDateMode
+                                      startDate
+                                      (Time.Resolution.FixedTemporalResolution.Months months)
+                                      obs ]
                                 |> Map.ofList
 
                             let result =
@@ -249,7 +261,11 @@ module ``Fit`` =
                                 [ (ShortCode.create "x").Value; (ShortCode.create "y").Value ]
                                 |> Seq.map (fun c ->
                                     c,
-                                    Time.TimeSeries.fromSeq startDate (Time.FixedTemporalResolution.Months months) data)
+                                    Time.TimeSeries.fromSeq
+                                        Time.DateMode.calendarDateMode
+                                        startDate
+                                        (Time.Resolution.FixedTemporalResolution.Months months)
+                                        data)
                                 |> Map.ofSeq
 
                             let result =

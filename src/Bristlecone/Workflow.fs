@@ -9,10 +9,10 @@ module Orchestration =
     open Bristlecone.ModelSystem
     open System.Collections.Generic
 
-    type OrchestrationMessage =
-        | StartWorkPackage of Async<EstimationResult>
-        | StartDependentWorkPackages of Async<EstimationResult>
-        | Finished of EstimationResult
+    type OrchestrationMessage<'date, 'timeunit, 'timespan> =
+        | StartWorkPackage of Async<EstimationResult<'date, 'timeunit, 'timespan>>
+        | StartDependentWorkPackages of Async<EstimationResult<'date, 'timeunit, 'timespan>>
+        | Finished of EstimationResult<'date, 'timeunit, 'timespan>
         | WorkFailed of exn
         | WorkCancelled
 
@@ -20,10 +20,10 @@ module Orchestration =
 
     /// The `OrchestrationAgent` queues work items of the type `Async<EstimationResult>`, which
     /// are run in parallel up to a total of `maxSimultaneous` at one time.
-    type OrchestrationAgent(writeOut, maxSimultaneous, retainResults) =
+    type OrchestrationAgent<'date, 'timeunit, 'timespan>(writeOut, maxSimultaneous, retainResults) =
 
-        let queue = Queue<_>()
-        let results = Queue<_>()
+        let queue: Queue<Async<EstimationResult<'date, 'timeunit, 'timespan>>> = Queue<_>()
+        let results: Queue<EstimationResult<'date, 'timeunit, 'timespan>> = Queue<_>()
 
         let agent =
             MailboxProcessor.Start(fun inbox ->

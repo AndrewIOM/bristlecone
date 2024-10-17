@@ -12,7 +12,11 @@ module Test =
     module Noise =
 
         /// Adds noise to a time-series 'seriesName', based on the given distribution function.
-        let tryAddNoise seriesName noiseDistributionFn (data: CodedMap<TimeSeries.TimeSeries<'a>>) =
+        let tryAddNoise
+            seriesName
+            noiseDistributionFn
+            (data: CodedMap<TimeSeries.TimeSeries<float, 'date, 'timeunit, 'timespan>>)
+            =
             data
             |> Map.tryFindKey (fun c _ -> c.Value = seriesName)
             |> Option.map (fun k ->
@@ -58,21 +62,25 @@ module Test =
                 |> Seq.map (fun (x1, x2) -> (x2 - x1) > 0.)
                 |> Seq.contains false
 
-    type TestSettings<'a> =
+    type TestSettings<'T, 'date, 'timeunit, 'timespan> =
         { TimeSeriesLength: int
-          StartValues: CodedMap<'a>
-          EndCondition: EndCondition<'a>
+          StartValues: CodedMap<'T>
+          EndCondition: EndCondition<'T>
           GenerationRules: GenerationRule list
           NoiseGeneration:
-              System.Random -> Parameter.Pool -> CodedMap<TimeSeries<'a>> -> Result<CodedMap<TimeSeries<'a>>, string>
-          EnvironmentalData: CodedMap<TimeSeries<'a>>
-          Resolution: FixedTemporalResolution
-          Random: System.Random
-          StartDate: DateTime
+              Random
+                  -> Parameter.Pool
+                  -> CodedMap<TimeSeries<'T, 'date, 'timeunit, 'timespan>>
+                  -> Result<CodedMap<TimeSeries<'T, 'date, 'timeunit, 'timespan>>, string>
+          EnvironmentalData: CodedMap<TimeSeries<'T, 'date, 'timeunit, 'timespan>>
+          Resolution: Resolution.FixedTemporalResolution<'timespan>
+          Random: Random
+          StartDate: 'date
+          DateMode: DateMode.DateMode<'date, 'timeunit, 'timespan>
           Attempts: int }
 
         static member Default =
-            { Resolution = FixedTemporalResolution.Years (PositiveInt.create 1).Value
+            { Resolution = Resolution.FixedTemporalResolution.Years (PositiveInt.create 1<year>).Value
               TimeSeriesLength = 30
               StartValues = Map.empty
               EndCondition = Optimisation.EndConditions.afterIteration 1000
@@ -81,6 +89,7 @@ module Test =
               EnvironmentalData = Map.empty
               Random = MathNet.Numerics.Random.MersenneTwister()
               StartDate = DateTime(1970, 01, 01)
+              DateMode = DateMode.calendarDateMode
               Attempts = 50000 }
 
     type ParameterTestResult =
@@ -88,16 +97,16 @@ module Test =
           RealValue: float
           EstimatedValue: float }
 
-    and TestResult =
+    and TestResult<'date, 'timeunit, 'timespan> =
         { Parameters: ParameterTestResult list
-          Series: Map<string, FitSeries>
+          Series: Map<string, FitSeries<'date, 'timeunit, 'timespan>>
           ErrorStructure: Map<string, seq<float>>
           RealLikelihood: float
           EstimatedLikelihood: float }
 
     /// Ensures settings are valid for a test, by ensuring that
     /// start values have been set for each equation.
-    let isValidSettings (model: ModelSystem.ModelSystem) testSettings =
+    let isValidSettings (model: ModelSystem.ModelSystem<'data>) testSettings =
         let equationKeys = model.Equations |> Map.toList |> List.map fst
 
         if
@@ -108,7 +117,7 @@ module Test =
             Error
             <| sprintf "You must specify a start point for the following equations: %A" equationKeys
 
-    let create = TestSettings<float>.Default
+    let create = TestSettings<_, _, _, _>.Default
 
     /// Add noise to a particular time-series when generating fake time-series.
     /// Built-in noise functions are in the `Noise` module.
@@ -139,8 +148,13 @@ module Test =
     let withTimeSeriesLength n settings = { settings with TimeSeriesLength = n }
     let withFixedTemporalResolution res settings = { settings with Resolution = res }
     let endWhen goal settings = { settings with EndCondition = goal }
-    let useRandom rnd (settings: TestSettings<'a>) = { settings with Random = rnd }
+    let useRandom rnd (settings: TestSettings<_, _, _, _>) = { settings with Random = rnd }
     let useStartTime time settings = { settings with StartDate = time }
+
+    let useDateMode dateMode startDate settings =
+        { settings with
+            StartDate = startDate
+            DateMode = dateMode }
 
     module Compute =
 
@@ -160,21 +174,44 @@ module Test =
                 | Error e -> failwith e)
 
         /// Generate a fixed-resolution time-series for testing model fits
-        let generateFixedSeries writeOut equations timeMode seriesLength startPoint startDate resolution env theta =
+        let generateFixedSeries
+            writeOut
+            equations
+            timeMode
+            seriesLength
+            startPoint
+            dateMode
+            startDate
+            resolution
+            env
+            theta
+            =
             let applyFakeTime s =
-                TimeSeries.fromSeq startDate resolution s
+                TimeSeries.fromSeq dateMode startDate resolution s
 
             let eqs = equations |> Map.map (fun _ v -> v theta)
 
             match timeMode with
             | Discrete -> invalidOp "Not supported at this time"
             | Continuous i ->
-                i writeOut 0. (seriesLength |> float) 1. startPoint env eqs
+                i
+                    writeOut
+                    0.<``time index``>
+                    (seriesLength |> float |> (*) 1.<``time index``>)
+                    1.<``time index``>
+                    startPoint
+                    env
+                    eqs
                 |> Map.map (fun _ v -> applyFakeTime v)
 
         /// A test procedure for computing measures given time series data.
-        let generateMeasures measures startValues (expected: CodedMap<TimeSeries<'a>>) : CodedMap<TimeSeries<'a>> =
+        let generateMeasures
+            measures
+            startValues
+            (expected: CodedMap<TimeSeries<'T, 'date, 'timeunit, 'timespan>>)
+            : CodedMap<TimeSeries<'T, 'date, 'timeunit, 'timespan>> =
             let time = (expected |> Seq.head).Value |> TimeSeries.toObservations |> Seq.map snd
+            let dateMode = (expected |> Seq.head).Value.DateMode
 
             measures
             |> Map.map (fun key measure ->
@@ -184,7 +221,7 @@ module Test =
                     measure
                     (expected |> Map.map (fun _ t -> t.Values |> Seq.toArray)))
             |> Map.fold
-                (fun acc key value -> Map.add key (time |> Seq.zip value |> TimeSeries.fromObservations) acc)
+                (fun acc key value -> Map.add key (time |> Seq.zip value |> TimeSeries.fromObservations dateMode) acc)
                 expected
 
         /// Generate data
@@ -206,6 +243,7 @@ module Test =
                 engine.TimeHandling
                 testSettings.TimeSeriesLength
                 testSettings.StartValues
+                testSettings.DateMode
                 testSettings.StartDate
                 testSettings.Resolution
                 envIndex
@@ -215,9 +253,9 @@ module Test =
         /// Generate data and check that it complies with the
         /// given ruleset.
         let rec tryGenerateData
-            (engine: EstimationEngine.EstimationEngine<'a, 'b>)
+            (engine: EstimationEngine.EstimationEngine<float, 'b, 'c, 'd>)
             settings
-            (model: ModelSystem.ModelSystem)
+            (model: ModelSystem.ModelSystem<float>)
             attempts
             =
             let theta = drawParameterSet engine.Random model.Parameters

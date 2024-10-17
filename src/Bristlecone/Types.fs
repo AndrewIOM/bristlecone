@@ -3,16 +3,35 @@ namespace Bristlecone
 open System.Runtime.CompilerServices
 
 [<assembly: InternalsVisibleTo("Bristlecone.Tests")>]
+[<assembly: InternalsVisibleTo("Bristlecone.Dendro")>]
 do ()
+
+module internal Units =
+
+    let removeUnitFromInt (v: int<_>) = int v
+    let removeUnitFromFloat (v: float<_>) = float v
+
+    let floatToInt (x: float<'u>) : int<'u> =
+        x |> int |> LanguagePrimitives.Int32WithMeasure
+
+    let intToFloat (x: int<'u>) : float<'u> =
+        x |> float |> LanguagePrimitives.FloatWithMeasure
+
+    let round<[<Measure>] 'u> (x: float<'u>) : float<'u> =
+        System.Math.Round(float x) |> LanguagePrimitives.FloatWithMeasure
+
+
+[<Measure>]
+type iteration
 
 [<RequireQualifiedAccess>]
 module PositiveInt =
 
-    type PositiveInt = private PositiveInt of int
+    type PositiveInt<[<Measure>] 'm> = private PositiveInt of int<'m>
 
-    let private (|Positive|Negative|Zero|) num =
-        if num > 0 then Positive
-        elif num < 0 then Negative
+    let private (|Positive|Negative|Zero|) (num: int<_>) =
+        if num > 0<_> then Positive
+        elif num < 0<_> then Negative
         else Zero
 
     let create i =
@@ -22,25 +41,7 @@ module PositiveInt =
 
     let private unwrap (PositiveInt p) = p
 
-    type PositiveInt with
-        member this.Value = unwrap this
-
-[<RequireQualifiedAccess>]
-module RealTimeSpan =
-
-    open System
-
-    type RealTimeSpan = private RealTimeSpan of TimeSpan
-
-    let create t =
-        if t = TimeSpan.Zero then
-            None
-        else
-            t |> RealTimeSpan |> Some
-
-    let private unwrap (RealTimeSpan t) = t
-
-    type RealTimeSpan with
+    type PositiveInt<'u> with
         member this.Value = unwrap this
 
 
@@ -59,8 +60,6 @@ module ShortCode =
         member this.Value = unwrap this
 
 
-type RealTimeSpan = RealTimeSpan.RealTimeSpan
-type PositiveInt = PositiveInt.PositiveInt
 type CodedMap<'T> = Map<ShortCode.ShortCode, 'T>
 
 module Conditioning =

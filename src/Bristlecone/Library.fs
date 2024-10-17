@@ -18,7 +18,7 @@ module Bristlecone =
     open Bristlecone.Statistics
 
     /// <summary>A basic estimation engine for discrete-time equations, using a Nelder-Mead optimiser.</summary>
-    let mkDiscrete: EstimationEngine<float, float> =
+    let mkDiscrete: EstimationEngine<float, obj, obj, obj> =
         { TimeHandling = Discrete
           OptimiseWith = Optimisation.Amoeba.single Optimisation.Amoeba.Solver.Default
           LogTo = Console.logger (1000)
@@ -26,7 +26,7 @@ module Bristlecone =
           Conditioning = Conditioning.NoConditioning }
 
     /// <summary>A basic estimation engine for ordinary differential equations, using a Nelder-Mead optimiser.</summary>
-    let mkContinuous =
+    let mkContinuous<'date, 'timeunit, 'timespan> : EstimationEngine<float, 'date, 'timeunit, 'timespan> =
         { TimeHandling = Continuous <| Integration.MathNet.integrate
           OptimiseWith = Optimisation.Amoeba.single Optimisation.Amoeba.Solver.Default
           LogTo = Bristlecone.Logging.Console.logger (1000)
@@ -70,7 +70,7 @@ module Bristlecone =
         /// Places a map of `TimeSeries` into a `TimeFrame` that has data
         /// that shares a common timeline. If no timeline is shared, returns
         /// an `Error`.
-        let observationsToCommonTimeFrame (equations: CodedMap<ModelEquation>) timeSeriesData =
+        let observationsToCommonTimeFrame (equations: CodedMap<ModelEquation<'data>>) timeSeriesData =
             let equationKeys = equations |> Map.keys
 
             timeSeriesData
@@ -143,7 +143,7 @@ module Bristlecone =
     /// <param name="timeSeriesData"></param>
     /// <param name="model"></param>
     /// <returns></returns>
-    let tryFit engine endCondition timeSeriesData (model: ModelSystem) =
+    let tryFit engine endCondition timeSeriesData (model: ModelSystem<float>) =
 
         // A. Setup initial time point values based on conditioning method.
         let t0 = Fit.t0 timeSeriesData engine.Conditioning engine.LogTo
@@ -180,9 +180,9 @@ module Bristlecone =
                 engine.LogTo
                 <| GeneralEvent(
                     sprintf
-                        "Time-series start at %s with resolution %A."
-                        (commonDynamicTimeFrame.StartDate.ToString "yyyy/MM/dd")
-                        commonDynamicTimeFrame.Resolution
+                        "Time-series start at %A with resolution %A."
+                        (commonDynamicTimeFrame.StartDate)
+                        (commonDynamicTimeFrame |> TimeFrame.resolution)
                 )
 
                 // 2. Ensure that dynamic variables is an exact or subset of environmental variables
@@ -264,7 +264,7 @@ module Bristlecone =
                     |> TimeSeries.toObservations
                     |> Seq.zip expected
                     |> Seq.map (fun (e, (o, d)) -> ({ Obs = o; Fit = e }, d))
-                    |> TimeSeries.fromObservations)
+                    |> TimeSeries.fromObservations observedSeries.DateMode)
 
             return
                 { ResultId = Guid.NewGuid()
@@ -281,7 +281,7 @@ module Bristlecone =
     /// <param name="timeSeriesData">Time-series dataset that contains a series for each equation in the model system.</param>
     /// <param name="model">A model system of equations, likelihood function, estimatible parameters, and optional measures.</param>
     /// <returns>The result of the model-fitting procedure. If an error occurs, throws an exception.</returns>
-    let fit engine endCondition timeSeriesData (model: ModelSystem) =
+    let fit engine endCondition timeSeriesData (model: ModelSystem<float>) =
         tryFit engine endCondition timeSeriesData model |> Result.forceOk
 
     open Test
@@ -297,7 +297,11 @@ module Bristlecone =
     /// <returns>A test result that indicates the error structure.
     /// It is wrapped in an F# Result, indicating if the procedure
     /// was successful or not.</returns>
-    let tryTestModel engine (settings: Test.TestSettings<float>) (model: ModelSystem) =
+    let tryTestModel
+        engine
+        (settings: Test.TestSettings<float, 'date, 'timeunit, 'timespan>)
+        (model: ModelSystem<float>)
+        =
         engine.LogTo <| GeneralEvent "Attempting to generate parameter set."
 
         engine.LogTo
@@ -377,10 +381,23 @@ module Bristlecone =
     /// <param name="model">A model system / hypothesis to fit</param>
     /// <param name="series">Time-series to fit with model</param>
     /// <returns>A list of estimation results (one for each bootstrap) for further analysis</returns>
-    let bootstrap (engine: EstimationEngine.EstimationEngine<float, float>) endCondition bootstrapCount model series =
+    let bootstrap
+        (engine: EstimationEngine.EstimationEngine<float, 'date, 'timeunit, 'timespan>)
+        endCondition
+        bootstrapCount
+        model
+        (series: Map<ShortCode.ShortCode, TimeSeries.TimeSeries<float, 'date, 'timeunit, 'timespan>>)
+        =
         let rec bootstrap s numberOfTimes solutions =
             if (numberOfTimes > 0) then
-                let subset = Bootstrap.removeSingle engine.Random s
+                let resolution = series |> Seq.head |> (fun s -> s.Value |> TimeSeries.resolution)
+
+                let stepping =
+                    match resolution with
+                    | Resolution.Variable -> failwith "Cannot boostrap variable resolution data"
+                    | Resolution.Fixed f -> (series |> Seq.head).Value.DateMode.ResolutionToSpan f
+
+                let subset = TimeSeries.Bootstrap.removeSingle engine.Random stepping s
                 let result = fit engine endCondition subset model
 
                 engine.LogTo <| GeneralEvent(sprintf "Completed bootstrap %i" numberOfTimes)
@@ -405,11 +422,13 @@ module Bristlecone =
     let oneStepAhead
         engine
         hypothesis
-        (preTransform: CodedMap<TimeSeries<'a>> -> CodedMap<TimeSeries<float>>)
+        (preTransform:
+            CodedMap<TimeSeries<float, 'date, 'timeunit, 'timespan>>
+                -> CodedMap<TimeSeries<float, 'date, 'timeunit, 'timespan>>)
         (timeSeries)
         (estimatedTheta: Parameter.Pool)
-        : CodedMap<FitSeries * NStepStatistics> =
-        let hypothesisMle: ModelSystem =
+        : CodedMap<FitSeries<'date, 'timeunit, 'timespan> * NStepStatistics> =
+        let hypothesisMle: ModelSystem<float> =
             { hypothesis with
                 Parameters = Parameter.Pool.fromEstimated estimatedTheta }
 
@@ -419,7 +438,11 @@ module Bristlecone =
                 fitSeries
                 |> TimeSeries.toObservations
                 |> Seq.pairwise
-                |> Seq.map (fun (t1, t2) -> TimeSeries.fromObservations [ t1; t2 ] |> TimeSeries.map (fun (x, y) -> x)))
+                |> Seq.map (fun (t1, t2) ->
+                    TimeSeries.fromObservations fitSeries.DateMode [ t1; t2 ]
+                    |> TimeSeries.map (fun (x, y) -> x)))
+
+        let dateMode = (timeSeries |> Seq.head).Value.DateMode
 
         let timeParcelCount = (pairedDataFrames |> Seq.head).Value |> Seq.length
 
@@ -459,7 +482,12 @@ module Bristlecone =
         |> Seq.groupBy (fun (k, _, _) -> k)
         |> Seq.map (fun (tsName, values) ->
             let sos = values |> Seq.averageBy (fun (_, x, _) -> (x.Obs - x.Fit) ** 2.)
-            tsName, (values |> Seq.map (fun (_, v, t) -> (v, t)) |> TimeSeries.fromObservations, { RMSE = sqrt sos }))
+
+            tsName,
+            (values
+             |> Seq.map (fun (_, v, t) -> (v, t))
+             |> TimeSeries.fromObservations dateMode,
+             { RMSE = sqrt sos }))
         |> Map.ofSeq
 
 

@@ -114,7 +114,7 @@ the orchestration agent:
 let orchestrator =
     Orchestration.OrchestrationAgent(logger, System.Environment.ProcessorCount, false)
 
-fun datasets hypotheses engine ->
+fun datasets hypotheses (engine:EstimationEngine.EstimationEngine<float,System.DateTime,System.TimeSpan,System.TimeSpan>) ->
 
     // Orchestrate the analyses
     let work = workPackages datasets hypotheses engine

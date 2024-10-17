@@ -25,7 +25,12 @@ module Convergence =
     /// <param name="hypothesisId">The hypothesis identifier</param>
     /// <param name="result">A result set (of 1 .. many results) for a particular subject and hypothesis</param>
     /// <returns>If more than one replicate, the R-hat convergence statistic across replicates</returns>
-    let gelmanRubin nMostRecent subjectId hypothesisId (result: ResultSet.ResultSet<'subject, 'hypothesis>) =
+    let gelmanRubin
+        nMostRecent
+        subjectId
+        hypothesisId
+        (result: ResultSet.ResultSet<'subject, 'hypothesis, 'date, 'timeunit, 'timespan>)
+        =
         printfn "Calculating Rhat for %s (H = %s)" subjectId hypothesisId
 
         if result.AllResults |> Seq.isEmpty || result.BestResult.IsNone then
@@ -69,7 +74,12 @@ module Convergence =
     /// <param name="hypothesis">A function to retrieve a hypothesis ID from a hypothesis</param>
     /// <param name="result">A result set (of 1 .. many results) for a particular subject and hypothesis</param>
     /// <returns>If more than one replicate, the R-hat convergence statistic across replicates</returns>
-    let gelmanRubinAll nMostRecent subject hypothesis (results: ResultSet.ResultSet<'subject, 'hypothesis> seq) =
+    let gelmanRubinAll
+        nMostRecent
+        subject
+        hypothesis
+        (results: ResultSet.ResultSet<'subject, 'hypothesis, 'date, 'timeunit, 'timespan> seq)
+        =
         results
         |> Seq.choose (fun r -> gelmanRubin nMostRecent (subject r.Subject) (hypothesis r.Hypothesis) r)
         |> Seq.concat
@@ -127,7 +137,14 @@ module ModelComponents =
     let calculateComponents
         fitFn
         engine
-        (result: ResultSet.ResultSet<'subject, Loggers.IComponentLogger<'data> -> ModelSystem>)
+        (result:
+            ResultSet.ResultSet<
+                'subject,
+                Loggers.IComponentLogger<'data> -> ModelSystem<'data>,
+                'date,
+                'timeunit,
+                'timespan
+             >)
         =
         match result.BestResult with
         | None -> [] |> Map.ofList
