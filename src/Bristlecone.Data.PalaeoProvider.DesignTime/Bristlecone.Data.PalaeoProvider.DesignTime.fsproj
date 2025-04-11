@@ -7,27 +7,16 @@
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="..\..\paket-files\fsprojects\FSharp.TypeProviders.SDK\src\ProvidedTypes.fsi">
-      <Paket>True</Paket>
-      <Link>paket-files/ProvidedTypes.fsi</Link>
-    </Compile>
-    <Compile Include="..\..\paket-files\fsprojects\FSharp.TypeProviders.SDK\src\ProvidedTypes.fs">
-      <Paket>True</Paket>
-      <Link>paket-files/ProvidedTypes.fs</Link>
-    </Compile>
+    <!-- It is normal to include a copy of the runtime helpers in the design-time DLL, to help build the code model which gets mapped to target files -->
     <Compile Include="..\Bristlecone.Data.PalaeoProvider.Runtime\Bristlecone.Data.PalaeoProvider.Runtime.fs" />
     <Compile Include="PalaeoProvider.fs" />
     <None Include="paket.references" />
   </ItemGroup>
   <ItemGroup>
    <ProjectReference Include="..\Bristlecone\Bristlecone.fsproj" />
-   <!-- 
-    To use a reference to the FSharp.TypeProviders.SDK nuget package, do this:
-    
-    <PackageReference Include="FSharp.TypeProviders.SDK" Version="7.0.3">
+    <PackageReference Include="FSharp.TypeProviders.SDK" Version="8.1.0">
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    -->
     <PackageReference Update="FSharp.Core" Version="4.7.2">
       <!-- This excludes FSharp.Core.xml and FSharp.Core.resources.dll while referencing the right FSharp.Core.dll version -->
       <ExcludeAssets>runtime;contentFiles</ExcludeAssets>

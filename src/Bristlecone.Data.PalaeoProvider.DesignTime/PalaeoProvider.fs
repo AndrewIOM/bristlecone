@@ -22,9 +22,10 @@ type InferredType =
 
 
 let private activeIs fn (str: string) =
-   match fn str with
-   | (true, x) -> Some(x)
-   | _ -> None
+    match fn str with
+    | (true, x) -> Some(x)
+    | _ -> None
+
 let (|Int|_|) str = activeIs System.Int32.TryParse str
 let (|Float|_|) str = activeIs System.Double.TryParse str
 
@@ -34,21 +35,19 @@ module UnitsOfMeasure =
 
     /// Based on FSharp.Data
     type UnitsOfMeasureProvider =
-            static member SI(str) = ProvidedMeasureBuilder.SI str
+        static member SI(str) = ProvidedMeasureBuilder.SI str
 
-            static member Product(measure1, measure2) =
-                ProvidedMeasureBuilder.Product(measure1, measure2)
+        static member Product(measure1, measure2) =
+            ProvidedMeasureBuilder.Product(measure1, measure2)
 
-            static member Inverse(denominator) : Type =
-                ProvidedMeasureBuilder.Inverse(denominator)
+        static member Inverse(denominator) : Type =
+            ProvidedMeasureBuilder.Inverse(denominator)
 
     /// Based on FSharp.Data
     let uomTransformations =
-        [ 
-            [ "²"; "^2" ], (fun t -> UnitsOfMeasureProvider.Product(t, t))
-            [ "³"; "^3" ], (fun t -> UnitsOfMeasureProvider.Product(UnitsOfMeasureProvider.Product(t, t), t))
-            [ "^-1" ], (fun t -> UnitsOfMeasureProvider.Inverse(t))
-        ]
+        [ [ "²"; "^2" ], (fun t -> UnitsOfMeasureProvider.Product(t, t))
+          [ "³"; "^3" ], (fun t -> UnitsOfMeasureProvider.Product(UnitsOfMeasureProvider.Product(t, t), t))
+          [ "^-1" ], (fun t -> UnitsOfMeasureProvider.Inverse(t)) ]
 
     /// From FSharp.Data
     let parseUnitOfMeasure (str: string) =
@@ -60,10 +59,7 @@ module UnitsOfMeasure =
                     let baseUnitStr = str.[.. str.Length - suffix.Length - 1]
                     let baseUnit = UnitsOfMeasureProvider.SI baseUnitStr
 
-                    if isNull baseUnit then
-                        None
-                    else
-                        baseUnit |> trans |> Some
+                    if isNull baseUnit then None else baseUnit |> trans |> Some
                 else
                     None)
 
@@ -75,14 +71,19 @@ module UnitsOfMeasure =
 
 
 [<TypeProvider>]
-type NOAAPalaeoTemplateProvider (config : TypeProviderConfig) as this =
-    inherit TypeProviderForNamespaces (config, assemblyReplacementMap=[("Bristlecone.Data.PalaeoProvider.DesignTime", "Bristlecone.Data.PalaeoProvider.Runtime")])
+type NOAAPalaeoTemplateProvider(config: TypeProviderConfig) as this =
+    inherit
+        TypeProviderForNamespaces(
+            config,
+            assemblyReplacementMap =
+                [ ("Bristlecone.Data.PalaeoProvider.DesignTime", "Bristlecone.Data.PalaeoProvider.Runtime") ]
+        )
 
     let ns = "Bristlecone.Data.Palaeo"
     let asm = Assembly.GetExecutingAssembly()
 
     // check we contain a copy of runtime files, and are not referencing the runtime DLL
-    do assert (typeof<NoaaFile>.Assembly.GetName().Name = asm.GetName().Name)  
+    do assert (typeof<NoaaFile>.Assembly.GetName().Name = asm.GetName().Name)
 
 
     let noaaProvTy =
@@ -96,10 +97,11 @@ type NOAAPalaeoTemplateProvider (config : TypeProviderConfig) as this =
         | _ -> Some(Primitive(typeof<string>, unitOfMeasure, false))
 
 
-    let inferTypes (columns:array<ColumnMetadata>) (rows: seq<_>) =
+    let inferTypes (columns: array<ColumnMetadata>) (rows: seq<_>) =
 
         // Not sure why this is necessary:
         let rowsIterator = rows.GetEnumerator()
+
         let rows =
             if rowsIterator.MoveNext() then
                 seq {
@@ -114,27 +116,26 @@ type NOAAPalaeoTemplateProvider (config : TypeProviderConfig) as this =
                     yield Array.create columns.Length ""
                 }
             else
-                Array.create columns.Length ""
-                |> Seq.singleton
+                Array.create columns.Length "" |> Seq.singleton
 
-        // For each row of data, infer the types of the column's values 
+        // For each row of data, infer the types of the column's values
         // using the first value. TODO use more values.
         let fieldTypes =
             rows
             |> Seq.head
             |> Seq.zip columns
-            |> Seq.map(fun (column, value) ->
+            |> Seq.map (fun (column, value) ->
                 let unit = UnitsOfMeasure.parseUnitOfMeasure column.Units
                 let typ = dataType unit value
-                {| Name = column.What; Type = typ |}
-            )
+                {| Name = column.What; Type = typ |})
 
         fieldTypes
 
 
     let buildTypes (typeName: string) (args: obj[]) =
 
-        let provided = ProvidedTypeDefinition(asm, ns, typeName, Some typeof<obj>, hideObjectMethods = true)
+        let provided =
+            ProvidedTypeDefinition(asm, ns, typeName, Some typeof<obj>, hideObjectMethods = true)
 
         // let fileName = args.[0] :?> string
 
@@ -156,7 +157,8 @@ type NOAAPalaeoTemplateProvider (config : TypeProviderConfig) as this =
         // provided.AddMember(m2)
 
         // Generate static Parse method
-        let args = [ ProvidedParameter("text", typeof<string>) ]        
+        let args = [ ProvidedParameter("text", typeof<string>) ]
+
         let m: ProvidedMethod =
             let parseCode (args: Expr list) = <@@ NoaaFile.Parse %%args[0] @@>
             ProvidedMethod("Parse", args, typeof<NoaaFile>, isStatic = true, invokeCode = parseCode)
@@ -181,9 +183,7 @@ type NOAAPalaeoTemplateProvider (config : TypeProviderConfig) as this =
 
 
     let parameters =
-        [ 
-            ProvidedStaticParameter("Sample", typeof<string>, parameterDefaultValue = "")
-        ]
+        [ ProvidedStaticParameter("Sample", typeof<string>, parameterDefaultValue = "") ]
 
     do noaaProvTy.DefineStaticParameters(parameters, buildTypes)
 
@@ -198,7 +198,7 @@ type NOAAPalaeoTemplateProvider (config : TypeProviderConfig) as this =
 //     let asm = Assembly.GetExecutingAssembly()
 
 //     // check we contain a copy of runtime files, and are not referencing the runtime DLL
-//     do assert (typeof<DataSource>.Assembly.GetName().Name = asm.GetName().Name)  
+//     do assert (typeof<DataSource>.Assembly.GetName().Name = asm.GetName().Name)
 
 //     let defaultServiceUrl = "https://www.ncei.noaa.gov/access/paleo-search/study/search.xml"
 
@@ -212,7 +212,7 @@ type NOAAPalaeoTemplateProvider (config : TypeProviderConfig) as this =
 //         let ctor2 = ProvidedConstructor([ProvidedParameter("InnerState", typeof<string>)], invokeCode = fun args -> <@@ (%%(args.[1]):string) :> obj @@>)
 //         myType.AddMember(ctor2)
 
-//         for i in 1 .. count do 
+//         for i in 1 .. count do
 //             let prop = ProvidedProperty("Property" + string i, typeof<int>, getterCode = fun args -> <@@ i @@>)
 //             myType.AddMember(prop)
 
@@ -280,10 +280,9 @@ type NOAAPalaeoTemplateProvider (config : TypeProviderConfig) as this =
 
 //         myType
 
-//     let noaaParamType = 
+//     let noaaParamType =
 //         let t = ProvidedTypeDefinition(asm, ns, "GenerativeProvider", Some typeof<obj>, isErased=false)
-//         t.DefineStaticParameters( [ProvidedStaticParameter("Count", typeof<int>)], fun typeName args -> createType typeName (unbox<int> args.[0]))        
+//         t.DefineStaticParameters( [ProvidedStaticParameter("Count", typeof<int>)], fun typeName args -> createType typeName (unbox<int> args.[0]))
 //         t
 //     do
 //         this.AddNamespace(ns, [noaaParamType])
-

@@ -9,7 +9,6 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Bristlecone.Data.PalaeoProvider.Runtime.fs" />
-    <Compile Include="TypeProviderAssembly.fs" />
     <None Include="paket.references" />
   </ItemGroup>
   <ItemGroup>
