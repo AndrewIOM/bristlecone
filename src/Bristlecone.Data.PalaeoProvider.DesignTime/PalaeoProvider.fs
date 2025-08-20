@@ -69,6 +69,10 @@ module UnitsOfMeasure =
             let unit = UnitsOfMeasureProvider.SI str
             if isNull unit then None else Some unit
 
+type ColumnDefinition = {
+    Name: string
+    Type: InferredType option
+}
 
 [<TypeProvider>]
 type NOAAPalaeoTemplateProvider(config: TypeProviderConfig) as this =
@@ -95,7 +99,6 @@ type NOAAPalaeoTemplateProvider(config: TypeProviderConfig) as this =
         | Float _ -> Some(Primitive(typeof<float>, unitOfMeasure, false))
         | Int _ -> Some(Primitive(typeof<int>, unitOfMeasure, false))
         | _ -> Some(Primitive(typeof<string>, unitOfMeasure, false))
-
 
     let inferTypes (columns: array<ColumnMetadata>) (rows: seq<_>) =
 
@@ -127,7 +130,7 @@ type NOAAPalaeoTemplateProvider(config: TypeProviderConfig) as this =
             |> Seq.map (fun (column, value) ->
                 let unit = UnitsOfMeasure.parseUnitOfMeasure column.Units
                 let typ = dataType unit value
-                {| Name = column.What; Type = typ |})
+                { Name = column.What; Type = typ })
 
         fieldTypes
 
@@ -137,47 +140,96 @@ type NOAAPalaeoTemplateProvider(config: TypeProviderConfig) as this =
         let provided =
             ProvidedTypeDefinition(asm, ns, typeName, Some typeof<obj>, hideObjectMethods = true)
 
-        // let fileName = args.[0] :?> string
+        // Parameterise the type by the file to use as a template.
+        let fileName = ProvidedStaticParameter("filename", typeof<string>)
 
-        // let txt = System.IO.File.ReadAllText fileName
-        // let noaaFile =
-        //     txt
-        //     |> NoaaFile.Parse
+        // Resolve the filename relative to the resolution folder.
+        let fileName = args.[0] :?> string
+        let resolvedFilename = Path.Combine(config.ResolutionFolder, fileName)
 
-        // let columns =
-        //     System.IO.File.ReadAllLines fileName
-        //     |> NoaaFile.ColumnDefinitions
-        //     |> List.map snd
-        //     |> List.toArray
+        // Define a provided type for each row, erasing to a float[].
+        let rowTy = ProvidedTypeDefinition("Row", Some typeof<float[]> )
 
-        // let colTypes =
-        //     inferTypes columns []
+        let fileData = System.IO.File.ReadAllLines fileName
+        
+        let columns =
+            fileData
+            |> NoaaFile.ColumnDefinitions
+            |> List.map snd
+            |> List.toArray
+
+        let rows =
+            fileData
+            |> Array.filter (fun s -> System.Text.RegularExpressions.Regex.IsMatch(s, "^[^#](.*)"))
+            |> Seq.map(fun row -> row.Split"\t")
+
+        let colTypes =
+            inferTypes columns rows |> Seq.toList
+
+        colTypes |> List.iteri(fun i col ->
+            
+            let typeToUse =
+                match col.Type with
+                | Some t ->
+                    match t with
+                    | Null -> typeof<obj>
+                    | Primitive (t,u,optional) -> t
+                | None -> typeof<obj>
+
+            let prop =
+                ProvidedProperty(col.Name, typeToUse,
+                    getterCode = fun [row] -> <@@ (%%row:float[])[i] @@>)
+            
+            // Add metadata that defines the property's location in the referenced file.
+            prop.AddDefinitionLocation(1, i + 1, fileName)
+            rowTy.AddMember prop
+        )
+
+        let m2: ProvidedProperty =
+            let parseCode (args: Expr list) = <@@ colTypes @@>
+            ProvidedProperty("Columns", typeof<string list>, isStatic = true, getterCode = parseCode)
 
         // let m2 = ProvidedProperty("Columns", columns.GetType(), (fun _ -> <@@ columns @@>), isStatic = true)
-        // provided.AddMember(m2)
+        m2 |> provided.AddMember
 
-        // Generate static Parse method
+        // Add a parameterless constructor that loads the file that was used to define the schema.
+        let ctor0 =
+            ProvidedConstructor([],
+                invokeCode = fun _ -> <@@ NoaaFile.Parse(System.IO.File.ReadAllText fileName) @@>)
+        provided.AddMember ctor0
+
+        // Add a constructor that takes the file name to load.
+        let ctor1 = ProvidedConstructor([ProvidedParameter("filename", typeof<Stream>)],
+            invokeCode = fun [filename] -> <@@ NoaaFile.Load(%%filename) @@>)
+        provided.AddMember ctor1
+
+        // Add a more strongly typed Data property, which uses the existing property at run time.
+        let prop =
+            ProvidedProperty("Data", typedefof<seq<_>>.MakeGenericType rowTy,
+                getterCode = fun [noaaFile] -> <@@ (%%noaaFile:NoaaFile).Series @@>)
+        provided.AddMember prop
+
+        ProvidedProperty("``Indexed By Time``", typedefof<seq<_>>.MakeGenericType rowTy,
+            getterCode = fun [noaaFile] -> <@@ (%%noaaFile:NoaaFile).Timelines @@>)
+        |> provided.AddMember
+
+
+        // Add the row type as a nested type.
+        provided.AddMember rowTy
+
+        // Static methods:
+
         let args = [ ProvidedParameter("text", typeof<string>) ]
-
         let m: ProvidedMethod =
             let parseCode (args: Expr list) = <@@ NoaaFile.Parse %%args[0] @@>
             ProvidedMethod("Parse", args, typeof<NoaaFile>, isStatic = true, invokeCode = parseCode)
+        m.AddXmlDoc "Parses the specified string representation of an NOAA data file"
+        m |> provided.AddMember
 
-        m.AddXmlDoc("Parses the specified string representation of an NOAA data file")
-
-        provided.AddMember(m)
-
-        // provided.AddMember(ProvidedProperty("Cool", typeof<int>, (fun _ -> <@@ 2 @@>), isStatic = true))
-
-        // // provided.AddMember(ProvidedConstructor([], (fun _ -> <@@ failwith "not finished" @@>)))
-        // // Declare a constructor.
-        // let ctor =
-        //     ProvidedConstructor(
-        //     parameters = [],
-        //     invokeCode = fun args -> <@@ System.Text.RegularExpressions.Regex("") :> obj @@>)
-
-        // ctor.AddXmlDoc "Initializes a TEST instance"
-        // provided.AddMember ctor
+        // let loadMember =
+        //     let parseCode (args: Expr list) = <@@ NoaaFile.Load %%args[0] @@>
+        //     ProvidedMethod("Load", args, typeof<NoaaFile>, isStatic = true, invokeCode = parseCode)
+        // loadMember |> provided.AddMember
 
         provided
 

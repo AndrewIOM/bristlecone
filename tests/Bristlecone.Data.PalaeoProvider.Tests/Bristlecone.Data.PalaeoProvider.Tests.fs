@@ -13,11 +13,9 @@ let typeProviderTests =
         // testCase "Default constructor should create instance" <| fun _ -> 
         //     Expect.equal "My internal state" (MyType().InnerState) ""
 
-        // testCase "Default constructor should create instance" <| fun _ -> 
-        //     Expect.equal "My internal state" (MyType().InnerState) ""
+        testCase "Can access properties of erase provider" <| fun _ ->             
 
-        testCase "Can access properties of erase provider" <| fun _ -> 
-            Expect.isNotEmpty NOAATest.Columns "Columns was empty"
+            Expect.hasLength NOAATest.Columns 4 "Not correct number of columns"
 
         ]
 

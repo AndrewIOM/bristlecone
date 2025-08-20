@@ -218,7 +218,7 @@ type NoaaFile private (metadata, timelines, series, datasets) =
 
         let variableDefinitions =
             txt
-            |> Array.filter (fun s -> s.StartsWith("##"))
+            |> Array.filter (fun s -> s.StartsWith "##")
             |> Array.map (fun row ->
                 let rowData =
                     System.Text.RegularExpressions.Regex.Match(
