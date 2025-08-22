@@ -51,7 +51,7 @@ module Language =
         | Power of ModelExpression * ModelExpression
         | Logarithm of ModelExpression
         | Exponential of ModelExpression
-        | Conditional of ((ModelExpression -> float) -> ModelExpression)
+        | Conditional of cond: ModelExpression * ifTrue: ModelExpression * ifFalse: ModelExpression
         | Label of string * ModelExpression
         | Invalid
 
@@ -74,6 +74,139 @@ module Language =
         static member (~-) e =
             Multiply[e
                      Constant -1.]
+
+    /// Compile model expressions into functions that take
+    /// changing state as Tensors.
+    module ExpressionCompiler =
+
+        open System
+        open DiffSharp
+        open Microsoft.FSharp.Quotations
+        open Microsoft.FSharp.Linq.RuntimeHelpers
+        open System.Linq.Expressions
+
+        module DslHelpers =
+
+            // Elementwise branch: condition should be tensor of bools
+            let ifThenElse (cond: Tensor) (thenVal: Tensor) (elseVal: Tensor) =
+                failwith "not implemented"
+                //dsharp.where(cond, thenVal, elseVal)
+
+        // ---- Index Builders ----
+        let private buildIndex toKey =
+            Seq.mapi (fun i k -> toKey k, i) >> Map.ofSeq
+
+        let private paramIndex =
+            Parameter.Pool.toList
+            >> Seq.map fst
+            >> Seq.map (fun s -> s.Value)
+            >> buildIndex id
+
+        let private envIndex: Map<ShortCode.ShortCode,obj> -> Map<string,int> =
+            Map.toSeq
+            >> Seq.map fst
+            >> Seq.map (fun (s: ShortCode.ShortCode) -> s.Value)
+            >> buildIndex id
+
+        // ---- Vars ----
+        let private pVar = Var("parameters", typeof<Tensors.ParameterPoolTensor>)
+        let private eVar = Var("environment", typeof<Tensors.PointTensor>)
+        let private tVar = Var("time", typeof<Tensor>)
+        let private xVar = Var("thisValue", typeof<Tensor>)
+
+        // ---- Quotation Builder ----
+        let rec private toQuotation (pIndex: Map<string,int>) (eIndex: Map<string,int>) = function
+            | Constant n       -> <@ dsharp.tensor n @>
+
+            | Parameter name   -> <@ (%%Expr.Var pVar : Tensor).[pIndex.[name]] @>
+
+            | Environment name -> <@ (%%Expr.Var eVar : Tensor).[eIndex.[name]] @>
+
+            | Time             -> <@ %%Expr.Var tVar : Tensor @>
+
+            | This             -> <@ %%Expr.Var xVar : Tensor @>
+
+            | Add xs           ->
+                xs |> List.map (toQuotation pIndex eIndex)
+                |> List.reduce (fun l r -> <@ dsharp.add(%l, %r) @>)
+
+            | Multiply xs      ->
+                xs |> List.map (toQuotation pIndex eIndex)
+                |> List.reduce (fun l r -> <@ %l * %r @>)
+
+            | Subtract (l, r)  ->
+                let lq = toQuotation pIndex eIndex l
+                let rq = toQuotation pIndex eIndex r
+                <@ dsharp.sub(%lq, %rq) @>
+
+            | Divide (l, r)    ->
+                let lq = toQuotation pIndex eIndex l
+                let rq = toQuotation pIndex eIndex r
+                <@ dsharp.div(%lq, %rq) @>
+
+            | Arbitrary (fn, _) ->
+                // Assumes `fn` can be represented/embedded as a quotation. If not,
+                // you'll need to expose it via a known method and call that here.
+                failwith "Embedding arbitrary functions requires a known quotation or wrapper"
+
+            | Mod (e, m) ->
+                let eq = toQuotation pIndex eIndex e
+                let mq = toQuotation pIndex eIndex m
+                <@ %eq - %mq * dsharp.floor(%eq / %mq) @>
+
+            | Power (e, m) ->
+                let eq = toQuotation pIndex eIndex e
+                let mq = toQuotation pIndex eIndex m
+                <@ dsharp.pow(%eq, %mq) @>
+
+            | Logarithm e ->
+                let eq = toQuotation pIndex eIndex e
+                <@ dsharp.log(%eq) @>
+
+            | Exponential e ->
+                let eq = toQuotation pIndex eIndex e
+                <@ dsharp.exp(%eq) @>
+
+            | Conditional (cond, ifTrue, ifFalse) ->
+                let cq = toQuotation pIndex eIndex cond
+                let tq = toQuotation pIndex eIndex ifTrue
+                let eq = toQuotation pIndex eIndex ifFalse
+                <@ DslHelpers.ifThenElse %cq %tq %eq @>
+
+            | Label (_, m) ->
+                toQuotation pIndex eIndex m
+
+            | Invalid ->
+                <@ dsharp.tensor nan @>
+
+        // ---- Lambda Pipeline ----
+        let private toLambda body =
+            Expr.Lambda(
+                pVar,
+                Expr.Lambda(
+                    eVar,
+                    Expr.Lambda(
+                        tVar,
+                        Expr.Lambda(xVar, body)
+                    )
+                )
+            )
+
+        let private toDelegate =
+            LeafExpressionConverter.EvaluateQuotation
+            >> unbox<Tensors.ParameterPoolTensor -> Tensors.PointTensor -> Tensor -> Tensor -> Tensor>
+
+        /// Compiles model expression into Tensor-based
+        /// function that can be evaluated when required without
+        /// needing recompiling.
+        let compile parameters env =
+            let pIndex = paramIndex parameters
+            let eIndex = envIndex env
+            toQuotation pIndex eIndex
+            >> toLambda
+            >> toDelegate
+
+
 
     /// Computes a `ModelExpression` given the current time, value,
     /// environment, and parameter pool.
@@ -111,7 +244,10 @@ module Language =
         | Power(e, m) -> (compute x t pool environment e) ** (compute x t pool environment m)
         | Logarithm e -> log (compute x t pool environment e)
         | Exponential e -> exp (compute x t pool environment e)
-        | Conditional m -> m (compute x t pool environment) |> compute x t pool environment
+        | Conditional (cond, ifTrue, ifFalse) ->
+            if compute x t pool environment cond <> 0.0
+            then compute x t pool environment ifTrue
+            else compute x t pool environment ifFalse
         | Label(_, m) -> m |> compute x t pool environment
         | Invalid -> nan
 
@@ -250,7 +386,7 @@ module Language =
                 | Some c -> map |> Map.add c comp |> ModelBuilder
                 | None -> failwithf "The text '%s' cannot be used to make a short code identifier." name
 
-        let compile builder : ModelSystem.ModelSystem<float> =
+        let compile builder : ModelSystem.ModelSystem<float, 'timeIndex> =
             // Ensure only single likelihood function
             // Find all parameters
 
@@ -424,8 +560,8 @@ module Language =
 
         /// <summary>A hypothesis consists of a model system and the names of the
         /// swappable components within it, alongside the name of their current implementation.</summary>
-        type Hypothesis<'data> =
-            | Hypothesis of ModelSystem.ModelSystem<'data> * list<ComponentName>
+        type Hypothesis<'data, 'timeIndex> =
+            | Hypothesis of ModelSystem.ModelSystem<'data, 'timeIndex> * list<ComponentName>
 
             member private this.unwrap = this |> fun (Hypothesis(h1, h2)) -> (h1, h2)
 

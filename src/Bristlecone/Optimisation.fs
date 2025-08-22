@@ -428,7 +428,7 @@ module MonteCarlo =
             writeOut
             (endCondition: EndCondition<float>)
             (domain: Domain)
-            (f: Objective<float>)
+            (f: Objective<Point<float>, float>)
             =
             writeOut <| GeneralEvent(sprintf "[Optimisation] Starting MCMC Random Walk")
             let sample cov = MutlivariateNormal.sample cov random
@@ -651,7 +651,7 @@ module MonteCarlo =
     /// individually, unlike the random walk algorithm.
     let ``Metropolis-within Gibbs``: Optimiser<float> =
         InDetachedSpace
-        <| fun random writeOut endCon domain startPoint (f: Objective<float>) ->
+        <| fun random writeOut endCon domain startPoint (f: Objective<Point<float>, float>) ->
             let theta = Initialise.initialise domain random
             let sigmas = theta |> Array.map (fun _ -> 0.)
 
@@ -665,7 +665,7 @@ module MonteCarlo =
     /// Reference: http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.70.7198&rep=rep1&type=pdf
     let ``Automatic (Adaptive Diagnostics)``: Optimiser<float> =
         InDetachedSpace
-        <| fun random writeOut endCon domain startPoint (f: Objective<float>) ->
+        <| fun random writeOut endCon domain startPoint (f: Objective<Point<float>, float>) ->
 
             // Starting condition
             let initialTheta = Initialise.initialise domain random
@@ -1068,7 +1068,7 @@ module MonteCarlo =
         /// Probability: Boltzmann Machine
         let classicalSimulatedAnnealing scale tDependentProposal settings : Optimiser<float> =
             InDetachedSpace
-            <| fun random writeOut endCon domain startPoint (f: Objective<float>) ->
+            <| fun random writeOut endCon domain startPoint (f: Objective<Point<float>, float>) ->
                 let gaussian rnd scale t =
                     let s = if tDependentProposal then scale * (sqrt t) else scale
                     Bristlecone.Statistics.Distributions.Normal.draw rnd 0. s
@@ -1090,7 +1090,7 @@ module MonteCarlo =
         /// Probability: Bottzmann Machine
         let fastSimulatedAnnealing scale tDependentProposal settings : Optimiser<float> =
             InDetachedSpace
-            <| fun random writeOut endCon domain startPoint (f: Objective<float>) ->
+            <| fun random writeOut endCon domain startPoint (f: Objective<Point<float>, float>) ->
                 let cauchy rnd scale t =
                     let s = if tDependentProposal then scale * (sqrt t) else scale
                     let c = MathNet.Numerics.Distributions.Cauchy(0., s, rnd)
@@ -1132,7 +1132,7 @@ module MonteCarlo =
             writeOut
             (sampleEnd: EndCondition<float>)
             (domain: Domain)
-            (f: Objective<float>)
+            (f: Objective<Point<float>, float>)
             =
             writeOut
             <| GeneralEvent(sprintf "[Optimisation] Starting Filzbach-style MCMC optimisation")
@@ -1272,7 +1272,7 @@ module MonteCarlo =
         /// Microsoft Research Cambridge.
         let filzbach settings : Optimiser<float> =
             InDetachedSpace
-            <| fun random writeOut endCon domain startPoint (f: Objective<float>) ->
+            <| fun random writeOut endCon domain startPoint (f: Objective<Point<float>, float>) ->
                 match startPoint with
                 | Some theta ->
                     writeOut
@@ -1317,7 +1317,7 @@ module Amoeba =
               Rho = (-0.5)
               Size = 3 }
 
-        let evaluate (f: Objective<'a>) (x: Point<'a>) = (f x, x)
+        let evaluate (f: Objective<Point<'a>, 'a>) (x: Point<'a>) = (f x, x)
         let valueOf (s: Solution<'a>) = fst s
 
         let replace (a: Amoeba) (s: Solution<float>) =
@@ -1340,7 +1340,7 @@ module Amoeba =
 
         let contracted v s = stretch v s.Rho
 
-        let shrink (a: Amoeba) (f: Objective<float>) s =
+        let shrink (a: Amoeba) (f: Objective<Point<float>, float>) s =
             let best = snd a.Best
 
             { a with
@@ -1349,7 +1349,7 @@ module Amoeba =
                     |> Array.map (fun p -> stretch (best, snd p) -s.Sigma)
                     |> Array.map (evaluate f) }
 
-        let update (a: Amoeba) (f: Objective<float>) (s: Settings) =
+        let update (a: Amoeba) (f: Objective<Point<float>, float>) (s: Settings) =
             let cen = centroid a
             let rv, r = reflected (cen, (snd a.Worst)) s |> evaluate f
 
@@ -1400,7 +1400,7 @@ module Amoeba =
             numberOfAmoeba
             (paramBounds: Domain)
             startPoint
-            (f: Objective<float>)
+            (f: Objective<Point<float>, float>)
             =
 
             let amoebaResults =

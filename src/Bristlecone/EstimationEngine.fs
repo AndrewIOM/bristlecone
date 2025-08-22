@@ -2,21 +2,37 @@ namespace Bristlecone
 
 open Bristlecone.Time
 
+/// Define wrappers for tensors that make it harder
+/// to get values in the wrong places in function calls.
+module Tensors =
+
+    open DiffSharp
+
+    type ModelTimeIndexTensor = ModelTimeIndexTensor of Tensor
+        with
+            static member Create (v:float<``time index``>) = ModelTimeIndexTensor (dsharp.tensor v)
+            member this.Value = this |> fun (ModelTimeIndexTensor v) -> v
+
+    type PointTensor = PointTensor of Tensor
+        with member this.Value = this |> fun (PointTensor v) -> v
+
+    type ParameterPoolTensor = ParameterPoolTensor of Tensor
+        with
+            member this.Value = this |> fun (ParameterPoolTensor v) -> v
+            member this.ValueFor (s:ShortCode.ShortCode) = dsharp.tensor 1
+
+
 /// Represents an ordinary differential equation model system and
 /// its likelihood as as objective function that may be optimised.
 module ModelSystem =
 
     type Environment<'data> = CodedMap<'data>
 
-    // Time is defined as either:
-    // - Integration / internal model timesteps
-    // - External ('real') time (radiocarbon, date-time etc.)
-    // Here, we will define time as a float
-    type ModelTime = float<``time index``>
-
     /// An ordinary differential equation that may require fixed or free parameters,
     /// the current time t, the current response value, and / or external environmental time series.
-    type ModelEquation<'data> = Parameter.Pool -> ModelTime -> 'data -> Environment<'data> -> 'data
+    type ModelEquation<'data, 'timeIndex> =
+        Parameter.Pool -> 'timeIndex ->
+            'data -> Environment<'data> -> 'data
 
     /// Paired time-series representing the true and modelled time-series.
     type PredictedSeries =
@@ -38,9 +54,9 @@ module ModelSystem =
     /// current (time t) and previous (time t-1) system state.
     type Measurement<'data> = 'data -> Environment<'data> -> Environment<'data> -> 'data
 
-    type ModelSystem<'data> =
+    type ModelSystem<'data, 'timeIndex> =
         { Parameters: Parameter.Pool
-          Equations: CodedMap<ModelEquation<'data>>
+          Equations: CodedMap<ModelEquation<'data, 'timeIndex>>
           Measures: CodedMap<Measurement<'data>>
           NegLogLikelihood: LikelihoodFn<'data> }
 
@@ -61,12 +77,16 @@ module EstimationEngine =
     open System
     open Bristlecone.Logging
     open Bristlecone.Conditioning
-    open ModelSystem
+    open DiffSharp
 
-    /// Point is generic to allow choice of number precision
     type Point<'a> = 'a[]
     type Solution<'a> = float * Point<'a>
-    type Objective<'a> = Point<'a> -> float
+
+    type Objective<'Input, 'Output> = 'Input -> 'Output
+    type ObjectiveWrapper =
+        | FloatObj of Objective<Point<float>, float>
+        | TensorObj of Objective<Tensor, Tensor>
+
     /// Determines if the end has been reached based on a list
     /// of tupled Solutions with their iteration number.
     type EndCondition<'a> = (Solution<'a>) list -> int -> bool

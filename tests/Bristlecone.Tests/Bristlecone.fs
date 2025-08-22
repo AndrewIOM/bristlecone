@@ -34,7 +34,7 @@ module TestModels =
         |> Model.compile
 
 let defaultEngine =
-    { TimeHandling = Continuous <| Integration.MathNet.integrate
+    { TimeHandling = Continuous <| Integration.RungeKutta.rk4
       OptimiseWith = Optimisation.None.none
       LogTo = ignore
       Random = MathNet.Numerics.Random.MersenneTwister(1000, true)

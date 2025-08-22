@@ -39,6 +39,24 @@ let modelExpressionOperators =
           testProperty "Negative sign negates value"
           <| fun (a: NormalFloat) x t pool env -> -Constant a.Get |> compute x t pool env = -a.Get ]
 
+
+open DiffSharp
+
+[<Tests>]
+let modelExpressionsTensor =
+    testList
+        "Model expression - DSL compilation (tensors)"
+        [
+
+            testProperty "Constant expressions produce constant tensors" <| fun (value: float) pool ->
+                let expr = Constant value
+                let compiled = ExpressionCompiler.compile pool Map.empty expr
+                let result = compiled (Tensors.ParameterPoolTensor <| dsharp.tensor 0.0) (Tensors.PointTensor <| dsharp.tensor 0.0) (dsharp.tensor 0.0) (dsharp.tensor 0.0)
+                Expect.floatClose Accuracy.high (result.toDouble()) value "Constant should match"
+        
+        ]
+
+
 [<Tests>]
 let modelExpressions =
     testList

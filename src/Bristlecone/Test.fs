@@ -106,7 +106,7 @@ module Test =
 
     /// Ensures settings are valid for a test, by ensuring that
     /// start values have been set for each equation.
-    let isValidSettings (model: ModelSystem.ModelSystem<'data>) testSettings =
+    let isValidSettings (model: ModelSystem.ModelSystem<'data, 'timeIndex>) testSettings =
         let equationKeys = model.Equations |> Map.toList |> List.map fst
 
         if
@@ -255,7 +255,7 @@ module Test =
         let rec tryGenerateData
             (engine: EstimationEngine.EstimationEngine<float, 'b, 'c, 'd>)
             settings
-            (model: ModelSystem.ModelSystem<float>)
+            (model: ModelSystem.ModelSystem<float, 'timeIndex>)
             attempts
             =
             let theta = drawParameterSet engine.Random model.Parameters

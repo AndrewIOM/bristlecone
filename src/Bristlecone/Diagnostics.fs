@@ -140,7 +140,7 @@ module ModelComponents =
         (result:
             ResultSet.ResultSet<
                 'subject,
-                Loggers.IComponentLogger<'data> -> ModelSystem<'data>,
+                Loggers.IComponentLogger<'data> -> ModelSystem<'data, 'timeIndex>,
                 'date,
                 'timeunit,
                 'timespan

@@ -8,7 +8,7 @@ module Objective =
     open ModelSystem
     open Bristlecone.EstimationEngine
 
-    let parameteriseModel parameterPool point (model: ModelEquation<'data>) =
+    let parameteriseModel parameterPool point (model: ModelEquation<'data, 'timeIndex>) =
         model (point |> Parameter.Pool.fromPointInTransformedSpace parameterPool)
 
     /// Pairs observed time series to predicted series for dynamic variables only.
@@ -30,19 +30,19 @@ module Objective =
                 invalidOp (sprintf "The predicted series %s was a different length to the observed series" key.Value))
 
     /// The system's `Measures` are computed from the product of the solver.
-    let measure (system: ModelSystem<'data>) solveDiscrete (expected: CodedMap<float[]>) : CodedMap<float[]> =
+    let measure (system: ModelSystem<'data, 'timeIndex>) solveDiscrete (expected: CodedMap<float[]>) : CodedMap<float[]> =
         system.Measures
         |> Map.map (fun key measure -> solveDiscrete key measure expected)
         |> Map.fold (fun acc key value -> Map.add key value acc) expected
 
-    let predict (system: ModelSystem<'data>) integrate solveDiscrete (p: Point<float>) =
+    let predict (system: ModelSystem<'data, 'timeIndex>) integrate solveDiscrete (p: Point<float>) =
         system.Equations
         |> Map.map (fun _ v -> parameteriseModel system.Parameters p v)
         |> integrate
         |> measure system solveDiscrete
 
     /// Computes measurement variables and appends to expected data
-    let create (system: ModelSystem<'data>) integrate solveDiscrete (observed: CodedMap<float[]>) =
+    let create (system: ModelSystem<'data, 'timeIndex>) integrate solveDiscrete (observed: CodedMap<float[]>) =
         fun point ->
             point
             |> predict system integrate solveDiscrete
