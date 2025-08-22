@@ -94,7 +94,15 @@ module EstimationEngine =
 
     type State = float
 
-    type ODE = float<``time index``> -> State -> ModelSystem.Environment<State> -> State
+    // Equations
+    type TensorODE = Tensors.ParameterPoolTensor -> Tensors.PointTensor -> Tensor -> Tensor -> Tensor
+    type FloatODE = float<``time index``> -> State -> ModelSystem.Environment<State> -> State
+
+    type ModelEquations =
+        | TensorODEs of CodedMap<TensorODE>
+        | FloatODEs of CodedMap<FloatODE>
+
+//ModelExpression -> Tensors.ParameterPoolTensor -> Tensors.PointTensor -> Tensor -> Tensor -> Tensor
 
     type WriteOut = LogEvent -> unit
 
@@ -105,7 +113,7 @@ module EstimationEngine =
             -> float<``time index``>
             -> CodedMap<'data>
             -> CodedMap<TimeIndex.TimeIndex<'data, 'date, 'timeunit, 'timespan>>
-            -> CodedMap<ODE>
+            -> CodedMap<FloatODE>
             -> CodedMap<'data[]>
 
     type Optimise<'data> =

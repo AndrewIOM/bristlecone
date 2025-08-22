@@ -79,11 +79,9 @@ module Language =
     /// changing state as Tensors.
     module ExpressionCompiler =
 
-        open System
         open DiffSharp
         open Microsoft.FSharp.Quotations
         open Microsoft.FSharp.Linq.RuntimeHelpers
-        open System.Linq.Expressions
 
         module DslHelpers =
 
@@ -91,6 +89,7 @@ module Language =
             let ifThenElse (cond: Tensor) (thenVal: Tensor) (elseVal: Tensor) =
                 failwith "not implemented"
                 //dsharp.where(cond, thenVal, elseVal)
+
 
         // ---- Index Builders ----
         let private buildIndex toKey =
@@ -115,6 +114,7 @@ module Language =
         let private xVar = Var("thisValue", typeof<Tensor>)
 
         // ---- Quotation Builder ----
+        // Note: parameters should be the 'real' / non-transformed value for use in model calculation.
         let rec private toQuotation (pIndex: Map<string,int>) (eIndex: Map<string,int>) = function
             | Constant n       -> <@ dsharp.tensor n @>
 
@@ -206,50 +206,69 @@ module Language =
             >> toLambda
             >> toDelegate
 
+        /// Compiles model expression into a float-based
+        /// function that can be evaluated when required
+        /// without needing recompiling.
+        let compileFloat expr =
+            let pVar = Var("parameters", typeof<Parameter.Pool>)
+            let eVar = Var("environment", typeof<CodedMap<float>>)
+            let tVar = Var("time", typeof<float<Time.``time index``>>)
+            let xVar = Var("thisValue", typeof<float>)
+
+            let rec toQuotation = function
+                | Constant n       -> <@ n @>
+                | Parameter name   ->
+                    <@ match (%%Expr.Var pVar : Parameter.Pool) |> Parameter.Pool.tryGetRealValue name with
+                       | Some est -> est
+                       | None ->
+                            failwithf
+                                "The equation could not be calculated. The parameter '%s' has not been set up (or has yet to be estimated)."
+                                name @>
+                | Environment name ->
+                    <@
+                        match (%%Expr.Var eVar : CodedMap<float>) |> Map.tryFindBy (fun n -> n.Value = name) with
+                        | Some i -> i
+                        | None ->
+                            failwithf
+                                "The equation could not be calculated. The environmental data '%s' has not been configured."
+                                name
+                    @>
+                | Time             -> <@ (%%Expr.Var tVar : float<Time.``time index``>) |> Units.removeUnitFromFloat @>
+                | This             -> <@ %%Expr.Var xVar : float @>
+                | Add xs           -> xs |> List.map toQuotation |> List.reduce (fun l r -> <@ %l + %r @>)
+                | Multiply xs      -> xs |> List.map toQuotation |> List.reduce (fun l r -> <@ %l * %r @>)
+                | Subtract(l,r)    -> <@ %(toQuotation l) - %(toQuotation r) @>
+                | Divide(l,r)      -> <@ %(toQuotation l) / %(toQuotation r) @>
+                | Power(l,r)       -> <@ %(toQuotation l) ** %(toQuotation r) @>
+                | Logarithm e      -> <@ log %(toQuotation e) @>
+                | Exponential e    -> <@ exp %(toQuotation e) @>
+                | Mod(l,r)         -> <@ %(toQuotation l) % %(toQuotation r) @>
+                | Conditional(c,t,f) ->
+                    <@ if %(toQuotation c) <> 0.0 then %(toQuotation t) else %(toQuotation f) @>
+                | Label(_,m)       -> toQuotation m
+                | Invalid          -> <@ nan @>
+                | Arbitrary _      -> failwith "Arbitrary requires custom handling"
+                // Add empty list handling into list expressions:
+//         //     match list with
+        //     | NotEmptyList l -> l |> List.sumBy (compute x t pool environment)
+        //     | _ -> failwith "List was empty"
+
+            let lambda =
+                Expr.Lambda(
+                    pVar,
+                    Expr.Lambda(eVar,
+                        Expr.Lambda(tVar,
+                            Expr.Lambda(xVar, toQuotation expr))))
+            lambda
+            |> LeafExpressionConverter.EvaluateQuotation
+            |> unbox<Parameter.Pool -> CodedMap<float> -> float<Time.``time index``> -> float -> float>
+
 
 
     /// Computes a `ModelExpression` given the current time, value,
     /// environment, and parameter pool.
     let rec compute x (t: float<Time.``time index``>) (pool: Parameter.Pool) (environment: CodedMap<float>) ex : float =
-        match ex with
-        | This -> x
-        | Time -> t |> Units.removeUnitFromFloat
-        | Environment name ->
-            match environment |> Map.tryFindBy (fun n -> n.Value = name) with
-            | Some i -> i
-            | None ->
-                failwithf
-                    "The equation could not be calculated. The environmental data '%s' has not been configured."
-                    name
-        | Parameter name ->
-            match pool |> Parameter.Pool.tryGetRealValue name with
-            | Some est -> est
-            | None ->
-                failwithf
-                    "The equation could not be calculated. The parameter '%s' has not been set up (or has yet to be estimated)."
-                    name
-        | Constant n -> n
-        | Add list ->
-            match list with
-            | NotEmptyList l -> l |> List.sumBy (compute x t pool environment)
-            | _ -> failwith "List was empty"
-        | Subtract(l, r) -> compute x t pool environment l - compute x t pool environment r
-        | Multiply list ->
-            match list with
-            | NotEmptyList l -> l |> List.map (compute x t pool environment) |> List.fold (*) 1.
-            | _ -> failwith "List was empty"
-        | Divide(l, r) -> compute x t pool environment l / compute x t pool environment r
-        | Arbitrary(fn, _) -> fn x t pool environment
-        | Mod(e, m) -> (compute x t pool environment e) % (compute x t pool environment m)
-        | Power(e, m) -> (compute x t pool environment e) ** (compute x t pool environment m)
-        | Logarithm e -> log (compute x t pool environment e)
-        | Exponential e -> exp (compute x t pool environment e)
-        | Conditional (cond, ifTrue, ifFalse) ->
-            if compute x t pool environment cond <> 0.0
-            then compute x t pool environment ifTrue
-            else compute x t pool environment ifFalse
-        | Label(_, m) -> m |> compute x t pool environment
-        | Invalid -> nan
+        ExpressionCompiler.compileFloat ex pool environment t x
 
 
     module Writer =

@@ -50,7 +50,7 @@ module Base =
         tStep
         initialConditions
         externalEnvironment
-        (modelMap: CodedMap<EstimationEngine.ODE>)
+        (modelMap: CodedMap<EstimationEngine.FloatODE>)
         : CodedMap<float[]> =
 
         // A. Setup initial vector
@@ -132,5 +132,5 @@ module RungeKutta =
         Array.init (Array2D.length1 arr2d) (fun i -> Array.init (Array2D.length2 arr2d) (fun j -> arr2d.[i, j]))
 
     let rk4: EstimationEngine.Integrate<float, 'date, 'timeunit, 'timespan> =
-        fun log tInitial tEnd tStep initialConditions externalEnvironment (modelMap: CodedMap<EstimationEngine.ODE>) ->
+        fun log tInitial tEnd tStep initialConditions externalEnvironment (modelMap: CodedMap<EstimationEngine.FloatODE>) ->
             Base.solve log rk4float tInitial tEnd tStep initialConditions externalEnvironment modelMap

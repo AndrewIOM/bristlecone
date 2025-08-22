@@ -8,7 +8,7 @@ module Solver =
     open Bristlecone.Logging
     open Bristlecone.Time
 
-    type Solver<'a> = CodedMap<ODE> -> CodedMap<'a[]>
+    type Solver<'a> = CodedMap<FloatODE> -> CodedMap<'a[]>
 
     /// If environmental forcing data is supplied, the output series may be
     /// configured to be either external (i.e. on observation timeline) or
