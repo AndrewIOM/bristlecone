@@ -5,8 +5,10 @@ namespace Bristlecone.Integration
 module Base =
 
     open Bristlecone
-    open Bristlecone.Logging
     open Bristlecone.Time
+    open Bristlecone.Tensors
+    open Bristlecone.EstimationEngine
+    open DiffSharp
 
     /// Generates a coded map of time-series where all values are NaN.
     let nanResult tInitial tEnd (tStep: float<``time index``>) modelMap =
@@ -16,80 +18,102 @@ module Base =
             let count = (tEnd - tInitial + 1.<``time index``>) / tStep |> int
             [ 1..count ] |> List.map (fun _ -> nan) |> List.toArray
 
-        variableCodes |> Array.map (fun k -> (k, fakeSeries)) |> Map.ofArray
+        variableCodes |> Array.map (fun k -> k, fakeSeries) |> Map.ofArray
 
-    let internal applyDynamicVariables newValues newValueKeys environment =
-        let newEnv = newValues |> Array.zip newValueKeys
+    /// Scaffolds an AD-aware function that bakes in the current parameter
+    /// set, and only requires the current time and state on any calculation.
+    /// Because of the way in which external environment variables are inserted,
+    /// the function should only be run at times as specified in tInitial, tEnd,
+    /// and tStep.
+    let makeCompiledFunctionForIntegration
+        (tInitial       : float<``time index``>)
+        (tEnd           : float<``time index``>)
+        (tStep          : float<``time index``>)
+        (initialEnv     : CodedMap<TypedTensor<Scalar,``environment``>>)
+        (externalEnv    : CodedMap<TimeIndex.TimeIndex<float<``environment``>,'date,'timeunit,'timespan>>)
+        (modelMap : CodedMap<TensorODE>)
+        : EstimationEngine.CompiledFunctionForIntegration =
 
-        environment
-        |> Map.map (fun key value ->
-            let updated = newEnv |> Array.tryFind (fun (k2, _) -> k2 = key)
+        // STAGE 1. Static scaffolding.
 
-            match updated with
-            | Some u -> snd u
-            | None -> value)
-
-    let internal applyExternalEnvironment
-        (time: float<``time index``>)
-        (externalEnv: Map<'a, TimeIndex.TimeIndex<'T, 'date, 'timeunit, 'timespan>>)
-        (currentEnv: Map<'a, 'T>)
-        =
-        currentEnv
-        |> Map.map (fun k v ->
-            let updated = externalEnv |> Map.tryFind k
-
-            match updated with
-            | Some index -> index.[time]
-            | None -> v)
-
-    let solve
-        log
-        integrate
-        (tInitial: float<``time index``>)
-        tEnd
-        tStep
-        initialConditions
-        externalEnvironment
-        (modelMap: CodedMap<EstimationEngine.FloatODE>)
-        : CodedMap<float[]> =
-
-        // A. Setup initial vector
+        // Keys & equations
         let modelKeys, modelEqs = modelMap |> Map.toArray |> Array.unzip
 
-        let vectorKeys, initialVector =
-            modelMap
-            |> Map.toArray
-            |> Array.map (fun (k, _) -> (k, initialConditions |> Map.find k |> Units.removeUnitFromFloat))
-            |> Array.unzip
+        // Precompute external env timeline (constant, non-diff)
+        let timeline = [| tInitial .. tStep .. tEnd |]
+        let externalEnvTensors : CodedMap<TypedTensor<Vector,``environment``>> =
+            externalEnv
+            |> Map.map (fun _ ti ->
+                timeline
+                |> Array.map (fun t -> ti.[t])
+                |> Typed.ofVector)
 
-        // B. Setup composite function to integrate
-        let mutable iteration = 1<iteration>
+        // Merge helpers (typed, AD-safe)
+        let inline applyDynamicVariablesT
+            (newValues: TypedTensor<Vector,1>)
+            (newValueKeys: ShortCode.ShortCode[])
+            (environment: CodedMap<TypedTensor<Scalar,``environment``>>) =
 
-        let rp (t: float) x =
-            let t = t * 1.<``time index``>
+            // Extract typed scalars from the vector without converting to float
+            let scalars =
+                [| for i in 0 .. newValues.Value.shape.[0] - 1 ->
+                    match Tensors.tryAsScalar<``environment``> newValues.Value.[i] with
+                    | Some s -> s
+                    | None   -> invalidOp "Expected scalar when injecting dynamic variables" |]
 
-            if iteration % 5000<iteration> = 0<iteration> then
-                log <| GeneralEvent(sprintf "[Integration] Slow for %f - %A" t x)
+            let merged = Array.zip newValueKeys scalars |> Map.ofArray
+            environment |> Map.map (fun k v -> Map.tryFind k merged |> Option.defaultValue v)
 
-            iteration <- iteration + 1<iteration>
+        let inline applyExternalEnvironmentTensor
+            (timeIdx: int)
+            (externalEnv: CodedMap<TypedTensor<Vector,``environment``>>)
+            (currentEnv: CodedMap<TypedTensor<Scalar,``environment``>>) =
 
-            let environment =
-                if t < tInitial + tStep then
-                    initialConditions |> applyDynamicVariables x vectorKeys
-                else
-                    initialConditions
-                    |> applyExternalEnvironment t externalEnvironment
-                    |> applyDynamicVariables x vectorKeys
+            currentEnv
+            |> Map.map (fun k v ->
+                match Map.tryFind k externalEnv with
+                | Some vec ->
+                    // Grab scalar tensor and wrap via tryAsScalar (no float conversion)
+                    match Tensors.tryAsScalar<``environment``> vec.Value.[timeIdx] with
+                    | Some s -> s
+                    | None   -> invalidOp "Expected scalar from external environment vector"
+                | None -> v)
 
-            modelEqs |> Array.mapi (fun i m -> m t x.[i] environment)
+        let tInitial = tInitial |> Tensors.Typed.ofScalar
+        let tStep = tStep |> Tensors.Typed.ofScalar
+        let tEnd = tEnd |> Tensors.Typed.ofScalar
 
-        // C. Integrate
-        let result: float[][] = integrate tInitial tEnd tStep initialVector rp
+        // STAGE 2. Make a parameter-specific concrete RHS.
+        fun (parameters: TypedTensor<Vector,``parameter``>) ->
 
-        // D. Match produced data back to keys
-        modelKeys
-        |> Seq.mapi (fun i k -> (k, result |> Array.map (fun x -> x.[i])))
-        |> Map.ofSeq
+            // The bound RHS now closes over `parameters` but reuses all static prep
+            fun (t: TypedTensor<Scalar,``time index``>)
+                (x: TypedTensor<Vector,1>) ->
+
+                let idx = int ((t.Value - tInitial) / tStep)
+
+                let env =
+                    if idx = 0 then
+                        applyDynamicVariablesT x modelKeys initialEnv
+                    else
+                        initialEnv
+                        |> applyExternalEnvironmentTensor idx externalEnvTensors
+                        |> applyDynamicVariablesT x modelKeys
+
+                // Compute derivatives for all variables
+                let result =
+                    modelEqs
+                    |> Array.mapi (fun i m ->
+                        let xi =
+                            Tensors.tryAsScalar x.Value.[i]
+                            |> Option.defaultWith (fun () -> invalidOp "Expected scalar state component")
+                        (m parameters env t xi).Value)
+                    |> Array.zip modelKeys
+                    |> Array.map(fun (k,v) -> k, v |> Tensors.tryAsVector)
+                
+                if result |> Array.exists(fun (_,v) -> Option.isNone v)
+                then invalidOp "RHS did not produce vector"
+                else result |> Map.ofArray |> Map.map(fun _ v -> Option.get v)
 
 
 module RungeKutta =
@@ -97,40 +121,94 @@ module RungeKutta =
     open Bristlecone
     open Bristlecone.Time
     open DiffSharp
+    open Tensors
     
-    let rk4'
-            (tInitial: Tensor) 
-            (tFinal: Tensor) 
-            (steps: int) 
-            (y0: Tensor) 
-            (f: Tensor -> Tensor -> Tensor) 
-            : Tensor
-            =
-        let dt = (tFinal - tInitial) / dsharp.tensor(float steps)
+    let private rk4Core
+        (tInitial: TypedTensor<Scalar,``time index``>)
+        (steps   : int)
+        (dt      : Tensor)
+        (y0      : Tensor)
+        (f       : Tensor -> Tensor -> Tensor) =
+
         let mutable t = tInitial
         let mutable y = y0
+        let outputs = ResizeArray<Tensor>()
+        outputs.Add y
         for _ in 1 .. steps do
-            let k1 = f t           y                     
-            let k2 = f (t + dt/2.0) (y + (dt/2.0) * k1)  
-            let k3 = f (t + dt/2.0) (y + (dt/2.0) * k2) 
-            let k4 = f (t + dt)     (y + dt * k3)        
-            y <- y + (dt/6.0) * (k1 + dsharp.tensor(2.0)*k2 + dsharp.tensor(2.0)*k3 + k4)
-            t <- t + dt
-        y
+            let k1 = f t.Value           y
+            let k2 = f (t.Value + dt/2.0) (y + (dt/2.0) * k1)
+            let k3 = f (t.Value + dt/2.0) (y + (dt/2.0) * k2)
+            let k4 = f (t.Value + dt)     (y + dt * k3)
+            y <- y + (dt/6.0) * (k1 + dsharp.tensor 2.0 * k2 + dsharp.tensor 2.0 * k3 + k4)
+            t <- Tensors.Typed.addScalar t (dt |> Tensors.asScalar)
+            outputs.Add y
+        dsharp.stack outputs
 
-    let rk4float (tInitial:float<``time index``>) (tFinal:float<``time index``>)
-        (steps:float<``time index``>) initialVector
-        (f:(float -> array<float> -> array<EstimationEngine.State>)) : float array array =
-        let answer =
-            rk4'
-                (dsharp.tensor tInitial)
-                (dsharp.tensor tFinal)
-                1 // TODO
-                (dsharp.tensor initialVector)
-                (fun t x -> f (t.toDouble()) (x.toArray() :?> float[]) |> dsharp.tensor)
-        let arr2d = answer.toArray2D()
-        Array.init (Array2D.length1 arr2d) (fun i -> Array.init (Array2D.length2 arr2d) (fun j -> arr2d.[i, j]))
+    let rk4WithStepCount
+        (tInitial: TypedTensor<Scalar,``time index``>)
+        (tFinal  : TypedTensor<Scalar,``time index``>)
+        (steps   : int)
+        (y0      : Tensor)
+        (f       : Tensor -> Tensor -> Tensor) =
+        let dt = (tFinal.Value - tInitial.Value) / dsharp.tensor (float steps)
+        rk4Core tInitial steps dt y0 f
 
-    let rk4: EstimationEngine.Integrate<float, 'date, 'timeunit, 'timespan> =
-        fun log tInitial tEnd tStep initialConditions externalEnvironment (modelMap: CodedMap<EstimationEngine.FloatODE>) ->
-            Base.solve log rk4float tInitial tEnd tStep initialConditions externalEnvironment modelMap
+    let rk4WithStepWidth
+        (tInitial: TypedTensor<Scalar,``time index``>)
+        (tFinal  : TypedTensor<Scalar,``time index``>)
+        (dt      : TypedTensor<Scalar,``time index``>)
+        (y0      : Tensor)
+        (f       : Tensor -> Tensor -> Tensor) =
+        let steps = int ((tFinal.Value - tInitial.Value) / dt.Value)
+        rk4Core tInitial steps dt.Value y0 f
+
+    let rk4float 
+        (tInitial: float<``time index``>) 
+        (tFinal: float<``time index``>)
+        (steps: float<``time index``>) 
+        (initialVector: float[]) 
+        (f: float -> float[] -> EstimationEngine.State[]) 
+        : float[][] =
+        
+        let tInit  = tInitial |> Tensors.Typed.ofScalar
+        let tFinal = tFinal |> Tensors.Typed.ofScalar
+        let steps = steps |> Tensors.Typed.ofScalar
+        let y0    = dsharp.tensor(initialVector, dtype = Dtype.Float64)
+
+        let tensorTrajectory =
+            rk4WithStepWidth
+                tInit
+                tFinal
+                steps
+                y0
+                (fun t x ->
+                    let arrDoubles =
+                        match x.toArray() with
+                        | :? array<float>  as doubles -> doubles
+                        | :? array<single> as singles -> singles |> Array.map float
+                        | other -> failwithf "Unexpected tensor storage: %A" (other.GetType())
+                    dsharp.tensor(f (t.toDouble()) arrDoubles, dtype = Dtype.Float64)
+                )
+
+        let arr2d : float[,] = tensorTrajectory.toArray2D()
+        Array.init (Array2D.length1 arr2d) (fun i ->
+            Array.init (Array2D.length2 arr2d) (fun j -> arr2d.[i, j])
+        )
+
+    let rk4 : EstimationEngine.Integrate<'data, 'dataEnv, 'date, 'timeunit, 'timespan> =
+        fun log tInitial tEnd tStep initialConditions externalEnvironment modelMap ->
+            match modelMap with
+            | EstimationEngine.FloatODEs odes ->
+                failwith "not implemented"
+                // odes |> Base.makeIntegrator log rk4float tInitial tEnd tStep initialConditions externalEnvironment
+            | EstimationEngine.TensorODEs odes ->
+                
+                let initialConditionsT : CodedMap<Tensors.TypedTensor<Tensors.Scalar,EstimationEngine.``environment``>> =
+                    initialConditions
+                    |> Map.map(fun _ v -> v |> (*) 1.<EstimationEngine.environment> |> Tensors.Typed.ofScalar)                
+                
+                Base.makeCompiledFunctionForIntegration tInitial tEnd tStep initialConditionsT externalEnvironment odes                
+
+            // TODO This now makes an integrator that only needs the parameter set.
+            // My code currently feeds in the parameters far earlier than this, so 
+            // need a bit of rejigging.

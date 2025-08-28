@@ -45,7 +45,7 @@ module Language =
         | Multiply of ModelExpression list // List must not be an empty list?
         | Divide of ModelExpression * ModelExpression
         | Arbitrary of
-            (float -> float<Time.``time index``> -> Parameter.Pool -> ModelSystem.Environment<float> -> float) *
+            (float -> float<Time.``time index``> -> Parameter.Pool.ParameterPool -> ModelSystem.Environment<float> -> float) *
             list<ArbitraryRequirement>
         | Mod of ModelExpression * ModelExpression
         | Power of ModelExpression * ModelExpression
@@ -75,6 +75,7 @@ module Language =
             Multiply[e
                      Constant -1.]
 
+
     /// Compile model expressions into functions that take
     /// changing state as Tensors.
     module ExpressionCompiler =
@@ -82,14 +83,6 @@ module Language =
         open DiffSharp
         open Microsoft.FSharp.Quotations
         open Microsoft.FSharp.Linq.RuntimeHelpers
-
-        module DslHelpers =
-
-            // Elementwise branch: condition should be tensor of bools
-            let ifThenElse (cond: Tensor) (thenVal: Tensor) (elseVal: Tensor) =
-                failwith "not implemented"
-                //dsharp.where(cond, thenVal, elseVal)
-
 
         // ---- Index Builders ----
         let private buildIndex toKey =
@@ -107,276 +100,186 @@ module Language =
             >> Seq.map (fun (s: ShortCode.ShortCode) -> s.Value)
             >> buildIndex id
 
-        // ---- Vars ----
-        let private pVar = Var("parameters", typeof<Tensors.ParameterPoolTensor>)
-        let private eVar = Var("environment", typeof<Tensors.PointTensor>)
-        let private tVar = Var("time", typeof<Tensor>)
-        let private xVar = Var("thisValue", typeof<Tensor>)
+        // ---- Generic AST traversal ----
+        type Ops<'r> = {
+            constVal    : float -> Expr<'r>
+            parameter   : string -> Expr<'r>
+            environment : string -> Expr<'r>
+            timeVal     : Expr<'r>
+            thisVal     : Expr<'r>
+            add         : Expr<'r> list -> Expr<'r>
+            sub         : Expr<'r> * Expr<'r> -> Expr<'r>
+            mul         : Expr<'r> list -> Expr<'r>
+            div         : Expr<'r> * Expr<'r> -> Expr<'r>
+            pow         : Expr<'r> * Expr<'r> -> Expr<'r>
+            log         : Expr<'r> -> Expr<'r>
+            exp         : Expr<'r> -> Expr<'r>
+            modulo      : Expr<'r> * Expr<'r> -> Expr<'r>
+            cond        : Expr<'r> * Expr<'r> * Expr<'r> -> Expr<'r>
+            label       : string * Expr<'r> -> Expr<'r>
+            invalid     : unit -> Expr<'r> }
 
-        // ---- Quotation Builder ----
-        // Note: parameters should be the 'real' / non-transformed value for use in model calculation.
-        let rec private toQuotation (pIndex: Map<string,int>) (eIndex: Map<string,int>) = function
-            | Constant n       -> <@ dsharp.tensor n @>
+        let rec private buildQuotation (ops: Ops<'r>) = function
+            | Constant n        -> ops.constVal n
+            | Parameter n       -> ops.parameter n
+            | Environment n     -> ops.environment n
+            | Time              -> ops.timeVal
+            | This              -> ops.thisVal
+            | Add xs            -> xs |> List.map (buildQuotation ops) |> ops.add
+            | Multiply xs       -> xs |> List.map (buildQuotation ops) |> ops.mul
+            | Subtract (l,r)    -> ops.sub (buildQuotation ops l, buildQuotation ops r)
+            | Divide   (l,r)    -> ops.div (buildQuotation ops l, buildQuotation ops r)
+            | Power    (l,r)    -> ops.pow (buildQuotation ops l, buildQuotation ops r)
+            | Logarithm e       -> ops.log (buildQuotation ops e)
+            | Exponential e     -> ops.exp (buildQuotation ops e)
+            | Mod (l,r)         -> ops.modulo (buildQuotation ops l, buildQuotation ops r)
+            | Conditional (c,t,f) ->
+                ops.cond (buildQuotation ops c, buildQuotation ops t, buildQuotation ops f)
+            | Label (n,m)       -> ops.label (n, buildQuotation ops m)
+            | Invalid           -> ops.invalid()
+            | Arbitrary _       -> failwith "Arbitrary not handled"
 
-            | Parameter name   -> <@ (%%Expr.Var pVar : Tensor).[pIndex.[name]] @>
+        // ---- Tensor ops ----
+        module DslHelpers =
+            let ifThenElse (cond: Tensor) (thenVal: Tensor) (elseVal: Tensor) =
+                //dsharp.where(cond, thenVal, elseVal)
+                failwith "not finished"
 
-            | Environment name -> <@ (%%Expr.Var eVar : Tensor).[eIndex.[name]] @>
+        let private tensorOps (pIndex: Map<string,int>) (eIndex: Map<string,int>)
+                            (pVar: Var) (eVar: Var) (tVar: Var) (xVar: Var) = {
+            constVal    = fun n -> <@ dsharp.tensor n @>
+            parameter   = fun name -> <@ (%%Expr.Var pVar : Tensor).[pIndex.[name]] @>
+            environment = fun name -> <@ (%%Expr.Var eVar : Tensor).[eIndex.[name]] @>
+            timeVal     = <@ %%Expr.Var tVar : Tensor @>
+            thisVal     = <@ %%Expr.Var xVar : Tensor @>
+            add         = List.reduce (fun l r -> <@ dsharp.add(%l, %r) @>)
+            sub         = fun (l,r) -> <@ dsharp.sub(%l, %r) @>
+            mul         = List.reduce (fun l r -> <@ %l * %r @>)
+            div         = fun (l,r) -> <@ dsharp.div(%l, %r) @>
+            pow         = fun (l,r) -> <@ dsharp.pow(%l, %r) @>
+            log         = fun e -> <@ dsharp.log %e @>
+            exp         = fun e -> <@ dsharp.exp %e @>
+            modulo      = fun (l,r) -> <@ %l - %r * dsharp.floor(%l / %r) @>
+            cond        = fun (c,t,f) -> <@ DslHelpers.ifThenElse %c %t %f @>
+            label       = fun (_,m) -> m
+            invalid     = fun () -> <@ dsharp.tensor nan @> }
 
-            | Time             -> <@ %%Expr.Var tVar : Tensor @>
+        // ---- Float ops ----
+        let private floatOps (pVar: Var) (eVar: Var) (tVar: Var) (xVar: Var) = {
+            constVal    = fun n -> <@ n @>
+            parameter   = fun name -> <@
+                match (%%Expr.Var pVar : Parameter.Pool.ParameterPool) |> Parameter.Pool.tryGetRealValue name with
+                | Some est -> est
+                | None ->
+                    failwithf "The parameter '%s' is missing" name @>
+            environment = fun name -> <@
+                match (%%Expr.Var eVar : CodedMap<float>)
+                        |> Map.tryFindBy (fun n -> n.Value = name) with
+                | Some v -> v
+                | None   -> failwithf "The environment value '%s' is missing" name @>
+            timeVal     = <@ (%%Expr.Var tVar : float<Time.``time index``>)
+                            |> Units.removeUnitFromFloat @>
+            thisVal     = <@ %%Expr.Var xVar : float @>
+            add         = List.reduce (fun l r -> <@ %l + %r @>)
+            sub         = fun (l,r) -> <@ %l - %r @>
+            mul         = List.reduce (fun l r -> <@ %l * %r @>)
+            div         = fun (l,r) -> <@ %l / %r @>
+            pow         = fun (l,r) -> <@ %l ** %r @>
+            log         = fun e -> <@ log %e @>
+            exp         = fun e -> <@ exp %e @>
+            modulo      = fun (l,r) -> <@ %l % %r @>
+            cond        = fun (c,t,f) -> <@ if %c <> 0.0 then %t else %f @>
+            label       = fun (_,m) -> m
+            invalid     = fun () -> <@ nan @> }
 
-            | This             -> <@ %%Expr.Var xVar : Tensor @>
+        // ---- Lambda helper ----
+        let private toLambda4 v1 v2 v3 v4 body =
+            Expr.Lambda(v1, Expr.Lambda(v2, Expr.Lambda(v3, Expr.Lambda(v4, body))))
 
-            | Add xs           ->
-                xs |> List.map (toQuotation pIndex eIndex)
-                |> List.reduce (fun l r -> <@ dsharp.add(%l, %r) @>)
-
-            | Multiply xs      ->
-                xs |> List.map (toQuotation pIndex eIndex)
-                |> List.reduce (fun l r -> <@ %l * %r @>)
-
-            | Subtract (l, r)  ->
-                let lq = toQuotation pIndex eIndex l
-                let rq = toQuotation pIndex eIndex r
-                <@ dsharp.sub(%lq, %rq) @>
-
-            | Divide (l, r)    ->
-                let lq = toQuotation pIndex eIndex l
-                let rq = toQuotation pIndex eIndex r
-                <@ dsharp.div(%lq, %rq) @>
-
-            | Arbitrary (fn, _) ->
-                // Assumes `fn` can be represented/embedded as a quotation. If not,
-                // you'll need to expose it via a known method and call that here.
-                failwith "Embedding arbitrary functions requires a known quotation or wrapper"
-
-            | Mod (e, m) ->
-                let eq = toQuotation pIndex eIndex e
-                let mq = toQuotation pIndex eIndex m
-                <@ %eq - %mq * dsharp.floor(%eq / %mq) @>
-
-            | Power (e, m) ->
-                let eq = toQuotation pIndex eIndex e
-                let mq = toQuotation pIndex eIndex m
-                <@ dsharp.pow(%eq, %mq) @>
-
-            | Logarithm e ->
-                let eq = toQuotation pIndex eIndex e
-                <@ dsharp.log(%eq) @>
-
-            | Exponential e ->
-                let eq = toQuotation pIndex eIndex e
-                <@ dsharp.exp(%eq) @>
-
-            | Conditional (cond, ifTrue, ifFalse) ->
-                let cq = toQuotation pIndex eIndex cond
-                let tq = toQuotation pIndex eIndex ifTrue
-                let eq = toQuotation pIndex eIndex ifFalse
-                <@ DslHelpers.ifThenElse %cq %tq %eq @>
-
-            | Label (_, m) ->
-                toQuotation pIndex eIndex m
-
-            | Invalid ->
-                <@ dsharp.tensor nan @>
-
-        // ---- Lambda Pipeline ----
-        let private toLambda body =
-            Expr.Lambda(
-                pVar,
-                Expr.Lambda(
-                    eVar,
-                    Expr.Lambda(
-                        tVar,
-                        Expr.Lambda(xVar, body)
-                    )
-                )
-            )
-
-        let private toDelegate =
-            LeafExpressionConverter.EvaluateQuotation
-            >> unbox<Tensors.ParameterPoolTensor -> Tensors.PointTensor -> Tensor -> Tensor -> Tensor>
-
-        /// Compiles model expression into Tensor-based
-        /// function that can be evaluated when required without
-        /// needing recompiling.
-        let compile parameters env =
+        // ---- Public compile functions ----
+        let compile parameters env expr =
+            let pVar = Var("parameters", typeof<Tensors.Vector>)
+            let eVar = Var("environment", typeof<Tensors.Scalar>)
+            let tVar = Var("time", typeof<Tensor>)
+            let xVar = Var("thisValue", typeof<Tensor>)
             let pIndex = paramIndex parameters
             let eIndex = envIndex env
-            toQuotation pIndex eIndex
-            >> toLambda
-            >> toDelegate
-
-        /// Compiles model expression into a float-based
-        /// function that can be evaluated when required
-        /// without needing recompiling.
-        let compileFloat expr =
-            let pVar = Var("parameters", typeof<Parameter.Pool>)
-            let eVar = Var("environment", typeof<CodedMap<float>>)
-            let tVar = Var("time", typeof<float<Time.``time index``>>)
-            let xVar = Var("thisValue", typeof<float>)
-
-            let rec toQuotation = function
-                | Constant n       -> <@ n @>
-                | Parameter name   ->
-                    <@ match (%%Expr.Var pVar : Parameter.Pool) |> Parameter.Pool.tryGetRealValue name with
-                       | Some est -> est
-                       | None ->
-                            failwithf
-                                "The equation could not be calculated. The parameter '%s' has not been set up (or has yet to be estimated)."
-                                name @>
-                | Environment name ->
-                    <@
-                        match (%%Expr.Var eVar : CodedMap<float>) |> Map.tryFindBy (fun n -> n.Value = name) with
-                        | Some i -> i
-                        | None ->
-                            failwithf
-                                "The equation could not be calculated. The environmental data '%s' has not been configured."
-                                name
-                    @>
-                | Time             -> <@ (%%Expr.Var tVar : float<Time.``time index``>) |> Units.removeUnitFromFloat @>
-                | This             -> <@ %%Expr.Var xVar : float @>
-                | Add xs           -> xs |> List.map toQuotation |> List.reduce (fun l r -> <@ %l + %r @>)
-                | Multiply xs      -> xs |> List.map toQuotation |> List.reduce (fun l r -> <@ %l * %r @>)
-                | Subtract(l,r)    -> <@ %(toQuotation l) - %(toQuotation r) @>
-                | Divide(l,r)      -> <@ %(toQuotation l) / %(toQuotation r) @>
-                | Power(l,r)       -> <@ %(toQuotation l) ** %(toQuotation r) @>
-                | Logarithm e      -> <@ log %(toQuotation e) @>
-                | Exponential e    -> <@ exp %(toQuotation e) @>
-                | Mod(l,r)         -> <@ %(toQuotation l) % %(toQuotation r) @>
-                | Conditional(c,t,f) ->
-                    <@ if %(toQuotation c) <> 0.0 then %(toQuotation t) else %(toQuotation f) @>
-                | Label(_,m)       -> toQuotation m
-                | Invalid          -> <@ nan @>
-                | Arbitrary _      -> failwith "Arbitrary requires custom handling"
-                // Add empty list handling into list expressions:
-//         //     match list with
-        //     | NotEmptyList l -> l |> List.sumBy (compute x t pool environment)
-        //     | _ -> failwith "List was empty"
-
-            let lambda =
-                Expr.Lambda(
-                    pVar,
-                    Expr.Lambda(eVar,
-                        Expr.Lambda(tVar,
-                            Expr.Lambda(xVar, toQuotation expr))))
-            lambda
+            buildQuotation (tensorOps pIndex eIndex pVar eVar tVar xVar) expr
+            |> toLambda4 pVar eVar tVar xVar
             |> LeafExpressionConverter.EvaluateQuotation
-            |> unbox<Parameter.Pool -> CodedMap<float> -> float<Time.``time index``> -> float -> float>
+            |> unbox<Tensors.Vector -> Tensors.Scalar -> Tensor -> Tensor -> Tensor>
+
+        let compileFloat expr =
+            let fpVar = Var("parameters", typeof<Parameter.Pool.ParameterPool>)
+            let feVar = Var("environment", typeof<CodedMap<float>>)
+            let ftVar = Var("time", typeof<float<Time.``time index``>>)
+            let fxVar = Var("thisValue", typeof<float>)
+            buildQuotation (floatOps fpVar feVar ftVar fxVar) expr
+            |> toLambda4 fpVar feVar ftVar fxVar
+            |> LeafExpressionConverter.EvaluateQuotation
+            |> unbox<Parameter.Pool.ParameterPool -> CodedMap<float> -> float<Time.``time index``> -> float -> float>
 
 
 
     /// Computes a `ModelExpression` given the current time, value,
     /// environment, and parameter pool.
-    let rec compute x (t: float<Time.``time index``>) (pool: Parameter.Pool) (environment: CodedMap<float>) ex : float =
+    let compute x (t: float<Time.``time index``>) (pool: Parameter.Pool.ParameterPool) (environment: CodedMap<float>) ex : float =
         ExpressionCompiler.compileFloat ex pool environment t x
 
-
-    module Writer =
-
-        type Writer<'a, 'L> = AWriter of 'a * List<'L>
-
-        let bind =
-            function
-            | (v, itemLog) -> AWriter(v, [ itemLog ])
-
-        let map fx =
-            function
-            | AWriter(a, log) -> AWriter(fx a, log)
-
-        let run =
-            function
-            | AWriter(a, log) -> (a, log)
-
-        let flatMap fx =
-            function
-            | AWriter(a, log) ->
-                let (v, newLog) = fx a |> run
-                AWriter(v, List.append log newLog)
+    let computeT x t pool environment ex =
+        ExpressionCompiler.compile pool environment ex
+        |> fun f -> f (Parameter.Pool.toTensor pool) environment t x
 
 
     module ExpressionParser =
-
-        open Writer
-
-        /// Characterises a Bristlecone model expression by the components used within.
-        let rec internal describe ex : Writer<unit, string> =
-            match ex with
-            | This -> bind ((), "current_state")
-            | Time -> bind ((), "time")
-            | Environment name -> bind ((), "environment: " + name)
-            | Parameter name -> bind ((), "parameter: " + name)
-            | Constant _ -> bind ((), "nothing")
-            | Add list -> bind ((), "add") // TODO
-            | Subtract(l, r) -> describe l |> flatMap (fun () -> describe r)
-            | Multiply list ->
-                match list with
-                | NotEmptyList l -> bind ((), "multiply") // TODO
-                | _ -> failwith "List was empty"
-            | Divide(l, r) -> describe l |> flatMap (fun () -> describe r)
-            | Arbitrary(fn, reqs) -> bind ((), "custom component - TODO may use additional parameters?")
-            | Logarithm(e) -> describe e
-            | Exponential(e) -> describe e
-            | Mod(e, _) -> describe e
-            | Power(e, _) -> describe e
-            | Invalid -> bind ((), "invalid model")
-            | Conditional _ -> bind ((), "conditional element") // TODO
-            | Label(_, e) -> describe e
 
         type Requirement =
             | ParameterRequirement of string
             | EnvironmentRequirement of string
 
-        /// Determines the parameter and environmental data requirements of the defined model expression.
-        let rec requirements ex reqs =
-            match ex with
-            | This -> reqs
-            | Time -> reqs
-            | Environment name -> EnvironmentRequirement name :: reqs
-            | Parameter name -> ParameterRequirement name :: reqs
-            | Constant _ -> reqs
-            | Add list
-            | Multiply list -> list |> List.collect (fun l -> requirements l reqs) |> List.append reqs
-            | Divide(l, r)
-            | Subtract(l, r) -> [ requirements l reqs; requirements r reqs; reqs ] |> List.concat
-            | Arbitrary(fn, r) ->
-                r
-                |> List.map (fun r ->
-                    match r with
-                    | ArbitraryEnvironment e -> EnvironmentRequirement e
-                    | ArbitraryParameter p -> ParameterRequirement p)
-                |> List.append reqs
-            | Mod(e, _) -> requirements e reqs
-            | Power(e, _) -> requirements e reqs
-            | Logarithm e -> requirements e reqs
-            | Exponential e -> requirements e reqs
-            | Invalid -> reqs
-            | Conditional _ -> reqs
-            | Label(_, e) -> requirements e reqs
+        let rec requirements expr =
+            Writer.writer {
+                match expr with
+                | Parameter n   -> do! Writer.tell (ParameterRequirement n)
+                | Environment n -> do! Writer.tell (EnvironmentRequirement n)
+                | Add xs
+                | Multiply xs   ->  for x in xs do
+                                        let! () = requirements x
+                                        ()
+                | Subtract (l,r)
+                | Divide (l,r)
+                | Power (l,r)
+                | Mod (l,r)     -> do! requirements l
+                                   do! requirements r
+                | Logarithm e
+                | Exponential e
+                | Label(_, e)   -> do! requirements e
+                | _             -> return ()
+            }
 
 
-    /// Allows common F# functions to use Bristlecone model expressions.
-    module ComputableFragment =
+    // /// Allows common F# functions to use Bristlecone model expressions.
+    // module ComputableFragment =
 
-        open Writer
+    //     open Writer
 
-        // Takes the standard arguments and computes
-        type ComputableFragment = float -> float -> CodedMap<float> -> CodedMap<float> -> ModelExpression
+    //     // Takes the standard arguments and computes
+    //     type ComputableFragment<'a> =
+    //         { compute : float -> float -> CodedMap<float> -> CodedMap<float> -> 'a
+    //           expr    : ModelExpression }
 
-        // Represents a compute function for model expressions
-        type Compute = float -> float -> CodedMap<float> -> CodedMap<float> -> ModelExpression -> float
+    //     /// Apply a Bristlecone model expression to a custom arbitrary function.
+    //     let apply ex fn =
+    //         { compute = fun x t p e -> fn (compute x t p e ex)
+    //           expr    = ex }
 
-        /// Apply a Bristlecone model expression to a custom arbitrary function.
-        let apply (ex: ModelExpression) fn =
-            bind ((fun x t p e -> fn (compute x t p e ex)), ex)
+    //     let applyAgain ex frag =
+    //         { compute = (fun x t p e ->
+    //             frag.compute x t p e (compute x t p e ex))
+    //           expr    = ex }
 
-        /// Apply additional parameters as Bristlecone expressions to an arbitrary function.
-        let applyAgain ex fn =
-            let fx expr =
-                bind ((fun x t p e -> expr x t p e (compute x t p e ex)), ex)
-
-            flatMap fx fn
-
-        let asBristleconeFunction fragment = run fragment |> Arbitrary
+    //     let asBristleconeFunction frag =
+    //         Arbitrary(frag.compute, [])
 
 
     /// Scaffolds a `ModelSystem` for fitting with Bristlecone.
@@ -405,85 +308,68 @@ module Language =
                 | Some c -> map |> Map.add c comp |> ModelBuilder
                 | None -> failwithf "The text '%s' cannot be used to make a short code identifier." name
 
-        let compile builder : ModelSystem.ModelSystem<float, 'timeIndex> =
-            // Ensure only single likelihood function
-            // Find all parameters
-
-            // Check each dynamic function that it has needed parameters.
-            // Check each measure has needed parameters.
-            // Check if any parameters are unused.
-
-            // 2. Environment required.
-            // Compile down to a [float -> float -> Pool -> Env -> float] function, with a list of requirements.
-
+        let compile builder : ModelSystem.ModelSystem<float, float<Time.``time index``>> =
             let map = builder |> unwrap
 
             let likelihoods =
                 map
                 |> Map.toSeq
-                |> Seq.map (fun (c, f) ->
-                    match f with
-                    | LikelihoodFragment l -> Some l
+                |> Seq.choose (function
+                    | _, LikelihoodFragment l -> Some l
                     | _ -> None)
-                |> Seq.choose id
+                |> Seq.toList
 
-            if likelihoods |> Seq.length <> 1 then
-                failwith
-                    "You did not specify a likelihood function. The likelihood function is used to assess model fit."
+            match likelihoods with
+            | [l] -> ()
+            | [] -> failwith "You did not specify a likelihood function. The likelihood function is used to assess model fit."
+            | _ -> failwith "Multiple likelihood functions specified. Only one is allowed."
 
             let parameters =
                 map
                 |> Map.toSeq
-                |> Seq.map (fun (c, f) ->
-                    match f with
-                    | ParameterFragment p -> Some(c, p)
+                |> Seq.choose (function
+                    | c, ParameterFragment p -> Some (c, p)
                     | _ -> None)
-                |> Seq.choose id
                 |> Map.ofSeq
                 |> Parameter.Pool.Pool
 
             let measures =
                 map
                 |> Map.toSeq
-                |> Seq.map (fun (c, f) ->
-                    match f with
-                    | MeasureFragment m -> Some(c, m)
+                |> Seq.choose (function
+                    | c, MeasureFragment m -> Some (c, m)
                     | _ -> None)
-                |> Seq.choose id
                 |> Map.ofSeq
 
             let equations =
                 map
                 |> Map.toSeq
-                |> Seq.map (fun (c, f) ->
-                    match f with
-                    | EquationFragment e -> Some(c, e)
+                |> Seq.choose (function
+                    | c, EquationFragment e -> Some (c, e)
                     | _ -> None)
-                |> Seq.choose id
                 |> Map.ofSeq
 
-            if Seq.hasDuplicates (Seq.concat [ Map.keys measures; Map.keys equations ]) then
+            let allKeys = Seq.append (Map.keys measures) (Map.keys equations)
+            if Seq.hasDuplicates allKeys then
                 failwith "Duplicate keys were used within equation and measures. These must be unique."
 
-            if equations.IsEmpty then
+            if Map.isEmpty equations then
                 failwith "No equations specified. You must state at least one model equation."
 
             equations
-            |> Map.map (fun _ v -> ExpressionParser.requirements v [])
-            |> Map.toList
-            |> List.map snd
-            |> List.collect id
-            |> List.distinct
-            |> List.iter (fun req ->
-                match req with
-                | ExpressionParser.ParameterRequirement p ->
-                    match parameters |> Parameter.Pool.hasParameter p with
-                    | Some p -> ()
-                    | None ->
-                        failwithf "The specified model requires the parameter '%s' but this has not been set up." p
-                | ExpressionParser.EnvironmentRequirement _ -> ())
+            |> Map.iter (fun _ v ->
+                ExpressionParser.requirements v
+                |> Writer.run
+                |> snd
+                |> List.distinct
+                |> List.iter (function
+                    | ExpressionParser.ParameterRequirement p ->
+                        if Option.isNone (parameters |> Parameter.Pool.hasParameter p) then
+                            failwithf "The specified model requires the parameter '%s' but this has not been set up." p
+                    | ExpressionParser.EnvironmentRequirement _ -> ()
+                ))
 
-            { NegLogLikelihood = likelihoods |> Seq.head
+            { NegLogLikelihood = List.head likelihoods
               Parameters = parameters
               Equations = equations |> Map.map (fun _ v -> (fun pool t x env -> compute x t pool env v))
               Measures = measures }
@@ -509,6 +395,52 @@ module Language =
             ModelBuilder.add "likelihood" (ModelBuilder.LikelihoodFragment likelihoodFn) builder
 
         let compile = ModelBuilder.compile
+
+    module ModelSystemDsl =
+
+        type ModelSystemBuilder() =
+            member _.Yield(_) = Model.empty
+            member _.Delay(f: unit -> ModelBuilder.ModelBuilder<float>) = f()
+            member _.Run(m: ModelBuilder.ModelBuilder<float>) = Model.compile m
+
+            [<CustomOperation("equation")>]
+            member _.Equation(m: ModelBuilder.ModelBuilder<float>, name: string, expr: ModelExpression) =
+                Model.addEquation name expr m
+
+            [<CustomOperation("parameter")>]
+            member _.Parameter(m: ModelBuilder.ModelBuilder<float>, name: string, lower: float, upper: float, constraintMode) =
+                Model.estimateParameter name constraintMode lower upper m
+
+            [<CustomOperation("measure")>]
+            member _.Measure(m: ModelBuilder.ModelBuilder<float>, name: string, data) =
+                Model.includeMeasure name data m
+
+            [<CustomOperation("likelihood")>]
+            member _.Likelihood(m: ModelBuilder.ModelBuilder<float>, fn) =
+                Model.useLikelihoodFunction fn m
+
+    let modelSystem = ModelSystemDsl.ModelSystemBuilder()
+
+    let baseModel growthLimit lossRate =
+        modelSystem {
+            equation "m" (Parameter "r" * (growthLimit This) - lossRate This)
+            parameter "r" 0.01 1.00 Parameter.Constraint.Unconstrained
+            likelihood (ModelLibrary.Likelihood.sumOfSquares ["x"])
+        }
+
+
+    // let sir =
+    //     modelSystem {
+    //         equation "S" (modelExpr { yield -"beta" * "S" * "I" })
+    //         equation "I" (modelExpr { yield "beta" * "S" * "I" - "gamma" * "I" })
+    //         equation "R" (modelExpr { yield "gamma" * "I" })
+
+    //         parameter "beta"  0.0 1.0 Parameter.Constraint.Unconstrained
+    //         parameter "gamma" 0.0 1.0 Parameter.Constraint.PositiveOnly
+
+    //         measure "infected" infectedSeries
+    //         likelihood (fun pars env -> 1.2)
+    //     }
 
 
     /// Terms for designing tests for model systems.
@@ -553,44 +485,49 @@ module Language =
                     Parameters = (snd comp).Parameters |> Map.add c p }
             | None -> failwithf "The code '%s' cannot be used as an identifier. See docs." name
 
+
     /// <summary>Types to represent a hypothesis, given that a hypothesis
     /// is a model system that contains some alternate formulations of certain
     /// components.</summary>
     [<RequireQualifiedAccess>]
     module Hypotheses =
 
-        open Writer
-
+        // Helper: truncate first N letters of each word and uppercase
         let internal nFirstLetters n (s: string) =
-            (s.Split(' ') |> Seq.map (fun s -> s |> Seq.truncate n) |> string).ToUpper()
+            s.Split(' ')
+            |> Seq.map (Seq.truncate n >> Seq.toArray >> System.String)
+            |> String.concat ""
+            |> fun s -> s.ToUpper()
 
         /// <summary>Represents the name of a swappable component in a model
         /// and the name of its implementation in a specific case.</summary>
         type ComponentName =
             { Component: string
               Implementation: string }
-
-            /// <summary>A short code that may be used to indicate a particular
-            /// model component by its current implementation.</summary>
-            /// <returns>A string in the format XX_XXX with the first part
-            /// indicating the model component and the second part the implementation.</returns>
-            member this.Reference =
-                sprintf "%s_%s" (nFirstLetters 2 this.Component) (nFirstLetters 3 this.Implementation)
+                /// <summary>A short code that may be used to indicate a particular
+                /// model component by its current implementation.</summary>
+                /// <returns>A string in the format XX_XXX with the first part
+                /// indicating the model component and the second part the implementation.</returns>
+                member this.Reference =
+                    $"{nFirstLetters 2 this.Component}_{nFirstLetters 3 this.Implementation}"
 
         /// <summary>A hypothesis consists of a model system and the names of the
         /// swappable components within it, alongside the name of their current implementation.</summary>
         type Hypothesis<'data, 'timeIndex> =
             | Hypothesis of ModelSystem.ModelSystem<'data, 'timeIndex> * list<ComponentName>
 
-            member private this.unwrap = this |> fun (Hypothesis(h1, h2)) -> (h1, h2)
-
+            member private this.Unwrap = let (Hypothesis(m, comps)) = this in m, comps
+            
             /// <summary>Compiles a reference code that may be used to identify (although not necessarily uniquely) this hypothesis</summary>
             /// <returns>A string in the format XX_XXX_YY_YYY... where XX_XXX is a singe component with XX the component and XXX the implementation.</returns>
             member this.ReferenceCode =
-                this.unwrap |> snd |> List.map (fun c -> c.Reference) |> String.concat "_"
+                this.Unwrap |> snd |> List.map (fun c -> c.Reference) |> String.concat "_"
 
-            member this.Components = this.unwrap |> snd
-            member this.Model = this.unwrap |> fst
+            member this.Components = this.Unwrap |> snd
+            member this.Model = this.Unwrap |> fst
+
+        let private makeName comp impl =
+            { Component = fst comp; Implementation = impl }
 
         /// <summary>Implement a component where a model system requires one. A component is a part of a model that may be varied, for example between competing hypotheses.</summary>
         /// <param name="comp">A tuple representing a component scaffolded with the `modelComponent` and `subComponent` functions.</param>
@@ -598,17 +535,28 @@ module Language =
         /// <typeparam name="'a"></typeparam>
         /// <typeparam name="'b"></typeparam>
         /// <returns>A builder to add further components or compile with `Hypothesis.compile`</returns>
-        let createFromComponent comp builder =
-            if snd comp |> List.isEmpty then
-                failwithf "You must specify at least one implementation for the '%s' component" (fst comp)
+        // let createFromComponent comp builder =
+        //     match snd comp with
+        //     | [] -> failwithf "You must specify at least one implementation for '%s'" (fst comp)
+        //     | impls ->
+        //         impls
+        //         |> List.map (fun (n,c) ->
+        //             Writer.bind (builder c.Expression, (makeName comp n, c.Parameters)))
+        
+        /// <summary>Add a second or further component to a model system where one is still required.</summary>
+        /// <param name="comp">A tuple representing a component scaffolded with the `modelComponent` and `subComponent` functions.</param>
+        /// <param name="builder">A builder started with `createFromComponent`</param>
+        /// <typeparam name="'a"></typeparam>
+        /// <typeparam name="'b"></typeparam>
+        /// <returns>A builder to add further components or compile with `Hypothesis.compile`</returns>
+        // let useAnother comp builders =
+        //     List.allPairs (snd comp) builders
+        //     |> List.map (fun ((n,c), model) ->
+        //         model
+        //         |> Writer.map (fun m -> m |> Model.addEquation "m" c.Expression)
+        //         |> Writer.tell (makeName comp n, c.Parameters)
+        //     )
 
-            let name i =
-                { Component = fst comp
-                  Implementation = i }
-
-            comp
-            |> snd
-            |> List.map (fun (n, c) -> bind (builder c.Expression, (name n, c.Parameters)))
 
         /// <summary>Add a second or further component to a model system where one is still required.</summary>
         /// <param name="comp">A tuple representing a component scaffolded with the `modelComponent` and `subComponent` functions.</param>
@@ -616,42 +564,21 @@ module Language =
         /// <typeparam name="'a"></typeparam>
         /// <typeparam name="'b"></typeparam>
         /// <returns>A builder to add further components or compile with `Hypothesis.compile`</returns>
-        let useAnother comp builder =
-            let name i =
-                { Component = fst comp
-                  Implementation = i }
-
-            List.allPairs (snd comp) builder
-            |> List.map (fun ((n, c), model) ->
-                model |> flatMap (fun m -> bind (m c.Expression, (name n, c.Parameters))))
-
-        /// <summary>Add a second or further component to a model system where one is still required.</summary>
-        /// <param name="comp">A tuple representing a component scaffolded with the `modelComponent` and `subComponent` functions.</param>
-        /// <param name="builder">A builder started with `createFromComponent`</param>
-        /// <typeparam name="'a"></typeparam>
-        /// <typeparam name="'b"></typeparam>
-        /// <returns>A builder to add further components or compile with `Hypothesis.compile`</returns>
-        let useAnotherWithName comp builder =
-            let name i =
-                { Component = fst comp
-                  Implementation = i }
-
-            List.allPairs (snd comp) builder
-            |> List.map (fun ((n, c), model) ->
-                model |> flatMap (fun m -> bind (m (n, c.Expression), (name n, c.Parameters))))
-
+        // let useAnotherWithName comp builders =
+        //     List.allPairs (snd comp) builders
+        //     |> List.map (fun ((n,c), model) ->
+        //         model
+        //         |> Writer.map (fun m -> m |> Model.addEquation "m" c.Expression)
+        //         |> Writer.tell (makeName comp n, c.Parameters)
+        //     )
+        
         /// <summary>Adds parameters from model components into the base model builder.</summary>
-        let internal addParameters
-            (
-                (modelBuilder, newParams):
-                    ModelBuilder.ModelBuilder<'data> * List<ComponentName * CodedMap<Parameter.Parameter>>
-            )
-            =
+        let internal addParameters (modelBuilder, newParams) =
             newParams
             |> List.collect (snd >> Map.toList)
-            |> List.fold
-                (fun mb (name, p) -> mb |> ModelBuilder.add name.Value (ModelBuilder.ParameterFragment p))
-                modelBuilder
+            |> List.fold (fun mb ((name:ShortCode.ShortCode),p) ->
+                mb |> ModelBuilder.add name.Value (ModelBuilder.ParameterFragment p)
+            ) modelBuilder
 
         /// <summary>Compiles a suite of competing model hypotheses based on the given components.
         /// The compilation includes only the required parameters in each model hypothesis,
@@ -659,17 +586,15 @@ module Language =
         /// <param name="builder">A builder started with `createFromComponent`</param>
         /// <returns>A list of compiled hypotheses for this model system and specified components.</returns>
         let compile
-            (builder: Writer<ModelBuilder.ModelBuilder<float>, ComponentName * CodedMap<Parameter.Parameter>> list)
-            =
-            if builder |> List.isEmpty then
-                failwith "No hypotheses specified"
-
-            builder
-            |> List.map (fun h ->
-                let names = run h
-
-                (names |> addParameters |> Model.compile, names |> snd |> List.map fst)
-                |> Hypothesis)
+            (builders: Writer.Writer<ModelBuilder.ModelBuilder<float>, ComponentName * CodedMap<Parameter.Parameter>> list) =
+            match builders with
+            | [] -> failwith "No hypotheses specified"
+            | bs ->
+                bs
+                |> List.map (fun h ->
+                    let names = Writer.run h
+                    Hypothesis (names |> addParameters |> Model.compile,
+                                names |> snd |> List.map fst))
 
 
 // type Hypotheses<'subject, 'hypothesis> =

@@ -48,6 +48,8 @@ type BC
 [<Measure>]
 type AD
 
+/// A measure that represents dimensionless indexed time
+/// where all variables are unified on a common timeline.
 [<Measure>]
 type ``time index``
 

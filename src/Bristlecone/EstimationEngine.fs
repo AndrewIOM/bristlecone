@@ -2,28 +2,8 @@ namespace Bristlecone
 
 open Bristlecone.Time
 
-/// Define wrappers for tensors that make it harder
-/// to get values in the wrong places in function calls.
-module Tensors =
-
-    open DiffSharp
-
-    type ModelTimeIndexTensor = ModelTimeIndexTensor of Tensor
-        with
-            static member Create (v:float<``time index``>) = ModelTimeIndexTensor (dsharp.tensor v)
-            member this.Value = this |> fun (ModelTimeIndexTensor v) -> v
-
-    type PointTensor = PointTensor of Tensor
-        with member this.Value = this |> fun (PointTensor v) -> v
-
-    type ParameterPoolTensor = ParameterPoolTensor of Tensor
-        with
-            member this.Value = this |> fun (ParameterPoolTensor v) -> v
-            member this.ValueFor (s:ShortCode.ShortCode) = dsharp.tensor 1
-
-
 /// Represents an ordinary differential equation model system and
-/// its likelihood as as objective function that may be optimised.
+/// its likelihood as an objective function that may be optimised.
 module ModelSystem =
 
     type Environment<'data> = CodedMap<'data>
@@ -31,7 +11,7 @@ module ModelSystem =
     /// An ordinary differential equation that may require fixed or free parameters,
     /// the current time t, the current response value, and / or external environmental time series.
     type ModelEquation<'data, 'timeIndex> =
-        Parameter.Pool -> 'timeIndex ->
+        Parameter.Pool.ParameterPool -> 'timeIndex ->
             'data -> Environment<'data> -> 'data
 
     /// Paired time-series representing the true and modelled time-series.
@@ -55,7 +35,7 @@ module ModelSystem =
     type Measurement<'data> = 'data -> Environment<'data> -> Environment<'data> -> 'data
 
     type ModelSystem<'data, 'timeIndex> =
-        { Parameters: Parameter.Pool
+        { Parameters: Parameter.Pool.ParameterPool
           Equations: CodedMap<ModelEquation<'data, 'timeIndex>>
           Measures: CodedMap<Measurement<'data>>
           NegLogLikelihood: LikelihoodFn<'data> }
@@ -67,7 +47,7 @@ module ModelSystem =
     type EstimationResult<'date, 'timeunit, 'timespan> =
         { ResultId: System.Guid
           Likelihood: float
-          Parameters: Parameter.Pool
+          Parameters: Parameter.Pool.ParameterPool
           Series: CodedMap<FitSeries<'date, 'timeunit, 'timespan>>
           Trace: (float * float[]) list
           InternalDynamics: CodedMap<float[]> option }
@@ -78,6 +58,10 @@ module EstimationEngine =
     open Bristlecone.Logging
     open Bristlecone.Conditioning
     open DiffSharp
+    open Bristlecone.Tensors
+
+    [<Measure>] type ``parameter``
+    [<Measure>] type ``environment``
 
     type Point<'a> = 'a[]
     type Solution<'a> = float * Point<'a>
@@ -94,27 +78,84 @@ module EstimationEngine =
 
     type State = float
 
-    // Equations
-    type TensorODE = Tensors.ParameterPoolTensor -> Tensors.PointTensor -> Tensor -> Tensor -> Tensor
+//ModelExpression -> Tensors.ParameterPoolTensor -> Tensors.PointTensor -> Tensor -> Tensor -> Tensor
+
+    type WriteOut = LogEvent -> unit
+
+    // Probably need a type that is a CodedMap<'data> or a tensor<vector> depending
+    // on the selected data type.
+
+    // fun log tInitial tEnd tStep initialConditions externalEnvironment
+        // (modelMap: EstimationEngine.ModelEquations) ->
+    
+    // Integrator should be revised so that there is an integration compiler
+    // and a compiled integration function (p:Tensor -> s:Tensor -> Tensor).
+    // Timeline and timesteps should be baked in already, as they will NEVER change
+    // once compiled?
+
+    /// Takes parameter vector, the current time index,
+    /// environment data, and returns a vector of the data.
+    /// Time is required to be indexed on a common timeline
+    /// (i.e. in 'time index' units).
+    type CompiledFunctionForIntegration =
+        TypedTensor<Vector,``parameter``>
+            -> TypedTensor<Scalar,``time index``>
+            -> TypedTensor<Vector, 1>
+            -> CodedMap<TypedTensor<Vector, 1>>
+
+    type TensorODE = TypedTensor<Vector,``parameter``> -> CodedMap<TypedTensor<Scalar,``environment``>> -> TypedTensor<Scalar,``time index``> -> TypedTensor<Scalar,1> -> TypedTensor<Scalar,1>
     type FloatODE = float<``time index``> -> State -> ModelSystem.Environment<State> -> State
+
+    // The models will always be written as 
 
     type ModelEquations =
         | TensorODEs of CodedMap<TensorODE>
         | FloatODEs of CodedMap<FloatODE>
 
-//ModelExpression -> Tensors.ParameterPoolTensor -> Tensors.PointTensor -> Tensor -> Tensor -> Tensor
-
-    type WriteOut = LogEvent -> unit
-
-    type Integrate<'data, 'date, 'timeunit, 'timespan> =
+    /// Disparate data types may enter the integration domain.
+    /// However, only tensor data is permitted to leave the
+    /// integration domain via the compiled function.
+    type Integrate<'data, 'dataEnv, 'date, 'timeunit, 'timespan> =
         WriteOut
             -> float<``time index``>
             -> float<``time index``>
             -> float<``time index``>
             -> CodedMap<'data>
-            -> CodedMap<TimeIndex.TimeIndex<'data, 'date, 'timeunit, 'timespan>>
-            -> CodedMap<FloatODE>
-            -> CodedMap<'data[]>
+            -> CodedMap<TimeIndex.TimeIndex<'dataEnv, 'date, 'timeunit, 'timespan>>
+            -> ModelEquations
+            -> CompiledFunctionForIntegration // Was codedmap<float[]>
+
+    /// Represents a method used to integrate functions.
+    /// Takes the intial time, final time, and time step,
+    /// the initial state, and returns a function that
+    /// is compiled to only require the current time
+    /// and current state.
+    type IntegrationRoutine =
+        TypedTensor<Scalar,``time index``>
+            -> TypedTensor<Scalar,``time index``>
+            -> TypedTensor<Scalar,``time index``>
+            -> CodedMap<TypedTensor<Scalar,environment>>
+            -> RightHandSide
+            -> IntegrationFn
+
+    // 'TypedTensor<Scalar,time index> -> 
+        // TypedTensor<Scalar,time index> -> 
+        // TypedTensor<Scalar,time index> -> 
+        // Tensor -> 
+        // (Tensor -> Tensor -> Tensor) 
+        // -> Tensor'    
+
+
+    and RightHandSide =
+        TypedTensor<Scalar,``time index``>
+            -> TypedTensor<Vector,environment>
+            -> TypedTensor<Vector,1>
+
+    and IntegrationFn =
+        TypedTensor<Scalar,``time index``>
+            -> TypedTensor<Vector, 1>
+            -> array<TypedTensor<Vector, 1>>
+
 
     type Optimise<'data> =
         Random

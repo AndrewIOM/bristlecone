@@ -20,9 +20,12 @@ module internal Units =
     let round<[<Measure>] 'u> (x: float<'u>) : float<'u> =
         System.Math.Round(float x) |> LanguagePrimitives.FloatWithMeasure
 
+    let floatMap<[<Measure>] 'u> fn (x:float<'u>) : float<'u> =
+        fn(float x) |> LanguagePrimitives.FloatWithMeasure
 
-[<Measure>]
-type iteration
+[<Measure>] type iteration
+[<Measure>] type ``optim-space``
+
 
 [<RequireQualifiedAccess>]
 module PositiveInt =
@@ -320,3 +323,28 @@ module ListExtensions =
             AllIdentical
         else
             Neither
+
+
+module Writer =
+    type Writer<'a,'log> = AWriter of 'a * 'log list
+
+    let run (AWriter (a, log)) = a, log
+    let return' x = AWriter (x, [])
+    let bind f (AWriter (a, log)) =
+        let (AWriter (b, log2)) = f a
+        AWriter (b, log @ log2)
+    let map f w =
+        let (AWriter (a, log)) = w
+        AWriter (f a, log)
+
+    let tell entry = AWriter ((), [entry])
+
+    // Computation expression
+    type WriterBuilder() =
+        member _.Return(x) = return' x
+        member _.Bind(m, f) = bind f m
+        member _.Zero() = return' ()
+        member _.For(seq, body) =
+            seq |> Seq.fold (fun acc x -> bind (fun () -> body x) acc) (return' ())
+
+    let writer = WriterBuilder()
