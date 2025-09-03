@@ -12,10 +12,10 @@ module Likelihood =
 
     let private pi = System.Math.PI
 
-    let private getData s (predictions: CodedMap<PredictedSeries>) =
-        match predictions |> Map.tryFindBy (fun k -> k.Value = s) with
+    let getData key (pairs: CodedMap<SeriesPair<'u>>) =
+        match pairs |> Map.tryFindBy (fun k -> k.Value = key) with
         | Some p -> p
-        | None -> failwithf "Predicted data was required for the variable '%s' but did not exist." s
+        | None -> failwithf "Predicted data was required for the variable '%s' but did not exist." key
 
     let internal sumOfSquares' exp obs =
         Array.zip obs exp |> Array.sumBy (fun d -> ((fst d) - (snd d)) ** 2.)
@@ -63,7 +63,7 @@ module Likelihood =
     /// Log likelihood function for dual simultaneous system, assuming Gaussian error for both x and y.
     /// Requires parameters 'σ[x]', 'σ[y]' and 'ρ' to be included in any `ModelSystem` that uses it.
     /// </summary>
-    let bivariateGaussian key1 key2 : LikelihoodFn<float> =
+    let bivariateGaussian key1 key2 : Likelihood<'u> =
         fun paramAccessor data ->
             let x = data |> getData key1
             let y = data |> getData key2

@@ -8,7 +8,7 @@ module Base =
     open Bristlecone.Time
     open Bristlecone.Tensors
     open Bristlecone.EstimationEngine
-    open DiffSharp
+    open Bristlecone.ModelSystem
 
     /// Generates a coded map of time-series where all values are NaN.
     let nanResult tInitial tEnd (tStep: float<``time index``>) modelMap =
@@ -32,7 +32,7 @@ module Base =
         (initialEnv     : CodedMap<TypedTensor<Scalar,``environment``>>)
         (externalEnv    : CodedMap<TimeIndex.TimeIndex<float<``environment``>,'date,'timeunit,'timespan>>)
         (modelMap : CodedMap<TensorODE>)
-        : EstimationEngine.CompiledFunctionForIntegration =
+        : EstimationEngine.UnparameterisedRHS =
 
         // STAGE 1. Static scaffolding.
 
@@ -50,9 +50,9 @@ module Base =
 
         // Merge helpers (typed, AD-safe)
         let inline applyDynamicVariablesT
-            (newValues: TypedTensor<Vector,1>)
+            (newValues: TypedTensor<Vector,ModelSystem.state>)
             (newValueKeys: ShortCode.ShortCode[])
-            (environment: CodedMap<TypedTensor<Scalar,``environment``>>) =
+            (environment: CodedMap<TypedTensor<Scalar,ModelSystem.``environment``>>) =
 
             // Extract typed scalars from the vector without converting to float
             let scalars =
@@ -88,9 +88,9 @@ module Base =
 
             // The bound RHS now closes over `parameters` but reuses all static prep
             fun (t: TypedTensor<Scalar,``time index``>)
-                (x: TypedTensor<Vector,1>) ->
+                (x: TypedTensor<Vector,ModelSystem.state>) ->
 
-                let idx = int ((t.Value - tInitial) / tStep)
+                let idx = int ((t.Value - tInitial.Value) / tStep.Value)
 
                 let env =
                     if idx = 0 then
@@ -114,6 +114,20 @@ module Base =
                 if result |> Array.exists(fun (_,v) -> Option.isNone v)
                 then invalidOp "RHS did not produce vector"
                 else result |> Map.ofArray |> Map.map(fun _ v -> Option.get v)
+
+    // let mkIntegrator : EstimationEngine.Integrate<'date, 'timeunit, 'timespan> =
+    //     fun log tInitial tEnd tStep initialConditions externalEnvironment modelMap ->
+    //         match modelMap with
+    //         | EstimationEngine.FloatODEs odes ->
+    //             failwith "not implemented"
+    //             // odes |> Base.makeIntegrator log rk4float tInitial tEnd tStep initialConditions externalEnvironment
+    //         | EstimationEngine.TensorODEs odes ->
+                
+    //             let initialConditionsT : CodedMap<Tensors.TypedTensor<Tensors.Scalar,ModelSystem.environment>> =
+    //                 initialConditions
+    //                 |> Map.map(fun _ v -> v |> (*) 1.<ModelSystem.environment> |> Tensors.Typed.ofScalar)                
+                
+    //             makeCompiledFunctionForIntegration tInitial tEnd tStep initialConditionsT externalEnvironment odes                
 
 
 module RungeKutta =
@@ -167,7 +181,7 @@ module RungeKutta =
         (tFinal: float<``time index``>)
         (steps: float<``time index``>) 
         (initialVector: float[]) 
-        (f: float -> float[] -> EstimationEngine.State[]) 
+        (f: float -> float[] -> float)
         : float[][] =
         
         let tInit  = tInitial |> Tensors.Typed.ofScalar
@@ -195,20 +209,54 @@ module RungeKutta =
             Array.init (Array2D.length2 arr2d) (fun j -> arr2d.[i, j])
         )
 
-    let rk4 : EstimationEngine.Integrate<'data, 'dataEnv, 'date, 'timeunit, 'timespan> =
-        fun log tInitial tEnd tStep initialConditions externalEnvironment modelMap ->
-            match modelMap with
-            | EstimationEngine.FloatODEs odes ->
-                failwith "not implemented"
-                // odes |> Base.makeIntegrator log rk4float tInitial tEnd tStep initialConditions externalEnvironment
-            | EstimationEngine.TensorODEs odes ->
-                
-                let initialConditionsT : CodedMap<Tensors.TypedTensor<Tensors.Scalar,EstimationEngine.``environment``>> =
-                    initialConditions
-                    |> Map.map(fun _ v -> v |> (*) 1.<EstimationEngine.environment> |> Tensors.Typed.ofScalar)                
-                
-                Base.makeCompiledFunctionForIntegration tInitial tEnd tStep initialConditionsT externalEnvironment odes                
+    // Flatten a CodedMap<Scalar> into (keys, Tensor vector)
+    let flattenState (stateMap: CodedMap<TypedTensor<Scalar,ModelSystem.state>>) =
+        let keys, vals =
+            stateMap
+            |> Map.toList
+            |> List.unzip
+        let vec =
+            vals
+            |> List.map (fun s -> s.Value) // Tensor scalar
+            |> dsharp.stack
+        keys, vec
 
-            // TODO This now makes an integrator that only needs the parameter set.
-            // My code currently feeds in the parameters far earlier than this, so 
-            // need a bit of rejigging.
+    // Wrap a ParameterisedRHS so it works on flat Tensors
+    let wrapRhs (keys: ShortCode.ShortCode list) (rhs: EstimationEngine.ParameterisedRHS) =
+        fun (t: Tensor) (y: Tensor) ->
+            // Rebuild state map from flat vector
+            let stateMap =
+                (keys, y.unstack())
+                ||> Seq.map2 (fun k comp ->
+                    // comp is a Tensor vector — wrap without converting to float
+                    match tryAsVector<ModelSystem.state> comp with
+                    | Some v -> k, v
+                    | None   -> failwith "Expected vector state component")
+                |> Map.ofSeq
+            // Call original RHS
+            let resultMap = rhs (asScalar<``time index``> t) ( // wrap time as scalar
+                                match tryAsVector<ModelSystem.state> y with
+                                | Some v -> v
+                                | None   -> failwith "Expected vector state input")
+            // Flatten result back to Tensor
+            keys
+            |> List.map (fun k -> resultMap.[k].Value)
+            |> dsharp.stack
+
+    // Unflatten trajectory Tensor back into CodedMap<Vector,state>
+    let unflattenTrajectory (keys: ShortCode.ShortCode list) (traj: Tensor) =
+        let comps = traj.unstack(1) // list of Tensor vectors
+        (keys, comps)
+        ||> Seq.map2 (fun k comp ->
+            match tryAsVector<ModelSystem.state> comp with
+            | Some v -> k, v
+            | None   -> failwith "Expected vector trajectory component")
+        |> Map.ofSeq
+
+    let rk4 : EstimationEngine.Integration.IntegrationRoutine =
+        fun tInitial tEnd tStep t0 rhs ->
+            let keys, y0 = flattenState t0
+            let fWrapped = wrapRhs keys rhs
+            let traj = rk4WithStepWidth tInitial tEnd tStep y0 fWrapped
+            unflattenTrajectory keys traj
+            

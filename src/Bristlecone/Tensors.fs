@@ -42,6 +42,8 @@ module Tensors =
             : TypedTensor<Matrix, 'u * 'v> =
             { Inner = a.Inner.matmul b.Inner }
 
+        let toFloatScalar (t:TypedTensor<Scalar, 'u>) : float<'u> =
+            float t.Value |> LanguagePrimitives.FloatWithMeasure<'u>
 
     // ---------------------
     // Shape-category active patterns
@@ -110,18 +112,3 @@ module Tensors =
         match classify t with
         | UScalar s -> { Inner = s } : TypedTensor<Scalar,'u>
         | _ -> failwithf "%A is not a valid scalar" t
-
-    // type ModelTimeIndexTensor = ModelTimeIndexTensor of Tensor
-    //     with
-    //         static member Create (v:float<``time index``>) = ModelTimeIndexTensor (dsharp.tensor v)
-    //         member this.Value = this |> fun (ModelTimeIndexTensor v) -> v
-    //         member this.Increment by = this.Value + by |> ModelTimeIndexTensor
-
-    // type PointTensor = PointTensor of Tensor
-    //     with member this.Value = this |> fun (PointTensor v) -> v
-
-    // type ParameterPoolTensor = ParameterPoolTensor of Tensor
-    //     with
-    //         member this.Value = this |> fun (ParameterPoolTensor v) -> v
-    //         member this.ValueFor (s:ShortCode.ShortCode) = dsharp.tensor 1
-

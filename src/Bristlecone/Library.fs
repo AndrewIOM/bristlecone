@@ -18,7 +18,7 @@ module Bristlecone =
     open Bristlecone.Statistics
 
     /// <summary>A basic estimation engine for discrete-time equations, using a Nelder-Mead optimiser.</summary>
-    let mkDiscrete: EstimationEngine<float, obj, obj, obj> =
+    let mkDiscrete: EstimationEngine<'data, 'date, 'timeunit, 'timespan> =
         { TimeHandling = Discrete
           OptimiseWith = Optimisation.Amoeba.single Optimisation.Amoeba.Solver.Default
           LogTo = Console.logger (1000)
@@ -26,7 +26,7 @@ module Bristlecone =
           Conditioning = Conditioning.NoConditioning }
 
     /// <summary>A basic estimation engine for ordinary differential equations, using a Nelder-Mead optimiser.</summary>
-    let mkContinuous<'date, 'timeunit, 'timespan> : EstimationEngine<float, 'date, 'timeunit, 'timespan> =
+    let mkContinuous<'date, 'timeunit, 'timespan> : EstimationEngine<'data, 'date, 'timeunit, 'timespan> =
         { TimeHandling = Continuous <| Integration.RungeKutta.rk4
           OptimiseWith = Optimisation.Amoeba.single Optimisation.Amoeba.Solver.Default
           LogTo = Bristlecone.Logging.Console.logger (1000)
@@ -70,11 +70,9 @@ module Bristlecone =
         /// Places a map of `TimeSeries` into a `TimeFrame` that has data
         /// that shares a common timeline. If no timeline is shared, returns
         /// an `Error`.
-        let observationsToCommonTimeFrame (equations: CodedMap<ModelEquation<'data, 'timeIndex>>) timeSeriesData =
-            let equationKeys = equations |> Map.keys
-
+        let observationsToCommonTimeFrame (dynamicEquationKeys: ShortCode.ShortCode seq) timeSeriesData =
             timeSeriesData
-            |> Map.filter (fun k _ -> equationKeys |> Seq.contains k)
+            |> Map.filter (fun k _ -> dynamicEquationKeys |> Seq.contains k)
             |> TimeFrame.tryCreate
             |> Result.ofOption "Observations for dynamic variables must share a common sampling time sequence"
 
@@ -126,6 +124,11 @@ module Bristlecone =
             //     fixedStep engine.LogTo engine.TimeHandling (startIndex - externalSteps.Head) endIndex t0 forcings
             )
 
+    let private dynamicVariableKeys (models:ModelSystem.ModelForm<_>) =
+        match models with
+        | ModelForm.DifferenceEqs eqs -> eqs
+        | ModelForm.DifferentialEqs eqs -> eqs
+        |> Map.keys
 
     /// <summary>
     /// Fit a time-series model to data.
@@ -143,23 +146,29 @@ module Bristlecone =
     /// <param name="timeSeriesData"></param>
     /// <param name="model"></param>
     /// <returns></returns>
-    let tryFit engine endCondition timeSeriesData (model: ModelSystem<float, 'timeIndex>) =
+    let tryFit engine endCondition
+        (timeSeriesData: CodedMap<TimeSeries<float,'date, 'timeunit, 'timespan>>)
+        (model: ModelSystem<'dataUnit, 'timeIndex>) =
 
         // A. Setup initial time point values based on conditioning method.
-        let t0 = Fit.t0 timeSeriesData engine.Conditioning engine.LogTo
+        let t0 : CodedMap<Tensors.TypedTensor<Tensors.Scalar,state>> = Fit.t0 timeSeriesData engine.Conditioning engine.LogTo
 
         // Check there is time-series data actually included and corresponding to correct equations.
         let hasRequiredData =
             if timeSeriesData.IsEmpty then
                 Error "No time-series data was specified"
-            else if Set.isSubset (model.Equations |> Map.keys |> set) (timeSeriesData |> Map.keys |> set) then
+            else if Set.isSubset (model.Equations |> dynamicVariableKeys |> set) (timeSeriesData |> Map.keys |> set) then
                 Ok timeSeriesData
             else
                 Error(
                     sprintf
                         "Required time-series data were missing. Need: %A"
-                        (model.Equations |> Map.keys |> Seq.map (fun k -> k.Value) |> String.concat " + ")
+                        (model.Equations |> dynamicVariableKeys |> Seq.map (fun k -> k.Value) |> String.concat " + ")
                 )
+
+        let requireDifferentialEqs = function
+            | DifferentialEqs e -> e
+            | DifferenceEqs _ -> invalidOp "Cannot integrate difference-based equation set."
 
         // B. Create a continuous-time that outputs float[]
         // containing only the values for the dynamic variable resolution.
@@ -169,11 +178,11 @@ module Bristlecone =
                 let! timeSeriesData = hasRequiredData
 
                 // 1. Set time-series into common timeline
-                let! commonDynamicTimeFrame = Fit.observationsToCommonTimeFrame model.Equations timeSeriesData
+                let! commonDynamicTimeFrame = Fit.observationsToCommonTimeFrame (dynamicVariableKeys model.Equations) timeSeriesData
 
                 let! commonForcingsTimeFrame =
                     Fit.environmentDataToCommonTimeFrame
-                        (Map.keys model.Equations)
+                        (dynamicVariableKeys model.Equations)
                         (Map.keys model.Measures)
                         timeSeriesData
 
@@ -181,7 +190,7 @@ module Bristlecone =
                 <| GeneralEvent(
                     sprintf
                         "Time-series start at %A with resolution %A."
-                        (commonDynamicTimeFrame.StartDate)
+                        commonDynamicTimeFrame.StartDate
                         (commonDynamicTimeFrame |> TimeFrame.resolution)
                 )
 
@@ -189,7 +198,8 @@ module Bristlecone =
                 let! _ = Fit.exactSubsetOf commonDynamicTimeFrame commonForcingsTimeFrame
 
                 let solver outputStep =
-                    Solver.solver outputStep commonDynamicTimeFrame commonForcingsTimeFrame engine t0
+                    Solver.makeSolver engine.LogTo engine.TimeHandling (requireDifferentialEqs model.Equations)
+                        outputStep commonDynamicTimeFrame commonForcingsTimeFrame t0
 
                 return solver
             }

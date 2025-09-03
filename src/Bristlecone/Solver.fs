@@ -7,8 +7,7 @@ module Solver =
     open Bristlecone.EstimationEngine
     open Bristlecone.Logging
     open Bristlecone.Time
-
-    type Solver<'a> = CodedMap<FloatODE> -> CodedMap<'a[]>
+    open Bristlecone.ModelSystem
 
     /// If environmental forcing data is supplied, the output series may be
     /// configured to be either external (i.e. on observation timeline) or
@@ -19,29 +18,33 @@ module Solver =
 
     /// Step the solver using high resolution, and output at low resolution.
     /// External steps are of a fixed width.
-    let fixedStep logTo timeHandling tStart tEnd initialState forcings =
+    let fixedStep (model:CodedMap<TensorODE>) timeHandling tStart tEnd initialState forcings =
         match timeHandling with
         | Discrete -> invalidOp "Not configured"
         | Continuous i ->
-            fun eqs ->
-                i logTo tStart tEnd 1.<``time index``> initialState forcings eqs
-                |> Map.map (fun _ v -> v |> Array.tail |> Seq.toArray)
+            let compiledRhs = Integration.Base.makeCompiledFunctionForIntegration tStart tEnd 1.<``time index``> initialState forcings model
+            let integrate = i tStart tEnd 1.<``time index``> initialState
+            fun parameters ->
+                integrate (compiledRhs parameters)
+                |> Map.map (fun _ v -> v |> Tensors.Typed.tail)
 
     /// Step the solver using the high resolution, and output at low resolution.
     /// External steps can be variable in size.
     /// Each time jump is integrated individually.
-    let variableExternalStep logTo timeHandling timeSteps (initialPoint: CodedMap<'data>) =
+    let variableExternalStep model timeHandling timeSteps (initialState: CodedMap<Tensors.TypedTensor<Tensors.Vector,state>>)
+        : Solver.ConfiguredSolver =
         match timeHandling with
         | Discrete -> invalidOp "Not configured"
         | Continuous i ->
-            fun eqs ->
+            fun parameters ->
                 let results =
                     timeSteps
                     |> Seq.pairwise
                     |> Seq.scan
-                        (fun state (t0, t1) ->
-                            i logTo t0 t1 (t1 - t0) state Map.empty eqs |> Map.map (fun k v -> v.[0]))
-                        initialPoint
+                        (fun state (tStart, tEnd) ->
+                            let integrate = i tStart tEnd (tEnd - tStart) state
+                            let rhs = Integration.Base.makeCompiledFunctionForIntegration tStart tEnd 1.<``time index``> state Map.empty model
+                            integrate (rhs parameters) |> Map.map (fun _ v -> v.[0])) initialState
 
                 eqs
                 |> Map.toSeq
@@ -49,12 +52,14 @@ module Solver =
                 |> Map.ofSeq
 
     let fixedResolutionSolver
+        models
         fRes
         stepType
         (dynamicSeries: TimeFrame.TimeFrame<'T, 'date, 'timeunit, 'timespan>)
         (environment: TimeFrame.TimeFrame<'T, 'date, 'timeunit, 'timespan> option)
-        engine
-        t0
+        logTo
+        timeHandling
+        t0 : EstimationEngine.Solver.ConfiguredSolver
         =
         let timeline, forcings =
             match environment with
@@ -62,7 +67,7 @@ module Solver =
                 match f |> TimeFrame.resolution with
                 | Resolution.Variable -> failwith "Variable-time environmental forcing data is not supported."
                 | Resolution.Fixed efRes ->
-                    engine.LogTo
+                    logTo
                     <| DebugEvent "Solving along the timeline of supplied environmental forcing data."
 
                     let timeline =
@@ -82,7 +87,7 @@ module Solver =
 
                     (timeline, envIndex)
             | None ->
-                engine.LogTo
+                logTo
                 <| DebugEvent "No environmental forcing data was supplied. Solving using time points of observations."
 
                 let timeline =
@@ -108,40 +113,44 @@ module Solver =
             failwithf "Encountered uneven timesteps: %A" externalSteps
 
         let solve =
-            fixedStep engine.LogTo engine.TimeHandling (startIndex - externalSteps.Head) endIndex t0 forcings
+            fixedStep models timeHandling (startIndex - externalSteps.Head) endIndex t0 forcings
 
-        fun ode ->
+        fun point ->
             match stepType with
-            | Internal -> solve ode
+            | Internal -> solve point
             | External ->
                 // Filter the results so that only results that match low-res data in time are included
-                solve ode
+                solve point
                 |> Map.map (fun _ v -> v |> Seq.everyNth (int externalSteps.Head) |> Seq.toArray) //TODO proper lookup
 
 
     /// Create a solver that applies time-series models to time-series data.
-    /// Takes a `TimeFrame` of dynamic time-series
-    let solver
+    /// Takes a `TimeFrame` of dynamic time-series.
+    /// The solver should take a parameterised model equation set and compute
+    /// the answer.
+    let makeSolver
+        logTo
+        timeHandling
+        modelEquations
         stepType
         (dynamicSeries: TimeFrame.TimeFrame<'T, 'date, 'timeunit, 'timespan>)
         (environment: TimeFrame.TimeFrame<'T, 'date, 'timeunit, 'timespan> option)
-        engine
         t0
-        : Solver<'T> =
+        : Solver.ConfiguredSolver =
         match dynamicSeries |> TimeFrame.resolution with
         | Resolution.Fixed fRes ->
-            engine.LogTo
+            logTo
             <| DebugEvent(sprintf "Observations occur on a fixed temporal resolution: %A." fRes)
 
-            fixedResolutionSolver fRes stepType dynamicSeries environment engine t0
+            fixedResolutionSolver modelEquations fRes stepType dynamicSeries environment logTo timeHandling t0
         | Resolution.Variable ->
             match environment with
             | Some f -> failwith "Variable time solver with environmental data is not yet supported."
             | None ->
-                engine.LogTo
+                logTo
                 <| DebugEvent "No environmental forcing data was supplied. Solving using time points of observations."
 
-                engine.LogTo <| DebugEvent "Solving over time-series with uneven time steps."
+                logTo <| DebugEvent "Solving over time-series with uneven time steps."
 
                 let medianTimespan =
                     dynamicSeries.Series
@@ -152,7 +161,7 @@ module Solver =
                     |> Seq.head
                     |> Seq.head
 
-                engine.LogTo
+                logTo
                 <| DebugEvent(
                     sprintf "Setting temporal resolution of solver as the median timestep (%A)." medianTimespan
                 )
@@ -167,15 +176,15 @@ module Solver =
                         (dynamicSeries.Series |> Seq.head).Value
                     )
 
-                variableExternalStep engine.LogTo engine.TimeHandling timeIndex.Index t0
+                variableExternalStep modelEquations timeHandling timeIndex.Index t0
 
 
     module Discrete =
 
         /// Finds the solution of a discretised model system, given time-series data.
         /// `startPoint` - a preconditioned point to represent time-zero.
-        let solve startPoint : ShortCode.ShortCode -> ModelSystem.Measurement<'a> -> CodedMap<'a[]> -> 'a[] =
-            fun (c: ShortCode.ShortCode) (m: ModelSystem.Measurement<'a>) (expected: CodedMap<'a[]>) ->
+        let solve startPoint : ShortCode.ShortCode -> ModelSystem.Measurement<environment> -> CodedMap<'a[]> -> 'a[] =
+            fun (c: ShortCode.ShortCode) (m: ModelSystem.Measurement<environment>) (expected: CodedMap<'a[]>) ->
                 expected
                 |> Map.toList
                 |> List.map (fun (c, d) -> d |> Array.map (fun x -> (c, x)) |> Seq.toList) // Add shortcode to each time point's value

@@ -25,7 +25,7 @@ module internal Units =
 
 [<Measure>] type iteration
 [<Measure>] type ``optim-space``
-
+[<Measure>] type ``parameter``
 
 [<RequireQualifiedAccess>]
 module PositiveInt =

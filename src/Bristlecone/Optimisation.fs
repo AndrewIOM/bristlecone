@@ -1,7 +1,9 @@
 namespace Bristlecone.Optimisation
 
+open Bristlecone
 open Bristlecone.Logging
 open Bristlecone.EstimationEngine
+open Bristlecone.EstimationEngine.Optimisation
 
 type OptimisationError =
     | OutOfBounds
@@ -12,21 +14,21 @@ module None =
 
     /// An optimisation function that calculates the value of `f` using
     /// the given bounds. Use when optimisation of the objective is not required.
-    let none: Optimiser<float> =
+    let none: Optimiser =
         InDetachedSpace
         <| fun _ writeOut _ domain _ f ->
             writeOut
             <| GeneralEvent "Skipping optimisation: only the result of the given parameters will be computed"
 
-            let point = [| for (min, _, _) in domain -> min |]
-            [ f point, point ]
+            let point = [| for (min, _, _) in domain -> min |] |> Tensors.Typed.ofVector
+            [ f point |> Tensors.Typed.toFloatScalar, point ]
 
 module EndConditions =
 
     open Bristlecone.Statistics
 
     /// End the optimisation procedure when a minimum number of iterations is exceeded.
-    let afterIteration iteration : EndCondition<float> =
+    let afterIteration iteration : EndCondition =
         fun _ currentIteration -> currentIteration >= iteration
 
     /// An `EndCondition` that calculates that segregates the most recent n results into
@@ -34,7 +36,7 @@ module EndConditions =
     /// squared jumping distance (MSJD). The significance of the slope coefficient of a linear
     /// regression is assessed to determine if the MSJD is increasing through time for every
     /// parameter sequentially: if all p-values are >0.1, then the `EndCondition` is true.
-    let stationarySquaredJumpDistance' fixedBin pointsRequired : EndCondition<float> =
+    let stationarySquaredJumpDistance' fixedBin pointsRequired : EndCondition =
         fun results _ ->
             if (results |> Seq.length) % (fixedBin * pointsRequired) = 0 then
                 let trendSignificance =
@@ -61,13 +63,13 @@ module EndConditions =
 
     /// True if there is no significant slope in mean squared jumping distances (MSJD),
     /// binned per 200 iterations and a regression of five bins.
-    let stationarySquaredJumpDistance: EndCondition<float> =
+    let stationarySquaredJumpDistance: EndCondition =
         stationarySquaredJumpDistance' 200 5
 
     /// Convergence of results using the Gelman-Rubin Rhat statistic.
     /// `thin` - Only test for convergence at multiples of the following intervals (when all chains are ready).
     /// `chainCount` - The number of chains to test for convergence. This makes the agent wait until results for all chains are in.
-    let convergence thin chainCount : EndCondition<float> =
+    let convergence thin chainCount : EndCondition =
 
         let assess (chains: Map<int, Solution<float> list>) =
             printfn "Assessing convergence..."
@@ -142,7 +144,7 @@ module Initialise =
     /// A value for each dimension is drawn from a univariate normal distribution, assuming that
     /// the bounds represent the 99th percentiles of the distribution.
     let initialise (d: Domain) (rng: System.Random) =
-        [| for (min, max, _) in d ->
+        [| for min, max, _ in d ->
                if min < max then
                    (Normal.draw rng (min + (max - min) / 2.) ((max - min) / 6.)) ()
                elif min = max then
@@ -1270,9 +1272,9 @@ module MonteCarlo =
 
         /// A Monte Carlo Markov Chain sampler based on the 'Filzbach' algorithm from
         /// Microsoft Research Cambridge.
-        let filzbach settings : Optimiser<float> =
+        let filzbach settings : Optimiser =
             InDetachedSpace
-            <| fun random writeOut endCon domain startPoint (f: Objective<Point<float>, float>) ->
+            <| fun random writeOut endCon domain startPoint (f: Objective) ->
                 match startPoint with
                 | Some theta ->
                     writeOut
