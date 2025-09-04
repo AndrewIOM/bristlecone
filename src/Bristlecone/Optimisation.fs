@@ -342,9 +342,16 @@ module MonteCarlo =
             |> samplesToMatrix
             |> Bristlecone.Statistics.LinearAlgebra.computeCovariance
 
-        let covarianceFromSigmas n random sigmas =
+        let covarianceFromStandardDeviations<[<Measure>] 'u>
+            (n: int)
+            (random: System.Random)
+            (sigmas: float<'u>[]) : Matrix<float<'u^2>> =
+            
             [| 1..n |]
-            |> Array.map (fun _ -> sigmas |> Array.map (fun s -> Normal.draw random 0. (s ** 2.) ()))
+            |> Array.map (fun _ ->
+                sigmas
+                |> Array.map (fun s -> Normal.draw<'u> random (LanguagePrimitives.FloatWithMeasure 0.) s ())
+            )
             |> samplesToMatrix
             |> Bristlecone.Statistics.LinearAlgebra.computeCovariance
 
@@ -438,7 +445,10 @@ module MonteCarlo =
             (theta: Point) : float<``optim-space``>[] =
 
             let dim = theta |> Typed.length |> float
-            sample (cov * (2.38 ** 2.0) / dim) ()
+            let factor = (2.38 ** 2.0) / dim // unitless
+            let covScaled = cov.Map(fun v -> v * factor)
+            
+            sample covScaled ()
             |> Vector.toArray
             |> Array.map (fun step -> step * scale)
             |> Array.mapi (fun i step -> (step, domain.[i]))
@@ -651,12 +661,11 @@ module MonteCarlo =
         InDetachedSpace
         <| fun random writeOut endCon domain startPoint f ->
             match Initialise.tryGenerateTheta f domain random 10000 with
-            | Ok theta ->
-                writeOut <| GeneralEvent(sprintf "[Optimisation] Initial theta is %A" theta)
-                let sigmas = theta |> Array.map (fun _ -> 0.)
-
+            | Ok initialTheta ->
+                writeOut <| GeneralEvent(sprintf "[Optimisation] Initial theta is %A" initialTheta)
+                let initialSigma = Array.init (Typed.length initialTheta) (fun _ -> 0.)
                 let _, result, _ =
-                    MetropolisWithinGibbs.core true writeOut random domain f [] 100 1 (theta: float[]) sigmas
+                    MetropolisWithinGibbs.core true writeOut random domain f [] 100<iteration> 1<MetropolisWithinGibbs.batch> initialTheta initialSigma
 
                 result
             | Error _ -> invalidOp "Could not generate theta"
@@ -666,11 +675,11 @@ module MonteCarlo =
     let ``Metropolis-within Gibbs``: Optimiser =
         InDetachedSpace
         <| fun random writeOut endCon domain startPoint (f: Objective) ->
-            let theta = Initialise.initialise domain random
-            let sigmas = theta |> Array.map (fun _ -> 0.)
+            let initialTheta = Initialise.initialise domain random
+            let initialSigma = Array.init (Typed.length initialTheta) (fun _ -> 0.)
 
             let _, result, _ =
-                MetropolisWithinGibbs.core false writeOut random domain f [] 100 1 (theta: float[]) sigmas
+                MetropolisWithinGibbs.core false writeOut random domain f [] 100<iteration> 1<MetropolisWithinGibbs.batch> initialTheta initialSigma
 
             result
 
@@ -683,7 +692,7 @@ module MonteCarlo =
 
             // Starting condition
             let initialTheta = Initialise.initialise domain random
-            let initialSigma = Array.init (Typed.length initialTheta) (fun _ -> 0.) |> Typed.ofVector
+            let initialSigma = Array.init (Typed.length initialTheta) (fun _ -> 0.)
 
             let mwg adapt batchSize currentBatch theta sigmas =
                 MetropolisWithinGibbs.core adapt writeOut random domain f [] batchSize currentBatch theta sigmas
@@ -693,7 +702,7 @@ module MonteCarlo =
 
             let batches, results, tunedSigmas =
                 initialSigma
-                |> mwg true 100<iteration> 1<iteration> initialTheta
+                |> mwg true 100<iteration> 1<MetropolisWithinGibbs.batch> initialTheta
                 |> fun (b, r, s) ->
                     let _, theta = r |> Seq.head
                     mwg true 200<iteration> b theta s
@@ -709,8 +718,10 @@ module MonteCarlo =
             // 2nd Adaptive Phase
             // a) Compute a covariance matrix from the previous sigma values
             let covariance =
-                tunedSigmas |> Array.map exp |> TuningMode.covarianceFromSigmas 10000 random
-
+                tunedSigmas
+                |> Array.map (fun ls -> exp ls * 1.0<``optim-space``>)
+                |> TuningMode.covarianceFromStandardDeviations 10000 random
+            
             // b) Continue the chain using the covariance matrix and last theta
             writeOut <| GeneralEvent "Generalised MCMC: Starting 2nd Adaptive Phase"
 
@@ -719,9 +730,9 @@ module MonteCarlo =
                     covariance
                     1.
                     (results |> Seq.head |> snd)
-                    [ (TuneMethod.CovarianceWithScaleTotalHistory 0.750,
-                       200,
-                       EndConditions.stationarySquaredJumpDistance) ]
+                    [ { Method = TuneMethod.CovarianceWithScaleTotalHistory 0.750
+                        Frequency = 200<iteration>
+                        EndCondition = EndConditions.stationarySquaredJumpDistance } ]
                     random
                     writeOut
                     (EndConditions.afterIteration 0<iteration>)
@@ -764,7 +775,7 @@ module MonteCarlo =
         module Machines =
 
             /// e = new minus old energy (or -logL)
-            let boltzmann t e : float = -e / t |> exp
+            let boltzmann (t: float) (e: float<``-logL``>) : float = float -e / t |> exp
 
 
         module EndConditions =
@@ -958,17 +969,16 @@ module MonteCarlo =
 
         // Given a candidate distribution + machine, run base SA algorithm
         let simulatedAnnealing
-            scale
+            (scale: float<``optim-space``>)
             settings
             annealEnd
-            machine
-            (jump: System.Random -> float -> float -> unit -> float<``optim-space``>)
+            (machine: float -> float<``-logL``> -> float)
+            (jump: System.Random -> float<``optim-space``> -> float -> unit -> float<``optim-space``>)
             cool
             random
             writeOut
             domain
-            startPoint
-            f
+            (f: TypedTensor<Vector,``optim-space``> -> TypedTensor<Scalar,``-logL``>)
             =
 
             // 1. Initial conditions
@@ -977,8 +987,8 @@ module MonteCarlo =
             let l1 = f theta1
 
             // 2. Chain generator
-            let homogenousChain (scales:float[]) e temperature =
-                let propose scale (theta: Point) =
+            let homogenousChain (scales:float<``optim-space``>[]) e temperature =
+                let propose (scale:float<``optim-space``>[]) (theta: Point) =
                     Array.zip3 (theta |> Typed.toFloatArray) scale domain
                     |> Array.map (fun (x, sc, (_, _, con)) -> constrainJump x (draw' sc temperature ()) 1. con)
                     |> Typed.ofVector
@@ -990,7 +1000,7 @@ module MonteCarlo =
 
             let kMax = settings.TuneLength
 
-            let rec tune (p: (float * float[])[]) k (l1, theta1) =
+            let rec tune (p: (float<``optim-space``> * float<``optim-space``>[])[]) k (l1, theta1) =
                 let chance = (float k) / (float kMax)
                 let parameterToChange = random.Next(0, (p |> Array.length) - 1)
 
@@ -1050,7 +1060,7 @@ module MonteCarlo =
                     (newScaleInfo |> Array.map fst, l1, theta1)
 
             let tunedScale, l2, theta2 =
-                homogenousChain initialScale (EndConditions.afterIteration settings.PreTuneLength) 1. (l1, theta1)
+                homogenousChain initialScale (EndConditions.afterIteration settings.PreTuneLength) 1. (l1 |> Typed.toFloatScalar, theta1)
                 |> List.minBy fst
                 |> tune (initialScale |> Array.map (fun t -> (t, Array.empty))) 1<iteration>
 
@@ -1083,12 +1093,10 @@ module MonteCarlo =
         /// Probability: Boltzmann Machine
         let classicalSimulatedAnnealing scale tDependentProposal settings : Optimiser =
             InDetachedSpace
-            <| fun random writeOut endCon domain startPoint (f: Objective) ->
-                let gaussian rnd scale t =
+            <| fun random writeOut endCon domain _ (f: Objective) ->
+                let gaussian rnd (scale:float<``optim-space``>) (t:float) =
                     let s = if tDependentProposal then scale * (sqrt t) else scale
-                    fun () ->
-                        Bristlecone.Statistics.Distributions.Normal.draw rnd 0. s ()
-                        |> (*) 1.<``optim-space``>
+                    fun () -> Normal.draw rnd 0.<``optim-space``> s ()
 
                 simulatedAnnealing
                     scale
@@ -1100,30 +1108,27 @@ module MonteCarlo =
                     random
                     writeOut
                     domain
-                    startPoint
                     f
 
         /// Candidate distribution: Cauchy univariate []
         /// Probability: Bottzmann Machine
         let fastSimulatedAnnealing scale tDependentProposal settings : Optimiser =
             InDetachedSpace
-            <| fun random writeOut endCon domain startPoint (f: Objective) ->
-                let cauchy rnd scale t =
-                    let s = if tDependentProposal then scale * (sqrt t) else scale
-                    let c = MathNet.Numerics.Distributions.Cauchy(0., s, rnd)
-                    fun () -> c.Sample() * 1.<``optim-space``>
-
+            <| fun random writeOut endCon domain _ (f: Objective) ->
+                let cauchyDraw random scale t =
+                    let s = if tDependentProposal then scale * sqrt t else scale
+                    Cauchy.draw<``optim-space``> random 0.0<``optim-space``> s
+                
                 simulatedAnnealing
                     scale
                     settings
                     endCon
                     Machines.boltzmann
-                    cauchy
+                    cauchyDraw
                     (CoolingSchemes.fastCauchyCoolingSchedule)
                     random
                     writeOut
                     domain
-                    startPoint
                     f
 
 
