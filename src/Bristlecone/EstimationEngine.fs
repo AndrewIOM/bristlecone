@@ -8,7 +8,6 @@ open Bristlecone.Tensors
 module ModelSystem =
 
     [<Measure>] type ``environment``
-    [<Measure>] type ``-logL``
     [<Measure>] type ``state``
 
     /// Model system that works with float-based
@@ -247,7 +246,7 @@ module EstimationEngine =
 
     type EstimationEngine<'data, 'date, 'timeunit, 'timespan> =
         { TimeHandling: TimeMode<'date, 'timeunit, 'timespan>
-          OptimiseWith: Optimisation.Optimise
+          OptimiseWith: Optimisation.Optimiser
           Conditioning: Conditioning<'data>
           LogTo: WriteOut
           Random: Random }

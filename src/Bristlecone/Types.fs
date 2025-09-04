@@ -23,9 +23,18 @@ module internal Units =
     let floatMap<[<Measure>] 'u> fn (x:float<'u>) : float<'u> =
         fn(float x) |> LanguagePrimitives.FloatWithMeasure
 
+    let isNan<[<Measure>] 'u> v =
+        v = LanguagePrimitives.FloatWithMeasure<'u> nan
+
+    let isInfinite<[<Measure>] 'u> v =
+        v = LanguagePrimitives.FloatWithMeasure<'u> infinity ||
+            v = LanguagePrimitives.FloatWithMeasure<'u> -infinity
+
+
 [<Measure>] type iteration
 [<Measure>] type ``optim-space``
 [<Measure>] type ``parameter``
+[<Measure>] type ``-logL``
 
 [<RequireQualifiedAccess>]
 module PositiveInt =

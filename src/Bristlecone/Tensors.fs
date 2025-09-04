@@ -16,7 +16,7 @@ module Tensors =
     /// 'U = unit of measure for element type (or float for no UoM)
     type TypedTensor<'Shape, [<Measure>] 'u> = private { Inner: Tensor }
     with
-        member this.Value = this.Inner
+        member this.Value = this.Inner        
 
     module Typed =
 
@@ -30,8 +30,11 @@ module Tensors =
         let ofMatrix (data: float<'u>[,]) : TypedTensor<Matrix, 'u> =
             { Inner = dsharp.tensor (data |> Array2D.map float, dtype = Dtype.Float64) }
 
-        let addScalar (a: TypedTensor<Scalar, 'u>) (b: TypedTensor<Scalar, 'u>) =
+        let addScalar (a: TypedTensor<Scalar, 'u>) (b: TypedTensor<Scalar, 'u>) : TypedTensor<Scalar, 'u> =
             { Inner = a.Inner + b.Inner }
+
+        let minusScalar (a: TypedTensor<Scalar, 'u>) (b: TypedTensor<Scalar, 'u>) : TypedTensor<Scalar, 'u> =
+            { Inner = a.Inner - b.Inner }
 
         let dot (a: TypedTensor<Vector, 'u>) (b: TypedTensor<Vector, 'u>) : TypedTensor<Scalar, 'u ^ 2> =
             { Inner = a.Inner.dot b.Inner }
@@ -44,6 +47,17 @@ module Tensors =
 
         let toFloatScalar (t:TypedTensor<Scalar, 'u>) : float<'u> =
             float t.Value |> LanguagePrimitives.FloatWithMeasure<'u>
+
+        let toFloatArray (v: TypedTensor<Vector,'u>) : float<'u>[] =
+            (v.Value.toArray() :?> float[])
+            |> Array.map LanguagePrimitives.FloatWithMeasure<'u>
+
+        let valueAt (i:int) (t:TypedTensor<Vector, 'u>) =
+            t.Value.[i].toDouble() |> LanguagePrimitives.FloatWithMeasure<'u>
+
+        let length (t:TypedTensor<Vector, 'u>) =
+            t.Value.shape.[0]
+
 
     // ---------------------
     // Shape-category active patterns

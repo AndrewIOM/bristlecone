@@ -35,7 +35,7 @@ module ResultSet =
                   BestResult = None
                   AllResults = [] }
             else
-                let r' = r |> Seq.filter (fun x -> not (System.Double.IsNaN(x.Likelihood)))
+                let r' = r |> Seq.filter (fun x -> not (Units.isNan x.Likelihood))
 
                 if Seq.isEmpty r' then
                     { Subject = s
@@ -74,7 +74,7 @@ let internal comparisonStatistic
 module Akaike =
 
     type AkaikeWeight =
-        { Likelihood: float
+        { Likelihood: float<``-logL``>
           AIC: float
           AICc: float
           Weight: float }
@@ -83,7 +83,7 @@ module Akaike =
     /// <param name="k">The number of parameters within the model in question.</param>
     /// <param name="logLikelihood">a `float` representing the minimum log-likelihood achieved for the model in question.</param>
     /// <returns></returns>
-    let aic (k: int) logLikelihood = 2. * logLikelihood + 2. * (float k)
+    let aic (k: int) (logLikelihood: float<``-logL``>) = 2. * Units.removeUnitFromFloat logLikelihood + 2. * (float k)
 
     /// <summary>The Akaike information criterion, corrected for small sample sizes.
     /// It represents standardised index of model fit quality for models that have different numbers of parameters.</summary>

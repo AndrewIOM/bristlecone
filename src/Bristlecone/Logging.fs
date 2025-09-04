@@ -1,5 +1,7 @@
 namespace Bristlecone.Logging
 
+open Bristlecone
+
 type LogEvent =
     | OptimisationEvent of ModelFitState
     | DifferentiationEvent of string
@@ -8,9 +10,9 @@ type LogEvent =
     | DebugEvent of string
 
 and ModelFitState =
-    { Iteration: int
-      Likelihood: float
-      Theta: seq<float> }
+    { Iteration: int<iteration>
+      Likelihood: float<``-logL``>
+      Theta: seq<float<``optim-space``>> }
 
 /// Simple logger to console that prints line-by-line progress and events.
 module Console =
@@ -20,7 +22,7 @@ module Console =
     let internal print nIteration threadId (x: LogEvent) =
         match x with
         | OptimisationEvent e ->
-            if e.Iteration % nIteration = 0 then
+            if e.Iteration % nIteration = 0<iteration> then
                 printfn "##%i## At iteration %i (-logL = %f) %A" threadId e.Iteration e.Likelihood e.Theta
         | _ -> printfn "##%i## %A" threadId x
 
