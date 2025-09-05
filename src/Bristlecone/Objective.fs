@@ -19,11 +19,36 @@ module Objective =
             | Some i -> asScalar<``parameter``> thetaReal.Value.[i]
             | None   -> invalidOp $"Parameter '{name}' not found")
 
-    /// The system's `Measures` are computed from the product of the solver.
-    let measure (measures: CodedMap<ModelSystem.Measurement<'u>>) solveDiscrete (expectedDynamic: CodedMap<TypedTensor<Vector,state>>) : CodedMap<TypedTensor<Vector,state>> =
-        measures
-        |> Map.map (fun key measure -> solveDiscrete key measure expectedDynamic)
-        |> Map.fold (fun acc key value -> Map.add key value acc) expectedDynamic
+    /// Compute the system's `Measures` from the dynamic variables produced by the solver.
+    /// AD‑safe: stays entirely in tensor space, no conversion to raw floats.
+    let measure
+        (measures: CodedMap<ModelSystem.Measurement<'u>>)
+        (parameters: TypedTensor<Vector,``parameter``>)
+        (expectedDynamic: CodedMap<TypedTensor<Vector,state>>)
+        : CodedMap<TypedTensor<Vector,state>> =
+
+        // Build environment maps for each time step
+        let envs : CodedMap<TypedTensor<Scalar,state>>[] =
+            let length = expectedDynamic |> Seq.head |> fun k -> k.Value |> Tensors.Typed.length
+            Array.init length (fun i ->
+                expectedDynamic
+                |> Map.map (fun _ vec -> Tensors.Typed.itemAt i vec))
+
+        // Compute each measure series
+        let measuredSeries =
+            measures
+            |> Map.map (fun key measFn ->
+                let buf = ResizeArray()
+                for i = 0 to envs.Length - 1 do
+                    let prevEnv = if i = 0 then envs.[0] else envs.[i-1]
+                    let currEnv = envs.[i]
+                    let value   = measFn parameters prevEnv currEnv
+                    buf.Add value
+                buf.ToArray() |> Tensors.Typed.stack1D)
+
+        // Merge into dynamic series
+        Map.fold (fun acc key value -> Map.add key value acc) expectedDynamic measuredSeries
+
 
     /// Pairs observed time series to predicted series for dynamic variables only.
     /// Environmental forcings and hidden variables are removed.
@@ -37,10 +62,15 @@ module Objective =
             if r.Observed.Value.shape = r.Expected.Value.shape then r
             else invalidOp (sprintf "The predicted series %s was a different length to the observed series" key.Value))
 
-    let predict solveDifferential solveDiscrete measures p =
-        p
-        |> solveDifferential
-        |> measure measures solveDiscrete
+    let compiledFromConfig (config:Parameter.Pool.AnyOptimiserConfig) =
+        match config with
+        | Parameter.Pool.DetachedConfig cfg    -> cfg.Compiled
+        | Parameter.Pool.TransformedConfig cfg -> cfg.Compiled
+
+    let predict solver measures parameters =
+        let dynamics = solver parameters
+        let measured = measure measures parameters dynamics
+        Map.fold (fun acc k v -> acc |> Map.add k v) dynamics measured
 
     /// Computes measurement variables and appends to expected data.
     /// Requires:
@@ -48,13 +78,13 @@ module Objective =
     /// - A discrete-time solver (for if measurement / computed variables are present)
     /// - Observed data (for calculating likelihood)
     let create
-        (system: ModelSystem<state, 'timeIndex>)
-        (solveDifferential: Solver.ConfiguredSolver)
-        solveDiscrete
-        parameterPool
+        (negLogLikFn: ModelSystem.Likelihood<state>)
+        (measures: CodedMap<ModelSystem.Measurement<state>>)
+        (solver: Solver.ConfiguredSolver)
+        config
         (observed: CodedMap<float[]>) : EstimationEngine.Objective =
-            
-            let compiled = Parameter.Pool.compileTransforms parameterPool
+
+            let compiled = compiledFromConfig config
             let observedTensors =
                 observed
                 |> Map.map (fun _ arr ->
@@ -64,6 +94,10 @@ module Objective =
                 let thetaReal = compiled.Forward point
                 let accessor  = accessorFromRealVector compiled thetaReal
                 thetaReal
-                |> predict solveDifferential solveDiscrete system.Measures
+                |> predict solver measures
                 |> pairObservationsToExpected observedTensors
-                |> system.NegLogLikelihood accessor
+                |> negLogLikFn accessor
+
+    let createPredictor (measures: CodedMap<ModelSystem.Measurement<state>>) (solver: Solver.ConfiguredSolver) config =
+            let compiled = compiledFromConfig config            
+            compiled.Forward >> predict solver measures

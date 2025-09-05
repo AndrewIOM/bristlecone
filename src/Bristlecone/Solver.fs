@@ -182,7 +182,7 @@ module Solver =
             (modelEquations: ModelForm<'modelTimeUnit>)
             engineTimeMode
             stepType
-            (dynamicSeries: TimeFrame.TimeFrame<float<environment>, 'date, 'timeunit, 'timespan>)
+            (dynamicSeries: TimeFrame.TimeFrame<float<state>, 'date, 'timeunit, 'timespan>)
             (environment: TimeFrame.TimeFrame<float<environment>, 'date, 'timeunit, 'timespan> option)
             (t0: CodedMap<TypedTensor<Scalar,state>>)
             : Solver.ConfiguredSolver =

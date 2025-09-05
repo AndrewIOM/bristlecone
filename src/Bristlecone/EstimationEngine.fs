@@ -102,7 +102,7 @@ module ModelSystem =
           Measures         : CodedMap<Measurement<'dataUnit>>
           NegLogLikelihood : Likelihood<'dataUnit> }
 
-    type FitValue = { Fit: float; Obs: float }
+    type FitValue = { Fit: float<state>; Obs: float }
     type FitSeries<'date, 'timeunit, 'timespan> = TimeSeries<FitValue, 'date, 'timeunit, 'timespan>
 
     /// An estimated model fit for a time-series model.
@@ -111,8 +111,8 @@ module ModelSystem =
           Likelihood: float<``-logL``>
           Parameters: Parameter.Pool.ParameterPool
           Series: CodedMap<FitSeries<'date, 'timeunit, 'timespan>>
-          Trace: (float<``-logL``> * float<``optim-space``>[]) list // TODO output trace into real parameter values.
-          InternalDynamics: CodedMap<float[]> option }
+          Trace: (float<``-logL``> * float<``parameter``>[]) list
+          InternalDynamics: CodedMap<float<state>[]> option }
 
 /// The estimation engine represents the method used to
 /// calculate equations and optimise a likelihood function.
@@ -228,7 +228,7 @@ module EstimationEngine =
                 -> WriteOut
                 -> EndCondition
                 -> Domain
-                -> Point option
+                -> Point option // optional starting point
                 -> Objective
                 -> Solution list
 

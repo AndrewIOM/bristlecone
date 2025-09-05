@@ -32,9 +32,12 @@ module internal Units =
 
 
 [<Measure>] type iteration
-[<Measure>] type ``optim-space``
 [<Measure>] type ``parameter``
 [<Measure>] type ``-logL``
+
+[<Measure>] type ``optim-space`` // bounded, real parameter space
+[<Measure>] type ``optim-space-transformed``  // unconstrained transformed space
+
 
 [<RequireQualifiedAccess>]
 module PositiveInt =

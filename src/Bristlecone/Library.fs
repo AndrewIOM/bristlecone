@@ -72,6 +72,7 @@ module Bristlecone =
         /// an `Error`.
         let observationsToCommonTimeFrame (dynamicEquationKeys: ShortCode.ShortCode seq) timeSeriesData =
             timeSeriesData
+            |> Map.map(fun _ v -> v |> TimeSeries.map(fun (_,v) -> v * 1.<state>))
             |> Map.filter (fun k _ -> dynamicEquationKeys |> Seq.contains k)
             |> TimeFrame.tryCreate
             |> Result.ofOption "Observations for dynamic variables must share a common sampling time sequence"
@@ -82,6 +83,7 @@ module Bristlecone =
         let environmentDataToCommonTimeFrame dynamicVariableKeys measureKeys timeSeriesData =
             let environmentSeries =
                 timeSeriesData
+                |> Map.map(fun _ v -> v |> TimeSeries.map(fun (_,v) -> v * 1.<environment>))
                 |> Map.filter (fun k _ -> dynamicVariableKeys |> Seq.append measureKeys |> Seq.contains k |> not)
 
             match environmentSeries.Count with
@@ -130,6 +132,7 @@ module Bristlecone =
         | ModelForm.DifferentialEqs eqs -> eqs
         |> Map.keys
 
+
     /// <summary>
     /// Fit a time-series model to data.
     ///
@@ -148,10 +151,10 @@ module Bristlecone =
     /// <returns></returns>
     let tryFit engine endCondition
         (timeSeriesData: CodedMap<TimeSeries<float,'date, 'timeunit, 'timespan>>)
-        (model: ModelSystem<'dataUnit, 'timeIndex>) =
+        (model: ModelSystem<'dataUnit, 'timeUnit>) =
 
         // A. Setup initial time point values based on conditioning method.
-        let t0 : CodedMap<Tensors.TypedTensor<Tensors.Scalar,state>> = Fit.t0 timeSeriesData engine.Conditioning engine.LogTo
+        let t0 = Fit.t0 timeSeriesData engine.Conditioning engine.LogTo
 
         // Check there is time-series data actually included and corresponding to correct equations.
         let hasRequiredData =
@@ -166,109 +169,88 @@ module Bristlecone =
                         (model.Equations |> dynamicVariableKeys |> Seq.map (fun k -> k.Value) |> String.concat " + ")
                 )
 
-        let requireDifferentialEqs = function
-            | DifferentialEqs e -> e
-            | DifferenceEqs _ -> invalidOp "Cannot integrate difference-based equation set."
-
-        // B. Create a continuous-time that outputs float[]
-        // containing only the values for the dynamic variable resolution.
-        let continuousSolver =
-            result {
-
-                let! timeSeriesData = hasRequiredData
-
-                // 1. Set time-series into common timeline
-                let! commonDynamicTimeFrame = Fit.observationsToCommonTimeFrame (dynamicVariableKeys model.Equations) timeSeriesData
-
-                let! commonForcingsTimeFrame =
-                    Fit.environmentDataToCommonTimeFrame
-                        (dynamicVariableKeys model.Equations)
-                        (Map.keys model.Measures)
-                        timeSeriesData
-
-                engine.LogTo
-                <| GeneralEvent(
-                    sprintf
-                        "Time-series start at %A with resolution %A."
-                        commonDynamicTimeFrame.StartDate
-                        (commonDynamicTimeFrame |> TimeFrame.resolution)
-                )
-
-                // 2. Ensure that dynamic variables is an exact or subset of environmental variables
-                let! _ = Fit.exactSubsetOf commonDynamicTimeFrame commonForcingsTimeFrame
-
-                let solver outputStep =
-                    Solver.makeSolver engine.LogTo engine.TimeHandling (requireDifferentialEqs model.Equations)
-                        outputStep commonDynamicTimeFrame commonForcingsTimeFrame t0
-
-                return solver
-            }
-
-        let discreteSolver = Solver.Discrete.solve t0
-
-        let data = timeSeriesData |> Map.map (fun _ ts -> ts.Values |> Seq.toArray)
-
-        // Setup optimisation algorithm given the parameter constraint mode.
-        let optimise, constrainedParameters =
-            match engine.OptimiseWith with
-            | Optimiser.InDetachedSpace optim ->
-                let detatchedPool, optimConstraints =
-                    Parameter.Pool.detatchConstraints model.Parameters
-
-                optim
-                    engine.Random
-                    engine.LogTo
-                    endCondition
-                    (detatchedPool |> Parameter.Pool.toDomain optimConstraints)
-                    None,
-                detatchedPool
-            | Optimiser.InTransformedSpace optim ->
-                let optimConstraints =
-                    List.init (Parameter.Pool.count model.Parameters) (fun _ -> Parameter.Unconstrained)
-
-                optim
-                    engine.Random
-                    engine.LogTo
-                    endCondition
-                    (model.Parameters |> Parameter.Pool.toDomain optimConstraints)
-                    None,
-                model.Parameters
-
         result {
-            let! continuousSolver = continuousSolver
+
+            let! tsData = hasRequiredData
+
+            // 1. Set time-series into common timeline
+            let! commonDynamic = Fit.observationsToCommonTimeFrame (dynamicVariableKeys model.Equations) timeSeriesData
+            let! commonEnv =
+                Fit.environmentDataToCommonTimeFrame
+                    (dynamicVariableKeys model.Equations)
+                    (Map.keys model.Measures)
+                    timeSeriesData
+
+            engine.LogTo
+            <| GeneralEvent(
+                sprintf
+                    "Time-series start at %A with resolution %A."
+                    commonDynamic.StartDate
+                    (commonDynamic |> TimeFrame.resolution)
+            )
+
+            // 2. Ensure that dynamic variables is an exact or subset of environmental variables
+            let! _ = Fit.exactSubsetOf commonDynamic commonEnv
+
+            // Compile solver (auto‑selects discrete/differential)
+            let t0' = t0 |> Map.map(fun _ v -> v * 1.<state> |> Tensors.Typed.ofScalar)
+            let solver stepType =
+                Solver.SolverCompiler.compile
+                    engine.LogTo
+                    toModelUnits
+                    model.Equations
+                    engine.TimeHandling
+                    stepType
+                    commonDynamic
+                    commonEnv
+                    t0'
+
+            let data = tsData |> Map.map (fun _ ts -> ts.Values |> Seq.toArray)
+
+            // A centralised transform for parameters between point and parameter space.
+            let optimConfig =
+                match engine.OptimiseWith with
+                | Optimisation.InDetachedSpace _    -> Parameter.Pool.DetachedConfig    (Parameter.Pool.toOptimiserConfigBounded model.Parameters)
+                | Optimisation.InTransformedSpace _ -> Parameter.Pool.TransformedConfig (Parameter.Pool.toOptimiserConfigTransformed model.Parameters)
+
+            let optimise =
+                match engine.OptimiseWith, optimConfig with
+                | Optimisation.InDetachedSpace optim, Parameter.Pool.DetachedConfig cfg ->
+                    optim engine.Random engine.LogTo endCondition cfg.Domain None
+                // | Optimisation.InTransformedSpace optim, Parameter.Pool.TransformedConfig cfg ->
+                //     optim engine.Random engine.LogTo endCondition cfg.Domain None
+                | _ -> invalidOp "Mode/config mismatch"
 
             let objective =
                 Objective.create
-                    { model with
-                        Parameters = constrainedParameters }
-                    (continuousSolver Solver.StepType.External)
-                    discreteSolver
+                    model.NegLogLikelihood
+                    model.Measures
+                    (solver Solver.StepType.External)
+                    optimConfig
                     data
 
             let result = objective |> optimise
             let lowestLikelihood, bestPoint = result |> List.minBy (fun (l, _) -> l)
 
             let estimatedSeries =
-                Objective.predict
-                    { model with
-                        Parameters = constrainedParameters }
-                    (continuousSolver Solver.StepType.External)
-                    discreteSolver
+                Objective.createPredictor
+                    model.Measures
+                    (solver Solver.StepType.External)
+                    optimConfig
                     bestPoint
 
             let estimatedHighRes =
-                Objective.predict
-                    { model with
-                        Parameters = constrainedParameters }
-                    (continuousSolver Solver.StepType.Internal)
-                    discreteSolver
+                Objective.createPredictor
+                    model.Measures
+                    (solver Solver.StepType.Internal)
+                    optimConfig
                     bestPoint
 
             let paired =
                 timeSeriesData
                 |> Map.filter (fun key _ -> estimatedSeries |> Map.containsKey key)
                 |> Map.map (fun k observedSeries ->
-                    let expected = estimatedSeries |> Map.find k
+                    let expected = estimatedSeries |> Map.find k |> Tensors.Typed.toFloatArray
 
                     observedSeries
                     |> TimeSeries.toObservations
@@ -276,13 +258,27 @@ module Bristlecone =
                     |> Seq.map (fun (e, (o, d)) -> ({ Obs = o; Fit = e }, d))
                     |> TimeSeries.fromObservations observedSeries.DateMode)
 
+            let realValueTrace =
+                ()
+
+            let bestPoint =
+                match optimConfig with
+                | Parameter.Pool.DetachedConfig o -> o.Compiled.Forward bestPoint
+                // | Parameter.Pool.TransformedConfig o -> o.Compiled.Forward bestPoint                
+            let bestPointPool = Parameter.Pool.fromRealVector bestPoint model.Parameters
+
+            let estimatedHighResFloat =
+                estimatedHighRes
+                |> Map.map(fun _ v -> v |> Tensors.Typed.toFloatArray)
+                |> Some
+
             return
                 { ResultId = Guid.NewGuid()
                   Likelihood = lowestLikelihood
-                  Parameters = bestPoint |> Parameter.Pool.fromPointInTransformedSpace constrainedParameters
+                  Parameters = bestPointPool
                   Series = paired
                   Trace = result
-                  InternalDynamics = Some estimatedHighRes }
+                  InternalDynamics = estimatedHighResFloat }
         }
 
     /// <summary>Fit a time-series model to data.</summary>
