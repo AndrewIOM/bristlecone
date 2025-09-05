@@ -39,11 +39,41 @@ module Tensors =
         let dot (a: TypedTensor<Vector, 'u>) (b: TypedTensor<Vector, 'u>) : TypedTensor<Scalar, 'u ^ 2> =
             { Inner = a.Inner.dot b.Inner }
 
+        let scale (s: TypedTensor<Scalar,'a>) (v: TypedTensor<Vector,'b>) : TypedTensor<Vector,'a * 'b> =
+            { Inner = s.Value * v.Value }
+
+        let addVector (a: TypedTensor<Vector,'u>) (b: TypedTensor<Vector,'u>) : TypedTensor<Vector,'u> =
+            { Inner = a.Value + b.Value }
+
+        let subVector (a: TypedTensor<Vector,'u>) (b: TypedTensor<Vector,'u>) : TypedTensor<Vector,'u> =
+            { Inner = a.Value - b.Value }
+
+        let tail (v: TypedTensor<Vector, 'u>) : TypedTensor<Vector, 'u> =
+            let len = v.Value.shape.[0]
+            let idx = [| 1 .. len - 1 |]
+            { Inner = v.Value.[idx] }
+
+        let stack1D (items: TypedTensor<Scalar,'u>[]) : TypedTensor<Vector,'u> =
+            let rawTensors = items |> Array.map (fun t -> t.Value)
+            let stacked = dsharp.stack(rawTensors, dim = 0)
+            { Inner = stacked }
+
         let matMul
             (a: TypedTensor<Matrix, 'u>)
             (b: TypedTensor<Matrix, 'v>)
             : TypedTensor<Matrix, 'u * 'v> =
             { Inner = a.Inner.matmul b.Inner }
+
+        /// Filter a vector tensor by a boolean mask.
+        /// The mask length must match the vector length.
+        let filterByMask (mask: bool[]) (v: TypedTensor<Vector,'u>) : TypedTensor<Vector,'u> =
+            if mask.Length <> v.Value.shape.[0] then
+                invalidArg "mask" "Mask length must match vector length."
+            let idx =
+                mask
+                |> Array.mapi (fun i keep -> if keep then Some i else None)
+                |> Array.choose id
+            { Inner = v.Value.[idx] }
 
         let toFloatScalar (t:TypedTensor<Scalar, 'u>) : float<'u> =
             float t.Value |> LanguagePrimitives.FloatWithMeasure<'u>
@@ -52,11 +82,15 @@ module Tensors =
             (v.Value.toArray() :?> float[])
             |> Array.map LanguagePrimitives.FloatWithMeasure<'u>
 
-        let valueAt (i:int) (t:TypedTensor<Vector, 'u>) =
+        let toFloatValueAt (i:int) (t:TypedTensor<Vector, 'u>) =
             t.Value.[i].toDouble() |> LanguagePrimitives.FloatWithMeasure<'u>
 
         let length (t:TypedTensor<Vector, 'u>) =
             t.Value.shape.[0]
+
+        let itemAt (i:int) (v: TypedTensor<Vector, 'u>) : TypedTensor<Scalar, 'u> =
+            { Inner = v.Value.[i] }
+
 
 
     // ---------------------

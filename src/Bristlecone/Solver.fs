@@ -8,6 +8,7 @@ module Solver =
     open Bristlecone.Logging
     open Bristlecone.Time
     open Bristlecone.ModelSystem
+    open Bristlecone.Tensors
 
     /// If environmental forcing data is supplied, the output series may be
     /// configured to be either external (i.e. on observation timeline) or
@@ -16,187 +17,239 @@ module Solver =
         | Internal
         | External
 
-    /// Step the solver using high resolution, and output at low resolution.
-    /// External steps are of a fixed width.
-    let fixedStep (model:CodedMap<TensorODE>) timeHandling tStart tEnd initialState forcings =
-        match timeHandling with
-        | Discrete -> invalidOp "Not configured"
-        | Continuous i ->
-            let compiledRhs = Integration.Base.makeCompiledFunctionForIntegration tStart tEnd 1.<``time index``> initialState forcings model
-            let integrate = i tStart tEnd 1.<``time index``> initialState
-            fun parameters ->
-                integrate (compiledRhs parameters)
-                |> Map.map (fun _ v -> v |> Tensors.Typed.tail)
+    // Time conversion tailored for your TypedTensor and time-index
+    module internal TimeWrapping =
+
+        // Wrap a model equation written in 'timeUnit so it accepts <time index>.
+        // factor: float<'timeUnit> / float<``time index``> (size of one TI in model units)
+        let inline wrapTime<[<Measure>] 'timeUnit>
+            (factor: float<'timeUnit / ``time index``>)
+            (eq: GenericModelEquation<'timeUnit>)
+            : GenericModelEquation<``time index``> =
+            fun pars env tIndex state ->
+                // Convert tIndex (Scalar<time-index>) -> Scalar<'timeUnit> by multiplying with factor
+                let tIndexF = Typed.toFloatScalar tIndex
+                let tModel  = Typed.ofScalar (tIndexF * factor)
+                eq pars env tModel state
+
+        // Lift wrapping over a whole model form
+        let wrapModelForm<[<Measure>] 'timeUnit>
+            (factor: float<'timeUnit / ``time index``>)
+            (mf: ModelForm<'timeUnit>)
+            : ModelForm<``time index``> =
+            match mf with
+            | DifferenceEqs eqs   -> eqs |> Map.map (fun _ e -> wrapTime factor e) |> DifferenceEqs
+            | DifferentialEqs eqs -> eqs |> Map.map (fun _ e -> wrapTime factor e) |> DifferentialEqs
+
+    
+    module SolverRunners =
+
+        module DiscreteTime =
+
+            let private stepOnce
+                (eqs: CodedMap<GenericModelEquation<``time index``>>)
+                (pars: ShortCode.ShortCode -> TypedTensor<Vector,``parameter``>)
+                (env: CodedMap<TypedTensor<Scalar,environment>>)
+                (t: TypedTensor<Scalar,``time index``>)
+                (state: CodedMap<TypedTensor<Scalar,state>>)
+                : CodedMap<TypedTensor<Scalar,state>> =
+                eqs |> Map.map (fun key eq -> eq (pars key) env t state.[key])
+
+            let iterateDifference
+                eqs
+                timeline
+                (envStream: CodedMap<TypedTensor<Scalar,environment>>[])
+                t0
+                pars
+                : CodedMap<TypedTensor<Vector,state>> =
+
+                let _, buffers =
+                    ((t0, Map.map (fun _ _ -> ResizeArray()) eqs), Array.indexed timeline)
+                    ||> Array.fold (fun (state, acc) (i, tiVal) ->
+                        let t = Typed.ofScalar tiVal
+                        let env = envStream.[i]
+                        let nextState = stepOnce eqs pars env t state
+                        nextState |> Map.iter (fun k v -> acc.[k].Add v)
+                        (nextState, acc))
+
+                buffers
+                |> Map.map (fun _ buf ->
+                    buf
+                    |> Seq.toArray
+                    |> Tensors.Typed.stack1D)
+
+            let discreteRunner
+                (eqs: CodedMap<GenericModelEquation<``time index``>>)
+                (timeline: float<``time index``>[])
+                (envIndex: CodedMap<TimeIndex.TimeIndex<float<environment>,_,_,_>>)
+                t0
+                point =
+                let envStream =
+                    timeline
+                    |> Array.map (fun ti ->
+                        envIndex |> Map.map (fun _ idxTI ->
+                            let v = idxTI.Item ti
+                            Typed.ofScalar v))
+                iterateDifference eqs timeline envStream t0 (fun _ -> point)
+
+
+        module DifferentialTime =
+
+            /// Step the solver using high resolution, and output at low resolution.
+            /// External steps are of a fixed width.
+            let fixedStep (model:CodedMap<TensorODE>) (i:Integration.IntegrationRoutine) tStart tEnd (initialState: CodedMap<TypedTensor<Scalar,state>>) forcings =
+                // TODO Resolve environment vs state conflict in integration maker, to remove below line
+                let t0' = initialState |> Map.map (fun _ v -> v.Value |> Tensors.tryAsScalar<environment> |> Option.get)
+                let compiledRhs = Integration.Base.makeCompiledFunctionForIntegration tStart tEnd 1.<``time index``> t0' forcings model
+                let tStart, tEnd, tStep = Typed.ofScalar tStart, Typed.ofScalar tEnd, Typed.ofScalar 1.<``time index``>
+                let integrate = i tStart tEnd tStep initialState
+                fun parameters ->
+                    integrate (compiledRhs parameters)
+                    |> Map.map (fun _ v -> v |> Tensors.Typed.tail)
+
+            let differentialRunner
+                (eqs: CodedMap<GenericModelEquation<``time index``>>)
+                integrateRoutine
+                (timeline: float<``time index``>[])
+                (envIndex: CodedMap<TimeIndex.TimeIndex<float<environment>,_,_,_>>)
+                t0
+                point =
+                let startIndex = timeline.[0]
+                let endIndex   = timeline.[timeline.Length - 1]
+                let solve = fixedStep eqs integrateRoutine (startIndex - 1.<``time index``>) endIndex t0 envIndex
+                solve point
+
+
+
+    module SolverCompiler =
+        
+        /// Determine the appropriate resolution for the integration routine
+        /// to run along, if using a fixed resolution.
+        let internal decideIntegrationResolution dynamicSeries environment =
+            match dynamicSeries |> TimeFrame.resolution with
+            | Resolution.Fixed fRes ->
+                let iRes =
+                    match environment with
+                    | Some envTF ->
+                        match envTF |> TimeFrame.resolution with
+                        | Resolution.Fixed efRes -> efRes
+                        | Resolution.Variable -> failwith "Variable-time environmental forcing data is not supported."
+                    | None -> fRes
+                iRes, fRes
+            | Resolution.Variable ->
+                match environment with
+                | Some _ -> failwith "Variable time solver with environmental data is not yet supported."
+                | None ->
+                    let medianTimespan =
+                        dynamicSeries.Series
+                        |> Seq.collect (fun ts -> ts.Value.TimeSteps)
+                        |> Seq.sort
+                        |> Seq.splitInto 2
+                        |> Seq.skip 1
+                        |> Seq.head
+                        |> Seq.head
+                    let custom = Resolution.FixedTemporalResolution.CustomEpoch medianTimespan
+                    custom, custom
+
+        let private computeFactor toModelUnits (dateMode:DateMode.DateMode<'a,'b,'c>) integrationRes =
+            let span = dateMode.ResolutionToSpan integrationRes
+            toModelUnits span / 1.0<``time index``>
+
+        let private buildEnvIndex startDate integrationRes (environment:option<TimeFrame.TimeFrame<float<environment>,'date,'timeunit,'timespan>>) : CodedMap<TimeIndex.TimeIndex<float<environment>,'date,'timeunit,'timespan>> =
+            environment
+            |> Option.map (fun f ->
+                f.Series
+                |> Map.map (fun _ v ->
+                    TimeIndex.TimeIndex(
+                        startDate,
+                        integrationRes,
+                        TimeIndex.IndexMode.Interpolate Statistics.Interpolate.lower,
+                        v)))
+            |> Option.defaultValue Map.empty
+
+        let private buildKeepMask headSeries startDate observationRes timeline =
+            let observedIndices =
+                headSeries
+                |> TimeIndex.create startDate observationRes
+                |> Seq.map fst
+                |> Set.ofSeq
+            timeline |> Array.map (fun idx -> Set.contains idx observedIndices)
+
+        /// Compile a configured solver, automatically selecting the correct runner
+        let compile
+            logTo
+            (toModelUnits: 'timespan -> float<'modelTimeUnit>)
+            (modelEquations: ModelForm<'modelTimeUnit>)
+            engineTimeMode
+            stepType
+            (dynamicSeries: TimeFrame.TimeFrame<float<environment>, 'date, 'timeunit, 'timespan>)
+            (environment: TimeFrame.TimeFrame<float<environment>, 'date, 'timeunit, 'timespan> option)
+            (t0: CodedMap<TypedTensor<Scalar,state>>)
+            : Solver.ConfiguredSolver =
+
+            let headSeries = (dynamicSeries.Series |> Seq.head).Value
+            let dateMode   = headSeries.DateMode
+            let startDate  = dynamicSeries.StartDate
+
+            // 1. Decide resolutions
+            let integrationRes, observationRes =
+                decideIntegrationResolution dynamicSeries environment
+
+            // 2. Compute factor and wrap equations
+            let factor = computeFactor toModelUnits dateMode integrationRes
+            let modelInTI = TimeWrapping.wrapModelForm factor modelEquations
+
+            // 3. Build timeline and env index
+            let envIndex = buildEnvIndex startDate integrationRes environment
+            let timeline =
+                headSeries
+                |> TimeIndex.create startDate integrationRes
+                |> Seq.map fst
+                |> Seq.toArray
+
+            // 4. Precompute keepMask for External mode
+            let keepMask = buildKeepMask headSeries startDate observationRes timeline
+
+            // 5. Pick runner automatically
+            let runner =
+                match modelInTI, engineTimeMode with
+                | DifferentialEqs eqs, Continuous i -> SolverRunners.DifferentialTime.differentialRunner eqs i
+                | DifferenceEqs eqs, Discrete -> SolverRunners.DiscreteTime.discreteRunner eqs
+                | _ -> invalidOp "Mismatch between time-mode and differential/difference equation form."
+
+            // 6. Return configured solver
+            fun point ->
+                let series = runner timeline envIndex t0 point
+                match stepType with
+                | Internal -> series
+                | External -> series |> Map.map (fun _ v -> Tensors.Typed.filterByMask keepMask v)
+
+
 
     /// Step the solver using the high resolution, and output at low resolution.
     /// External steps can be variable in size.
     /// Each time jump is integrated individually.
-    let variableExternalStep model timeHandling timeSteps (initialState: CodedMap<Tensors.TypedTensor<Tensors.Vector,state>>)
+    let variableExternalStep model timeHandling timeSteps (initialState: CodedMap<Tensors.TypedTensor<Tensors.Scalar,state>>)
         : Solver.ConfiguredSolver =
         match timeHandling with
         | Discrete -> invalidOp "Not configured"
         | Continuous i ->
-            fun parameters ->
-                let results =
-                    timeSteps
-                    |> Seq.pairwise
-                    |> Seq.scan
-                        (fun state (tStart, tEnd) ->
-                            let integrate = i tStart tEnd (tEnd - tStart) state
-                            let rhs = Integration.Base.makeCompiledFunctionForIntegration tStart tEnd 1.<``time index``> state Map.empty model
-                            integrate (rhs parameters) |> Map.map (fun _ v -> v.[0])) initialState
+            failwith "implementation requires mending (AD)"
+            // fun parameters ->
+            //     let results =
+            //         timeSteps
+            //         |> Seq.pairwise
+            //         |> Seq.scan
+            //             (fun state (tStart, tEnd) ->
+            //                 let integrate = i tStart tEnd (tEnd - tStart) state
+            //                 let rhs = Integration.Base.makeCompiledFunctionForIntegration tStart tEnd 1.<``time index``> state Map.empty model
+            //                 integrate (rhs parameters) |> Map.map (fun _ v -> v.[0])) initialState
 
-                eqs
-                |> Map.toSeq
-                |> Seq.map (fun (key, _) -> key, results |> Seq.map (fun r -> r.[key]) |> Seq.toArray)
-                |> Map.ofSeq
+            //     eqs
+            //     |> Map.toSeq
+            //     |> Seq.map (fun (key, _) -> key, results |> Seq.map (fun r -> r.[key]) |> Seq.toArray)
+            //     |> Map.ofSeq
 
-    let fixedResolutionSolver
-        models
-        fRes
-        stepType
-        (dynamicSeries: TimeFrame.TimeFrame<'T, 'date, 'timeunit, 'timespan>)
-        (environment: TimeFrame.TimeFrame<'T, 'date, 'timeunit, 'timespan> option)
-        logTo
-        timeHandling
-        t0 : EstimationEngine.Solver.ConfiguredSolver
-        =
-        let timeline, forcings =
-            match environment with
-            | Some f ->
-                match f |> TimeFrame.resolution with
-                | Resolution.Variable -> failwith "Variable-time environmental forcing data is not supported."
-                | Resolution.Fixed efRes ->
-                    logTo
-                    <| DebugEvent "Solving along the timeline of supplied environmental forcing data."
-
-                    let timeline =
-                        (dynamicSeries.Series |> Seq.head).Value
-                        |> TimeIndex.create dynamicSeries.StartDate efRes
-                        |> Seq.map fst
-
-                    let envIndex =
-                        f.Series
-                        |> Map.map (fun k v ->
-                            TimeIndex.TimeIndex(
-                                dynamicSeries.StartDate,
-                                efRes,
-                                TimeIndex.IndexMode.Interpolate Statistics.Interpolate.lower,
-                                v
-                            )) //TimeIndex.IndexMode.Interpolate Statistics.Interpolate.bilinear, v))
-
-                    (timeline, envIndex)
-            | None ->
-                logTo
-                <| DebugEvent "No environmental forcing data was supplied. Solving using time points of observations."
-
-                let timeline =
-                    (dynamicSeries.Series |> Seq.head).Value
-                    |> TimeIndex.create dynamicSeries.StartDate fRes
-                    |> Seq.map fst
-
-                (timeline, Map.empty)
-
-        // Parameters for the integration routine
-        // Internal step size is 1, given that the time-index is scaled to the steps of the high-resolution external data
-        let startIndex = timeline |> Seq.head
-        let endIndex = timeline |> Seq.last
-
-        let externalSteps =
-            timeline
-            |> Seq.pairwise
-            |> Seq.map (fun (a, b) -> b - a)
-            |> Seq.distinct
-            |> Seq.toList
-
-        if externalSteps.Length <> 1 then
-            failwithf "Encountered uneven timesteps: %A" externalSteps
-
-        let solve =
-            fixedStep models timeHandling (startIndex - externalSteps.Head) endIndex t0 forcings
-
-        fun point ->
-            match stepType with
-            | Internal -> solve point
-            | External ->
-                // Filter the results so that only results that match low-res data in time are included
-                solve point
-                |> Map.map (fun _ v -> v |> Seq.everyNth (int externalSteps.Head) |> Seq.toArray) //TODO proper lookup
-
-
-    /// Create a solver that applies time-series models to time-series data.
-    /// Takes a `TimeFrame` of dynamic time-series.
-    /// The solver should take a parameterised model equation set and compute
-    /// the answer.
-    let makeSolver
-        logTo
-        timeHandling
-        modelEquations
-        stepType
-        (dynamicSeries: TimeFrame.TimeFrame<'T, 'date, 'timeunit, 'timespan>)
-        (environment: TimeFrame.TimeFrame<'T, 'date, 'timeunit, 'timespan> option)
-        t0
-        : Solver.ConfiguredSolver =
-        match dynamicSeries |> TimeFrame.resolution with
-        | Resolution.Fixed fRes ->
-            logTo
-            <| DebugEvent(sprintf "Observations occur on a fixed temporal resolution: %A." fRes)
-
-            fixedResolutionSolver modelEquations fRes stepType dynamicSeries environment logTo timeHandling t0
-        | Resolution.Variable ->
-            match environment with
-            | Some f -> failwith "Variable time solver with environmental data is not yet supported."
-            | None ->
-                logTo
-                <| DebugEvent "No environmental forcing data was supplied. Solving using time points of observations."
-
-                logTo <| DebugEvent "Solving over time-series with uneven time steps."
-
-                let medianTimespan =
-                    dynamicSeries.Series
-                    |> Seq.collect (fun ts -> ts.Value.TimeSteps)
-                    |> Seq.sort
-                    |> Seq.splitInto 2
-                    |> Seq.skip 1
-                    |> Seq.head
-                    |> Seq.head
-
-                logTo
-                <| DebugEvent(
-                    sprintf "Setting temporal resolution of solver as the median timestep (%A)." medianTimespan
-                )
-
-                let startDate = (dynamicSeries.Series |> Seq.head).Value.StartDate |> snd
-
-                let timeIndex =
-                    TimeIndex.TimeIndex(
-                        startDate,
-                        Resolution.FixedTemporalResolution.CustomEpoch medianTimespan,
-                        TimeIndex.IndexMode.Exact, // TODO interpolate?
-                        (dynamicSeries.Series |> Seq.head).Value
-                    )
-
-                variableExternalStep modelEquations timeHandling timeIndex.Index t0
-
-
-    module Discrete =
-
-        /// Finds the solution of a discretised model system, given time-series data.
-        /// `startPoint` - a preconditioned point to represent time-zero.
-        let solve startPoint : ShortCode.ShortCode -> ModelSystem.Measurement<environment> -> CodedMap<'a[]> -> 'a[] =
-            fun (c: ShortCode.ShortCode) (m: ModelSystem.Measurement<environment>) (expected: CodedMap<'a[]>) ->
-                expected
-                |> Map.toList
-                |> List.map (fun (c, d) -> d |> Array.map (fun x -> (c, x)) |> Seq.toList) // Add shortcode to each time point's value
-                |> List.flip // Flip list so that it is primarily timepoint-indexed
-                |> List.map Map.ofList // Make environment at each time into a CodedMap<float>
-                // Scan through the environments, outputting the measure at each time
-                |> List.scan
-                    (fun (previousEnv, previousX) currentEnv -> (currentEnv, m previousX previousEnv currentEnv))
-                    (startPoint, startPoint.Item c)
-                |> List.tail // Remove conditioned point (time zero)
-                |> List.map snd
-                |> List.toArray
 
     /// Conditioning of time-series data, which allows for maximum use of observed time-series data.
     module Conditioning =

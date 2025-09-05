@@ -89,7 +89,7 @@ module EndConditions =
                     [ 1..thetaLength ]
                     |> Seq.map (fun p ->
                         chainsEqualLength
-                        |> Seq.map (fun chain -> chain |> Seq.map (fun v -> v |> snd |> Tensors.Typed.valueAt (p - 1) |> Units.removeUnitFromFloat)))
+                        |> Seq.map (fun chain -> chain |> Seq.map (fun v -> v |> snd |> Tensors.Typed.toFloatValueAt (p - 1) |> Units.removeUnitFromFloat)))
 
                 printfn "Param values by chain: %A" parameterValueByChain
 
@@ -447,7 +447,7 @@ module MonteCarlo =
             let dim = theta |> Typed.length |> float
             let factor = (2.38 ** 2.0) / dim // unitless
             let covScaled = cov.Map(fun v -> v * factor)
-            
+
             sample covScaled ()
             |> Vector.toArray
             |> Array.map (fun step -> step * scale)
@@ -599,7 +599,7 @@ module MonteCarlo =
                 |> List.chunkBySize (batchLength / 1<iteration>)
                 |> List.mapi (fun i batch ->
                     let paramNumber = i % paramCount
-                    let paramValues = batch |> List.map snd |> List.averageBy (fun x -> Typed.valueAt paramNumber x)
+                    let paramValues = batch |> List.map snd |> List.averageBy (fun x -> Typed.toFloatValueAt paramNumber x)
                     (paramNumber, paramValues))
                 |> List.groupBy fst
                 |> List.where (fun (_, g) -> g.Length >= 5)

@@ -78,6 +78,26 @@ module Distributions =
                 factor * z
 
 
+    [<RequireQualifiedAccess>]
+    module Cauchy =
+
+        /// Unit-generic Cauchy draw
+        let draw<[<Measure>] 'u>
+            (random: System.Random)
+            (location: float<'u>)
+            (scale: float<'u>) : unit -> float<'u> =
+
+            // Strip units for MathNet
+            let locF   = float location
+            let scaleF = float scale
+
+            let dist = MathNet.Numerics.Distributions.Cauchy(locF, scaleF, random)
+
+            fun () ->
+                dist.Sample()
+                |> LanguagePrimitives.FloatWithMeasure<'u>
+
+
 module LinearAlgebra =
 
         open MathNet.Numerics.LinearAlgebra
