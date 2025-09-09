@@ -119,6 +119,16 @@ module Parameter =
         let count   (Pool p) = p.Count
         let fromList xs      = xs |> Map.ofList |> Pool
 
+        /// Try to get the real value of a parameter by its ShortCode key.
+        let tryGetRealValue (name: string) (Pool p: ParameterPool) : float<'u> option =
+            p
+            |> Map.toSeq
+            |> Seq.tryPick (fun (_, ap) ->
+                if ap.Name = name then
+                    ap.TryGetReal()
+                    |> Option.map (fun f -> LanguagePrimitives.FloatWithMeasure<'u> f)
+                else None)
+
         /// Given a real-space parameter vector and an existing pool,
         /// return a new pool with each parameter's estimate set to the corresponding value.
         let fromRealVector (realVec: TypedTensor<Vector,``parameter``>) (Pool p: ParameterPool) : ParameterPool =
@@ -244,3 +254,36 @@ module Parameter =
             let compiled    = compileTransformsTransformed pool
             let domainArray = buildDomainFromBounds compiled pool
             { Domain = domainArray; Constraints = []; Compiled = compiled }
+
+        /// Draw a random set of parameters in real space within their bounds.
+        /// Assumes a uniform distribution for each draw across all parameters.
+        let drawRandom (rnd: Random) (Pool p: ParameterPool) : ParameterPool =
+            p
+            |> Map.map (fun _ ap ->
+                match ap.TryGetBounds() with
+                | Some (lo, hi) ->
+                    // Draw uniformly between lo and hi (already float<parameter>)
+                    let draw = Statistics.Distributions.ContinuousUniform.draw rnd lo hi ()
+                    // Set the drawn value back into the AnyParameter
+                    ap.FromTensorRealIO (dsharp.scalar (float draw))
+                | None ->
+                    failwithf "Parameter '%s' has no bounds to draw from" ap.Name)
+            |> Pool
+
+
+        /// Create a Pool where all parameters are fixed at their current estimate.
+        /// Lower and upper bounds are both set to the estimate.
+        let fromEstimated (Pool p: ParameterPool) : ParameterPool =
+            let fixd =
+                p
+                |> Map.map (fun _ ap ->
+                    match ap.TryGetReal() with
+                    | Some est ->
+                        let newParam =
+                            create (ap.GetConstraint()) (LanguagePrimitives.FloatWithMeasure<parameter> est) (LanguagePrimitives.FloatWithMeasure<parameter> est)
+                            |> Option.get
+                            |> boxParam<parameter> ap.Name
+                        newParam
+                    | None ->
+                        failwithf "Could not get estimate for parameter '%s'" ap.Name)
+            Pool fixd

@@ -110,7 +110,7 @@ module Trace =
                 result.Parameters
                 |> Parameter.Pool.toList
                 |> Seq.mapi (fun i (name, _) ->
-                    (subject, modelId, iterationNumber + 1, result.ResultId, name.Value, likelihood, values.[i])
+                    (subject, modelId, iterationNumber + 1, result.ResultId, name.Value, float likelihood, float values.[i])
                     |> BristleconeTrace.Row))
             |> if (thinBy |> Option.isSome) then
                    Seq.everyNth thinBy.Value
@@ -251,7 +251,7 @@ module Series =
                 series
                 |> TimeSeries.toObservations
                 |> Seq.map (fun (v, t) ->
-                    IndividualSeries.Row(subject, hypothesisId, name.Value, t, v.Fit, v.Obs, result.Likelihood)))
+                    IndividualSeries.Row(subject, hypothesisId, name.Value, t, float v.Fit, float v.Obs, float result.Likelihood)))
 
         let toSeries (data: IndividualSeries) =
             data.Rows
@@ -320,11 +320,12 @@ module EstimationResult =
         |> Seq.keyMatch traces
         |> Seq.map (fun (k, t, (s, (l, p))) ->
             { ResultId = k |> System.Guid.Parse
-              Likelihood = l
+              Likelihood = l * 1.<``-logL``>
               Parameters = p
               Series = s
               InternalDynamics = None
-              Trace = t })
+              Trace = t |> List.map(fun (x,y) -> x * 1.<``-logL``>, y |> Array.map ((*) 1.<parameter>)) }
+        )
 
 [<RequireQualifiedAccess>]
 module Confidence =
@@ -364,7 +365,7 @@ module ModelSelection =
         let fromResult (result: seq<string * string * EstimationResult<'data, 'timeunit, 'timespan> * AkaikeWeight>) =
             result
             |> Seq.map (fun (subject, hypothesisId, r, aic) ->
-                (subject, hypothesisId, r.ResultId, aic.Likelihood, aic.AIC, aic.AICc, aic.Weight)
+                (subject, hypothesisId, r.ResultId, float aic.Likelihood, aic.AIC, aic.AICc, aic.Weight)
                 |> EnsembleAIC.Row)
 
     let save directory result =
@@ -408,7 +409,7 @@ module NStepAhead =
             |> fst
             |> Time.TimeSeries.toObservations
             |> Seq.map (fun (fit, t) ->
-                NStepAhead.Row(subjectId, hypothesisId, analysisId, t, fit.Obs, nSteps, fit.Fit)))
+                NStepAhead.Row(subjectId, hypothesisId, analysisId, t, float fit.Obs, nSteps, float fit.Fit)))
 
     let internal toStatCsvRows
         (results:

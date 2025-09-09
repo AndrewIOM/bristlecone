@@ -62,7 +62,7 @@ module Convergence =
                       StatisticName = "R-hat"
                       StatisticValue =
                         chains'
-                        |> Seq.map (fun c -> c |> Seq.map (fun x -> x.[i]))
+                        |> Seq.map (fun c -> c |> Seq.map (fun x -> x.[i] |> Units.removeUnitFromFloat))
                         |> Statistics.Convergence.GelmanRubin.rHat })
                 |> Some
 
@@ -140,7 +140,7 @@ module ModelComponents =
         (result:
             ResultSet.ResultSet<
                 'subject,
-                Loggers.IComponentLogger<'data> -> ModelSystem<'data, 'timeIndex>,
+                Loggers.IComponentLogger<'data> -> ModelSystem<'dataUnit, 'timeIndex>,
                 'date,
                 'timeunit,
                 'timespan

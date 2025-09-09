@@ -10,11 +10,14 @@ module Distributions =
     [<RequireQualifiedAccess>]
     module ContinuousUniform =
 
-        let draw random min max =
+        let draw<[<Measure>] 'u> random (min: float<'u>) (max: float<'u>) : unit -> float<'u> =
+            let min, max  = Bristlecone.Units.removeUnitFromFloat min, Bristlecone.Units.removeUnitFromFloat max
             let distribution =
                 MathNet.Numerics.Distributions.ContinuousUniform(min, max, random)
 
-            fun () -> distribution.Sample()
+            fun () ->
+                distribution.Sample()
+                |> LanguagePrimitives.FloatWithMeasure<'u>
 
     [<RequireQualifiedAccess>]
     module Normal =

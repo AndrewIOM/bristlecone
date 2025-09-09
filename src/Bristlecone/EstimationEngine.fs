@@ -89,20 +89,21 @@ module ModelSystem =
     /// A function that computes a measured system property given a
     /// current (time t) and previous (time t-1) system state.
     type Measurement<[<Measure>] 'u> =
-        TypedTensor<Scalar,parameter>
-            -> ExternalEnvironment
-            -> ExternalEnvironment
+        TypedTensor<Vector,``parameter``> // current parameters
+            -> CodedMap<TypedTensor<Vector,state>> // states time-series
+            -> int // current time index
             -> TypedTensor<Scalar,'u>
 
     /// TODO: Probably don't need 'dataUnit here, or revised;
     /// as the data unit will vary from eq to eq.
     type ModelSystem<[<Measure>] 'dataUnit, [<Measure>] 'timeUnit> =
         { Parameters       : Parameter.Pool.ParameterPool
+          EnvironmentKeys  : ShortCode.ShortCode list
           Equations        : ModelForm<'timeUnit>
           Measures         : CodedMap<Measurement<'dataUnit>>
           NegLogLikelihood : Likelihood<'dataUnit> }
 
-    type FitValue = { Fit: float<state>; Obs: float }
+    type FitValue = { Fit: float<state>; Obs: float<state> }
     type FitSeries<'date, 'timeunit, 'timespan> = TimeSeries<FitValue, 'date, 'timeunit, 'timespan>
 
     /// An estimated model fit for a time-series model.
@@ -244,9 +245,9 @@ module EstimationEngine =
         | Discrete
         | Continuous of Integration.IntegrationRoutine
 
-    type EstimationEngine<'data, 'date, 'timeunit, 'timespan> =
+    type EstimationEngine<'date, 'timeunit, 'timespan> =
         { TimeHandling: TimeMode<'date, 'timeunit, 'timespan>
           OptimiseWith: Optimisation.Optimiser
-          Conditioning: Conditioning<'data>
+          Conditioning: Conditioning
           LogTo: WriteOut
           Random: Random }

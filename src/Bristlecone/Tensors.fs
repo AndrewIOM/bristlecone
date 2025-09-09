@@ -18,6 +18,54 @@ module Tensors =
     with
         member this.Value = this.Inner        
 
+        // Scalar–Scalar arithmetic
+        static member inline (+) (a: TypedTensor<Scalar,'u>, b: TypedTensor<Scalar,'u>) : TypedTensor<Scalar,'u> =
+            { Inner = a.Value + b.Value }
+            
+        static member inline (-) (a: TypedTensor<Scalar,'u>, b: TypedTensor<Scalar,'u>) : TypedTensor<Scalar,'u> =
+            { Inner = a.Value - b.Value }
+
+        static member inline (*) (a: TypedTensor<Scalar,'u>, b: TypedTensor<Scalar,'v>) : TypedTensor<Scalar,'u * 'v> =
+            { Inner = a.Value * b.Value }
+
+        static member inline (/) (a: TypedTensor<Scalar,'u>, b: TypedTensor<Scalar,'v>) : TypedTensor<Scalar,'u / 'v> =
+            { Inner = a.Value / b.Value }
+
+        // Allow float * scalar and scalar * float
+        static member inline (*) (k: float, a: TypedTensor<Scalar,'u>) =
+            { Inner = dsharp.scalar k * a.Value }
+
+        static member inline (*) (a: TypedTensor<Scalar,'u>, k: float) =
+            { Inner = a.Value * dsharp.scalar k }
+
+        // Vector–Vector elementwise
+        static member inline (+) (a: TypedTensor<Vector,'u>, b: TypedTensor<Vector,'u>) =
+            { Inner = a.Value + b.Value }
+
+        static member inline (-) (a: TypedTensor<Vector,'u>, b: TypedTensor<Vector,'u>) : TypedTensor<Vector,'u> =
+            { Inner = a.Value - b.Value }
+
+        // Vector–Scalar broadcast
+        static member inline (*) (v: TypedTensor<Vector,'u>, s: TypedTensor<Scalar,'v>) : TypedTensor<Vector,'u * 'v> =
+            { Inner = v.Value * s.Value }
+
+        static member inline (*) (s: TypedTensor<Scalar,'u>, v: TypedTensor<Vector,'v>) : TypedTensor<Vector,'u * 'v> =
+            { Inner = s.Value * v.Value }
+
+        static member inline (/) (v: TypedTensor<Vector,'u>, s: TypedTensor<Scalar,'v>) : TypedTensor<Vector,'u / 'v> =
+            { Inner = v.Value / s.Value }
+
+        // Vector–float exponent
+        static member inline ( ** ) (v: TypedTensor<Vector,'u>, p: float) =
+            { Inner = v.Value ** p }
+
+        static member inline ( * )
+            (a: TypedTensor<Vector,'u>, b: TypedTensor<Vector,'v>)
+            : TypedTensor<Vector,'u * 'v> =
+            { Inner = a.Value * b.Value }
+
+
+
     module Typed =
 
         // Constructors
@@ -36,6 +84,30 @@ module Tensors =
         let minusScalar (a: TypedTensor<Scalar, 'u>) (b: TypedTensor<Scalar, 'u>) : TypedTensor<Scalar, 'u> =
             { Inner = a.Inner - b.Inner }
 
+        let mulScalar (a: TypedTensor<Scalar,'u>) (b: TypedTensor<Scalar,'v>) : TypedTensor<Scalar,'u * 'v> =
+            { Inner = a.Value * b.Value }
+
+        let divScalar (a: TypedTensor<Scalar,'u>) (b: TypedTensor<Scalar,'v>) : TypedTensor<Scalar,'u / 'v> =
+            { Inner = a.Value / b.Value }
+
+        let divVectorByScalar (v: TypedTensor<Vector,'u>) (s: TypedTensor<Scalar,'v>) : TypedTensor<Vector,'u / 'v> =
+            { Inner = v.Value / s.Value }
+
+        let logScalar (a: TypedTensor<Scalar,'u>) : TypedTensor<Scalar,1> =
+            { Inner = a.Value.log() }
+
+        let logVector (a: TypedTensor<Vector,'u>) : TypedTensor<Vector,1> =
+            { Inner = a.Value.log() }
+
+        let square (x: TypedTensor<Scalar,'u>) : TypedTensor<Scalar,'u^2> =
+            { Inner = x.Value ** 2.0 }
+
+        let squareVector (x: TypedTensor<Vector,'u>) : TypedTensor<Vector,'u^2> =
+            { Inner = x.Value ** 2.0 }
+
+        let sqrtScalar (x: TypedTensor<Scalar,'u^2>) : TypedTensor<Scalar,'u> =
+            { Inner = x.Value.sqrt() }
+
         let dot (a: TypedTensor<Vector, 'u>) (b: TypedTensor<Vector, 'u>) : TypedTensor<Scalar, 'u ^ 2> =
             { Inner = a.Inner.dot b.Inner }
 
@@ -47,6 +119,9 @@ module Tensors =
 
         let subVector (a: TypedTensor<Vector,'u>) (b: TypedTensor<Vector,'u>) : TypedTensor<Vector,'u> =
             { Inner = a.Value - b.Value }
+
+        let sumVector (a: TypedTensor<Vector,'u>) : TypedTensor<Scalar,'u> =
+            { Inner = a.Value.sum() }
 
         let tail (v: TypedTensor<Vector, 'u>) : TypedTensor<Vector, 'u> =
             let len = v.Value.shape.[0]
@@ -91,6 +166,36 @@ module Tensors =
         let itemAt (i:int) (v: TypedTensor<Vector, 'u>) : TypedTensor<Scalar, 'u> =
             { Inner = v.Value.[i] }
 
+        /// Change the unit-of-measure phantom type of a TypedTensor without altering its value.
+        /// This is purely a compile-time reinterpretation; the underlying DiffSharp tensor is unchanged.
+        let inline retype<[<Measure>] 'u, [<Measure>] 'v, 'Shape>
+            (t: TypedTensor<'Shape,'u>)
+            : TypedTensor<'Shape,'v> =
+            { Inner = t.Value }
+
+        // And scalar-to-vector broadcast
+        let broadcastScalarToVector (s: TypedTensor<Scalar,'u>) (len: int) : TypedTensor<Vector,'u> =
+            let arr = Array.init len (fun _ -> LanguagePrimitives.FloatWithMeasure<'u> (float s.Value))
+            ofVector arr
+
+        // // Exact log-factorial for integer counts
+        // let logFactorialVector (v: TypedTensor<Vector,'count>) : TypedTensor<Vector,1> =
+        //     let ints = v |> toIntArray
+        //     let logs =
+        //         ints
+        //         |> Array.map (fun n ->
+        //             if n <= 1 then 0.0<1>
+        //             else [| 2 .. n |]
+        //                 |> Array.sumBy (fun k -> log (float k))
+        //         )
+        //     ofVector logs
+
+        // // Stirling's approximation for log-gamma, differentiable
+        // let logGammaApproxVector (v: TypedTensor<Vector,'u>) : TypedTensor<Vector,1> =
+        //     let half  = ofScalar 0.5
+        //     let twoPi = ofScalar (2.0 * System.Math.PI)
+        //     let n = length v
+        //     (v - half) * logVector v - v + broadcastScalarToVector (half * logScalar twoPi) n
 
 
     // ---------------------

@@ -817,30 +817,6 @@ module MonteCarlo =
                     else
                         false
 
-        /// Represents configurable settings of an annealing procedure
-        /// that supports (a) heating, followed by (b) annealing.
-        type AnnealSettings =
-            { HeatStepLength: EndCondition
-              HeatRamp: float -> float
-              TemperatureCeiling: float option
-              BoilingAcceptanceRate: float
-              InitialTemperature: float
-              PreTuneLength: int<iteration>
-              TuneLength: int<iteration>
-              TuneN: int<iteration>
-              AnnealStepLength: EndCondition }
-
-            static member Default =
-                { HeatStepLength = EndConditions.afterIteration 250<iteration>
-                  HeatRamp = fun t -> t * 1.10
-                  BoilingAcceptanceRate = 0.85
-                  TemperatureCeiling = Some 200.
-                  InitialTemperature = 1.00
-                  PreTuneLength = 5000<iteration>
-                  TuneLength = 100000<iteration>
-                  TuneN = 50<iteration>
-                  AnnealStepLength = EndConditions.improvementCount 250 250<iteration> }
-
         /// Jump based on a proposal function and probability function
         let tryMove propose probability random (f:Objective) tries (l1, theta1) : Solution option =
             let rec catchNan tries =
@@ -860,6 +836,125 @@ module MonteCarlo =
                     let rand = ContinuousUniform.draw random 0. 1. ()
                     let ratio = probability (l2 - l1)
                     if rand < ratio then (l2, theta2) else (l1, theta1))
+
+        module Tuning =
+
+            type TuningSettings =
+                { InitialScale: float
+                  TuneLength: int<iteration>
+                  TuneN: int<iteration> }
+
+                static member Default =
+                    { InitialScale = 0.001
+                      TuneLength = 100000<iteration>
+                      TuneN = 50<iteration> }
+
+            /// Tune individual parameter step sizes based on acceptance rate.
+            /// Returns tuned scales and the final point.
+            let tuneStepSizes
+                writeOut
+                (random: System.Random)
+                (domain: Domain)
+                (draw: float<``optim-space``> -> float -> unit -> float<``optim-space``>)
+                (machine: float -> float<``-logL``> -> float)
+                (f: Objective)
+                (initialScale: float<``optim-space``>[])
+                (settings: TuningSettings)
+                (start: float<``-logL``> * Point) =
+
+                let rec tune (p: (float<``optim-space``> * float<``optim-space``>[])[]) k (l1, theta1) =
+                    let chance = float k / float settings.TuneLength
+                    let parameterToChange = random.Next(0, p.Length - 1)
+
+                    let scalesToChange =
+                        p
+                        |> Array.mapi (fun i x -> (x, random.NextDouble() < chance || i = parameterToChange))
+
+                    let propose (theta: Point) =
+                        Array.zip3 (theta |> Typed.toFloatArray) scalesToChange domain
+                        |> Array.map (fun (x, ((ti, prev), shouldChange), (_, _, con)) ->
+                            if shouldChange then constrainJump x (draw ti 1. ()) 1. con else x)
+                        |> Typed.ofVector
+
+                    match tryMove propose (machine 1.) random f 100 (l1, theta1) with
+                    | None -> failwith "Could not move in parameter space."
+                    | Some (lNew, thetaNew) ->
+                        let newScaleInfo =
+                            scalesToChange
+                            |> Array.zip (thetaNew |> Typed.toFloatArray)
+                            |> Array.map (fun (v, ((ti, prev), changed)) ->
+                                let ti, prev =
+                                    if changed then (ti, Array.append prev [| v |]) else (ti, prev)
+                                if prev.Length * 1<iteration> = settings.TuneN then
+                                    let changes = prev |> Array.pairwise |> Array.where (fun (a, b) -> a <> b) |> Array.length
+                                    match float changes / float settings.TuneN with
+                                    | ar when ar < 0.35 -> (ti * 0.80, Array.empty)
+                                    | ar when ar > 0.50 -> (ti * 1.20, Array.empty)
+                                    | _ -> (ti, Array.empty)
+                                else (ti, prev))
+
+                        if k % 1000<iteration> = 0<iteration> then
+                            writeOut <| GeneralEvent(sprintf "Tuning is at %A (k=%i/%i)" (newScaleInfo |> Array.map fst) k settings.TuneLength)
+
+                        if k < settings.TuneLength then
+                            writeOut
+                            <| OptimisationEvent
+                                { Iteration = k
+                                  Likelihood = lNew
+                                  Theta = thetaNew |> Typed.toFloatArray }
+
+                            tune newScaleInfo (k + 1<iteration>) (lNew, thetaNew)
+                        else
+                            (newScaleInfo |> Array.map fst, lNew, thetaNew)
+
+                tune (initialScale |> Array.map (fun t -> (t, Array.empty))) 1<iteration> start
+
+            /// An exploration method that perturbs around a point in optimisation-space.
+            /// Used for profile likelihood in the Confidence module.
+            let perturb settings : Optimiser =
+                InDetachedSpace
+                <| fun random writeOut _ domain _ (f: Objective) ->
+                    let gaussian (scale:float<``optim-space``>) (t:float) =
+                        fun () -> Normal.draw random 0.<``optim-space``> scale ()
+                    let theta1 = Initialise.initialise domain random
+                    let l1 = f theta1
+                    let initialScale = [| 1 .. theta1 |> Typed.length |] |> Array.map (fun _ -> settings.InitialScale * 1.<``optim-space``>)
+
+                    tuneStepSizes
+                        writeOut
+                        random
+                        domain
+                        gaussian
+                        Machines.boltzmann
+                        f
+                        initialScale
+                        settings
+                        (l1 |> Typed.toFloatScalar, theta1)
+                    |> fun _ -> [] // TODO Return results
+
+
+        /// Represents configurable settings of an annealing procedure
+        /// that supports (a) heating, followed by (b) annealing.
+        type AnnealSettings =
+            { HeatStepLength: EndCondition
+              HeatRamp: float -> float
+              TemperatureCeiling: float option
+              BoilingAcceptanceRate: float
+              InitialTemperature: float
+              PreTuneLength: int<iteration>
+              Tuning: Tuning.TuningSettings
+              AnnealStepLength: EndCondition }
+
+            static member Default =
+                { HeatStepLength = EndConditions.afterIteration 250<iteration>
+                  HeatRamp = fun t -> t * 1.10
+                  BoilingAcceptanceRate = 0.85
+                  TemperatureCeiling = Some 200.
+                  InitialTemperature = 1.00
+                  PreTuneLength = 5000<iteration>
+                  Tuning = Tuning.TuningSettings.Default
+                  AnnealStepLength = EndConditions.improvementCount 250 250<iteration> }
+
 
         /// Run a homogenous Markov chain recursively until an end condition - `atEnd` - is met.
         let rec markovChain writeOut atEnd propose probability random f temperature initialPoint =
@@ -998,71 +1093,19 @@ module MonteCarlo =
             // 3. Tune individual step size based on acceptance rate
             let initialScale = [| 1 .. theta1 |> Typed.length |] |> Array.map (fun _ -> scale)
 
-            let kMax = settings.TuneLength
-
-            let rec tune (p: (float<``optim-space``> * float<``optim-space``>[])[]) k (l1, theta1) =
-                let chance = (float k) / (float kMax)
-                let parameterToChange = random.Next(0, (p |> Array.length) - 1)
-
-                let scalesToChange =
-                    p
-                    |> Array.mapi (fun i x -> (x, random.NextDouble() < chance || i = parameterToChange))
-
-                let propose (theta:Point) =
-                    Array.zip3 (theta |> Typed.toFloatArray) scalesToChange domain
-                    |> Array.map (fun (x, ((ti, n), shouldChange), (_, _, con)) ->
-                        if shouldChange then
-                            constrainJump x (draw' ti 1. ()) 1. con
-                        else
-                            x)
-                    |> Typed.ofVector
-
-                let result = tryMove propose (machine 1.) random f 100 (l1, theta1)
-
-                if result.IsNone then
-                    failwith "Could not move in parameter space."
-
-                let newScaleInfo =
-                    scalesToChange
-                    |> Array.zip (result.Value |> snd |> Typed.toFloatArray)
-                    |> Array.map (fun (v, ((ti, previous), changed)) ->
-                        let ti, previous =
-                            if changed then
-                                (ti, (previous |> Array.append [| v |])) // Append new parameter values to previous ones
-                            else
-                                (ti, previous)
-
-                        if Array.length previous * 1<iteration> = settings.TuneN then
-                            let changes =
-                                previous |> Array.pairwise |> Array.where (fun (a, b) -> a <> b) |> Array.length
-
-                            match (float changes) / (float settings.TuneN) with
-                            | ar when ar < 0.35 -> (ti * 0.80, Array.empty)
-                            | ar when ar > 0.50 -> (ti * 1.20, Array.empty)
-                            | _ -> (ti, Array.empty)
-                        else
-                            (ti, previous))
-
-                if k % 1000<iteration> = 0<iteration> then
-                    writeOut
-                    <| GeneralEvent(
-                        sprintf
-                            "Tuning is at %A (k=%i/%i) [-logL %f]"
-                            (newScaleInfo |> Array.map fst)
-                            k
-                            kMax
-                            (result.Value |> fst)
-                    )
-
-                if k < kMax then
-                    tune newScaleInfo (k + 1<iteration>) result.Value
-                else
-                    (newScaleInfo |> Array.map fst, l1, theta1)
-
             let tunedScale, l2, theta2 =
                 homogenousChain initialScale (EndConditions.afterIteration settings.PreTuneLength) 1. (l1 |> Typed.toFloatScalar, theta1)
                 |> List.minBy fst
-                |> tune (initialScale |> Array.map (fun t -> (t, Array.empty))) 1<iteration>
+                // |> tune (initialScale |> Array.map (fun t -> (t, Array.empty))) 1<iteration>
+                |> Tuning.tuneStepSizes
+                        writeOut
+                        random
+                        domain
+                        draw'
+                        machine
+                        f
+                        initialScale
+                        settings.Tuning
 
             writeOut <| GeneralEvent(sprintf "Tuned = %A" tunedScale)
 
@@ -1309,179 +1352,179 @@ module MonteCarlo =
 //                     | Error _ -> invalidOp "Could not generate theta"
 
 
-// /// Nelder Mead implementation
-// /// Adapted from original at: https://github.com/mathias-brandewinder/Amoeba
-// module Amoeba =
+/// Nelder Mead implementation
+/// Adapted from original at: https://github.com/mathias-brandewinder/Amoeba
+module Amoeba =
 
-//     module Solver =
+    module Solver =
 
-//         type Amoeba =
-//             { Dim: int
-//               Solutions: Solution<float>[] }
+        type Amoeba =
+            { Dim: int
+              Solutions: Solution[] }
 
-//             member this.Size = this.Solutions.Length
+            member this.Size = this.Solutions.Length
 
-//             member this.Best = this.Solutions.[0]
+            member this.Best = this.Solutions.[0]
 
-//             member this.Worst = this.Solutions.[this.Size - 1]
+            member this.Worst = this.Solutions.[this.Size - 1]
 
-//         type Settings =
-//             { Alpha: float
-//               Sigma: float
-//               Gamma: float
-//               Rho: float
-//               Size: int }
+        type Settings =
+            { Alpha: float
+              Sigma: float
+              Gamma: float
+              Rho: float
+              Size: int }
 
-//         let Default =
-//             { Alpha = 1.
-//               Sigma = 0.5
-//               Gamma = 2.
-//               Rho = (-0.5)
-//               Size = 3 }
+        let Default =
+            { Alpha = 1.
+              Sigma = 0.5
+              Gamma = 2.
+              Rho = (-0.5)
+              Size = 3 }
 
-//         let evaluate (f: Objective) (x: Point) = (f x, x)
-//         let valueOf (s: Solution) = fst s
+        let evaluate (f: Objective) (x: Point) = (f x, x)
+        let valueOf (s: Solution) = fst s
 
-//         let replace (a: Amoeba) (s: Solution) =
-//             let last = a.Size - 1
-//             let a' = Array.copy a.Solutions
-//             a'.[last] <- s
+        let replace (a: Amoeba) (s: Solution) =
+            let last = a.Size - 1
+            let a' = Array.copy a.Solutions
+            a'.[last] <- s
 
-//             { a with
-//                 Solutions = a' |> Array.sortBy fst }
+            { a with
+                Solutions = a' |> Array.sortBy fst }
 
-//         let centroid (a: Amoeba) =
-//             [| for d in 0 .. (a.Dim - 1) -> (a.Solutions.[0 .. a.Size - 2] |> Array.averageBy (fun (_, x) -> x.[d])) |]
+        let centroid (a: Amoeba) =
+            [| for d in 0 .. (a.Dim - 1) -> (a.Solutions.[0 .. a.Size - 2] |> Array.averageBy (fun (_, x) -> x.[d])) |]
 
-//         let stretch ((X, Y): Point<float> * Point<float>) (s: float) =
-//             Array.map2 (fun x y -> x + s * (x - y)) X Y
+        let stretch ((X, Y): Point * Point) (s: float) =
+            Array.map2 (fun x y -> x + s * (x - y)) X Y
 
-//         let reflected v s = stretch v s.Alpha
+        let reflected v s = stretch v s.Alpha
 
-//         let expanded v s = stretch v s.Gamma
+        let expanded v s = stretch v s.Gamma
 
-//         let contracted v s = stretch v s.Rho
+        let contracted v s = stretch v s.Rho
 
-//         let shrink (a: Amoeba) (f: Objective<Point<float>, float>) s =
-//             let best = snd a.Best
+        let shrink (a: Amoeba) (f: Objective) s =
+            let best = snd a.Best
 
-//             { a with
-//                 Solutions =
-//                     a.Solutions
-//                     |> Array.map (fun p -> stretch (best, snd p) -s.Sigma)
-//                     |> Array.map (evaluate f) }
+            { a with
+                Solutions =
+                    a.Solutions
+                    |> Array.map (fun p -> stretch (best, snd p) -s.Sigma)
+                    |> Array.map (evaluate f) }
 
-//         let update (a: Amoeba) (f: Objective<Point<float>, float>) (s: Settings) =
-//             let cen = centroid a
-//             let rv, r = reflected (cen, (snd a.Worst)) s |> evaluate f
+        let update (a: Amoeba) (f: Objective) (s: Settings) =
+            let cen = centroid a
+            let rv, r = reflected (cen, (snd a.Worst)) s |> evaluate f
 
-//             if ((valueOf (a.Best) <= rv) && (rv < (valueOf (a.Solutions.[a.Size - 2])))) then
-//                 replace a (rv, r)
-//             else if (rv < valueOf (a.Best)) then
-//                 let ev, e = expanded (cen, r) s |> evaluate f
-//                 if (ev < rv) then replace a (ev, e) else replace a (rv, r)
-//             else
-//                 let (cv, c) = contracted (cen, (snd a.Worst)) s |> evaluate f
+            if ((valueOf (a.Best) <= rv) && (rv < (valueOf (a.Solutions.[a.Size - 2])))) then
+                replace a (rv, r)
+            else if (rv < valueOf (a.Best)) then
+                let ev, e = expanded (cen, r) s |> evaluate f
+                if (ev < rv) then replace a (ev, e) else replace a (rv, r)
+            else
+                let (cv, c) = contracted (cen, (snd a.Worst)) s |> evaluate f
 
-//                 if (cv < valueOf (a.Worst)) then
-//                     replace a (cv, c)
-//                 else
-//                     shrink a f s
+                if (cv < valueOf (a.Worst)) then
+                    replace a (cv, c)
+                else
+                    shrink a f s
 
-//         let solve settings rng writeOut atEnd domain _ f =
-//             let dim = Array.length domain
+        let solve settings rng writeOut atEnd domain _ f =
+            let dim = Array.length domain
 
-//             let start =
-//                 [| for _ in 1 .. settings.Size -> Initialise.tryGenerateTheta f domain rng 1000 |]
-//                 |> Array.map (fun r ->
-//                     match r with
-//                     | Ok r -> r
-//                     | Error _ -> failwith "Could not generate theta")
-//                 |> Array.map (evaluate f)
-//                 |> Array.sortBy fst
+            let start =
+                [| for _ in 1 .. settings.Size -> Initialise.tryGenerateTheta f domain rng 1000 |]
+                |> Array.map (fun r ->
+                    match r with
+                    | Ok r -> r
+                    | Error _ -> failwith "Could not generate theta")
+                |> Array.map (evaluate f)
+                |> Array.sortBy fst
 
-//             let amoeba = { Dim = dim; Solutions = start }
+            let amoeba = { Dim = dim; Solutions = start }
 
-//             let rec search i trace atEnd (a: Amoeba) =
-//                 if not <| atEnd trace i then
-//                     // writeOut <| OptimisationEvent { Iteration = i; Likelihood = trace; Theta = thetaAccepted }
-//                     search (i + 1) (a.Best :: trace) atEnd (update a f settings)
-//                 else
-//                     writeOut <| GeneralEvent(sprintf "Solution: -L = %f" (fst a.Solutions.[0]))
-//                     a.Solutions |> Array.toList
+            let rec search i trace atEnd (a: Amoeba) =
+                if not <| atEnd trace i then
+                    // writeOut <| OptimisationEvent { Iteration = i; Likelihood = trace; Theta = thetaAccepted }
+                    search (i + 1<iteration>) (a.Best :: trace) atEnd (update a f settings)
+                else
+                    writeOut <| GeneralEvent(sprintf "Solution: -L = %f" (fst a.Solutions.[0]))
+                    a.Solutions |> Array.toList
 
-//             search 0 [] atEnd amoeba
-
-
-//         let rec swarm
-//             settings
-//             rng
-//             logger
-//             numberOfLevels
-//             iterationsPerLevel
-//             numberOfAmoeba
-//             (paramBounds: Domain)
-//             startPoint
-//             (f: Objective<Point<float>, float>)
-//             =
-
-//             let amoebaResults =
-//                 [| 1..numberOfAmoeba |]
-//                 |> Array.collect (fun _ ->
-//                     try
-//                         [| solve settings rng logger iterationsPerLevel paramBounds startPoint f |]
-//                     with e ->
-//                         logger
-//                         <| GeneralEvent(
-//                             sprintf
-//                                 "Warning: Could not generate numercal solution for point (with EXN %s): %A"
-//                                 e.Message
-//                                 paramBounds
-//                         )
-
-//                         [||])
-
-//             // Drop worst 20% of likelihoods
-//             let mostLikely = amoebaResults |> Array.map List.head |> Array.minBy fst
-
-//             let percentile80thRank =
-//                 int (System.Math.Floor(float (80. / 100. * (float amoebaResults.Length + 1.))))
-
-//             let ranked =
-//                 amoebaResults
-//                 |> Array.map List.head
-//                 |> Array.sortBy fst
-//                 |> Array.take (amoebaResults.Length - percentile80thRank)
-
-//             let dims = Array.length paramBounds
-//             let boundsList = ranked |> Array.map snd
-
-//             let getBounds (dim: int) (points: Point<'a> array) =
-//                 let max = points |> Array.maxBy (fun p -> p.[dim])
-//                 let min = points |> Array.minBy (fun p -> p.[dim])
-//                 logger <| GeneralEvent(sprintf "Min %A Max %A" min.[dim] max.[dim])
-//                 (min.[dim], max.[dim], Bristlecone.Parameter.Constraint.Unconstrained)
-
-//             let bounds =
-//                 [| 0 .. dims - 1 |] |> Array.map (fun dim -> (boundsList |> getBounds dim))
-
-//             let boundWidth = bounds |> Array.sumBy (fun (l, h, _) -> h - l)
-//             logger <| GeneralEvent(sprintf "Bound width: %f" boundWidth)
-
-//             if (numberOfLevels > 1 && boundWidth > 0.01) then
-//                 swarm settings rng logger (numberOfLevels - 1) iterationsPerLevel numberOfAmoeba bounds startPoint f
-//             else
-//                 mostLikely
+            search 0<iteration> [] atEnd amoeba
 
 
-//     /// Optimise an objective function using a single downhill Nelder Mead simplex.
-//     let single settings : Optimiser =
-//         InTransformedSpace <| Solver.solve settings
+        let rec swarm
+            settings
+            rng
+            logger
+            numberOfLevels
+            iterationsPerLevel
+            numberOfAmoeba
+            (paramBounds: Domain)
+            startPoint
+            (f: Objective)
+            =
 
-//     /// Optimisation heuristic that creates a swarm of amoeba (Nelder-Mead) solvers.
-//     /// The swarm proceeds for `numberOfLevels` levels, constraining the starting bounds
-//     /// at each level to the 80th percentile of the current set of best likelihoods.
-//     let swarm levels amoebaAtLevel settings : Optimiser =
-//         InTransformedSpace
-//         <| fun rng logger endAt domain startPoint f ->
-//             [ Solver.swarm settings rng logger levels endAt amoebaAtLevel domain startPoint f ]
+            let amoebaResults =
+                [| 1..numberOfAmoeba |]
+                |> Array.collect (fun _ ->
+                    try
+                        [| solve settings rng logger iterationsPerLevel paramBounds startPoint f |]
+                    with e ->
+                        logger
+                        <| GeneralEvent(
+                            sprintf
+                                "Warning: Could not generate numercal solution for point (with EXN %s): %A"
+                                e.Message
+                                paramBounds
+                        )
+
+                        [||])
+
+            // Drop worst 20% of likelihoods
+            let mostLikely = amoebaResults |> Array.map List.head |> Array.minBy fst
+
+            let percentile80thRank =
+                int (System.Math.Floor(float (80. / 100. * (float amoebaResults.Length + 1.))))
+
+            let ranked =
+                amoebaResults
+                |> Array.map List.head
+                |> Array.sortBy fst
+                |> Array.take (amoebaResults.Length - percentile80thRank)
+
+            let dims = Array.length paramBounds
+            let boundsList = ranked |> Array.map snd
+
+            let getBounds (dim: int) (points: Point array) =
+                let max = points |> Array.maxBy (fun p -> p |> Tensors.Typed.itemAt dim)
+                let min = points |> Array.minBy (fun p -> p |> Tensors.Typed.itemAt dim)
+                logger <| GeneralEvent(sprintf "Min %A Max %A" (min |> Tensors.Typed.itemAt dim) (max |> Tensors.Typed.itemAt dim))
+                (min |> Tensors.Typed.itemAt dim, max |> Tensors.Typed.itemAt dim, Bristlecone.Parameter.Constraint.Unconstrained)
+
+            let bounds =
+                [| 0 .. dims - 1 |] |> Array.map (fun dim -> (boundsList |> getBounds dim))
+
+            let boundWidth = bounds |> Array.sumBy (fun (l, h, _) -> Tensors.Typed.toFloatScalar h - Tensors.Typed.toFloatScalar l)
+            logger <| GeneralEvent(sprintf "Bound width: %f" boundWidth)
+
+            if numberOfLevels > 1 && boundWidth > 0.01<``optim-space``> then
+                swarm settings rng logger (numberOfLevels - 1) iterationsPerLevel numberOfAmoeba bounds startPoint f
+            else
+                mostLikely
+
+
+    /// Optimise an objective function using a single downhill Nelder Mead simplex.
+    let single settings : Optimiser =
+        InTransformedSpace <| Solver.solve settings
+
+    /// Optimisation heuristic that creates a swarm of amoeba (Nelder-Mead) solvers.
+    /// The swarm proceeds for `numberOfLevels` levels, constraining the starting bounds
+    /// at each level to the 80th percentile of the current set of best likelihoods.
+    let swarm levels amoebaAtLevel settings : Optimiser =
+        InTransformedSpace
+        <| fun rng logger endAt domain startPoint f ->
+            [ Solver.swarm settings rng logger levels endAt amoebaAtLevel domain startPoint f ]

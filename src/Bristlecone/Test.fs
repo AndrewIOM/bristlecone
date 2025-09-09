@@ -65,11 +65,11 @@ module Test =
     type TestSettings<'T, 'date, 'timeunit, 'timespan> =
         { TimeSeriesLength: int
           StartValues: CodedMap<'T>
-          EndCondition: EndCondition<'T>
+          EndCondition: EndCondition
           GenerationRules: GenerationRule list
           NoiseGeneration:
               Random
-                  -> Parameter.Pool
+                  -> Parameter.Pool.ParameterPool
                   -> CodedMap<TimeSeries<'T, 'date, 'timeunit, 'timespan>>
                   -> Result<CodedMap<TimeSeries<'T, 'date, 'timeunit, 'timespan>>, string>
           EnvironmentalData: CodedMap<TimeSeries<'T, 'date, 'timeunit, 'timespan>>
@@ -83,7 +83,7 @@ module Test =
             { Resolution = Resolution.FixedTemporalResolution.Years (PositiveInt.create 1<year>).Value
               TimeSeriesLength = 30
               StartValues = Map.empty
-              EndCondition = Optimisation.EndConditions.afterIteration 1000
+              EndCondition = Optimisation.EndConditions.afterIteration 1000<iteration>
               GenerationRules = []
               NoiseGeneration = fun _ -> fun _ -> id >> Ok
               EnvironmentalData = Map.empty
@@ -94,20 +94,24 @@ module Test =
 
     type ParameterTestResult =
         { Identifier: string
-          RealValue: float
-          EstimatedValue: float }
+          RealValue: float<parameter>
+          EstimatedValue: float<parameter> }
 
-    and TestResult<'date, 'timeunit, 'timespan> =
+    and TestResult<'date, 'timeunit, 'timespan, [<Measure>] 'u> =
         { Parameters: ParameterTestResult list
           Series: Map<string, FitSeries<'date, 'timeunit, 'timespan>>
-          ErrorStructure: Map<string, seq<float>>
-          RealLikelihood: float
-          EstimatedLikelihood: float }
+          ErrorStructure: Map<string, seq<float<'u^2>>>
+          RealLikelihood: float<``-logL``>
+          EstimatedLikelihood: float<``-logL``> }
 
     /// Ensures settings are valid for a test, by ensuring that
     /// start values have been set for each equation.
     let isValidSettings (model: ModelSystem.ModelSystem<'data, 'timeIndex>) testSettings =
-        let equationKeys = model.Equations |> Map.toList |> List.map fst
+        let equationKeys =
+            match model.Equations with
+            | DifferenceEqs eqs -> eqs
+            | DifferentialEqs eqs -> eqs
+            |> Map.toList |> List.map fst
 
         if
             Set.isSubset (Set.ofList equationKeys) (Set.ofList (testSettings.StartValues |> Map.toList |> List.map fst))
@@ -158,74 +162,11 @@ module Test =
 
     module Compute =
 
-        /// Draw a random set of parameters
-        let drawParameterSet rnd pool =
-            pool
-            |> Parameter.Pool.map (fun _ v ->
-                let lower, upper =
-                    match Parameter.bounds v with
-                    | Some b -> b
-                    | None -> failwith "Parameters already estimated"
+        /// Generate time-series for a given engine and model, and
+        /// for a particular point in optim-space.
+        let tryGenerateData' engine model testSettings thetaPool =
 
-                let trueValue = Statistics.Distributions.ContinuousUniform.draw rnd lower upper ()
-
-                match Parameter.setTransformedValue v trueValue with
-                | Ok p -> p
-                | Error e -> failwith e)
-
-        /// Generate a fixed-resolution time-series for testing model fits
-        let generateFixedSeries
-            writeOut
-            equations
-            timeMode
-            seriesLength
-            startPoint
-            dateMode
-            startDate
-            resolution
-            env
-            theta
-            =
-            let applyFakeTime s =
-                TimeSeries.fromSeq dateMode startDate resolution s
-
-            let eqs = equations |> Map.map (fun _ v -> v theta)
-
-            match timeMode with
-            | Discrete -> invalidOp "Not supported at this time"
-            | Continuous i ->
-                i
-                    writeOut
-                    0.<``time index``>
-                    (seriesLength |> float |> (*) 1.<``time index``>)
-                    1.<``time index``>
-                    startPoint
-                    env
-                    eqs
-                |> Map.map (fun _ v -> applyFakeTime v)
-
-        /// A test procedure for computing measures given time series data.
-        let generateMeasures
-            measures
-            startValues
-            (expected: CodedMap<TimeSeries<'T, 'date, 'timeunit, 'timespan>>)
-            : CodedMap<TimeSeries<'T, 'date, 'timeunit, 'timespan>> =
-            let time = (expected |> Seq.head).Value |> TimeSeries.toObservations |> Seq.map snd
-            let dateMode = (expected |> Seq.head).Value.DateMode
-
-            measures
-            |> Map.map (fun key measure ->
-                Solver.Discrete.solve
-                    startValues
-                    key
-                    measure
-                    (expected |> Map.map (fun _ t -> t.Values |> Seq.toArray)))
-            |> Map.fold
-                (fun acc key value -> Map.add key (time |> Seq.zip value |> TimeSeries.fromObservations dateMode) acc)
-                expected
-
-        /// Generate data
-        let tryGenerateData' engine model testSettings theta =
+            // Build environment index
             let envIndex =
                 testSettings.EnvironmentalData
                 |> Map.map (fun k v ->
@@ -233,34 +174,42 @@ module Test =
                         testSettings.StartDate,
                         testSettings.Resolution,
                         TimeIndex.IndexMode.Interpolate Statistics.Interpolate.bilinear,
-                        v
-                    ))
+                        v))
 
-            theta
-            |> generateFixedSeries
-                engine.LogTo
-                model.Equations
-                engine.TimeHandling
-                testSettings.TimeSeriesLength
-                testSettings.StartValues
-                testSettings.DateMode
-                testSettings.StartDate
-                testSettings.Resolution
-                envIndex
-            |> testSettings.NoiseGeneration testSettings.Random theta
-            |> Result.lift (generateMeasures model.Measures testSettings.StartValues)
+            // Configure solver
+            let solver =
+                Solver.SolverCompiler.compile
+                    engine.LogTo
+                    (testSettings.DateMode.TotalDays)
+                    model.Equations
+                    engine.TimeHandling
+                    Solver.StepType.External
+                    dynSeries
+                    envIndex
+                    testSettings.StartValues
+
+            // Get real-space vector from pool
+            let _, thetaReal = Parameter.Pool.toTensorWithKeysReal thetaPool
+
+            // Predict series
+            let predicted = Objective.predict solver model.Measures thetaReal
+
+            // Add noise if needed
+            let noisy = testSettings.NoiseGeneration testSettings.Random thetaPool predicted
+            noisy
+
 
         /// Generate data and check that it complies with the
         /// given ruleset.
         let rec tryGenerateData
-            (engine: EstimationEngine.EstimationEngine<float, 'b, 'c, 'd>)
+            (engine: EstimationEngine.EstimationEngine<'b, 'c, 'd>)
             settings
-            (model: ModelSystem.ModelSystem<float, 'timeIndex>)
+            (model: ModelSystem.ModelSystem<'dataUnit, 'timeIndex>)
             attempts
             =
-            let theta = drawParameterSet engine.Random model.Parameters
+            let randomPool = Parameter.Pool.drawRandom engine.Random model.Parameters
 
-            match tryGenerateData' engine model settings theta with
+            match tryGenerateData' engine model settings randomPool with
             | Ok series ->
                 let rulesPassed =
                     settings.GenerationRules
@@ -279,5 +228,5 @@ module Test =
                     else
                         tryGenerateData engine settings model (attempts - 1)
                 else
-                    Ok(series, theta)
+                    Ok(series, randomPool)
             | Error e -> Error e
