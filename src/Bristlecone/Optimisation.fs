@@ -1382,7 +1382,7 @@ module Amoeba =
               Rho = (-0.5)
               Size = 3 }
 
-        let evaluate (f: Objective) (x: Point) = (f x, x)
+        let evaluate (f: Objective) (x: Point) = f x, x
         let valueOf (s: Solution) = fst s
 
         let replace (a: Amoeba) (s: Solution) =
@@ -1394,16 +1394,19 @@ module Amoeba =
                 Solutions = a' |> Array.sortBy fst }
 
         let centroid (a: Amoeba) =
-            [| for d in 0 .. (a.Dim - 1) -> (a.Solutions.[0 .. a.Size - 2] |> Array.averageBy (fun (_, x) -> x.[d])) |]
+            let pts = a.Solutions.[0 .. a.Size - 2] |> Array.map snd
+            let sum = pts |> Array.reduce (+)
+            sum * (Tensors.Typed.ofScalar 1. / Tensors.Typed.ofScalar (float a.Dim))
 
         let stretch ((X, Y): Point * Point) (s: float) =
-            Array.map2 (fun x y -> x + s * (x - y)) X Y
+            let s1 = X + (X - Y)
+            s1 * s
 
         let reflected v s = stretch v s.Alpha
-
         let expanded v s = stretch v s.Gamma
-
         let contracted v s = stretch v s.Rho
+
+        let toFloatLogL (l,p) = Tensors.Typed.toFloatScalar l, p
 
         let shrink (a: Amoeba) (f: Objective) s =
             let best = snd a.Best
@@ -1412,21 +1415,21 @@ module Amoeba =
                 Solutions =
                     a.Solutions
                     |> Array.map (fun p -> stretch (best, snd p) -s.Sigma)
-                    |> Array.map (evaluate f) }
+                    |> Array.map (evaluate f >> toFloatLogL) }
 
         let update (a: Amoeba) (f: Objective) (s: Settings) =
             let cen = centroid a
-            let rv, r = reflected (cen, (snd a.Worst)) s |> evaluate f
+            let rv, r = reflected (cen, snd a.Worst) s |> evaluate f |> toFloatLogL
 
-            if ((valueOf (a.Best) <= rv) && (rv < (valueOf (a.Solutions.[a.Size - 2])))) then
+            if valueOf a.Best <= rv && rv < valueOf a.Solutions.[a.Size - 2] then
                 replace a (rv, r)
-            else if (rv < valueOf (a.Best)) then
-                let ev, e = expanded (cen, r) s |> evaluate f
-                if (ev < rv) then replace a (ev, e) else replace a (rv, r)
+            else if rv < valueOf a.Best then
+                let ev, e = expanded (cen, r) s |> evaluate f |> toFloatLogL
+                if ev < rv then replace a (ev, e) else replace a (rv, r)
             else
-                let (cv, c) = contracted (cen, (snd a.Worst)) s |> evaluate f
+                let cv, c = contracted (cen, snd a.Worst) s |> evaluate f |> toFloatLogL
 
-                if (cv < valueOf (a.Worst)) then
+                if cv < valueOf a.Worst then
                     replace a (cv, c)
                 else
                     shrink a f s
@@ -1440,7 +1443,7 @@ module Amoeba =
                     match r with
                     | Ok r -> r
                     | Error _ -> failwith "Could not generate theta")
-                |> Array.map (evaluate f)
+                |> Array.map (evaluate f >> toFloatLogL)
                 |> Array.sortBy fst
 
             let amoeba = { Dim = dim; Solutions = start }
@@ -1503,12 +1506,14 @@ module Amoeba =
                 let max = points |> Array.maxBy (fun p -> p |> Tensors.Typed.itemAt dim)
                 let min = points |> Array.minBy (fun p -> p |> Tensors.Typed.itemAt dim)
                 logger <| GeneralEvent(sprintf "Min %A Max %A" (min |> Tensors.Typed.itemAt dim) (max |> Tensors.Typed.itemAt dim))
-                (min |> Tensors.Typed.itemAt dim, max |> Tensors.Typed.itemAt dim, Bristlecone.Parameter.Constraint.Unconstrained)
+                min |> Tensors.Typed.itemAt dim |> Tensors.Typed.toFloatScalar,
+                max |> Tensors.Typed.itemAt dim |> Tensors.Typed.toFloatScalar,
+                Parameter.Constraint.Unconstrained
 
             let bounds =
-                [| 0 .. dims - 1 |] |> Array.map (fun dim -> (boundsList |> getBounds dim))
+                [| 0 .. dims - 1 |] |> Array.map (fun dim -> boundsList |> getBounds dim)
 
-            let boundWidth = bounds |> Array.sumBy (fun (l, h, _) -> Tensors.Typed.toFloatScalar h - Tensors.Typed.toFloatScalar l)
+            let boundWidth = bounds |> Array.sumBy (fun (l, h, _) -> h - l)
             logger <| GeneralEvent(sprintf "Bound width: %f" boundWidth)
 
             if numberOfLevels > 1 && boundWidth > 0.01<``optim-space``> then
