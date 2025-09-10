@@ -1175,181 +1175,177 @@ module MonteCarlo =
                     f
 
 
-//     /// An adaptation of the Filzbach method (originally by Drew Purves)
-//     module Filzbach =
+    /// An adaptation of the Filzbach method (originally by Drew Purves)
+    module Filzbach =
 
-//         type FilzbachSettings<'a> =
-//             { TuneAfterChanges: int
-//               MaxScaleChange: float
-//               MinScaleChange: float
-//               BurnLength: EndCondition }
+        type FilzbachSettings =
+            { TuneAfterChanges: int
+              MaxScaleChange: float
+              MinScaleChange: float
+              BurnLength: EndCondition }
 
-//             static member Default =
-//                 { TuneAfterChanges = 50
-//                   MaxScaleChange = 100.00
-//                   MinScaleChange = 0.0010
-//                   BurnLength = EndConditions.afterIteration 2000 }
+            static member Default =
+                { TuneAfterChanges = 50
+                  MaxScaleChange = 100.00
+                  MinScaleChange = 0.0010
+                  BurnLength = EndConditions.afterIteration 2000<iteration> }
 
-//         let filzbach'
-//             settings
-//             (theta: Point)
-//             random
-//             writeOut
-//             (sampleEnd: EndCondition)
-//             (domain: Domain)
-//             (f: Objective)
-//             =
-//             writeOut
-//             <| GeneralEvent(sprintf "[Optimisation] Starting Filzbach-style MCMC optimisation")
+        type ParameterTuning<[<Measure>] 'u> =
+            { Scale: float<'u>
+              History: float<'u>[] }
 
-//             let sample sd = Normal.draw random 0. sd
+        let filzbach'
+            (settings: FilzbachSettings)
+            (theta: TypedTensor<Vector,``optim-space``>)
+            (random: System.Random)
+            writeOut
+            (sampleEnd: EndCondition)
+            (domain: Domain)
+            (f: Objective) =
 
-//             let scaleRnd =
-//                 Bristlecone.Statistics.Distributions.ContinuousUniform.draw random 0. 1.
+            writeOut <| GeneralEvent "[Optimisation] Starting Filzbach-style MCMC optimisation"
 
-//             let paramRnd =
-//                 MathNet.Numerics.Distributions.DiscreteUniform(0, (theta |> Typed.length) - 1, random)
+            let sample sd = Normal.draw random 0.<``optim-space``> sd
+            let scaleRnd = ContinuousUniform.draw random 0. 1.
+            let paramRnd = DiscreteUniform.draw random 0 (Typed.length theta - 1)
 
-//             let initialScale = domain |> Array.map (fun (l, u, _) -> (u - l) / 6.)
-//             printfn "Initial scale: %A" initialScale
-//             let l1 = f theta
+            // Initial proposal scales: 1/6 of parameter range
+            let initialScale =
+                domain
+                |> Array.map (fun (l, u, _) -> (u - l) / 6.)
 
-//             let rec step burning (p: (float * float[])[]) endWhen (l1, theta1) d currentIteration =
-//                 // Change one to many parameter at once (Filzbach-style)
-//                 let scalesToChange =
-//                     if scaleRnd () < 0.670 then
-//                         // Choose one parameter to change
-//                         let rnd = paramRnd.Sample()
-//                         // Change also nearby parameters with probability 1/2:
-//                         p
-//                         |> Array.mapi (fun i x ->
-//                             (x,
-//                              if i = rnd then true
-//                              else if i = (rnd - 1) then scaleRnd () < 0.5
-//                              else if i = (rnd + 1) then scaleRnd () < 0.5
-//                              else false))
-//                     else
-//                         // Probability of change:
-//                         let pChange = exp (4.0 * (scaleRnd () - 0.50))
-//                         // Try and allocate random changes to array
-//                         let rec changeRandom p =
-//                             let r = p |> Array.mapi (fun i x -> (x, scaleRnd () < pChange))
+            let l1 = f theta
 
-//                             if r |> Array.where (fun (_, b) -> b) |> Array.isEmpty then
-//                                 changeRandom p
-//                             else
-//                                 r
+            let rec step
+                (isBurnIn: bool)
+                (tuningState: ParameterTuning<``optim-space``>[])
+                (endWhen: EndCondition)
+                (current: Solution)
+                (trace: Solution list)
+                (iteration: int<iteration>) =
 
-//                         changeRandom p
+                // Decide which parameters to change
+                let changeMask: (ParameterTuning<``optim-space``> * bool)[] =
+                    if scaleRnd () < 0.670 then
+                        // Pick one parameter, maybe include neighbours
+                        let idx = paramRnd ()
+                        tuningState
+                        |> Array.mapi (fun i t ->
+                            t,
+                            i = idx
+                            || i = idx - 1 && scaleRnd () < 0.5
+                            || i = idx + 1 && scaleRnd () < 0.5)
+                    else
+                        // Random subset based on pChange
+                        let pChange = exp (4.0 * (scaleRnd () - 0.50))
+                        let rec pickRandom state =
+                            let mask = state |> Array.mapi (fun _ t -> t, scaleRnd () < pChange)
+                            if mask |> Array.exists snd then mask else pickRandom state
+                        pickRandom tuningState
 
-//                 let propose theta =
-//                     Array.zip3 theta scalesToChange domain
-//                     |> Array.map (fun (x, ((ti, n), shouldChange), (_, _, con)) ->
-//                         if shouldChange then
-//                             constrainJump x (sample ti () * 1.<``optim-space``>) 1. con
-//                         else
-//                             x)
+                // Propose a new point
+                let propose (theta: TypedTensor<Vector,``optim-space``>) =
+                    Array.zip3 (Typed.toFloatArray theta) changeMask domain
+                    |> Array.map (fun (value, (tune, shouldChange), (_, _, con)) ->
+                        if shouldChange then
+                            constrainJump value (sample tune.Scale ()) 1. con
+                        else
+                            value)
+                    |> Typed.ofVector
 
-//                 // Metropolis step here
-//                 let result =
-//                     SimulatedAnnealing.tryMove
-//                         propose
-//                         (SimulatedAnnealing.Machines.boltzmann 1.)
-//                         random
-//                         f
-//                         100
-//                         (l1, theta1)
+                // Metropolis step
+                let result =
+                    SimulatedAnnealing.tryMove
+                        propose
+                        (SimulatedAnnealing.Machines.boltzmann 1.)
+                        random
+                        f
+                        100
+                        current
 
-//                 if Option.isNone result then
-//                     failwith "Could not move in parameter space."
-//                 // End metropolis step
+                if result.IsNone then failwith "Could not move in parameter space."
 
-//                 // Tune Scales (burnin only)
-//                 let newScaleInfo =
-//                     if not burning then
-//                         p
-//                     else
-//                         scalesToChange
-//                         |> Array.zip (result.Value |> snd)
-//                         |> Array.mapi (fun parameteri (v, ((ti, previous), changed)) ->
-//                             let ti, previous =
-//                                 if changed then
-//                                     (ti, (previous |> Array.append [| v |])) // Append new parameter values to previous ones
-//                                 else
-//                                     (ti, previous)
+                // Update tuning state if in burn-in
+                let newTuningState =
+                    if not isBurnIn then tuningState
+                    else
+                        changeMask
+                        |> Array.zip (result.Value |> snd |> Typed.toFloatArray)
+                        |> Array.mapi (fun i (newVal, (tune, changed)) ->
+                            let newHistory =
+                                if changed then Array.append tune.History [| newVal |]
+                                else tune.History
 
-//                             if previous |> Array.length = settings.TuneAfterChanges then
-//                                 let changes =
-//                                     previous |> Array.pairwise |> Array.where (fun (a, b) -> a <> b) |> Array.length
+                            if newHistory.Length = settings.TuneAfterChanges then
+                                let changes =
+                                    newHistory
+                                    |> Array.pairwise
+                                    |> Array.filter (fun (a, b) -> a <> b)
+                                    |> Array.length
+                                let ar = float changes / float settings.TuneAfterChanges
+                                let newScale =
+                                    if ar < 0.25 then
+                                        max (initialScale.[i] * settings.MinScaleChange) (tune.Scale * 0.80)
+                                    elif ar > 0.25 then
+                                        min (initialScale.[i] * settings.MaxScaleChange) (tune.Scale * 1.20)
+                                    else tune.Scale
+                                { Scale = newScale; History = [||] }
+                            else
+                                { tune with History = newHistory })
 
-//                                 match (float changes) / (float settings.TuneAfterChanges) with
-//                                 | ar when ar < 0.25 ->
-//                                     if (ti * 0.80) < (initialScale.[parameteri] * settings.MinScaleChange) then
-//                                         (initialScale.[parameteri] * settings.MinScaleChange, Array.empty)
-//                                     else
-//                                         (ti * 0.80, Array.empty)
-//                                 | ar when ar > 0.25 ->
-//                                     if (ti * 1.20) > (initialScale.[parameteri] * settings.MaxScaleChange) then
-//                                         (initialScale.[parameteri] * settings.MaxScaleChange, Array.empty)
-//                                     else
-//                                         (ti * 1.20, Array.empty)
-//                                 | _ -> (ti, Array.empty)
-//                             else
-//                                 (ti, previous))
-//                 // End Tune Scales (burnin only)
+                let newTrace = result.Value :: trace
 
-//                 let newResult = result.Value :: d
+                if endWhen trace iteration then
+                    newTrace, newTuningState |> Array.map (fun t -> t.Scale)
+                else
+                    writeOut <| OptimisationEvent {
+                        Iteration = iteration
+                        Likelihood = fst result.Value
+                        Theta = snd result.Value |> Typed.toFloatArray
+                    }
+                    step isBurnIn newTuningState endWhen result.Value newTrace (iteration + 1<iteration>)
 
-//                 if endWhen d currentIteration then
-//                     (newResult, newScaleInfo |> Array.map fst)
-//                 else
-//                     writeOut
-//                     <| OptimisationEvent
-//                         { Iteration = currentIteration
-//                           Likelihood = result.Value |> fst
-//                           Theta = result.Value |> snd }
+            // Burn-in phase
+            writeOut <| GeneralEvent (sprintf "[Filzbach] Starting burn-in at point %A (L = %f)" theta (l1 |> Typed.toFloatScalar))
 
-//                     step burning newScaleInfo endWhen result.Value newResult (currentIteration + 1)
+            let burnResults, burnScales =
+                step true
+                    (initialScale |> Array.map (fun s -> { Scale = s; History = [||] }))
+                    settings.BurnLength
+                    (l1 |> Typed.toFloatScalar, theta)
+                    []
+                    0<iteration>
 
-//             writeOut
-//             <| GeneralEvent(sprintf "[Filzbach] Starting burn-in at point %A (L = %f)" theta l1)
+            writeOut <| GeneralEvent "[Filzbach] Burn-in complete. Starting sampling..."
 
-//             let burnResults, burnScales =
-//                 step true (initialScale |> Array.map (fun x -> x, Array.empty)) settings.BurnLength (l1, theta) [] 0
+            // Sampling phase
+            let results, _ =
+                step false
+                    (burnScales |> Array.map (fun s -> { Scale = s; History = [||] }))
+                    sampleEnd
+                    (List.head burnResults)
+                    []
+                    0<iteration>
 
-//             writeOut
-//             <| GeneralEvent(
-//                 sprintf "[Filzbach] Burn-in complete. Starting sampling at point %A" (burnResults |> Seq.head)
-//             )
+            [ results; burnResults ] |> List.concat
 
-//             let results, _ =
-//                 step
-//                     false
-//                     (burnScales |> Array.map (fun t -> (t, Array.empty)))
-//                     sampleEnd
-//                     (burnResults |> Seq.head)
-//                     []
-//                     0
+        /// A Monte Carlo Markov Chain sampler based on the 'Filzbach' algorithm from
+        /// Microsoft Research Cambridge.
+        let filzbach settings : Optimiser =
+            InDetachedSpace
+            <| fun random writeOut endCon domain startPoint (f: Objective) ->
+                match startPoint with
+                | Some theta ->
+                    writeOut
+                    <| GeneralEvent(sprintf "[Optimisation] Pre-defined initial theta is %A" theta)
 
-//             [ results; burnResults ] |> List.concat
-
-//         /// A Monte Carlo Markov Chain sampler based on the 'Filzbach' algorithm from
-//         /// Microsoft Research Cambridge.
-//         let filzbach settings : Optimiser =
-//             InDetachedSpace
-//             <| fun random writeOut endCon domain startPoint (f: Objective) ->
-//                 match startPoint with
-//                 | Some theta ->
-//                     writeOut
-//                     <| GeneralEvent(sprintf "[Optimisation] Pre-defined initial theta is %A" theta)
-
-//                     filzbach' settings theta random writeOut endCon domain f
-//                 | None ->
-//                     match Initialise.tryGenerateTheta f domain random 10000 with
-//                     | Ok theta ->
-//                         writeOut <| GeneralEvent(sprintf "[Optimisation] Initial theta is %A" theta)
-//                         filzbach' settings theta random writeOut endCon domain f
-//                     | Error _ -> invalidOp "Could not generate theta"
+                    filzbach' settings theta random writeOut endCon domain f
+                | None ->
+                    match Initialise.tryGenerateTheta f domain random 10000 with
+                    | Ok theta ->
+                        writeOut <| GeneralEvent(sprintf "[Optimisation] Initial theta is %A" theta)
+                        filzbach' settings theta random writeOut endCon domain f
+                    | Error _ -> invalidOp "Could not generate theta"
 
 
 /// Nelder Mead implementation
