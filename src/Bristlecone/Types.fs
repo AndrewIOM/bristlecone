@@ -348,7 +348,7 @@ module Writer =
     let map f w =
         let (AWriter (a, log)) = w
         AWriter (f a, log)
-
+    let flatMap f w = bind f w
     let tell entry = AWriter ((), [entry])
 
     // Computation expression

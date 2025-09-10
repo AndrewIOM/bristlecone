@@ -125,50 +125,50 @@ module ModelComponents =
                 member __.StoreValue _ _ v = v
                 member __.GetAll() = [] |> Map.ofList
 
-    /// <summary>Log out components specified in a model by disabling optimisation. The model will only be computed once.</summary>
-    /// <param name="fitFn">The function used</param>
-    /// <param name="engine"></param>
-    /// <param name="result"></param>
-    /// <typeparam name="'subject"></typeparam>
-    /// <typeparam name="'a"></typeparam>
-    /// <typeparam name="'b"></typeparam>
-    /// <typeparam name="'data"></typeparam>
-    /// <returns></returns>
-    let calculateComponents
-        fitFn
-        engine
-        (result:
-            ResultSet.ResultSet<
-                'subject,
-                Loggers.IComponentLogger<'data> -> ModelSystem<'dataUnit, 'timeIndex>,
-                'date,
-                'timeunit,
-                'timespan
-             >)
-        =
-        match result.BestResult with
-        | None -> [] |> Map.ofList
-        | Some mle ->
-            let eng =
-                { engine with
-                    OptimiseWith = Optimisation.None.none }
+    // /// <summary>Log out components specified in a model by disabling optimisation. The model will only be computed once.</summary>
+    // /// <param name="fitFn">The function used</param>
+    // /// <param name="engine"></param>
+    // /// <param name="result"></param>
+    // /// <typeparam name="'subject"></typeparam>
+    // /// <typeparam name="'a"></typeparam>
+    // /// <typeparam name="'b"></typeparam>
+    // /// <typeparam name="'data"></typeparam>
+    // /// <returns></returns>
+    // let calculateComponents
+    //     fitFn
+    //     engine
+    //     (result:
+    //         ResultSet.ResultSet<
+    //             'subject,
+    //             Loggers.IComponentLogger<'data> -> ModelSystem<'dataUnit, 'timeIndex>,
+    //             'date,
+    //             'timeunit,
+    //             'timespan
+    //          >)
+    //     =
+    //     match result.BestResult with
+    //     | None -> [] |> Map.ofList
+    //     | Some mle ->
+    //         let eng =
+    //             { engine with
+    //                 OptimiseWith = Optimisation.None.none }
 
-            let cLog = Loggers.ComponentLogger<'data>() :> Loggers.IComponentLogger<'data>
+    //         let cLog = Loggers.ComponentLogger<'data>() :> Loggers.IComponentLogger<'data>
 
-            let p =
-                mle.Parameters
-                |> Parameter.Pool.toList
-                |> List.choose (fun (k, v) ->
-                    Parameter.create
-                        Parameter.Constraint.Unconstrained
-                        (v |> Parameter.getTransformedValue)
-                        (v |> Parameter.getTransformedValue)
-                    |> Option.map (fun v -> k, v))
-                |> Parameter.Pool.fromList
+    //         let p =
+    //             mle.Parameters
+    //             |> Parameter.Pool.toList
+    //             |> List.choose (fun (k, v) ->
+    //                 Parameter.create
+    //                     Parameter.Constraint.Unconstrained
+    //                     (v |> Parameter.getTransformedValue)
+    //                     (v |> Parameter.getTransformedValue)
+    //                 |> Option.map (fun v -> k, v))
+    //             |> Parameter.Pool.fromList
 
-            let mleHypothesis =
-                { result.Hypothesis cLog with
-                    Parameters = p }
+    //         let mleHypothesis =
+    //             { result.Hypothesis cLog with
+    //                 Parameters = p }
 
-            fitFn result.Subject mleHypothesis eng |> ignore
-            cLog.GetAll()
+    //         fitFn result.Subject mleHypothesis eng |> ignore
+    //         cLog.GetAll()

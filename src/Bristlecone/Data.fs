@@ -158,14 +158,15 @@ module MLE =
 
         let fromResult subject hypothesisId result =
             result.Parameters
-            |> Parameter.Pool.toList
+            |> Parameter.Pool.toTensorWithKeysReal
+            |> fun (k,v) -> Seq.zip k (v |> Tensors.Typed.toFloatArray)
             |> Seq.map (fun (name, v) ->
                 (subject,
                  hypothesisId,
                  result.ResultId,
                  name.Value,
-                 result.Likelihood,
-                 v |> Parameter.getTransformedValue)
+                 result.Likelihood |> Units.removeUnitFromFloat,
+                 v |> Units.removeUnitFromFloat)
                 |> IndividualMLE.Row)
 
         let toResult (modelSystem: ModelSystem<'data, 'timeIndex>) (data: IndividualMLE) =
@@ -174,23 +175,18 @@ module MLE =
             else
                 let mle = (data.Rows |> Seq.head).NegativeLogLikelihood
 
+                let pKeys = Parameter.Pool.keys modelSystem.Parameters
                 let estimatedTheta =
-                    data.Rows
-                    |> Seq.choose (fun r ->
-                        ShortCode.create r.ParameterCode |> Option.map (fun o -> o, r.ParameterValue))
-                    |> Map.ofSeq
+                    pKeys
+                    |> List.map(fun pName ->
+                        let e = data.Rows |> Seq.find (fun r -> r.ParameterCode = pName.Value)
+                        e.ParameterValue * 1.<parameter> )
+                    |> List.toArray
+                    |> Tensors.Typed.ofVector
 
-                let pool =
-                    modelSystem.Parameters
-                    |> Parameter.Pool.toList
-                    |> List.map (fun (k, v) -> k, Parameter.setTransformedValue v (estimatedTheta |> Map.find k))
-                    |> List.choose (fun (c, r) ->
-                        match r with
-                        | Ok x -> Some(c, x)
-                        | Error _ -> None)
-                    |> Parameter.Pool.fromList
+                let newPool = Parameter.Pool.fromRealVector estimatedTheta modelSystem.Parameters
 
-                (mle, pool) |> Ok
+                (mle, newPool) |> Ok
 
     let save directory subject modelId result =
         let csv = new IndividualMLE(result |> Row.fromResult subject modelId)
@@ -259,7 +255,7 @@ module Series =
             |> Seq.choose (fun (g, r) ->
                 let ts =
                     r
-                    |> Seq.map (fun r -> ({ Fit = r.Expected; Obs = r.Observed }, r.Time))
+                    |> Seq.map (fun r -> ({ Fit = r.Expected * 1.<state>; Obs = r.Observed * 1.<state> }, r.Time))
                     |> TimeSeries.fromObservations DateMode.calendarDateMode
 
                 ShortCode.create g |> Option.map (fun c -> c, ts))
@@ -342,7 +338,7 @@ module Confidence =
             |> Seq.collect (fun (name, ci) ->
                 [ 68., ci.``68%``; 95., ci.``95%`` ]
                 |> Seq.map (fun (i, iv) ->
-                    (subject, hypothesisId, runId, name.Value, i, iv.Lower, iv.Upper)
+                    (subject, hypothesisId, runId, name.Value, i, iv.Lower |> Units.removeUnitFromFloat, iv.Upper |> Units.removeUnitFromFloat)
                     |> IndividualCI.Row))
 
     let save directory subject modelId runId result =

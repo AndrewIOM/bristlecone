@@ -117,6 +117,7 @@ module Parameter =
 
         let toList  (Pool p) = Map.toList p
         let count   (Pool p) = p.Count
+        let keys (Pool p) = p |> Map.toList |> List.map (fun (sc, _) -> sc)
         let fromList xs      = xs |> Map.ofList |> Pool
 
         /// Try to get the real value of a parameter by its ShortCode key.
@@ -152,6 +153,7 @@ module Parameter =
                 |> tryAsVector<``parameter``>
                 |> Option.defaultWith (fun () -> invalidOp "Pool was not a vector tensor")
             keys |> List.toArray, vec
+
 
         type CompiledTransforms<[<Measure>] 'space> =
             { Keys             : ShortCode.ShortCode[]

@@ -10,7 +10,7 @@ module Objective =
     open Bristlecone.Tensors
 
     let accessorFromRealVector
-        (compiled: Parameter.Pool.CompiledTransforms)
+        (compiled: Parameter.Pool.CompiledTransforms<'space>)
         (thetaReal: TypedTensor<Vector,``parameter``>)
         : ModelSystem.ParameterValueAccessor =
         let idx = compiled.IndexByName
@@ -20,35 +20,26 @@ module Objective =
             | None   -> invalidOp $"Parameter '{name}' not found")
 
     /// Compute the system's `Measures` from the dynamic variables produced by the solver.
-    /// AD‑safe: stays entirely in tensor space, no conversion to raw floats.
+    /// All operations happen in Tensor-space.
     let measure
-        (measures: CodedMap<ModelSystem.Measurement<'u>>)
+        (measures: CodedMap<Measurement<'u>>)
         (parameters: TypedTensor<Vector,``parameter``>)
         (expectedDynamic: CodedMap<TypedTensor<Vector,state>>)
         : CodedMap<TypedTensor<Vector,state>> =
 
-        // Build environment maps for each time step
-        let envs : CodedMap<TypedTensor<Scalar,state>>[] =
-            let length = expectedDynamic |> Seq.head |> fun k -> k.Value |> Tensors.Typed.length
-            Array.init length (fun i ->
-                expectedDynamic
-                |> Map.map (fun _ vec -> Tensors.Typed.itemAt i vec))
+        let length = expectedDynamic |> Seq.head |> fun kv -> kv.Value |> Typed.length
 
-        // Compute each measure series
         let measuredSeries =
             measures
-            |> Map.map (fun key measFn ->
+            |> Map.map (fun _ measFn ->
                 let buf = ResizeArray()
-                for i = 0 to envs.Length - 1 do
-                    let prevEnv = if i = 0 then envs.[0] else envs.[i-1]
-                    let currEnv = envs.[i]
-                    let value   = measFn parameters prevEnv currEnv
+                for i = 0 to length - 1 do
+                    let value = measFn parameters expectedDynamic i
                     buf.Add value
-                buf.ToArray() |> Tensors.Typed.stack1D)
+                buf.ToArray() |> Typed.stack1D)
 
         // Merge into dynamic series
         Map.fold (fun acc key value -> Map.add key value acc) expectedDynamic measuredSeries
-
 
     /// Pairs observed time series to predicted series for dynamic variables only.
     /// Environmental forcings and hidden variables are removed.
@@ -62,10 +53,10 @@ module Objective =
             if r.Observed.Value.shape = r.Expected.Value.shape then r
             else invalidOp (sprintf "The predicted series %s was a different length to the observed series" key.Value))
 
-    let compiledFromConfig (config:Parameter.Pool.AnyOptimiserConfig) =
+    let compiledFromConfig (config:Parameter.Pool.AnyOptimiserConfig) : Parameter.Pool.CompiledTransforms<``optim-space``> =
         match config with
         | Parameter.Pool.DetachedConfig cfg    -> cfg.Compiled
-        | Parameter.Pool.TransformedConfig cfg -> cfg.Compiled
+        | Parameter.Pool.TransformedConfig cfg -> unbox cfg.Compiled // TODO remove this unbox and coercion.
 
     let predict solver measures parameters =
         let dynamics = solver parameters

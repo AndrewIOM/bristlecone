@@ -121,7 +121,7 @@ module Test =
             Error
             <| sprintf "You must specify a start point for the following equations: %A" equationKeys
 
-    let create = TestSettings<_, _, _, _>.Default
+    // let create = TestSettings<_, _, _, _>.Default
 
     /// Add noise to a particular time-series when generating fake time-series.
     /// Built-in noise functions are in the `Noise` module.
@@ -162,37 +162,70 @@ module Test =
 
     module Compute =
 
+        let tryMakeDummySeries<[<Measure>] 'state,'date,'timeunit,'timespan>
+            (startDate: 'T)
+            (resolution: Resolution.FixedTemporalResolution<'timespan>)
+            (length: int)
+            (eqs: ModelForm<'timeUnit>)
+            (dateMode: DateMode.DateMode<'T, 'date,'timespan>) =
+            
+            let ts = TimeSeries.fromSeq dateMode startDate resolution (Seq.init length (fun _ -> nan |> LanguagePrimitives.FloatWithMeasure<'state>))
+            let stateNames =    
+                match eqs with
+                | DifferenceEqs e -> Map.keys e
+                | DifferentialEqs e -> Map.keys e
+            
+            stateNames
+            |> Seq.map(fun s -> s, ts)
+            |> Map.ofSeq
+            |> TimeFrame.tryCreate
+
         /// Generate time-series for a given engine and model, and
         /// for a particular point in optim-space.
-        let tryGenerateData' engine model testSettings thetaPool =
+        let tryGenerateData' engine model (testSettings: TestSettings<float,'date,'timeunit,'timespan>) thetaPool =
 
             // Build environment index
-            let envIndex =
+            let envSeries =
                 testSettings.EnvironmentalData
-                |> Map.map (fun k v ->
-                    TimeIndex.TimeIndex(
-                        testSettings.StartDate,
-                        testSettings.Resolution,
-                        TimeIndex.IndexMode.Interpolate Statistics.Interpolate.bilinear,
-                        v))
+                |> Map.map(fun k v -> v |> TimeSeries.map(fun (v,_) -> v |> Units.removeUnitFromFloat |> (*) 1.<environment>))
+                |> TimeFrame.tryCreate
+
+            // Setup dummy timeline for solver
+            let dynSeries =
+                tryMakeDummySeries
+                    testSettings.StartDate testSettings.Resolution
+                    testSettings.TimeSeriesLength model.Equations testSettings.DateMode
+                |> Option.get
+
+            let t0 =
+                testSettings.StartValues
+                |> Map.map(fun _ v -> v * 1.<state> |> Tensors.Typed.ofScalar)
 
             // Configure solver
             let solver =
                 Solver.SolverCompiler.compile
                     engine.LogTo
-                    (testSettings.DateMode.TotalDays)
+                    testSettings.DateMode.TotalDays
                     model.Equations
                     engine.TimeHandling
                     Solver.StepType.External
                     dynSeries
-                    envIndex
-                    testSettings.StartValues
+                    envSeries
+                    t0
 
             // Get real-space vector from pool
             let _, thetaReal = Parameter.Pool.toTensorWithKeysReal thetaPool
 
             // Predict series
-            let predicted = Objective.predict solver model.Measures thetaReal
+            let timeline = dynSeries.Series |> Seq.head |> fun kv -> kv.Value |> TimeSeries.toObservations |> Seq.map snd |> Seq.toArray
+            let predicted =
+                Objective.predict solver model.Measures thetaReal
+                |> Map.map(fun _ v ->                    
+                    Tensors.Typed.toFloatArray v
+                    |> Array.map Units.removeUnitFromFloat
+                    |> Array.zip timeline
+                    |> TimeSeries.fromObservations testSettings.DateMode
+                )
 
             // Add noise if needed
             let noisy = testSettings.NoiseGeneration testSettings.Random thetaPool predicted

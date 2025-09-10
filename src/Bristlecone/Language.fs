@@ -339,8 +339,9 @@ module Language =
 
         type ModelBuilder<[<Measure>] 'state> = private ModelBuilder of CodedMap<ModelFragment<'state>> * bool
 
-        let create<[<Measure>] 'state> isDiscrete : ModelBuilder<'state> =
-            (Map.empty<ShortCode.ShortCode, ModelFragment<'state>>, isDiscrete) |> ModelBuilder
+        let create<[<Measure>] 'state> isDiscrete : unit -> ModelBuilder<'state> =
+            fun () -> 
+                (Map.empty<ShortCode.ShortCode, ModelFragment<'state>>, isDiscrete) |> ModelBuilder
 
         let internal unwrap (ModelBuilder (m,isDiscrete)) = m, isDiscrete
 
@@ -438,8 +439,8 @@ module Language =
     /// Terms for scaffolding a model system for use with Bristlecone.
     module Model =
 
-        let empty = ModelBuilder.create false
-        let discrete = ModelBuilder.create true
+        let empty<'state> = ModelBuilder.create false ()
+        let discrete<'state> = ModelBuilder.create true ()
 
         let addEquation name eq builder =
             ModelBuilder.add name (ModelBuilder.EquationFragment eq) builder
@@ -482,7 +483,7 @@ module Language =
 
         let emptyState<[<Measure>] 'state, [<Measure>] 'time> isDiscrete
             : ModelBuilderState<'state, 'time, Missing, Missing> =
-            { Inner = ModelBuilder.create isDiscrete }
+            { Inner = ModelBuilder.create isDiscrete () }
 
         type ModelSystemBuilder<[<Measure>] 'state, [<Measure>] 'time>(isDiscrete) =
             member _.Yield(_) = emptyState<'state, 'time> isDiscrete
@@ -519,41 +520,41 @@ module Language =
                 ModelBuilder.compile state.Inner
 
 
-    let discreteModel<[<Measure>] 'time> : ModelSystemDsl.ModelSystemBuilder<'state, 'time> =
+    let discreteModel<[<Measure>] 'time> : ModelSystemDsl.ModelSystemBuilder<ModelSystem.state, 'time> =
         ModelSystemDsl.ModelSystemBuilder true
 
-    let continuousModel<[<Measure>] 'time> : ModelSystemDsl.ModelSystemBuilder<'state, 'time> =
+    let continuousModel<[<Measure>] 'time> : ModelSystemDsl.ModelSystemBuilder<ModelSystem.state, 'time> =
         ModelSystemDsl.ModelSystemBuilder false
 
-    // TODO delete this module:
-    module Example =
+    // // TODO delete this module:
+    // module Example =
 
-        [<Measure>] type mm
-        [<Measure>] type day
+    //     [<Measure>] type mm
+    //     [<Measure>] type day
 
-        let example growthLimit lossRate =
-            continuousModel {
-                equation "m" (Parameter "r" * growthLimit This - lossRate This)
-                parameter "r" 0.01<mm> 1.00<mm> Parameter.Constraint.Unconstrained
-                likelihood (ModelLibrary.Likelihood.sumOfSquares ["x"])
-            }
+    //     let example growthLimit lossRate =
+    //         continuousModel {
+    //             equation "m" (Parameter "r" * growthLimit This - lossRate This)
+    //             parameter "r" 0.01<mm> 1.00<mm> Parameter.Constraint.Unconstrained
+    //             likelihood (ModelLibrary.Likelihood.sumOfSquares ["x"])
+    //         }
 
-        let growthLimit s = This
-        let lossRate s = This
+    //     let growthLimit s = This
+    //     let lossRate s = This
 
-        let discreteForm =
-            discreteModel<day> {
-                equation "N" (Parameter "r" * growthLimit This - lossRate This)
-                parameter "r" 0.01<mm/day> 1.00<mm/day> Parameter.Constraint.Unconstrained
-                likelihood (ModelLibrary.Likelihood.sumOfSquares ["N"])
-            }
+    //     // let discreteForm =
+    //     //     discreteModel<day> {
+    //     //         equation "N" (Parameter "r" * growthLimit This - lossRate This)
+    //     //         parameter "r" 0.01<mm/day> 1.00<mm/day> Parameter.Constraint.Unconstrained
+    //     //         likelihood (ModelLibrary.Likelihood.sumOfSquares ["N"])
+    //     //     }
 
-        let continuousForm =
-            continuousModel<day> {
-                equation "N" (Parameter "r" * growthLimit This - lossRate This)
-                parameter "r" 0.01<mm/day> 1.00<mm/day> Parameter.Constraint.Unconstrained
-                likelihood (ModelLibrary.Likelihood.sumOfSquares ["N"])
-            }
+    //     // let continuousForm =
+    //     //     continuousModel<day> {
+    //     //         equation "N" (Parameter "r" * growthLimit This - lossRate This)
+    //     //         parameter "r" 0.01<mm/day> 1.00<mm/day> Parameter.Constraint.Unconstrained
+    //     //         likelihood (ModelLibrary.Likelihood.sumOfSquares ["N"])
+    //     //     }
 
 
     /// Terms for designing tests for model systems.
@@ -634,88 +635,89 @@ module Language =
             member this.Components = this.Unwrap |> snd
             member this.Model = this.Unwrap |> fst
             
+        // // The pluggable function you want to pass through the pipeline
+        // type Transform = ModelExpression -> ModelExpression
 
-        let private makeName comp impl =
-            { Component = fst comp; Implementation = impl }
+        // // Builder that expects a single Transform and returns the next staged builder or a finished model.
+        // // Keep it generic so it matches whatever you already have downstream.
+        // type Builder<'next> = Transform -> Writer.Writer<'next, ComponentName * CodedMap<Parameter.Parameter>>
 
-        /// <summary>Implement a component where a model system requires one. A component is a part of a model that may be varied, for example between competing hypotheses.</summary>
-        /// <param name="comp">A tuple representing a component scaffolded with the `modelComponent` and `subComponent` functions.</param>
-        /// <param name="builder">A builder started with `createFromComponent`</param>
-        /// <typeparam name="'a"></typeparam>
-        /// <typeparam name="'b"></typeparam>
-        /// <returns>A builder to add further components or compile with `Hypothesis.compile`</returns>
-        let createFromComponent comp builder =
-            match snd comp with
-            | [] -> failwithf "You must specify at least one implementation for '%s'" (fst comp)
-            | impls ->
-                impls
-                |> List.map (fun (n, c) ->
-                    // builder takes the expression and returns a Writer with the base model and log
-                    let w = builder c.Transform
-                    Writer.bind (fun mb ->
-                        Writer.tell (makeName comp n, c.Parameters)
-                        |> Writer.map (fun () -> mb)
-                    ) w
-                )
+        // // Some builders take a named transform (e.g., pick which hole to fill by name)
+        // type NamedBuilder<'next> = (string * Transform) -> Writer.Writer<'next, ComponentName * CodedMap<Parameter.Parameter>>
 
-        /// <summary>Add a second or further component to a model system where one is still required.</summary>
-        /// <param name="comp">A tuple representing a component scaffolded with the `modelComponent` and `subComponent` functions.</param>
-        /// <param name="builder">A builder started with `createFromComponent`</param>
-        /// <typeparam name="'a"></typeparam>
-        /// <typeparam name="'b"></typeparam>
-        /// <returns>A builder to add further components or compile with `Hypothesis.compile`</returns>
-        let useAnother
-            (comp: string * (string * PluggableComponent) list)
-            (builders: Writer.Writer<ModelBuilder.ModelBuilder<'state>, ComponentName * CodedMap<AnyParameter>> list) =
-            List.allPairs (snd comp) builders
-            |> List.map (fun ((implName, c), model) ->
-                model
-                |> Writer.map (fun mb -> mb |> Model.addEquation "m" c.Transform)
-                |> Writer.bind (fun mb ->
-                    Writer.tell (makeName comp implName, c.Parameters)
-                    |> Writer.map (fun () -> mb)
-                )
-            )
+        // let private makeName comp impl =
+        //     { Component = fst comp; Implementation = impl }
 
-        /// <summary>Add a second or further component to a model system where one is still required.</summary>
-        /// <param name="comp">A tuple representing a component scaffolded with the `modelComponent` and `subComponent` functions.</param>
-        /// <param name="builder">A builder started with `createFromComponent`</param>
-        /// <typeparam name="'a"></typeparam>
-        /// <typeparam name="'b"></typeparam>
-        /// <returns>A builder to add further components or compile with `Hypothesis.compile`</returns>
-        let useAnotherWithName comp builders =
-            List.allPairs (snd comp) builders
-            |> List.map (fun ((n,c), model) ->
-                model
-                |> Writer.map (fun m -> m |> Model.addEquation "m" c.Expression)
-                |> Writer.tell (makeName comp n, c.Parameters)
-            )
+        // /// <summary>Implement a component where a model system requires one. A component is a part of a model that may be varied, for example between competing hypotheses.</summary>
+        // /// <param name="comp">A tuple representing a component scaffolded with the `modelComponent` and `subComponent` functions.</param>
+        // /// <param name="builder">A builder started with `createFromComponent`</param>
+        // /// <typeparam name="'a"></typeparam>
+        // /// <typeparam name="'b"></typeparam>
+        // /// <returns>A builder to add further components or compile with `Hypothesis.compile`</returns>
+        // let createFromComponent
+        //     (compName: string, impls: (string * PluggableComponent) list)
+        //     (builder: Builder<'next>) =
+        //     if List.isEmpty impls then
+        //         failwithf "You must specify at least one implementation for the '%s' component" compName
+        //     impls
+        //     |> List.map (fun (implName, c) ->
+        //         Writer.bind (builder c.Transform, (nameOf compName implName, c.Parameters)))
+
+        // /// <summary>Add a second or further component to a model system where one is still required.</summary>
+        // /// <param name="comp">A tuple representing a component scaffolded with the `modelComponent` and `subComponent` functions.</param>
+        // /// <param name="builder">A builder started with `createFromComponent`</param>
+        // /// <typeparam name="'a"></typeparam>
+        // /// <typeparam name="'b"></typeparam>
+        // /// <returns>A builder to add further components or compile with `Hypothesis.compile`</returns>
+        // let useAnother
+        //     (compName: string, impls: (string * PluggableComponent) list)
+        //     (builders: Writer.Writer<Builder<'next>, ComponentName * CodedMap<Parameter.Parameter>> list) =
+        //     List.allPairs impls builders
+        //     |> List.map (fun ((implName, c), model) ->
+        //         model
+        //         |> Writer.flatMap (fun nextBuilder ->
+        //             Writer.bind (nextBuilder c.Transform, (nameOf compName implName, c.Parameters))))
         
-        /// <summary>Adds parameters from model components into the base model builder.</summary>
-        let internal addParameters
-            (modelBuilder: ModelBuilder.ModelBuilder<'state>)
-            (newParams: (ComponentName * CodedMap<Parameter.Pool.AnyParameter>) list) =
-            newParams
-            |> List.collect (snd >> Map.toList)
-            |> List.fold (fun mb ((name: ShortCode.ShortCode), p) ->
-                mb |> ModelBuilder.add name.Value (ModelBuilder.ParameterFragment p)
-            ) modelBuilder
+        // /// <summary>Add a second or further component to a model system where one is still required.</summary>
+        // /// <param name="comp">A tuple representing a component scaffolded with the `modelComponent` and `subComponent` functions.</param>
+        // /// <param name="builder">A builder started with `createFromComponent`</param>
+        // /// <typeparam name="'a"></typeparam>
+        // /// <typeparam name="'b"></typeparam>
+        // /// <returns>A builder to add further components or compile with `Hypothesis.compile`</returns>
+        // let useAnotherWithName
+        //     (compName: string, impls: (string * PluggableComponent) list)
+        //     (builders: Writer.Writer<NamedBuilder<'next>, ComponentName * CodedMap<Parameter.Parameter>> list) =
+        //     List.allPairs impls builders
+        //     |> List.map (fun ((implName, c), model) ->
+        //         model
+        //         |> Writer.flatMap (fun nextNamedBuilder ->
+        //             Writer.bind (nextNamedBuilder (implName, c.Transform), (nameOf compName implName, c.Parameters))))
         
-        /// <summary>Compiles a suite of competing model hypotheses based on the given components.
-        /// The compilation includes only the required parameters in each model hypothesis,
-        /// and combines all labels into a single model identifier.</summary>
-        /// <param name="builder">A builder started with `createFromComponent`</param>
-        /// <returns>A list of compiled hypotheses for this model system and specified components.</returns>
-        let compile
-            (builders: Writer.Writer<ModelBuilder.ModelBuilder<'state>, ComponentName * CodedMap<Parameter.Pool.AnyParameter>> list) =
-            match builders with
-            | [] -> failwith "No hypotheses specified"
-            | bs ->
-                bs
-                |> List.map (fun h ->
-                    let (mb, logs) = Writer.run h
-                    Hypothesis (addParameters mb logs |> Model.compile,
-                                logs |> List.map fst))
+        // /// <summary>Adds parameters from model components into the base model builder.</summary>
+        // let internal addParameters
+        //     (modelBuilder: ModelBuilder.ModelBuilder<'state>)
+        //     (newParams: (ComponentName * CodedMap<Parameter.Pool.AnyParameter>) list) =
+        //     newParams
+        //     |> List.collect (snd >> Map.toList)
+        //     |> List.fold (fun mb ((name: ShortCode.ShortCode), p) ->
+        //         mb |> ModelBuilder.add name.Value (ModelBuilder.ParameterFragment p)
+        //     ) modelBuilder
+        
+        // /// <summary>Compiles a suite of competing model hypotheses based on the given components.
+        // /// The compilation includes only the required parameters in each model hypothesis,
+        // /// and combines all labels into a single model identifier.</summary>
+        // /// <param name="builder">A builder started with `createFromComponent`</param>
+        // /// <returns>A list of compiled hypotheses for this model system and specified components.</returns>
+        // let compile (builder: Writer.Writer<ModelBuilder.ModelBuilder<'state>, ComponentName * CodedMap<Parameter.Parameter>> list) =
+        //     if builder |> List.isEmpty then
+        //         failwith "No hypotheses specified"
+
+        //     builder
+        //     |> List.map (fun h ->
+        //         let names = run h
+
+        //         (names |> addParameters |> Model.compile, names |> snd |> List.map fst)
+        //         |> Hypothesis)
 
 
 

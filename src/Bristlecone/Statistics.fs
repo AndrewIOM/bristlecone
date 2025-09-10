@@ -20,6 +20,18 @@ module Distributions =
                 |> LanguagePrimitives.FloatWithMeasure<'u>
 
     [<RequireQualifiedAccess>]
+    module DiscreteUniform =
+
+        let draw<[<Measure>] 'u> random (min: int<'u>) (max: int<'u>) : unit -> int<'u> =
+            let min, max  = Bristlecone.Units.removeUnitFromInt min, Bristlecone.Units.removeUnitFromInt max
+            let distribution =
+                MathNet.Numerics.Distributions.DiscreteUniform(min, max, random)
+
+            fun () ->
+                distribution.Sample()
+                |> LanguagePrimitives.Int32WithMeasure<'u>
+
+    [<RequireQualifiedAccess>]
     module Normal =
 
         /// Unit-generic normal draw
