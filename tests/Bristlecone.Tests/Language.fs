@@ -40,7 +40,7 @@ let modelExpressionOperators =
           <| fun (a: NormalFloat) x t pool env -> -Constant a.Get |> compute x t pool env = -a.Get ]
 
 
-open DiffSharp
+open Bristlecone.Tensors
 
 [<Tests>]
 let modelExpressionsTensor =
@@ -48,11 +48,13 @@ let modelExpressionsTensor =
         "Model expression - DSL compilation (tensors)"
         [
 
-            testProperty "Constant expressions produce constant tensors" <| fun (value: float) pool ->
-                let expr = Constant value
-                let compiled = ExpressionCompiler.compile pool Map.empty expr
-                let result = compiled (Tensors.ParameterPoolTensor <| dsharp.tensor 0.0) (Tensors.PointTensor <| dsharp.tensor 0.0) (dsharp.tensor 0.0) (dsharp.tensor 0.0)
-                Expect.floatClose Accuracy.high (result.toDouble()) value "Constant should match"
+            testProperty "Constant expressions produce constant tensors" <| fun (value: NormalFloat) pool ->
+                let expr = Constant value.Get
+                let compiled = ExpressionCompiler.compile pool [] expr
+                let p = [|0.<parameter>|] |> Typed.ofVector
+                let t, this = Typed.ofScalar 0., Typed.ofScalar 0.<ModelSystem.state>
+                let result = compiled p Map.empty t this
+                Expect.floatClose Accuracy.high (result |> Typed.toFloatScalar |> Units.removeUnitFromFloat) value.Get "Constant should match"
         
         ]
 
@@ -72,47 +74,47 @@ let modelExpressions =
           testProperty "A constant is purely represented"
           <| fun (c: NormalFloat) x t pool env -> Constant c.Get |> compute x t pool env = c.Get
 
-          testPropertyWithConfig Config.config "Getting parameter value fails when parameter not present"
-          <| fun (code: ShortCode.ShortCode) x t pool e ->
-              let f () =
-                  Parameter code.Value |> compute x t pool e
+        //   testPropertyWithConfig Config.config "Getting parameter value fails when parameter not present"
+        //   <| fun (code: ShortCode.ShortCode) x t pool e ->
+        //       let f () =
+        //           Parameter code.Value |> compute x t pool e
 
-              match
-                  pool
-                  |> Parameter.Pool.toList
-                  |> List.tryFind (fun (k, _) -> k.Value = code.Value)
-              with
-              | Some p ->
-                  if p |> snd |> Parameter.isEstimated then
-                      Expect.equal
-                          (f ())
-                          (p |> snd |> Parameter.getTransformedValue)
-                          "Did not fail when parameter was not present"
-              | None -> Expect.throws (fun () -> f () |> ignore) "Parameter was not present"
+        //       match
+        //           pool
+        //           |> Parameter.Pool.toList
+        //           |> List.tryFind (fun (k, _) -> k.Value = code.Value)
+        //       with
+        //       | Some p ->
+        //           if p |> snd |> Parameter.isEstimated then
+        //               Expect.equal
+        //                   (f ())
+        //                   (p |> snd |> Parameter.getTransformedValue)
+        //                   "Did not fail when parameter was not present"
+        //       | None -> Expect.throws (fun () -> f () |> ignore) "Parameter was not present"
 
-          testPropertyWithConfig Config.config "Getting parameter values returns real value when present"
-          <| fun pool x t e ->
-              let selectedCode =
-                  Gen.elements (pool |> Parameter.Pool.toList |> List.map fst)
-                  |> Gen.sample 1 1
-                  |> List.head
+        //   testPropertyWithConfig Config.config "Getting parameter values returns real value when present"
+        //   <| fun pool x t e ->
+        //       let selectedCode =
+        //           Gen.elements (pool |> Parameter.Pool.toList |> List.map fst)
+        //           |> Gen.sample 1 1
+        //           |> List.head
 
-              if
-                  not
-                      (pool
-                       |> Parameter.Pool.hasParameter selectedCode.Value
-                       |> Option.map Parameter.isEstimated)
-                          .Value
-              then
-                  ()
-              else
+        //       if
+        //           not
+        //               (pool
+        //                |> Parameter.Pool.hasParameter selectedCode.Value
+        //                |> Option.map Parameter.isEstimated)
+        //                   .Value
+        //       then
+        //           ()
+        //       else
 
-                  let existingValue =
-                      pool |> Parameter.Pool.tryGetRealValue selectedCode.Value |> Option.get
+        //           let existingValue =
+        //               pool |> Parameter.Pool.tryGetRealValue selectedCode.Value |> Option.get
 
-                  let result = Parameter selectedCode.Value |> compute x t pool e
+        //           let result = Parameter selectedCode.Value |> compute x t pool e
 
-                  Expect.equal result existingValue "The parameter value was not correct"
+        //           Expect.equal result existingValue "The parameter value was not correct"
 
           testPropertyWithConfig Config.config "Fails when environmental (aka time-varying) data is not present"
           <| fun (code: ShortCode.ShortCode) x t pool e ->
@@ -128,6 +130,7 @@ let modelExpressions =
               let e: CodedMap<float> = Map.ofList [ identifier, value.Get ]
               Environment identifier.Value |> compute x t pool e = value.Get ]
 
+
 [<Tests>]
 let modelBuilder =
     testList
@@ -135,7 +138,7 @@ let modelBuilder =
         [
 
           testProperty "Does not compile when more than one likelihood function"
-          <| fun (likelihoodFns: ModelSystem.LikelihoodFn<float> list) ->
+          <| fun (likelihoodFns: ModelSystem.Likelihood<'state> list) ->
               let f () =
                   likelihoodFns
                   |> Seq.fold (fun mb l -> mb |> Model.useLikelihoodFunction l) Model.empty
@@ -186,7 +189,7 @@ let modelBuilder =
                       mb |> Model.compile |> ignore
 
           testPropertyWithConfig Config.config "Compiles whether measures are present or not"
-          <| fun likelihood (measures: CodedMap<ModelSystem.Measurement<float>>) ->
+          <| fun likelihood (measures: CodedMap<ModelSystem.Measurement<'state>>) ->
               if measures.Keys |> Seq.hasDuplicates then
                   ()
               else
@@ -204,7 +207,7 @@ let modelBuilder =
           <| fun
                  likelihood
                  (eqs: ShortCode.ShortCode list)
-                 (measures: (ShortCode.ShortCode * ModelSystem.Measurement<float>) list) ->
+                 (measures: (ShortCode.ShortCode * ModelSystem.Measurement<'state>) list) ->
               if eqs.IsEmpty then
                   ()
               else

@@ -50,8 +50,8 @@ module Objective =
             let r =
                 { Observed = value
                   Expected = expected |> Map.find key }
-            if r.Observed.Value.shape = r.Expected.Value.shape then r
-            else invalidOp (sprintf "The predicted series %s was a different length to the observed series" key.Value))
+            if Typed.length r.Observed = Typed.length r.Expected then r
+            else invalidOp (sprintf "The predicted series %s was a different length to the observed series (%i vs %i)" key.Value (Typed.length r.Observed) (Typed.length r.Expected) ))
 
     let compiledFromConfig (config:Parameter.Pool.AnyOptimiserConfig) : Parameter.Pool.CompiledTransforms<``optim-space``> =
         match config with

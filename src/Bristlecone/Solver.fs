@@ -5,7 +5,6 @@ namespace Bristlecone
 module Solver =
 
     open Bristlecone.EstimationEngine
-    open Bristlecone.Logging
     open Bristlecone.Time
     open Bristlecone.ModelSystem
     open Bristlecone.Tensors
@@ -46,14 +45,14 @@ module Solver =
 
         module DiscreteTime =
 
-            let private stepOnce
+            let internal stepOnce
                 (eqs: CodedMap<GenericModelEquation<``time index``>>)
-                (pars: ShortCode.ShortCode -> TypedTensor<Vector,``parameter``>)
+                (pars: TypedTensor<Vector,``parameter``>)
                 (env: CodedMap<TypedTensor<Scalar,environment>>)
                 (t: TypedTensor<Scalar,``time index``>)
                 (state: CodedMap<TypedTensor<Scalar,state>>)
                 : CodedMap<TypedTensor<Scalar,state>> =
-                eqs |> Map.map (fun key eq -> eq (pars key) env t state.[key])
+                eqs |> Map.map (fun key eq -> eq pars env t state.[key])
 
             let iterateDifference
                 eqs
@@ -90,7 +89,7 @@ module Solver =
                         envIndex |> Map.map (fun _ idxTI ->
                             let v = idxTI.Item ti
                             Typed.ofScalar v))
-                iterateDifference eqs timeline envStream t0 (fun _ -> point)
+                iterateDifference eqs timeline envStream t0 point
 
 
         module DifferentialTime =
@@ -257,7 +256,7 @@ module Solver =
         open Bristlecone.Time
 
         /// Strategy for assigning a start time - `t0` - to a time series.
-        let startPoint conditioning (series: CodedMap<TimeSeries<'T, 'date, 'timeunit, 'timespan>>) =
+        let startPoint conditioning (series: CodedMap<TimeSeries<float<'u>, 'date, 'timeunit, 'timespan>>) =
             match conditioning with
             | Conditioning.NoConditioning -> None
             | Conditioning.RepeatFirstDataPoint -> series |> Map.map (fun _ v -> v.Values |> Seq.head) |> Some

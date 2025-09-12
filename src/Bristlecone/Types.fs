@@ -79,10 +79,10 @@ type CodedMap<'T> = Map<ShortCode.ShortCode, 'T>
 
 module Conditioning =
 
-    type Conditioning =
+    type Conditioning<[<Measure>] 'u> =
         | NoConditioning
         | RepeatFirstDataPoint
-        | Custom of CodedMap<float>
+        | Custom of CodedMap<float<'u>>
 
 [<RequireQualifiedAccess>]
 module Seq =

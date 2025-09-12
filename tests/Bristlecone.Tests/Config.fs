@@ -37,7 +37,7 @@ type BristleconeTypesGen() =
     static member EquationList = genStrings 1 10 |> genTuple<ModelExpression> |> Arb.fromGen
 
     static member MeasureList =
-        genStrings 1 10 |> genTuple<ModelSystem.Measurement<float>> |> Arb.fromGen
+        genStrings 1 10 |> genTuple<ModelSystem.Measurement<ModelSystem.state>> |> Arb.fromGen
 
     static member Pool =
         gen {
@@ -48,7 +48,12 @@ type BristleconeTypesGen() =
 
             return
                 List.zip3 codes bounds1 bounds2
-                |> List.map (fun (c, b1, b2) -> c, Parameter.create noConstraints b1.Get b2.Get |> Option.get)
+                |> List.map (fun (c, b1, b2) ->
+                    c,
+                    match Parameter.create noConstraints b1.Get b2.Get with
+                    | Some (p: Parameter.Parameter<1>) -> Parameter.Pool.boxParam<1> c.Value p
+                    | None -> failwithf "The bounds %f - %f cannot be used to estimate a parameter. See docs." b1.Get b2.Get
+                )
                 |> Parameter.Pool.fromList
         }
         |> Arb.fromGen

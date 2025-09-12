@@ -10,14 +10,18 @@
     <ProjectReference Include="../../src/Bristlecone/Bristlecone.fsproj" />
     <ProjectReference Include="../../src/Bristlecone.Dendro/Bristlecone.Dendro.fsproj" />
     <Compile Include="Config.fs" />
+    <Compile Include="Tensors.fs" />
     <Compile Include="Time.fs" />
     <Compile Include="Parameter.fs" />
     <Compile Include="Optimisation.fs" />
+    <Compile Include="Objective.fs" />
+    <Compile Include="Solver.fs" />
     <Compile Include="ModelSelection.fs" />
     <Compile Include="Workflow.fs" />
     <Compile Include="Test.fs" />
     <Compile Include="Bristlecone.fs" />
     <Compile Include="Language.fs" />
+    <Compile Include="Integration.fs" />
     <Compile Include="Dendro.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>

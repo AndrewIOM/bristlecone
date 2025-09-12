@@ -235,7 +235,7 @@ module Test =
         /// Generate data and check that it complies with the
         /// given ruleset.
         let rec tryGenerateData
-            (engine: EstimationEngine.EstimationEngine<'b, 'c, 'd>)
+            (engine: EstimationEngine.EstimationEngine<'b, 'c, 'd, 'u>)
             settings
             (model: ModelSystem.ModelSystem<'dataUnit, 'timeIndex>)
             attempts

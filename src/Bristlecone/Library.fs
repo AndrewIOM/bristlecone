@@ -18,7 +18,7 @@ module Bristlecone =
     open Bristlecone.Statistics
 
     /// <summary>A basic estimation engine for discrete-time equations, using a Nelder-Mead optimiser.</summary>
-    let mkDiscrete () : EstimationEngine<'date, 'timeunit, 'timespan> =
+    let mkDiscrete () : EstimationEngine<'date, 'timeunit, 'timespan, 'u> =
         { TimeHandling = Discrete
           OptimiseWith = Optimisation.Amoeba.single Optimisation.Amoeba.Solver.Default
           LogTo = Console.logger 1000<iteration>
@@ -26,7 +26,7 @@ module Bristlecone =
           Conditioning = Conditioning.NoConditioning }
 
     /// <summary>A basic estimation engine for ordinary differential equations, using a Nelder-Mead optimiser.</summary>
-    let mkContinuous<'date, 'timeunit, 'timespan> : EstimationEngine<'date, 'timeunit, 'timespan> =
+    let mkContinuous<'date, 'timeunit, 'timespan> : EstimationEngine<'date, 'timeunit, 'timespan, 1> =
         { TimeHandling = Continuous <| Integration.RungeKutta.rk4
           OptimiseWith = Optimisation.Amoeba.single Optimisation.Amoeba.Solver.Default
           LogTo = Bristlecone.Logging.Console.logger 1000<iteration>
@@ -72,7 +72,7 @@ module Bristlecone =
         /// an `Error`.
         let observationsToCommonTimeFrame (dynamicEquationKeys: ShortCode.ShortCode seq) timeSeriesData =
             timeSeriesData
-            |> Map.map(fun _ v -> v |> TimeSeries.map(fun (_,v) -> v * 1.<state>))
+            |> Map.map(fun _ v -> v |> TimeSeries.map(fun (v,_) -> v |> Units.removeUnitFromFloat |> (*) 1.<state>))
             |> Map.filter (fun k _ -> dynamicEquationKeys |> Seq.contains k)
             |> TimeFrame.tryCreate
             |> Result.ofOption "Observations for dynamic variables must share a common sampling time sequence"
@@ -83,7 +83,7 @@ module Bristlecone =
         let environmentDataToCommonTimeFrame dynamicVariableKeys measureKeys timeSeriesData =
             let environmentSeries =
                 timeSeriesData
-                |> Map.map(fun _ v -> v |> TimeSeries.map(fun (_,v) -> v * 1.<environment>))
+                |> Map.map(fun _ v -> v |> TimeSeries.map(fun (v,_) -> v |> Units.removeUnitFromFloat |> (*) 1.<environment>))
                 |> Map.filter (fun k _ -> dynamicVariableKeys |> Seq.append measureKeys |> Seq.contains k |> not)
 
             match environmentSeries.Count with
@@ -106,7 +106,7 @@ module Bristlecone =
 
         /// Returns a tuple of the start point (t0) and the
         /// subsequent time-series (t1 .. tn).
-        let t0 timeSeriesData (conditionMode: Conditioning.Conditioning) logger =
+        let t0 timeSeriesData (conditionMode: Conditioning.Conditioning<'u>) logger =
             timeSeriesData
             |> Solver.Conditioning.startPoint conditionMode
             // |> Option.map(fun t0 -> t0, timeSeriesData)
@@ -179,7 +179,7 @@ module Bristlecone =
     /// <param name="model"></param>
     /// <returns></returns>
     let tryFit engine endCondition
-        (timeSeriesData: CodedMap<TimeSeries<float,'date, 'timeunit, 'timespan>>)
+        (timeSeriesData: CodedMap<TimeSeries<float<'u>,'date, 'timeunit, 'timespan>>)
         (model: ModelSystem<'dataUnit, 'timeUnit>) =
 
         let resultId = Guid.NewGuid()
@@ -423,7 +423,7 @@ module Bristlecone =
     /// <param name="series">Time-series to fit with model</param>
     /// <returns>A list of estimation results (one for each bootstrap) for further analysis</returns>
     let bootstrap
-        (engine: EstimationEngine.EstimationEngine<'date, 'timeunit, 'timespan>)
+        (engine: EstimationEngine.EstimationEngine<'date, 'timeunit, 'timespan, 'u>)
         endCondition
         bootstrapCount
         model

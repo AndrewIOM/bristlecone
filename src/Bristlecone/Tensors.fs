@@ -16,50 +16,50 @@ module Tensors =
     /// 'U = unit of measure for element type (or float for no UoM)
     type TypedTensor<'Shape, [<Measure>] 'u> = private { Inner: Tensor }
     with
-        member this.Value = this.Inner        
+        member this.Value = this.Inner
 
         // Scalar–Scalar arithmetic
-        static member inline (+) (a: TypedTensor<Scalar,'u>, b: TypedTensor<Scalar,'u>) : TypedTensor<Scalar,'u> =
+        static member (+) (a: TypedTensor<Scalar,'u>, b: TypedTensor<Scalar,'u>) : TypedTensor<Scalar,'u> =
             { Inner = a.Value + b.Value }
             
-        static member inline (-) (a: TypedTensor<Scalar,'u>, b: TypedTensor<Scalar,'u>) : TypedTensor<Scalar,'u> =
+        static member (-) (a: TypedTensor<Scalar,'u>, b: TypedTensor<Scalar,'u>) : TypedTensor<Scalar,'u> =
             { Inner = a.Value - b.Value }
 
-        static member inline (*) (a: TypedTensor<Scalar,'u>, b: TypedTensor<Scalar,'v>) : TypedTensor<Scalar,'u * 'v> =
+        static member (*) (a: TypedTensor<Scalar,'u>, b: TypedTensor<Scalar,'v>) : TypedTensor<Scalar,'u * 'v> =
             { Inner = a.Value * b.Value }
 
-        static member inline (/) (a: TypedTensor<Scalar,'u>, b: TypedTensor<Scalar,'v>) : TypedTensor<Scalar,'u / 'v> =
+        static member (/) (a: TypedTensor<Scalar,'u>, b: TypedTensor<Scalar,'v>) : TypedTensor<Scalar,'u / 'v> =
             { Inner = a.Value / b.Value }
 
         // Allow float * scalar and scalar * float
-        static member inline (*) (k: float, a: TypedTensor<Scalar,'u>) =
+        static member (*) (k: float, a: TypedTensor<Scalar,'u>) =
             { Inner = dsharp.scalar k * a.Value }
 
-        static member inline (*) (a: TypedTensor<Scalar,'u>, k: float) =
+        static member (*) (a: TypedTensor<Scalar,'u>, k: float) =
             { Inner = a.Value * dsharp.scalar k }
 
         // Vector–Vector elementwise
-        static member inline (+) (a: TypedTensor<Vector,'u>, b: TypedTensor<Vector,'u>) =
+        static member (+) (a: TypedTensor<Vector,'u>, b: TypedTensor<Vector,'u>) =
             { Inner = a.Value + b.Value }
 
-        static member inline (-) (a: TypedTensor<Vector,'u>, b: TypedTensor<Vector,'u>) : TypedTensor<Vector,'u> =
+        static member (-) (a: TypedTensor<Vector,'u>, b: TypedTensor<Vector,'u>) : TypedTensor<Vector,'u> =
             { Inner = a.Value - b.Value }
 
         // Vector–Scalar broadcast
-        static member inline (*) (v: TypedTensor<Vector,'u>, s: TypedTensor<Scalar,'v>) : TypedTensor<Vector,'u * 'v> =
+        static member (*) (v: TypedTensor<Vector,'u>, s: TypedTensor<Scalar,'v>) : TypedTensor<Vector,'u * 'v> =
             { Inner = v.Value * s.Value }
 
-        static member inline (*) (s: TypedTensor<Scalar,'u>, v: TypedTensor<Vector,'v>) : TypedTensor<Vector,'u * 'v> =
+        static member (*) (s: TypedTensor<Scalar,'u>, v: TypedTensor<Vector,'v>) : TypedTensor<Vector,'u * 'v> =
             { Inner = s.Value * v.Value }
 
-        static member inline (/) (v: TypedTensor<Vector,'u>, s: TypedTensor<Scalar,'v>) : TypedTensor<Vector,'u / 'v> =
+        static member (/) (v: TypedTensor<Vector,'u>, s: TypedTensor<Scalar,'v>) : TypedTensor<Vector,'u / 'v> =
             { Inner = v.Value / s.Value }
 
         // Vector–float exponent
-        static member inline ( ** ) (v: TypedTensor<Vector,'u>, p: float) =
+        static member ( ** ) (v: TypedTensor<Vector,'u>, p: float) =
             { Inner = v.Value ** p }
 
-        static member inline ( * )
+        static member ( * )
             (a: TypedTensor<Vector,'u>, b: TypedTensor<Vector,'v>)
             : TypedTensor<Vector,'u * 'v> =
             { Inner = a.Value * b.Value }
@@ -73,6 +73,8 @@ module Tensors =
             { Inner = dsharp.scalar (float value, dtype = Dtype.Float64) }
 
         let ofVector (data: float<'u>[]) : TypedTensor<Vector, 'u> =
+            if Array.isEmpty data then
+                invalidArg "data" "Cannot create a TypedTensor<Vector,_> from an empty array."
             { Inner = dsharp.tensor (data |> Array.map float, dtype = Dtype.Float64) }
 
         let ofMatrix (data: float<'u>[,]) : TypedTensor<Matrix, 'u> =
@@ -125,10 +127,14 @@ module Tensors =
 
         let tail (v: TypedTensor<Vector, 'u>) : TypedTensor<Vector, 'u> =
             let len = v.Value.shape.[0]
-            let idx = [| 1 .. len - 1 |]
-            { Inner = v.Value.[idx] }
+            if len < 2 then invalidArg "v" "Vector must have at least two elements to take tail."
+            else
+                // Use range slicing to preserve the 1‑D shape
+                { Inner = v.Value.[1..] }
 
         let stack1D (items: TypedTensor<Scalar,'u>[]) : TypedTensor<Vector,'u> =
+            if Array.isEmpty items then
+                invalidArg "items" "Cannot stack an empty array of scalars into a vector."
             let rawTensors = items |> Array.map (fun t -> t.Value)
             let stacked = dsharp.stack(rawTensors, dim = 0)
             { Inner = stacked }
@@ -141,14 +147,22 @@ module Tensors =
 
         /// Filter a vector tensor by a boolean mask.
         /// The mask length must match the vector length.
-        let filterByMask (mask: bool[]) (v: TypedTensor<Vector,'u>) : TypedTensor<Vector,'u> =
-            if mask.Length <> v.Value.shape.[0] then
-                invalidArg "mask" "Mask length must match vector length."
+        let filterByMask (mask:bool[]) (v: TypedTensor<Vector,'u>) =
+            if v.Value.dim <> 1 then invalidArg "v" "Expected 1‑D vector"
+            if mask.Length <> v.Value.shape.[0] then invalidArg "mask" "Mask length mismatch"
+
             let idx =
                 mask
                 |> Array.mapi (fun i keep -> if keep then Some i else None)
                 |> Array.choose id
-            { Inner = v.Value.[idx] }
+
+            let selected =
+                idx
+                |> Array.map (fun i -> v.Value.[i])
+                |> dsharp.stack
+
+            { Inner = selected }
+
 
         let toFloatScalar (t:TypedTensor<Scalar, 'u>) : float<'u> =
             float t.Value |> LanguagePrimitives.FloatWithMeasure<'u>
@@ -168,7 +182,7 @@ module Tensors =
 
         /// Change the unit-of-measure phantom type of a TypedTensor without altering its value.
         /// This is purely a compile-time reinterpretation; the underlying DiffSharp tensor is unchanged.
-        let inline retype<[<Measure>] 'u, [<Measure>] 'v, 'Shape>
+        let retype<[<Measure>] 'u, [<Measure>] 'v, 'Shape>
             (t: TypedTensor<'Shape,'u>)
             : TypedTensor<'Shape,'v> =
             { Inner = t.Value }

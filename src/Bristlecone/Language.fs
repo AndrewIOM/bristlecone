@@ -152,13 +152,23 @@ module Language =
                 //dsharp.where(cond, thenVal, elseVal)
                 failwith "not finished"
 
-        let private tensorOps (pIndex: Map<string,int>) (eIndex: Map<string,int>)
+        // let pVar      = Var("parameters", typeof<TypedTensor<Vector,``parameter``>>)
+        // let statesVar = Var("states", typeof<CodedMap<TypedTensor<Scalar,ModelSystem.state>>[]>)
+        // let tIdxVar   = Var("timeIndex", typeof<int>)
+        // let pIndex    = paramIndex parameters
+        let private tensorOps<[<Measure>] 'timeUnit> (pIndex: Map<string,int>) (eIndex: Map<string,int>)
                             (pVar: Var) (eVar: Var) (tVar: Var) (xVar: Var) = {
             constVal    = fun n -> <@ dsharp.tensor n @>
-            parameter   = fun name -> <@ (%%Expr.Var pVar : Tensor).[pIndex.[name]] @>
-            environment = fun name -> <@ (%%Expr.Var eVar : Tensor).[eIndex.[name]] @>
-            timeVal     = <@ %%Expr.Var tVar : Tensor @>
-            thisVal     = <@ %%Expr.Var xVar : Tensor @>
+            parameter   = fun name -> <@ (%%Expr.Var pVar : TypedTensor<Vector,``parameter``>).Value.[pIndex.[name]] @>
+            environment = fun name ->
+                <@
+                    (%%Expr.Var eVar : CodedMap<TypedTensor<Scalar,ModelSystem.``environment``>>)
+                    |> Map.tryFindBy(fun k -> k.Value = name)
+                    |> Option.get
+                    |> fun t -> t.Value
+                @>
+            timeVal     = <@ (%%Expr.Var tVar : TypedTensor<Scalar,'timeUnit>).Value @>
+            thisVal     = <@ (%%Expr.Var xVar : TypedTensor<Scalar,ModelSystem.state>).Value @>
             add         = List.reduce (fun l r -> <@ dsharp.add(%l, %r) @>)
             sub         = fun (l,r) -> <@ dsharp.sub(%l, %r) @>
             mul         = List.reduce (fun l r -> <@ %l * %r @>)
@@ -240,7 +250,8 @@ module Language =
             let xVar = Var("thisValue", typeof<TypedTensor<Scalar,ModelSystem.state>>)
             let pIndex = paramIndex parameters
             let eIndex = envIndexFromKeys envKeys
-            buildQuotation (tensorOps pIndex eIndex pVar eVar tVar xVar) expr
+            let core = buildQuotation (tensorOps pIndex eIndex pVar eVar tVar xVar) expr
+            <@ tryAsScalar<ModelSystem.state> %core |> Option.get @>
             |> toLambda4 pVar eVar tVar xVar
             |> LeafExpressionConverter.EvaluateQuotation
             |> unbox<ModelSystem.GenericModelEquation<'timeUnit>>
@@ -273,7 +284,9 @@ module Language =
         ExpressionCompiler.compileFloat ex pool environment t x
 
     let computeT x t pool (environment:CodedMap<Tensors.TypedTensor<Tensors.Scalar,ModelSystem.environment>>) ex =
-        ExpressionCompiler.compile pool (Map.keys environment |> Seq.toList) ex
+        let eIndex, eScalar = environment |> Seq.toList |> List.map(fun kv -> kv.Key, kv.Value) |> List.unzip
+        let eVector = eScalar |> List.toArray |> Tensors.Typed.stack1D
+        ExpressionCompiler.compile pool eIndex ex
         |> fun f -> f (Parameter.Pool.toTensorWithKeysReal pool |> snd) environment t x
 
 
@@ -345,7 +358,7 @@ module Language =
 
         let internal unwrap (ModelBuilder (m,isDiscrete)) = m, isDiscrete
 
-        let add name comp builder =
+        let add<[<Measure>] 'u, [<Measure>] 'state> name comp (builder: ModelBuilder<'state>) =
             let map, isDiscrete = builder |> unwrap
 
             match map |> Map.tryFindBy (fun n -> n.Value = name) with
@@ -411,7 +424,7 @@ module Language =
             reqs
             |> List.iter (function
                 | ExpressionParser.ParameterRequirement p ->
-                    if not (parameters |> Parameter.Pool.toTensorWithKeysReal |> fst |> Array.exists (fun p2 -> p2.Value = p)) then
+                    if not (parameters |> Parameter.Pool.keys |> List.exists (fun p2 -> p2.Value = p)) then
                         failwithf "The specified model requires the parameter '%s' but this has not been set up." p
                 | ExpressionParser.EnvironmentRequirement _ -> () )
 
@@ -439,14 +452,14 @@ module Language =
     /// Terms for scaffolding a model system for use with Bristlecone.
     module Model =
 
-        let empty<'state> = ModelBuilder.create false ()
+        let empty<[<Measure>] 'state> : ModelBuilder.ModelBuilder<'state> = ModelBuilder.create false ()
         let discrete<'state> = ModelBuilder.create true ()
 
         let addEquation name eq builder =
             ModelBuilder.add name (ModelBuilder.EquationFragment eq) builder
 
         // Units preserved end-to-end: Parameter.create returns Parameter<'u>; we box to AnyParameter
-        let estimateParameter<[<Measure>] 'u>
+        let estimateParameter
             (name: string)
             (constraintMode: Parameter.Constraint)
             (lower: float<'u>)

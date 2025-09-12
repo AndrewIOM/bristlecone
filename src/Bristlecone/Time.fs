@@ -351,7 +351,20 @@ module DateMode =
                 |> PositiveInt.create
                 |> Option.get
                 |> Resolution.FixedTemporalResolution.Days
-          ResolutionToSpan = fun res -> failwith "not finished"
+          ResolutionToSpan =
+            function
+            | Resolution.FixedTemporalResolution.Days d ->
+                let days = Units.removeUnitFromInt d.Value |> float
+                TimeSpan.FromDays days
+            | Resolution.FixedTemporalResolution.Months m ->
+                let months = Units.removeUnitFromInt m.Value |> float |> LanguagePrimitives.FloatWithMeasure
+                let days: float<day> = months * 30.
+                TimeSpan.FromDays(Units.removeUnitFromFloat days)
+            | Resolution.FixedTemporalResolution.Years y ->
+                let years = Units.removeUnitFromInt y.Value |> float |> LanguagePrimitives.FloatWithMeasure
+                let days: float<day> = years * daysPerYearInOldDates
+                TimeSpan.FromDays(Units.removeUnitFromFloat days)
+            | Resolution.FixedTemporalResolution.CustomEpoch t -> t
           Minus = fun d1 d2 -> d1 - d2
           Divide = fun ts1 ts2 -> float ts1.Ticks / float ts2.Ticks
           SortOldestFirst = fun d1 d2 -> if d1 < d2 then -1 else 1 }
@@ -371,7 +384,12 @@ module DateMode =
                 (years |> Units.removeUnitFromInt |> float |> LanguagePrimitives.FloatWithMeasure)
                 * daysPerYearInOldDates
           SpanToResolution = fun epoch -> oldYearsToResolution epoch
-          ResolutionToSpan = fun res -> failwith "not finished"
+          ResolutionToSpan =
+            function
+            | Resolution.FixedTemporalResolution.Years y -> y.Value
+            | Resolution.FixedTemporalResolution.Months _ 
+            | Resolution.FixedTemporalResolution.Days _ ->
+                invalidOp "Annual date mode does not support sub-annual fixed resolutions."
           Divide = fun ts1 ts2 -> ts1 / ts2 |> float
           Minus = fun d1 d2 -> d1 - d2 }
 
@@ -390,7 +408,12 @@ module DateMode =
                 (years |> Units.removeUnitFromInt |> float |> LanguagePrimitives.FloatWithMeasure)
                 * daysPerYearInOldDates
           SpanToResolution = fun epoch -> oldYearsToResolution epoch
-          ResolutionToSpan = fun res -> failwith "not finished"
+          ResolutionToSpan =
+            function
+            | Resolution.FixedTemporalResolution.Years y -> y.Value |> Units.removeUnitFromInt |> (*) 1<``BP (radiocarbon)``>
+            | Resolution.FixedTemporalResolution.Months _ 
+            | Resolution.FixedTemporalResolution.Days _ ->
+                invalidOp "Radiocarbon date mode does not support sub-annual fixed resolutions."
           Divide = fun ts1 ts2 -> ts1 / ts2 |> float
           Minus = fun d1 d2 -> d1 - d2 }
 

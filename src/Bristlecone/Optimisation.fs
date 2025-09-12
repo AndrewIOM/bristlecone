@@ -1352,6 +1352,7 @@ module MonteCarlo =
 /// Adapted from original at: https://github.com/mathias-brandewinder/Amoeba
 module Amoeba =
 
+    /// Nelder–Mead downhill simplex
     module Solver =
 
         type Amoeba =
@@ -1375,11 +1376,10 @@ module Amoeba =
             { Alpha = 1.
               Sigma = 0.5
               Gamma = 2.
-              Rho = (-0.5)
+              Rho = 0.5
               Size = 3 }
 
-        let evaluate (f: Objective) (x: Point) = f x, x
-        let valueOf (s: Solution) = fst s
+        let fscale (s: float) = Tensors.Typed.ofScalar s
 
         let replace (a: Amoeba) (s: Solution) =
             let last = a.Size - 1
@@ -1394,41 +1394,50 @@ module Amoeba =
             let sum = pts |> Array.reduce (+)
             sum * (Tensors.Typed.ofScalar 1. / Tensors.Typed.ofScalar (float a.Dim))
 
-        let stretch ((X, Y): Point * Point) (s: float) =
-            let s1 = X + (X - Y)
-            s1 * s
+        let reflect (c: Point) (w: Point) (s: Settings) =
+            c + (c - w) * fscale s.Alpha
 
-        let reflected v s = stretch v s.Alpha
-        let expanded v s = stretch v s.Gamma
-        let contracted v s = stretch v s.Rho
+        let expand (c: Point) (r: Point) (s: Settings) =
+            c + (r - c) * fscale s.Gamma
 
-        let toFloatLogL (l,p) = Tensors.Typed.toFloatScalar l, p
+        let contract (c: Point) (w: Point) (s: Settings) =
+            c + (w - c) * fscale s.Rho
+
+        let shrinkTowardsBest (best: Point) (x: Point) (s: Settings) =
+            best + (x - best) * fscale s.Sigma
+
+        let evaluate (f: Objective) (x: Point) = f x, x
+        let valueOf (s: Solution) = fst s
+
+        let toFloatLogL (l, p) = Tensors.Typed.toFloatScalar l, p
 
         let shrink (a: Amoeba) (f: Objective) s =
             let best = snd a.Best
-
             { a with
                 Solutions =
                     a.Solutions
-                    |> Array.map (fun p -> stretch (best, snd p) -s.Sigma)
+                    |> Array.map (fun (_, xi) -> shrinkTowardsBest best xi s)
                     |> Array.map (evaluate f >> toFloatLogL) }
 
         let update (a: Amoeba) (f: Objective) (s: Settings) =
-            let cen = centroid a
-            let rv, r = reflected (cen, snd a.Worst) s |> evaluate f |> toFloatLogL
+            let c = centroid a
+
+            let rv, r =
+                reflect c (snd a.Worst) s |> evaluate f |> toFloatLogL
 
             if valueOf a.Best <= rv && rv < valueOf a.Solutions.[a.Size - 2] then
                 replace a (rv, r)
-            else if rv < valueOf a.Best then
-                let ev, e = expanded (cen, r) s |> evaluate f |> toFloatLogL
-                if ev < rv then replace a (ev, e) else replace a (rv, r)
-            else
-                let cv, c = contracted (cen, snd a.Worst) s |> evaluate f |> toFloatLogL
 
-                if cv < valueOf a.Worst then
-                    replace a (cv, c)
-                else
-                    shrink a f s
+            elif rv < valueOf a.Best then
+                let ev, e =
+                    expand c r s |> evaluate f |> toFloatLogL
+                if ev < rv then replace a (ev, e) else replace a (rv, r)
+
+            else
+                let cv, cpt =
+                    contract c (snd a.Worst) s |> evaluate f |> toFloatLogL
+                if cv < valueOf a.Worst then replace a (cv, cpt)
+                else shrink a f s
 
         let solve settings rng writeOut atEnd domain _ f =
             let dim = Array.length domain

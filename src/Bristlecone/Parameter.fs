@@ -94,7 +94,7 @@ module Parameter =
                 TryGetBounds     : unit -> (float<parameter> * float<parameter>) option
             }
 
-        let inline boxParam<[<Measure>] 'u> (name: string) (p: Parameter<'u>) : AnyParameter =
+        let boxParam<[<Measure>] 'u> (name: string) (p: Parameter<'u>) : AnyParameter =
             let rec make param =
                 {
                     Name = name

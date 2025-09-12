@@ -74,14 +74,14 @@ module Base =
                 match Map.tryFind k externalEnv with
                 | Some vec ->
                     // Grab scalar tensor and wrap via tryAsScalar (no float conversion)
-                    match Tensors.tryAsScalar<``environment``> vec.Value.[timeIdx] with
+                    match tryAsScalar<``environment``> vec.Value.[timeIdx] with
                     | Some s -> s
                     | None   -> invalidOp "Expected scalar from external environment vector"
                 | None -> v)
 
-        let tInitial = tInitial |> Tensors.Typed.ofScalar
-        let tStep = tStep |> Tensors.Typed.ofScalar
-        let tEnd = tEnd |> Tensors.Typed.ofScalar
+        let tInitial = tInitial |> Typed.ofScalar
+        let tStep = tStep |> Typed.ofScalar
+        let tEnd = tEnd |> Typed.ofScalar
 
         // STAGE 2. Make a parameter-specific concrete RHS.
         fun (parameters: TypedTensor<Vector,``parameter``>) ->
@@ -101,19 +101,14 @@ module Base =
                         |> applyDynamicVariablesT x modelKeys
 
                 // Compute derivatives for all variables
-                let result =
-                    modelEqs
-                    |> Array.mapi (fun i m ->
-                        let xi =
-                            Tensors.tryAsScalar x.Value.[i]
-                            |> Option.defaultWith (fun () -> invalidOp "Expected scalar state component")
-                        (m parameters env t xi).Value)
-                    |> Array.zip modelKeys
-                    |> Array.map(fun (k,v) -> k, v |> Tensors.tryAsVector)
-                
-                if result |> Array.exists(fun (_,v) -> Option.isNone v)
-                then invalidOp "RHS did not produce vector"
-                else result |> Map.ofArray |> Map.map(fun _ v -> Option.get v)
+                modelEqs
+                |> Array.mapi (fun i m ->
+                    let xi =
+                        Tensors.tryAsScalar x.Value.[i]
+                        |> Option.defaultWith (fun () -> invalidOp "Expected scalar state component")
+                    modelKeys.[i], m parameters env t xi)
+                |> Map.ofArray
+
 
     // let mkIntegrator : EstimationEngine.Integrate<'date, 'timeunit, 'timespan> =
     //     fun log tInitial tEnd tStep initialConditions externalEnvironment modelMap ->
@@ -181,12 +176,12 @@ module RungeKutta =
         (tFinal: float<``time index``>)
         (steps: float<``time index``>) 
         (initialVector: float[]) 
-        (f: float -> float[] -> float)
+        (f: float -> float[] -> float[])
         : float[][] =
         
-        let tInit  = tInitial |> Tensors.Typed.ofScalar
-        let tFinal = tFinal |> Tensors.Typed.ofScalar
-        let steps = steps |> Tensors.Typed.ofScalar
+        let tInit  = tInitial |> Typed.ofScalar
+        let tFinal = tFinal |> Typed.ofScalar
+        let steps = steps |> Typed.ofScalar
         let y0    = dsharp.tensor(initialVector, dtype = Dtype.Float64)
 
         let tensorTrajectory =
@@ -218,39 +213,50 @@ module RungeKutta =
         let vec =
             vals
             |> List.map (fun s -> s.Value) // Tensor scalar
-            |> dsharp.stack
+            |> dsharp.stack // stack into a 1‑D state vector
         keys, vec
 
     // Wrap a ParameterisedRHS so it works on flat Tensors
     let wrapRhs (keys: ShortCode.ShortCode list) (rhs: EstimationEngine.ParameterisedRHS) =
         fun (t: Tensor) (y: Tensor) ->
+
+            if y.shape.[0] <> keys.Length then
+                failwithf "wrapRhs: state length %d does not match keys length %d"
+                        y.shape.[0] keys.Length
+
             // Rebuild state map from flat vector
-            let stateMap =
+            let stateMap : CodedMap<TypedTensor<Scalar, ModelSystem.state>> =
                 (keys, y.unstack())
                 ||> Seq.map2 (fun k comp ->
-                    // comp is a Tensor vector — wrap without converting to float
-                    match tryAsVector<ModelSystem.state> comp with
-                    | Some v -> k, v
-                    | None   -> failwith "Expected vector state component")
+                    match tryAsScalar<ModelSystem.state> comp with
+                    | Some s -> k, s
+                    | None   -> failwithf "wrapRhs: expected scalar for state '%s', got shape %A"
+                                        k.Value comp.shape)
                 |> Map.ofSeq
+            
             // Call original RHS
-            let resultMap = rhs (asScalar<``time index``> t) ( // wrap time as scalar
-                                match tryAsVector<ModelSystem.state> y with
-                                | Some v -> v
-                                | None   -> failwith "Expected vector state input")
+            let tScalar = asScalar<``time index``> t
+            let yVector =
+                match tryAsVector<ModelSystem.state> y with
+                | Some v -> v
+                | None   -> failwithf "wrapRhs: expected vector state input, got shape %A" y.shape
+            let resultMap : CodedMap<TypedTensor<Scalar,ModelSystem.state>> = rhs tScalar yVector
+            
             // Flatten result back to Tensor
             keys
             |> List.map (fun k -> resultMap.[k].Value)
             |> dsharp.stack
 
-    // Unflatten trajectory Tensor back into CodedMap<Vector,state>
+    /// Unflatten trajectory Tensor back into ``CodedMap<Vector,state>``.
+    /// traj has shape [timeSteps; stateCount].
     let unflattenTrajectory (keys: ShortCode.ShortCode list) (traj: Tensor) =
-        let comps = traj.unstack(1) // list of Tensor vectors
+        let comps = traj.unstack(1) // one column per state key
         (keys, comps)
         ||> Seq.map2 (fun k comp ->
             match tryAsVector<ModelSystem.state> comp with
             | Some v -> k, v
-            | None   -> failwith "Expected vector trajectory component")
+            | None   -> failwithf "Expected vector trajectory component for '%s', got shape %A"
+                                k.Value comp.shape)
         |> Map.ofSeq
 
     let rk4 : EstimationEngine.Integration.IntegrationRoutine =

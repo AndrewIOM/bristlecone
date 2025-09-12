@@ -176,14 +176,14 @@ module EstimationEngine =
         TypedTensor<Vector,``parameter``>
             -> TypedTensor<Scalar,``time index``>
             -> TypedTensor<Vector,state>
-            -> CodedMap<TypedTensor<Vector,state>>
+            -> CodedMap<TypedTensor<Scalar,state>>
 
     /// A parameterised RHS — parameters already bound.
     /// This is what the integration routine actually steps.
     type ParameterisedRHS =
         TypedTensor<Scalar,``time index``>
             -> TypedTensor<Vector,state>
-            -> CodedMap<TypedTensor<Vector,state>>
+            -> CodedMap<TypedTensor<Scalar,state>>
 
 
     module Solver =
@@ -245,9 +245,9 @@ module EstimationEngine =
         | Discrete
         | Continuous of Integration.IntegrationRoutine
 
-    type EstimationEngine<'date, 'timeunit, 'timespan> =
+    type EstimationEngine<'date, 'timeunit, 'timespan, [<Measure>] 'u> =
         { TimeHandling: TimeMode<'date, 'timeunit, 'timespan>
           OptimiseWith: Optimisation.Optimiser
-          Conditioning: Conditioning
+          Conditioning: Conditioning<'u>
           LogTo: WriteOut
           Random: Random }
