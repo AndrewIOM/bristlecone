@@ -22,7 +22,7 @@ module Objective =
     /// Compute the system's `Measures` from the dynamic variables produced by the solver.
     /// All operations happen in Tensor-space.
     let measure
-        (measures: CodedMap<Measurement<'u>>)
+        (measures: CodedMap<Measurement<state>>)
         (parameters: TypedTensor<Vector,``parameter``>)
         (expectedDynamic: CodedMap<TypedTensor<Vector,state>>)
         : CodedMap<TypedTensor<Vector,state>> =
@@ -73,13 +73,13 @@ module Objective =
         (measures: CodedMap<ModelSystem.Measurement<state>>)
         (solver: Solver.ConfiguredSolver)
         config
-        (observed: CodedMap<float[]>) : EstimationEngine.Objective =
+        (observed: CodedMap<float<'state>[]>) : EstimationEngine.Objective =
 
             let compiled = compiledFromConfig config
             let observedTensors =
                 observed
                 |> Map.map (fun _ arr ->
-                    arr |> Array.map ((*) 1.<state>) |> Tensors.Typed.ofVector)
+                    arr |> Array.map (Units.removeUnitFromFloat >> (*) 1.<state>) |> Tensors.Typed.ofVector)
             
             fun point ->
                 let thetaReal = compiled.Forward point

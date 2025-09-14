@@ -18,20 +18,23 @@ module Bristlecone =
     open Bristlecone.Statistics
 
     /// <summary>A basic estimation engine for discrete-time equations, using a Nelder-Mead optimiser.</summary>
-    let mkDiscrete () : EstimationEngine<'date, 'timeunit, 'timespan, 'u> =
+    let mkDiscrete () =
         { TimeHandling = Discrete
           OptimiseWith = Optimisation.Amoeba.single Optimisation.Amoeba.Solver.Default
           LogTo = Console.logger 1000<iteration>
           Random = MathNet.Numerics.Random.MersenneTwister true
+          ToModelTime = failwith "not implemented"
           Conditioning = Conditioning.NoConditioning }
 
     /// <summary>A basic estimation engine for ordinary differential equations, using a Nelder-Mead optimiser.</summary>
-    let mkContinuous<'date, 'timeunit, 'timespan> : EstimationEngine<'date, 'timeunit, 'timespan, 1> =
+    let mkContinuous () =
         { TimeHandling = Continuous <| Integration.RungeKutta.rk4
           OptimiseWith = Optimisation.Amoeba.single Optimisation.Amoeba.Solver.Default
           LogTo = Bristlecone.Logging.Console.logger 1000<iteration>
           Random = MathNet.Numerics.Random.MersenneTwister true
+          ToModelTime = failwith "not implemented"
           Conditioning = Conditioning.RepeatFirstDataPoint }
+
 
     /// <summary>Substitute a specific logger into</summary>
     /// <param name="out"></param>
@@ -178,9 +181,11 @@ module Bristlecone =
     /// <param name="timeSeriesData"></param>
     /// <param name="model"></param>
     /// <returns></returns>
-    let tryFit engine endCondition
-        (timeSeriesData: CodedMap<TimeSeries<float<'u>,'date, 'timeunit, 'timespan>>)
-        (model: ModelSystem<'dataUnit, 'timeUnit>) =
+    let tryFit
+        (engine: EstimationEngine<'timespan, 'modelTimeUnit, 'stateUnit>)
+        endCondition
+        (timeSeriesData: CodedMap<TimeSeries<float<'stateUnit>,'date, 'yearType, 'timespan>>)
+        (model: ModelSystem<'modelTimeUnit>) =
 
         let resultId = Guid.NewGuid()
 
@@ -224,11 +229,11 @@ module Bristlecone =
             let! _ = Fit.exactSubsetOf commonDynamic commonEnv
 
             // Compile solver (auto‑selects discrete/differential)
-            let t0' = t0 |> Map.map(fun _ v -> v * 1.<state> |> Tensors.Typed.ofScalar)
+            let t0' = t0 |> Map.map(fun _ v -> v |> Units.removeUnitFromFloat |> (*) 1.<state> |> Tensors.Typed.ofScalar)
             let solver stepType =
                 Solver.SolverCompiler.compile
                     engine.LogTo
-                    (commonDynamic.Series |> Seq.head).Value.DateMode.TotalDays
+                    engine.ToModelTime
                     model.Equations
                     engine.TimeHandling
                     stepType
@@ -292,7 +297,7 @@ module Bristlecone =
             let bestPoint =
                 match optimConfig with
                 | Parameter.Pool.DetachedConfig o -> o.Compiled.Forward bestPoint
-                // | Parameter.Pool.TransformedConfig o -> o.Compiled.Forward bestPoint                
+                | Parameter.Pool.TransformedConfig o -> o.Compiled.Forward (unbox bestPoint) // TODO Remove unbox
             let bestPointPool = Parameter.Pool.fromRealVector bestPoint model.Parameters
 
             let estimatedHighResFloat =
@@ -315,7 +320,7 @@ module Bristlecone =
     /// <param name="timeSeriesData">Time-series dataset that contains a series for each equation in the model system.</param>
     /// <param name="model">A model system of equations, likelihood function, estimatible parameters, and optional measures.</param>
     /// <returns>The result of the model-fitting procedure. If an error occurs, throws an exception.</returns>
-    let fit engine endCondition timeSeriesData (model: ModelSystem<'dataType, 'timeIndex>) =
+    let fit engine endCondition timeSeriesData (model: ModelSystem<'modelTimeUnit>) =
         tryFit engine endCondition timeSeriesData model |> Result.forceOk
 
     open Test
@@ -333,8 +338,8 @@ module Bristlecone =
     /// was successful or not.</returns>
     let tryTestModel
         engine
-        (settings: Test.TestSettings<float, 'date, 'timeunit, 'timespan>)
-        (model: ModelSystem<'dataType, 'timeIndex>)
+        (settings: Test.TestSettings<'state, 'date, 'timeunit, 'timespan>)
+        (model: ModelSystem<'modelTimeUnit>)
         =
 
         engine.LogTo <| GeneralEvent "Attempting to generate parameter set."
@@ -423,7 +428,7 @@ module Bristlecone =
     /// <param name="series">Time-series to fit with model</param>
     /// <returns>A list of estimation results (one for each bootstrap) for further analysis</returns>
     let bootstrap
-        (engine: EstimationEngine.EstimationEngine<'date, 'timeunit, 'timespan, 'u>)
+        (engine: EstimationEngine.EstimationEngine<'timespan, 'modelTimeUnit, 'state>)
         endCondition
         bootstrapCount
         model
@@ -462,7 +467,7 @@ module Bristlecone =
     /// <returns>A time-series for each variable containing a step-ahead prediction</returns>
     let oneStepAhead
         engine
-        (hypothesis: ModelSystem<'dataUnit,'timeUnit>)
+        (hypothesis: ModelSystem<'modelTimeUnit>)
         preTransform
         (timeSeries: Map<ShortCode.ShortCode, TimeSeries.TimeSeries<float, 'date, 'timeunit, 'timespan>>)
         estimatedTheta =

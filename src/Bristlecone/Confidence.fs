@@ -50,9 +50,9 @@ module ProfileLikelihood =
     open Bristlecone.ModelSystem
     open Bristlecone.Optimisation
 
-    type EstimateFunction<[<Measure>] 'dataUnit, 'subject, 'date, 'timeunit, 'timespan, [<Measure>] 'timeIndex> =
-        EstimationEngine<'date, 'timeunit, 'timespan, 'dataUnit>
-            -> ModelSystem<'dataUnit, 'timeIndex>
+    type EstimateFunction<[<Measure>] 'modelTimeUnit, [<Measure>] 'state, 'subject, 'date, 'timeunit, 'timespan> =
+        EstimationEngine<'timespan,'modelTimeUnit,'state>
+            -> ModelSystem<'modelTimeUnit>
             -> 'subject
             -> EstimationResult<'date, 'timeunit, 'timespan>
 
@@ -65,7 +65,7 @@ module ProfileLikelihood =
 
     /// The profile likelihood method samples the likelihood space
     /// around the Maximum Likelihood Estimate
-    let profile fit engine subject (hypothesis: ModelSystem<'data, 'timeIndex>) n result =
+    let profile fit engine subject (hypothesis: ModelSystem<'modelTimeUnit>) n result =
 
         // Start at the MLE
         let hypothesisMle =

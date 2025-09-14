@@ -94,14 +94,12 @@ module ModelSystem =
             -> int // current time index
             -> TypedTensor<Scalar,'u>
 
-    /// TODO: Probably don't need 'dataUnit here, or revised;
-    /// as the data unit will vary from eq to eq.
-    type ModelSystem<[<Measure>] 'dataUnit, [<Measure>] 'timeUnit> =
+    type ModelSystem<[<Measure>] 'modelTimeUnit> =
         { Parameters       : Parameter.Pool.ParameterPool
           EnvironmentKeys  : ShortCode.ShortCode list
-          Equations        : ModelForm<'timeUnit>
-          Measures         : CodedMap<Measurement<'dataUnit>>
-          NegLogLikelihood : Likelihood<'dataUnit> }
+          Equations        : ModelForm<'modelTimeUnit>
+          Measures         : CodedMap<Measurement<state>>
+          NegLogLikelihood : Likelihood<state> }
 
     type FitValue = { Fit: float<state>; Obs: float<state> }
     type FitSeries<'date, 'timeunit, 'timespan> = TimeSeries<FitValue, 'date, 'timeunit, 'timespan>
@@ -241,13 +239,14 @@ module EstimationEngine =
             | InTransformedSpace of Optimise
             | InDetachedSpace of Optimise
 
-    type TimeMode<'date, 'timeunit, 'timespan> =
+    type TimeMode =
         | Discrete
         | Continuous of Integration.IntegrationRoutine
 
-    type EstimationEngine<'date, 'timeunit, 'timespan, [<Measure>] 'u> =
-        { TimeHandling: TimeMode<'date, 'timeunit, 'timespan>
+    type EstimationEngine<'timespan, [<Measure>] 'modelTimeUnit, [<Measure>] 'state> =
+        { TimeHandling: TimeMode
           OptimiseWith: Optimisation.Optimiser
-          Conditioning: Conditioning<'u>
+          Conditioning: Conditioning<'state>
           LogTo: WriteOut
+          ToModelTime: 'timespan -> float<'modelTimeUnit>
           Random: Random }

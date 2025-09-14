@@ -13,13 +13,6 @@ module Runners =
 
     open Solver.SolverRunners
 
-    let sequenceEqualTol arr expected message =
-        arr
-        |> Seq.iteri (fun i actual ->
-            let exp = expected |> Seq.item i
-            Expect.floatClose Accuracy.high (Units.removeUnitFromFloat actual) (Units.removeUnitFromFloat exp) message)
-
-
     [<Tests>]
     let discreteTimeTests =
         testList "DiscreteTime runner" [
@@ -50,7 +43,7 @@ module Runners =
                     let result = DiscreteTime.iterateDifference eqs timeline envStream t0 p
                     let arr = result.[c] |> Typed.toFloatArray
                     let expected = Array.init steps (fun i -> start.Get + inc.Get * float (i+1))
-                    sequenceEqualTol arr expected "Accumulated values do not match expected sequence"
+                    Config.sequenceEqualTol arr expected "Accumulated values do not match expected sequence"
 
             // testPropertyWithConfig Config.config
             //     "discreteRunner passes env values through to equations" <| fun c envKey (envVal:NormalFloat) ->

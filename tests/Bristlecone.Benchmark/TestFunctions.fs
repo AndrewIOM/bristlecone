@@ -82,7 +82,7 @@ module Timeseries =
 
     open Bristlecone.Language
 
-    let predatorPreyBase =
+    let predatorPreyBase () =
 
         let ``dh/dt`` = Parameter "α" * This - Parameter "β" * This * Environment "lynx"
         let ``dl/dt`` = -Parameter "γ" * This + Parameter "Δ" * Environment "hare" * This
@@ -95,13 +95,13 @@ module Timeseries =
         |> Model.estimateParameter "Δ" noConstraints 0.10 0.60 // Efficiency of turning predated hares into lynx
         |> Model.estimateParameter "γ" noConstraints 0.10 0.60 // Natural death rate of lynx in the absence of food
 
-    let ``predator-prey`` =
-        predatorPreyBase
+    let ``predator-prey`` () =
+        predatorPreyBase ()
         |> Model.useLikelihoodFunction (Bristlecone.ModelLibrary.Likelihood.sumOfSquares [ "hare"; "lynx" ])
         |> Model.compile
 
-    let ``predator-prey [with noise]`` =
-        predatorPreyBase
+    let ``predator-prey [with noise]`` () =
+        predatorPreyBase ()
         |> Model.estimateParameter "σ[x]" notNegative 0.01 0.5
         |> Model.estimateParameter "σ[y]" notNegative 0.01 0.5
         |> Model.estimateParameter "ρ" noConstraints -0.5 0.5

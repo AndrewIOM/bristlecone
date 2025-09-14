@@ -312,9 +312,9 @@ module DateMode =
 
     /// <summary>Represents the configuration for handling the specific
     /// date type `'T` in a time series.</summary>
-    type DateMode<'T, 'timeunits, 'timespan> =
+    type DateMode<'T, 'yearType, 'timespan> =
         { Resolution: MaximumResolution<'T>
-          GetYear: 'T -> 'timeunits
+          GetYear: 'T -> 'yearType
           AddYears: 'T -> int<year> -> 'T
           AddMonths: 'T -> int<month> -> 'T
           AddDays: 'T -> int<day> -> 'T

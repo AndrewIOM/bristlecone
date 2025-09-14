@@ -368,7 +368,7 @@ module Language =
                 | Some c -> (map |> Map.add c comp, isDiscrete) |> ModelBuilder
                 | None -> failwithf "The text '%s' cannot be used to make a short code identifier." name
 
-        let compile builder : ModelSystem.ModelSystem<'state, 'timeUnit> =
+        let compile builder : ModelSystem.ModelSystem<'modelTimeUnit> =
             let map, isDiscrete = builder |> unwrap
 
             let likelihoods =
@@ -498,7 +498,7 @@ module Language =
             : ModelBuilderState<'state, 'time, Missing, Missing> =
             { Inner = ModelBuilder.create isDiscrete () }
 
-        type ModelSystemBuilder<[<Measure>] 'state, [<Measure>] 'time>(isDiscrete) =
+        type ModelSystemBuilder<[<Measure>] 'time>(isDiscrete) =
             member _.Yield(_) = emptyState<'state, 'time> isDiscrete
             member _.Delay(f: unit -> ModelBuilderState<'state, 'time, 'E, 'L>) = f()
 
@@ -533,10 +533,10 @@ module Language =
                 ModelBuilder.compile state.Inner
 
 
-    let discreteModel<[<Measure>] 'time> : ModelSystemDsl.ModelSystemBuilder<ModelSystem.state, 'time> =
+    let discreteModel<[<Measure>] 'time> : ModelSystemDsl.ModelSystemBuilder<'time> =
         ModelSystemDsl.ModelSystemBuilder true
 
-    let continuousModel<[<Measure>] 'time> : ModelSystemDsl.ModelSystemBuilder<ModelSystem.state, 'time> =
+    let continuousModel<[<Measure>] 'time> : ModelSystemDsl.ModelSystemBuilder<'time> =
         ModelSystemDsl.ModelSystemBuilder false
 
     // // TODO delete this module:
@@ -573,10 +573,10 @@ module Language =
     /// Terms for designing tests for model systems.
     module Test =
 
-        let defaultSettings = Bristlecone.Test.TestSettings<_, _, _, _>.Default
+        let defaultSettings = Bristlecone.Test.TestSettings.Default
 
         /// If the start value has already been set, it will be overwritten with the new value.
-        let withStartValue code value (settings: Bristlecone.Test.TestSettings<float, _, _, _>) =
+        let withStartValue code value (settings: Bristlecone.Test.TestSettings<'state, _, _, _>) =
             match ShortCode.create code with
             | Some c ->
                 { settings with
@@ -635,8 +635,8 @@ module Language =
 
         /// <summary>A hypothesis consists of a model system and the names of the
         /// swappable components within it, alongside the name of their current implementation.</summary>
-        type Hypothesis<[<Measure>] 'data, [<Measure>] 'timeIndex> =
-            | Hypothesis of ModelSystem.ModelSystem<'data, 'timeIndex> * list<ComponentName>
+        type Hypothesis<[<Measure>] 'timeIndex> =
+            | Hypothesis of ModelSystem.ModelSystem<'timeIndex> * list<ComponentName>
 
             member private this.Unwrap = let (Hypothesis(m, comps)) = this in m, comps
             /// <summary>Compiles a reference code that may be used to identify (although not necessarily uniquely) this hypothesis</summary>
