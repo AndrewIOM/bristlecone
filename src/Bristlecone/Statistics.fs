@@ -166,7 +166,8 @@ module Regression =
     let private sumBy2 f (a: 'T[]) (b: 'U[]) =
         Array.map2 f a b |> Array.sum
 
-    /// p-value for the slope coefficient in simple linear regression
+    /// p-value for the slope coefficient in simple linear regression.
+    /// Returns NaN if the data is perfectly flat.
     let pValueForLinearSlopeCoefficient (x: float[]) (y: float[]) =
         try
             let n = float x.Length

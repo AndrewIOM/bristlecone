@@ -23,12 +23,15 @@ module internal Units =
     let floatMap<[<Measure>] 'u> fn (x:float<'u>) : float<'u> =
         fn(float x) |> LanguagePrimitives.FloatWithMeasure
 
-    let isNan<[<Measure>] 'u> v =
-        v = LanguagePrimitives.FloatWithMeasure<'u> nan
+    let isNan<[<Measure>] 'u> (v:float<'u>) =
+        System.Double.IsNaN (removeUnitFromFloat v)
 
-    let isInfinite<[<Measure>] 'u> v =
-        v = LanguagePrimitives.FloatWithMeasure<'u> infinity ||
-            v = LanguagePrimitives.FloatWithMeasure<'u> -infinity
+    let inInfinite<[<Measure>] 'u> (v:float<'u>) =
+        System.Double.IsInfinity (removeUnitFromFloat v)
+
+    let isFinite<[<Measure>] 'u> (v:float<'u>) =
+        not (inInfinite v) && not (isNan v)
+
 
 
 [<Measure>] type iteration

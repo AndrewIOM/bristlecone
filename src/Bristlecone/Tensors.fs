@@ -14,6 +14,7 @@ module Tensors =
 
     /// 'Shape = Scalar | Vector | Matrix
     /// 'U = unit of measure for element type (or float for no UoM)
+    [<NoEquality; NoComparison>]
     type TypedTensor<'Shape, [<Measure>] 'u> = private { Inner: Tensor }
     with
         member this.Value = this.Inner
