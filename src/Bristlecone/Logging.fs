@@ -29,7 +29,7 @@ module Console =
     /// A simple console logger.
     /// `nIteration` specifies the number of iterations after which to log
     /// the current likelihood and parameter values.
-    let logger (nIteration) =
+    let logger nIteration =
 
         let agent =
             MailboxProcessor.Start(fun inbox ->

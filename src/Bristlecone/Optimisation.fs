@@ -37,8 +37,8 @@ module EndConditions =
     /// regression is assessed to determine if the MSJD is increasing through time for every
     /// parameter sequentially: if all p-values are >0.1, then the `EndCondition` is true.
     let stationarySquaredJumpDistance' fixedBin pointsRequired : EndCondition =
-        fun results _ ->
-            if (results |> Seq.length) % (fixedBin * pointsRequired) = 0 then
+        fun results i ->
+            if i % (fixedBin * pointsRequired * 1<iteration>) = 0<iteration> && i > 1<iteration> then
                 let trendSignificance =
                     results
                     |> List.take (fixedBin * pointsRequired)
@@ -55,7 +55,7 @@ module EndConditions =
                             (msjds |> List.toArray))
 
                 not (
-                    trendSignificance |> List.exists (fun p -> p <= 0.1)
+                    trendSignificance |> List.exists (fun p -> p <= 0.1 || System.Double.IsNaN p)
                     || trendSignificance.Length = 0
                 )
             else
@@ -161,8 +161,8 @@ module Initialise =
         Seq.zip theta constraints
         |> Seq.map (fun (v, c) ->
             match c with
-            | Bristlecone.Parameter.Constraint.Unconstrained -> true
-            | Bristlecone.Parameter.Constraint.PositiveOnly -> v > 0.<``optim-space``>)
+            | Parameter.Constraint.Unconstrained -> true
+            | Parameter.Constraint.PositiveOnly -> v > 0.<``optim-space``>)
         |> Seq.contains false
 
     /// Attempts to generate random theta based on starting bounds
@@ -179,11 +179,10 @@ module Initialise =
                 tryGenerateTheta f domain random (n - 1)
             else
                 let result = f t |> Tensors.Typed.toFloatScalar
-                if Units.isNan result || Units.isInfinite result then
-                    tryGenerateTheta f domain random (n - 1)
-                else
+                if Units.isFinite result then
                     Ok t
-
+                else
+                    tryGenerateTheta f domain random (n - 1)
 
 /// A module containing Monte Carlo Markov Chain (MCMC) methods for optimisation.
 /// An introduction to MCMC approaches is provided by
@@ -224,7 +223,7 @@ module MonteCarlo =
     /// the analysis. The `(float * 'a) list` represents a list of paired -log likelihood values with
     /// the proposed theta.</returns>
     let rec metropolisHastings' random writeOut endCondition propose tune f (theta1:Point) (l1:TypedTensor<Scalar,``-logL``>) d scale iteration : Solution list * 'a =
-        if theta1 |> Tensors.Typed.length = 0 then
+        if theta1 |> Typed.length = 0 then
             invalidOp "Not valid theta"
 
         let sc = scale |> tune iteration d
@@ -234,27 +233,33 @@ module MonteCarlo =
             invalidOp "Theta different length"
 
         let thetaAccepted, lAccepted =
-            let l2 = f theta2
+            let l1' = l1 |> Typed.toFloatScalar
+            let l2' = f theta2 |> Typed.toFloatScalar
 
-            if l2 < l1 then
-                (theta2, l2)
-            else
-                let l1', l2' = l1 |> Typed.toFloatScalar |> Units.removeUnitFromFloat, l2 |> Typed.toFloatScalar |> Units.removeUnitFromFloat
-                let rand = ContinuousUniform.draw random 0. 1. ()
-                let ratio = -(l2' - l1') |> exp
-
-                if rand < ratio && l2' <> infinity && l2' <> -infinity && l2' <> nan then
-                    (theta2, l2)
+            if Units.isFinite l2'
+            then 
+                if l2' < l1' then
+                    theta2, l2'
                 else
-                    (theta1, l1)
+                    let rand = ContinuousUniform.draw random 0. 1. ()
+                    let ratio = -(l2' - l1') |> Units.removeUnitFromFloat |> exp
+
+                    if rand < ratio then
+                        theta2, l2'
+                    else
+                        theta1, l1'
+            else
+                if not <| Units.isFinite l1' then
+                    failwith "Bad state: -logL became stuck as NaN or infinity"
+                theta1, l1'
 
         if endCondition d iteration then
-            (d, sc)
+            d, sc
         else
             writeOut
             <| OptimisationEvent
                 { Iteration = iteration
-                  Likelihood = lAccepted |> Tensors.Typed.toFloatScalar
+                  Likelihood = lAccepted
                   Theta = thetaAccepted |> Tensors.Typed.toFloatArray }
 
             metropolisHastings'
@@ -265,8 +270,8 @@ module MonteCarlo =
                 tune
                 f
                 thetaAccepted
-                lAccepted
-                ((lAccepted |> Typed.toFloatScalar, thetaAccepted) :: d)
+                (lAccepted |> Typed.ofScalar)
+                ((lAccepted, thetaAccepted) :: d)
                 sc
                 (iteration + 1<iteration>)
 
@@ -284,19 +289,19 @@ module MonteCarlo =
             | a when a < 0.20 -> scale * 0.9
             | _ -> scale
 
-        /// Modifies a scale factor depending on
-        let scaleFactor tuneInterval remainingIterations history scale =
+        /// Modifies a scale factor
+        let scaleFactor tuneInterval remainingIterations (history:Solution seq) scale =
             if remainingIterations % tuneInterval = 0<iteration> then
                 if (history |> Seq.length) * 1<iteration> >= tuneInterval then
                     let acceptance =
                         float (
-                            (history
-                             |> Seq.take (Units.removeUnitFromInt tuneInterval)
-                             |> Seq.pairwise
-                             |> Seq.where (fun (x, y) -> x <> y)
-                             |> Seq.length)
+                            history
+                            |> Seq.take (Units.removeUnitFromInt tuneInterval)
+                            |> Seq.pairwise
+                            |> Seq.where (fun (x, y) -> fst x <> fst y)
+                            |> Seq.length
                         )
-                        / (float tuneInterval)
+                        / float tuneInterval
 
                     tuneScale scale acceptance
                 else
@@ -547,6 +552,56 @@ module MonteCarlo =
                 |> Array.zip domain
                 |> Array.map (fun ((_, _, con), (e, jump)) -> constrainJump e jump 1. con)
 
+            /// One MH step updating only coordinate j, returning accepted theta, -logL, and accepted flag.
+            let mhStep1D random domain f j lsj (theta, l) =
+                let proposeJump _ t = propose (t |> Typed.toFloatArray) j lsj domain random
+                let res, _ =
+                    metropolisHastings'
+                        random
+                        ignore
+                        (EndConditions.afterIteration 1<iteration>)
+                        proposeJump
+                        TuningMode.none
+                        f
+                        theta
+                        l
+                        []
+                        ()
+                        0<iteration>
+                let (lAccepted, thetaAccepted) = res |> List.head
+                let accepted = not (Typed.toFloatArray theta = Typed.toFloatArray thetaAccepted)
+                (thetaAccepted, lAccepted, accepted)
+
+            /// One full MWG sweep across all coordinates, cumulatively updating theta.
+            let sweepOnce random domain f sigmas (theta, l) =
+                sigmas
+                |> Array.mapi (fun j lsj -> j, lsj)
+                |> Array.fold (fun (thetaAcc, lAcc, accepts, trace) (j, lsj) ->
+                    let theta', l', accepted = mhStep1D random domain f j lsj (thetaAcc, lAcc)
+                    let accepts' =
+                        accepts
+                        |> Array.mapi (fun k a -> if k = j && accepted then a + 1 else a)
+                    let trace' = (l', theta') :: trace
+                    (theta', l' |> Typed.ofScalar, accepts', trace')
+                ) (theta, l, Array.zeroCreate sigmas.Length, [])
+
+            /// Run a batch of 'n' sweeps.
+            let runBatchMWG random domain f batchLength sigmas (theta, l) =
+                let iters = Units.removeUnitFromInt batchLength
+                [1..iters]
+                |> List.fold (fun (thetaAcc, lAcc, acceptsAcc, traceAcc) _ ->
+                    let theta', l', accepts', sweepTrace =
+                        sweepOnce random domain f sigmas (thetaAcc, lAcc)
+                    let acceptsAcc' =
+                        Array.map2 (+) acceptsAcc accepts'
+                    let traceAcc' = sweepTrace @ traceAcc
+                    (theta', l', acceptsAcc', traceAcc')
+                ) (theta, l, Array.zeroCreate sigmas.Length, [])
+
+            let acceptanceFromCounts accepts (stepsPerParam:int<iteration>) =
+                let n = Units.removeUnitFromInt stepsPerParam
+                Array.map (fun a -> if n = 0 then 0.0 else float a / float n) accepts
+
             /// Tune variance of a parameter based on its acceptance rate.
             /// The magnitude of tuning reduces as more batches have been run.
             let tune (ls: LogSigma) (acceptanceRate: float) (batchNumber: int<batch>) : LogSigma =
@@ -554,64 +609,50 @@ module MonteCarlo =
                 if acceptanceRate < 0.44 then ls - delta
                 else ls + delta
 
-            /// Run MH updates for a single parameter index
-            let updateParameter
-                j
-                (lsj: LogSigma)
-                theta
-                domain
-                random
-                f
-                batchLength
-                (results:Solution list) =
-                let proposeJump _ t = propose (t |> Typed.toFloatArray) j lsj domain random
-                metropolisHastings'
-                    random
-                    ignore
-                    (EndConditions.afterIteration batchLength)
-                    proposeJump
-                    TuningMode.none
-                    f
-                    theta
-                    (fst (List.head results) |> Typed.ofScalar)
-                    []
-                    ()
-                    (List.length results * 1<iteration>)
-                |> fst
-
-            /// Compute acceptance rates per parameter
-            let acceptanceRates ds batchLength =
-                ds
-                |> Array.map (fun results ->
-                    let accepted =
-                        results |> List.pairwise |> List.where (fun (x, y) -> x <> y) |> List.length
-                    float accepted / float (Units.removeUnitFromInt batchLength))
-
             /// Adaptive tuning step
             let adaptiveStep (sigmas: LogSigma[]) acceptanceRates batchNumber : LogSigma[] =
                 acceptanceRates
                 |> Array.zip sigmas
                 |> Array.map (fun (ls, ar) -> tune ls ar batchNumber)
 
-            /// Trend check step (non‑adaptive)
+
+            type TrendResult =
+                | Stationary of pValue: float
+                | Trending of pValue: float
+                | Degenerate
+                | NotEnoughData
+
+            /// Trend check step (non‑adaptive) on the last five batches.
             let trendCheckStep (fullResults: Solution list) (batchLength: int<iteration>) paramCount =
                 fullResults
-                |> List.chunkBySize (batchLength / 1<iteration>)
+                |> List.chunkBySize (batchLength / 1<iteration>)                
                 |> List.mapi (fun i batch ->
                     let paramNumber = i % paramCount
-                    let paramValues = batch |> List.map snd |> List.averageBy (fun x -> Typed.toFloatValueAt paramNumber x)
-                    (paramNumber, paramValues))
-                |> List.groupBy fst
-                |> List.where (fun (_, g) -> g.Length >= 5)
-                |> List.map (fun (_, p) ->
-                    let x, y =
-                        p
-                        |> List.take 5
-                        |> List.map snd
-                        |> List.mapi (fun i v -> (float i, float v)) // strip units
-                        |> List.toArray
-                        |> Array.unzip
-                    Regression.pValueForLinearSlopeCoefficient x y)
+                    let meanValues = batch |> List.map snd |> List.averageBy (fun x ->
+                        Typed.toFloatValueAt paramNumber x)
+                    paramNumber, meanValues)
+                |> List.groupBy fst // group each parameter together
+                |> List.map (fun (k, chunks) ->
+
+                    let y = chunks |> List.map snd |> List.truncate 5 |> List.toArray
+                    let n = y.Length
+                    if n < 3 then k, NotEnoughData
+                    else
+                        // Check variance
+                        let mean = Array.average y
+                        let var = y |> Array.sumBy (fun v -> let dv = v - mean in dv * dv)
+                        if var = 0.0<``optim-space``^2> then k, Degenerate
+                        else
+                            let x = [| 0. .. float (n-1) |]
+                            let p = Regression.pValueForLinearSlopeCoefficient x (y |> Array.map Units.removeUnitFromFloat)
+                            if System.Double.IsNaN p then k, Degenerate
+                            else if p >= 0.1 then k, Trending p
+                            else k, Stationary p
+                )
+
+            let internal hasTrend pValues = pValues |> List.map snd |> List.exists (function Trending _ -> true | _ -> false)
+            let internal hasDegenerate pValues = pValues |> List.map snd |> List.exists (function Degenerate -> true | _ -> false)
+            let internal notEnoughBatches pValues = pValues |> List.map snd |> List.exists (function NotEnoughData -> true | _ -> false)
 
 
         /// Adaptive-metropolis-within-Gibbs algorithm, which can work in both adaptive and fixed modes.
@@ -620,35 +661,38 @@ module MonteCarlo =
         /// Non‑adaptive mode: checks for linear trends in parameter values over batches
         /// (via regression p‑values) and repeats until no significant trends remain.
         let rec core isAdaptive writeOut random domain f (results:Solution list) (batchLength:int<iteration>) (batchNumber: int<batch>) (theta:Point) (sigmas: LogSigma[]) =
-            let ds =
-                sigmas
-                |> Array.mapi (fun j logSigma ->
-                    Core.updateParameter j logSigma theta domain random f batchLength results)
 
-            let d = ds |> Array.rev |> List.concat
-            let fullResults = d @ results
+            // Run one batch of the MWG chain
+            let ltheta = f theta
+            let theta', l', accepts, batchTrace =
+                Core.runBatchMWG random domain f batchLength sigmas (theta, ltheta)
+
+            let fullResults = batchTrace @ results
 
             writeOut <| OptimisationEvent {
-                Iteration = List.length d * 1<iteration>
-                Likelihood = d |> List.head |> fst
-                Theta = d |> List.head |> snd |> Typed.toFloatArray
+                Iteration = List.length fullResults * 1<iteration>
+                Likelihood = l' |> Typed.toFloatScalar
+                Theta = theta' |> Typed.toFloatArray
             }
 
             match isAdaptive with
             | true ->
-                let ar = Core.acceptanceRates ds batchLength
-                let tunedSigmas = Core.adaptiveStep sigmas ar batchNumber
-                writeOut <| GeneralEvent(sprintf "[Tuning] Sigmas: %A | Acceptance rates: %A" tunedSigmas ar)
-                if ar |> Array.exists (fun s -> s < 0.28 || s > 0.60) then
-                    core isAdaptive writeOut random domain f fullResults batchLength (batchNumber + 1<batch>) (fullResults |> Seq.head |> snd) tunedSigmas
+                let rates = Core.acceptanceFromCounts accepts batchLength
+                let tunedSigmas = Core.adaptiveStep sigmas rates batchNumber
+                writeOut <| GeneralEvent(sprintf "[Tuning] Sigmas: %A | Acceptance rates: %A" tunedSigmas rates)
+                let allInBand = rates |> Array.forall (fun ar -> ar >= 0.28 && ar <= 0.60)
+                if allInBand then batchNumber, fullResults, tunedSigmas
                 else
-                    (batchNumber, fullResults, tunedSigmas)
+                    core isAdaptive writeOut random domain f fullResults batchLength (batchNumber + 1<batch>) (fullResults |> Seq.head |> snd) tunedSigmas
+            
             | false ->
                 let dims = Typed.length theta
                 let pValues = Core.trendCheckStep fullResults batchLength dims
                 writeOut <| GeneralEvent(sprintf "Linear trend p-values: %A" pValues)
-                if pValues |> List.exists (fun p -> p <= 0.1) || pValues.IsEmpty then
+                if Core.hasTrend pValues || results.IsEmpty || Core.notEnoughBatches pValues then
                     core isAdaptive writeOut random domain f fullResults batchLength (batchNumber + 1<batch>) (fullResults |> Seq.head |> snd) sigmas
+                else if Core.hasDegenerate pValues then
+                    failwith "Degenerate trend (zero variance) — parameter seems stuck."
                 else
                     (batchNumber, fullResults, sigmas)
 
@@ -675,7 +719,7 @@ module MonteCarlo =
     let ``Metropolis-within Gibbs``: Optimiser =
         InDetachedSpace
         <| fun random writeOut endCon domain startPoint (f: Objective) ->
-            let initialTheta = Initialise.initialise domain random
+            let initialTheta = Initialise.tryGenerateTheta f domain random 10000 |> forceOk
             let initialSigma = Array.init (Typed.length initialTheta) (fun _ -> 0.)
 
             let _, result, _ =
@@ -691,7 +735,7 @@ module MonteCarlo =
         <| fun random writeOut endCon domain startPoint (f: Objective) ->
 
             // Starting condition
-            let initialTheta = Initialise.initialise domain random
+            let initialTheta = Initialise.tryGenerateTheta f domain random 10000 |> forceOk
             let initialSigma = Array.init (Typed.length initialTheta) (fun _ -> 0.)
 
             let mwg adapt batchSize currentBatch theta sigmas =
@@ -812,7 +856,7 @@ module MonteCarlo =
             let improvementCount count interval : EndCondition =
                 fun results iteration ->
                     if iteration % interval = 0<iteration> then
-                        (results |> List.pairwise |> List.where (fun (x, y) -> x < y) |> List.length)
+                        (results |> List.pairwise |> List.where (fun (x, y) -> fst x < fst y) |> List.length)
                         >= count
                     else
                         false
@@ -916,7 +960,7 @@ module MonteCarlo =
                 <| fun random writeOut _ domain _ (f: Objective) ->
                     let gaussian (scale:float<``optim-space``>) (t:float) =
                         fun () -> Normal.draw random 0.<``optim-space``> scale ()
-                    let theta1 = Initialise.initialise domain random
+                    let theta1 = Initialise.tryGenerateTheta f domain random 10000 |> forceOk
                     let l1 = f theta1
                     let initialScale = [| 1 .. theta1 |> Typed.length |] |> Array.map (fun _ -> settings.InitialScale * 1.<``optim-space``>)
 
@@ -1078,7 +1122,7 @@ module MonteCarlo =
 
             // 1. Initial conditions
             let draw' = jump random
-            let theta1 = Initialise.initialise domain random
+            let theta1 = Initialise.tryGenerateTheta f domain random 10000 |> forceOk
             let l1 = f theta1
 
             // 2. Chain generator
@@ -1508,8 +1552,8 @@ module Amoeba =
             let boundsList = ranked |> Array.map snd
 
             let getBounds (dim: int) (points: Point array) =
-                let max = points |> Array.maxBy (fun p -> p |> Tensors.Typed.itemAt dim)
-                let min = points |> Array.minBy (fun p -> p |> Tensors.Typed.itemAt dim)
+                let max = points |> Array.maxBy (fun p -> p |> Tensors.Typed.itemAt dim |> Tensors.Typed.toFloatScalar)
+                let min = points |> Array.minBy (fun p -> p |> Tensors.Typed.itemAt dim |> Tensors.Typed.toFloatScalar)
                 logger <| GeneralEvent(sprintf "Min %A Max %A" (min |> Tensors.Typed.itemAt dim) (max |> Tensors.Typed.itemAt dim))
                 min |> Tensors.Typed.itemAt dim |> Tensors.Typed.toFloatScalar,
                 max |> Tensors.Typed.itemAt dim |> Tensors.Typed.toFloatScalar,
