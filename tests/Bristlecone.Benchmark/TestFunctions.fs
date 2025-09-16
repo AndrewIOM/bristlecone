@@ -90,10 +90,10 @@ module Timeseries =
         Model.empty
         |> Model.addEquation "hare" ``dh/dt``
         |> Model.addEquation "lynx" ``dl/dt``
-        |> Model.estimateParameter "α" noConstraints 0.10 0.60 // Natural growth rate of hares in absence of predation
-        |> Model.estimateParameter "β" noConstraints 0.10 0.60 // Death rate per encounter of hares due to predation
-        |> Model.estimateParameter "Δ" noConstraints 0.10 0.60 // Efficiency of turning predated hares into lynx
-        |> Model.estimateParameter "γ" noConstraints 0.10 0.60 // Natural death rate of lynx in the absence of food
+        |> Model.estimateParameter "α" noConstraints 0.75 1.25 // Natural growth rate of hares in absence of predation
+        |> Model.estimateParameter "β" noConstraints 0.01 0.20 // Death rate per encounter of hares due to predation
+        |> Model.estimateParameter "δ" noConstraints 0.75 1.25 // Natural death rate of lynx in the absence of food
+        |> Model.estimateParameter "γ" noConstraints 0.01 0.20 // Efficiency of turning predated hares into lynx
 
     let ``predator-prey`` () =
         predatorPreyBase ()
@@ -102,8 +102,8 @@ module Timeseries =
 
     let ``predator-prey [with noise]`` () =
         predatorPreyBase ()
-        |> Model.estimateParameter "σ[x]" notNegative 0.01 0.5
-        |> Model.estimateParameter "σ[y]" notNegative 0.01 0.5
-        |> Model.estimateParameter "ρ" noConstraints -0.5 0.5
+        |> Model.estimateParameter "ρ" noConstraints -0.500 0.500
+        |> Model.estimateParameter "σ[x]" notNegative 0.001 0.100
+        |> Model.estimateParameter "σ[y]" notNegative 0.001 0.100
         |> Model.useLikelihoodFunction (Bristlecone.ModelLibrary.Likelihood.bivariateGaussian "hare" "lynx")
         |> Model.compile

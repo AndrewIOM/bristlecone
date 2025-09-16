@@ -21,6 +21,10 @@ module None =
             <| GeneralEvent "Skipping optimisation: only the result of the given parameters will be computed"
 
             let point = [| for (min, _, _) in domain -> min |] |> Tensors.Typed.ofVector
+
+            writeOut <| GeneralEvent (sprintf "Parameters under test are %A" point)
+
+
             [ f point |> Tensors.Typed.toFloatScalar, point ]
 
 module EndConditions =
@@ -252,7 +256,7 @@ module MonteCarlo =
                 if not <| Units.isFinite l1' then
                     failwith "Bad state: -logL became stuck as NaN or infinity"
                 theta1, l1'
-
+        
         if endCondition d iteration then
             d, sc
         else
@@ -1486,6 +1490,8 @@ module Amoeba =
         let solve settings rng writeOut atEnd domain _ f =
             let dim = Array.length domain
 
+            writeOut <| GeneralEvent (sprintf "Domain = %A" domain)
+
             let start =
                 [| for _ in 1 .. settings.Size -> Initialise.tryGenerateTheta f domain rng 1000 |]
                 |> Array.map (fun r ->
@@ -1497,12 +1503,11 @@ module Amoeba =
 
             let amoeba = { Dim = dim; Solutions = start }
 
-            let rec search i trace atEnd (a: Amoeba) =
+            let rec search i (trace:Solution list) atEnd (a: Amoeba) =
                 if not <| atEnd trace i then
-                    // writeOut <| OptimisationEvent { Iteration = i; Likelihood = trace; Theta = thetaAccepted }
+                    if trace.Length > 0 then writeOut <| OptimisationEvent { Iteration = i; Likelihood = trace |> Seq.head |> fst; Theta = trace |> Seq.head |> snd |> Tensors.Typed.toFloatArray }
                     search (i + 1<iteration>) (a.Best :: trace) atEnd (update a f settings)
                 else
-                    writeOut <| GeneralEvent(sprintf "Solution: -L = %f" (fst a.Solutions.[0]))
                     a.Solutions |> Array.toList
 
             search 0<iteration> [] atEnd amoeba

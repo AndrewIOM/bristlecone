@@ -160,12 +160,14 @@ module Parameter =
               IndexByName      : Map<string,int>
               Forward          : TypedTensor<Vector,'space>        -> TypedTensor<Vector,``parameter``>
               Inverse          : TypedTensor<Vector,``parameter``> -> TypedTensor<Vector,'space>
-              ScalarTransforms : ParameterTransforms.OptimSpaceTransform<'space>[] }
+              ScalarTransforms : ParameterTransforms.OptimSpaceTransform<'space>[]
+              IsBounded        : bool }
 
         /// Compiles forward and inverse transformations between parameter-space (real units)
         /// and optimisation space.
         let internal compileTransformsWith<[<Measure>] 'space>
             (mkScalar: Constraint -> ParameterTransforms.OptimSpaceTransform<'space>)
+            isBounded
             (Pool p)
             : CompiledTransforms<'space> =
 
@@ -199,13 +201,14 @@ module Parameter =
               IndexByName = index
               Forward = forwardVec
               Inverse = inverseVec
-              ScalarTransforms = trans }
+              ScalarTransforms = trans
+              IsBounded = isBounded }
 
         let internal compileTransformsBounded (pool: ParameterPool) =
-            compileTransformsWith<``optim-space``> ParameterTransforms.scalarTransformOptimSpace pool
+            compileTransformsWith<``optim-space``> ParameterTransforms.scalarTransformOptimSpace true pool
 
         let internal compileTransformsTransformed (pool: ParameterPool) =
-            compileTransformsWith<``optim-space-transformed``> ParameterTransforms.scalarTransformOptimSpaceTransformed pool
+            compileTransformsWith<``optim-space-transformed``> ParameterTransforms.scalarTransformOptimSpaceTransformed false pool
 
 
         type OptimiserConfig<[<Measure>] 'space> =
@@ -231,14 +234,12 @@ module Parameter =
                 | Some (loReal, hiReal) ->
                     // Convert real-space bounds to optimiser space using scalar transforms
                     let inv = compiled.ScalarTransforms.[i].Inverse
-                    let loOpt = inv (Tensors.Typed.ofScalar loReal) |> Tensors.Typed.toFloatScalar
-                    let hiOpt = inv (Tensors.Typed.ofScalar hiReal) |> Tensors.Typed.toFloatScalar
-                    (loOpt, hiOpt, ap.GetConstraint())
+                    let loOpt = inv (Typed.ofScalar loReal) |> Typed.toFloatScalar
+                    let hiOpt = inv (Typed.ofScalar hiReal) |> Typed.toFloatScalar
+                    let con = if compiled.IsBounded then ap.GetConstraint() else Unconstrained
+                    loOpt, hiOpt, con
 
-                | None ->
-                    // No bounds: use +/- infinity in optimiser space
-                    let inf = LanguagePrimitives.FloatWithMeasure<'space> infinity
-                    (-inf, inf, ap.GetConstraint()) )
+                | None -> failwith "Unable to generate domain from parameter pool. It may have already been used for estimation.")
             |> List.toArray
 
         /// Make a configuration for an optimiser that handles

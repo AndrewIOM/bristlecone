@@ -17,13 +17,18 @@ module Bristlecone =
     open Bristlecone.EstimationEngine
     open Bristlecone.Statistics
 
+    // TODO Current default conversions, but may not be most appropriate defaults.
+    let private indexByMonth (ts : int<year>) = (float ts) * 1.<year> * 12.<Time.``time index``/year>
+    let private indexBySpan (ts : TimeSpan) = float ts.Days * 1.<day> * 12.<Time.``time index``/day>
+
+
     /// <summary>A basic estimation engine for discrete-time equations, using a Nelder-Mead optimiser.</summary>
     let mkDiscrete () =
         { TimeHandling = Discrete
           OptimiseWith = Optimisation.Amoeba.single Optimisation.Amoeba.Solver.Default
           LogTo = Console.logger 1000<iteration>
           Random = MathNet.Numerics.Random.MersenneTwister true
-          ToModelTime = failwith "not implemented"
+          ToModelTime = indexBySpan
           Conditioning = Conditioning.NoConditioning }
 
     /// <summary>A basic estimation engine for ordinary differential equations, using a Nelder-Mead optimiser.</summary>
@@ -32,7 +37,7 @@ module Bristlecone =
           OptimiseWith = Optimisation.Amoeba.single Optimisation.Amoeba.Solver.Default
           LogTo = Bristlecone.Logging.Console.logger 1000<iteration>
           Random = MathNet.Numerics.Random.MersenneTwister true
-          ToModelTime = failwith "not implemented"
+          ToModelTime = indexBySpan
           Conditioning = Conditioning.RepeatFirstDataPoint }
 
 
@@ -162,7 +167,7 @@ module Bristlecone =
         let expectedSet = expectedKeys |> Set.ofList
         let actualSet   = actualMap |> Map.keys |> Set.ofSeq
         if expectedSet <> actualSet then
-            Error "Environment data keys do not match model definition"
+            Error <| sprintf "Environment data keys do not match model definition. Expected [%A] but provided with [%A]." expectedKeys actualMap
         else Ok ()
 
     /// <summary>
@@ -252,6 +257,7 @@ module Bristlecone =
             let optimise =
                 match engine.OptimiseWith, optimConfig with
                 | Optimisation.InDetachedSpace optim, Parameter.Pool.DetachedConfig cfg ->
+                    engine.LogTo <| GeneralEvent (sprintf "Domain = %A" cfg.Domain)
                     optim engine.Random engine.LogTo endCondition cfg.Domain None
                 | Optimisation.InTransformedSpace optim, Parameter.Pool.TransformedConfig cfg ->
                     optim engine.Random engine.LogTo endCondition (unsafeEraseSpace cfg).Domain None
@@ -362,13 +368,15 @@ module Bristlecone =
             let mergedData =
                 Map.merge trueData settings.EnvironmentalData (fun dyn _env -> dyn)
 
+            engine.LogTo <| GeneralEvent(sprintf "Parameters to test are %A" (trueParamPool |> Parameter.Pool.toTensorWithKeysReal))
+
             // Fit with true parameters (no optimisation)
             let! realEstimate =
                 tryFit
                     { engine with OptimiseWith = Optimisation.None.none }
                     settings.EndCondition
                     mergedData
-                    { model with Parameters = trueParamPool }
+                    { model with Parameters = Parameter.Pool.fromEstimated trueParamPool }
 
             // Fit normally (optimisation enabled)
             let! estimated =
@@ -401,6 +409,7 @@ module Bristlecone =
 
             return
                 { ErrorStructure = errorStructure
+                  IterationsRun = estimated.Trace.Length * 1<iteration>
                   Parameters = paramDiffs
                   Series =
                     estimated.Series

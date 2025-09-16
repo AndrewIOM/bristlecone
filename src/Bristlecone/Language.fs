@@ -433,6 +433,8 @@ module Language =
                 |> List.choose (function
                     | ExpressionParser.ParameterRequirement _ -> None
                     | ExpressionParser.EnvironmentRequirement e -> e |> ShortCode.create )
+                |> List.except (Map.keys equations)
+                |> List.except (Map.keys measures)
 
             let eqs =
                 equations

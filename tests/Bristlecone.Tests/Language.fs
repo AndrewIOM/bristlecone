@@ -55,7 +55,7 @@ let modelExpressionsTensor =
                 let t, this = Typed.ofScalar 0., Typed.ofScalar 0.<ModelSystem.state>
                 let result = compiled p Map.empty t this
                 Expect.floatClose Accuracy.high (result |> Typed.toFloatScalar |> Units.removeUnitFromFloat) value.Get "Constant should match"
-        
+
         ]
 
 

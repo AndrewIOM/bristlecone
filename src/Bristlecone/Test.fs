@@ -53,6 +53,9 @@ module Test =
         let alwaysMoreThan i variable : GenerationRule<'state> =
             variable, (fun data -> data |> Seq.min > i)
 
+        let alwaysFinite variable : GenerationRule<'state> =
+            variable, (fun data -> data |> Seq.exists Units.isNotFinite |> not)
+
         /// Ensures that there is always a positive change in values of a variable
         let monotonicallyIncreasing variable : GenerationRule<'state> =
             variable,
@@ -102,6 +105,7 @@ module Test =
         { Parameters: ParameterTestResult list
           Series: Map<string, FitSeries<'date, 'timeunit, 'timespan>>
           ErrorStructure: Map<string, seq<float<'u^2>>>
+          IterationsRun: int<iteration>
           RealLikelihood: float<``-logL``>
           EstimatedLikelihood: float<``-logL``> }
 
@@ -191,7 +195,7 @@ module Test =
                 |> Map.map(fun k v -> v |> TimeSeries.map(fun (v,_) -> v |> Units.removeUnitFromFloat |> (*) 1.<environment>))
                 |> TimeFrame.tryCreate
 
-            // Setup dummy timeline for solver
+            // Setup dummy timeline for solver (all values = nan)
             let dynSeries =
                 tryMakeDummySeries
                     testSettings.StartDate testSettings.Resolution
@@ -242,12 +246,18 @@ module Test =
             (model: ModelSystem.ModelSystem<'modelTimeUnit>)
             attempts
             =
-            let randomPool = Parameter.Pool.drawRandom engine.Random model.Parameters
+            let randomPool = Parameter.Pool.drawRandom engine.Random model.Parameters                
 
             match tryGenerateData' engine model settings randomPool with
             | Ok series ->
+                engine.LogTo <| Logging.GeneralEvent (sprintf "Series %A" series)
+
+                let extraFiniteRules =
+                    series |> Map.keys |> Seq.map (fun s -> s.Value |> GenerationRules.alwaysFinite) |> Seq.toList
+                let rules = extraFiniteRules @ settings.GenerationRules
+
                 let rulesPassed =
-                    settings.GenerationRules
+                    rules
                     |> List.choose (fun (key, ruleFn) ->
                         series
                         |> Map.tryFindKey (fun k _ -> k.Value = key)
@@ -256,7 +266,7 @@ module Test =
 
                 if
                     (rulesPassed |> List.contains false)
-                    || rulesPassed.Length <> settings.GenerationRules.Length
+                    || rulesPassed.Length <> rules.Length
                 then
                     if attempts = 0 then
                         Error "Could not generate data that complies with the given ruleset"

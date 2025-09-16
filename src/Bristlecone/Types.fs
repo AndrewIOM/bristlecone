@@ -32,6 +32,8 @@ module internal Units =
     let isFinite<[<Measure>] 'u> (v:float<'u>) =
         not (inInfinite v) && not (isNan v)
 
+    let isNotFinite<[<Measure>] 'u> (v:float<'u>) =
+        inInfinite v || isNan v
 
 
 [<Measure>] type iteration

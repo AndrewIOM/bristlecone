@@ -65,6 +65,94 @@ module ``End Conditions`` =
 //         //     |> not
 //     ]
 
+module Gibbs =
+
+    open Bristlecone.Optimisation.MonteCarlo.MetropolisWithinGibbs
+    open Bristlecone.Tensors
+
+    // Dummy domain and objective for testing
+    let mkDomain p =
+        [| for _ in 1 .. p -> ("p", 0.0<``optim-space``>, fun _ _ _ -> 0.0<``optim-space``>) |]
+
+    let mkTheta floats =
+        floats
+        |> Array.map (fun f -> f * 1.0<``optim-space``>)
+        |> Typed.ofVector
+
+    let dummyObjective (theta: Point) =
+        // simple convex bowl: min at origin
+        let arr = Typed.toFloatArray theta
+        let v = Array.sumBy (fun x -> x * x) arr
+        Typed.ofScalar v
+
+    [<Tests>]
+    let gibbsProps =
+        testList "Core Gibbs property tests" [
+
+            // propose should only change the chosen coordinate
+            testProperty "propose changes only chosen coordinate" <|
+            fun (NonEmptyArray<float> coords) (PositiveInt jRaw) (NormalFloat lsj) ->
+                let theta = coords |> Array.map (fun f -> f * 1.0<``optim-space``>)
+                let j = jRaw % theta.Length
+                let rnd = System.Random(42)
+                let proposed = Core.propose theta j lsj (mkDomain theta.Length) rnd
+                // All coords except j are unchanged
+                proposed
+                |> Array.mapi (fun i v -> i, v)
+                |> Array.forall (fun (i, v) -> i = j || v = theta.[i])
+                |> Expect.isTrue "Only target coordinate should change"
+
+            // mhStep1D preserves dimensionality and returns valid theta
+            testProperty "mhStep1D preserves dimension" <|
+            fun (NonEmptyArray<float> coords) (PositiveInt jRaw) (NormalFloat lsj) ->
+                let theta = mkTheta coords
+                let l = dummyObjective theta
+                let j = jRaw % coords.Length
+                let rnd = System.Random(0)
+                let theta', _, _ = Core.mhStep1D rnd (mkDomain coords.Length) dummyObjective j lsj (theta, l)
+                Expect.equal (Typed.length theta') (Typed.length theta) "Dimensionality preserved"
+
+            // sweepOnce updates all coordinates in sequence
+            testProperty "sweepOnce returns acceptance counts for all coords" <|
+            fun (NonEmptyArray<float> coords) (ArrayOf<NormalFloat> sigmasRaw) ->
+                let p = coords.Length
+                let sigmas =
+                    sigmasRaw
+                    |> Array.truncate p
+                    |> Array.map (fun (NormalFloat s) -> s)
+                    |> fun arr -> if arr.Length < p then Array.append arr (Array.create (p - arr.Length) 0.1) else arr
+                let theta = mkTheta coords
+                let l = dummyObjective theta
+                let rnd = System.Random(1)
+                let _, _, accepts, _ = Core.sweepOnce rnd (mkDomain p) dummyObjective sigmas (theta, l)
+                Expect.equal accepts.Length p "Acceptance counts length = param count"
+
+            // runBatchMWG produces trace length = batchLength * paramCount
+            testProperty "runBatchMWG trace length matches iterations × params" <|
+            fun (NonEmptyArray<float> coords) (PositiveInt batchLenRaw) (ArrayOf<NormalFloat> sigmasRaw) ->
+                let p = coords.Length
+                let sigmas =
+                    sigmasRaw
+                    |> Array.truncate p
+                    |> Array.map (fun (NormalFloat s) -> s)
+                    |> fun arr -> if arr.Length < p then Array.append arr (Array.create (p - arr.Length) 0.1) else arr
+                let theta = mkTheta coords
+                let l = dummyObjective theta
+                let rnd = System.Random(2)
+                let batchLength = (batchLenRaw % 5 + 1) * 1<iteration> // keep small for test speed
+                let _, _, _, trace = Core.runBatchMWG rnd (mkDomain p) dummyObjective batchLength sigmas (theta, l)
+                let expectedLen = (Units.removeUnitFromInt batchLength) * p
+                Expect.equal trace.Length expectedLen "Trace length matches sweeps × params"
+
+            // acceptanceFromCounts always returns values in [0,1]
+            testProperty "acceptanceFromCounts yields rates in [0,1]" <|
+            fun (NonEmptyArray<int> accepts) (PositiveInt steps) ->
+                let accepts' = accepts |> Array.map abs
+                let rates = Core.acceptanceFromCounts accepts' (steps * 1<iteration>)
+                Expect.isTrue (rates |> Array.forall (fun r -> r >= 0.0 && r <= 1.0)) "Rates in [0,1]"
+    ]
+
+
 
 // Module adapted from https://github.com/mathias-brandewinder/Amoeba
 module ``Gradient Descent`` =
