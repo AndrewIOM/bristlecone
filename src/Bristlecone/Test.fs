@@ -114,9 +114,8 @@ module Test =
     let isValidSettings (model: ModelSystem.ModelSystem<'modelTimeUnit>) testSettings =
         let equationKeys =
             match model.Equations with
-            | DifferenceEqs eqs -> eqs
-            | DifferentialEqs eqs -> eqs
-            |> Map.toList |> List.map fst
+            | DifferenceEqs eqs -> eqs |> Map.toList |> List.map fst
+            | DifferentialEqs eqs -> eqs |> Map.toList |> List.map fst
 
         if
             Set.isSubset (Set.ofList equationKeys) (Set.ofList (testSettings.StartValues |> Map.toList |> List.map fst))

@@ -10,54 +10,31 @@ module ModelSystem =
     [<Measure>] type ``environment``
     [<Measure>] type ``state``
 
-    /// Model system that works with float-based
-    /// data values and equations.
-    module FloatBased =
-
-        type Environment<[<Measure>] 'u> = CodedMap<float<'u>>
-
-        type ModelEquationF<[<Measure>] 'u> =
-            Parameter.Pool.ParameterPool -> float<``time index``> -> float<'u> -> Environment<'u> -> float<'u>
-
-        type MeasurementF<[<Measure>] 'u> =
-            float<'u> -> Environment<'u> -> Environment<'u> -> float<'u>
-
-        type PredictedSeriesF = float[]
-
-        type ParameterValueAccessorF = string -> float
-
-        type LikelihoodF<[<Measure>] 'u> =
-            ParameterValueAccessorF -> CodedMap<PredictedSeriesF> -> float<'u>
-
-        type ModelSystemF<[<Measure>] 'u> =
-            {   Parameters       : Parameter.Pool.ParameterPool
-                Equations        : CodedMap<ModelEquationF<'u>>
-                Measures         : CodedMap<MeasurementF<'u>>
-                NegLogLikelihood : LikelihoodF<'u> }
-
-
     /// The external environment at any time t.
     type ExternalEnvironment = CodedMap<TypedTensor<Scalar,environment>>
 
     /// An equation that may require fixed or free parameters,
     /// the current time t, the current response value, and / or
     /// external environmental time series.
-    /// - TODO Maybe allow the state be any unit (e.g. grams),
-    ///   or maybe it can be at a higher (DSL) level.
-    type GenericModelEquation<[<Measure>] 'timeUnit> =
+    type GenericModelEquation<[<Measure>] 'timeUnit, [<Measure>] 'returnUnit> =
         TypedTensor<Vector,``parameter``> ->
             CodedMap<TypedTensor<Scalar,``environment``>> ->
             TypedTensor<Scalar,'timeUnit> ->
             TypedTensor<Scalar,state> ->
-            TypedTensor<Scalar,state>
+            TypedTensor<Scalar,'returnUnit>
+
+
+    type RateEquation<[<Measure>] 'timeUnit> = GenericModelEquation<'timeUnit, state / 'timeUnit>
+    type StateEquation<[<Measure>] 'timeUnit> = GenericModelEquation<'timeUnit, state>
 
     /// The model system may make use of either stepped or integrated-time
     /// equations. Each are both require the same inputs, but differ in
     /// whether a solver is applied or not. Here, the DU's purpose is for
     /// additional type safety.
+    /// TODO Allow state to differ between equations.
     type ModelForm<[<Measure>] 'timeUnit> =
-        | DifferenceEqs   of CodedMap<GenericModelEquation<'timeUnit>>
-        | DifferentialEqs of CodedMap<GenericModelEquation<'timeUnit>>
+        | DifferenceEqs   of CodedMap<StateEquation<'timeUnit>>
+        | DifferentialEqs of CodedMap<RateEquation<'timeUnit>>
 
     /// Predicted time-series for a single variable.
     /// 'u is the state unit of measure.
@@ -162,8 +139,8 @@ module EstimationEngine =
         | TensorODEs of CodedMap<TensorODE>
         | FloatODEs of CodedMap<FloatODE>
 
-    and TensorODE = TypedTensor<Vector,``parameter``> -> CodedMap<TypedTensor<Scalar,``environment``>> -> TypedTensor<Scalar,``time index``> -> TypedTensor<Scalar,state> -> TypedTensor<Scalar,state>
-    and FloatODE = CodedMap<float<parameter>> -> float<``time index``> -> float<state> -> ExternalEnvironment -> float<state>
+    and TensorODE = TypedTensor<Vector,``parameter``> -> CodedMap<TypedTensor<Scalar,``environment``>> -> TypedTensor<Scalar,``time index``> -> TypedTensor<Scalar,state> -> TypedTensor<Scalar,state/``time index``>
+    and FloatODE = CodedMap<float<parameter>> -> float<``time index``> -> float<state> -> ExternalEnvironment -> float<state/``time index``>
 
     /// Represents an external logging function.
     type WriteOut = LogEvent -> unit
@@ -174,14 +151,14 @@ module EstimationEngine =
         TypedTensor<Vector,``parameter``>
             -> TypedTensor<Scalar,``time index``>
             -> TypedTensor<Vector,state>
-            -> CodedMap<TypedTensor<Scalar,state>>
+            -> CodedMap<TypedTensor<Scalar,state/``time index``>>
 
     /// A parameterised RHS — parameters already bound.
     /// This is what the integration routine actually steps.
     type ParameterisedRHS =
         TypedTensor<Scalar,``time index``>
             -> TypedTensor<Vector,state>
-            -> CodedMap<TypedTensor<Scalar,state>>
+            -> CodedMap<TypedTensor<Scalar,state/``time index``>>
 
 
     module Solver =

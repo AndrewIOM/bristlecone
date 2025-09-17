@@ -21,10 +21,10 @@ module Solver =
 
         // Wrap a model equation written in 'timeUnit so it accepts <time index>.
         // factor: float<'timeUnit> / float<``time index``> (size of one TI in model units)
-        let inline wrapTime<[<Measure>] 'timeUnit>
+        let wrapTime<[<Measure>] 'timeUnit, [<Measure>] 'returnUnit>
             (factor: float<'timeUnit / ``time index``>)
-            (eq: GenericModelEquation<'timeUnit>)
-            : GenericModelEquation<``time index``> =
+            (eq: GenericModelEquation<'timeUnit, 'returnUnit>)
+            : GenericModelEquation<``time index``,'returnUnit> =
             fun pars env tIndex state ->
                 // Convert tIndex (Scalar<time-index>) -> Scalar<'timeUnit> by multiplying with factor
                 let tIndexF = Typed.toFloatScalar tIndex
@@ -46,7 +46,7 @@ module Solver =
         module DiscreteTime =
 
             let internal stepOnce
-                (eqs: CodedMap<GenericModelEquation<``time index``>>)
+                (eqs: CodedMap<StateEquation<``time index``>>)
                 (pars: TypedTensor<Vector,``parameter``>)
                 (env: CodedMap<TypedTensor<Scalar,environment>>)
                 (t: TypedTensor<Scalar,``time index``>)
@@ -78,7 +78,7 @@ module Solver =
                     |> Tensors.Typed.stack1D)
 
             let discreteRunner
-                (eqs: CodedMap<GenericModelEquation<``time index``>>)
+                (eqs: CodedMap<StateEquation<``time index``>>)
                 (timeline: float<``time index``>[])
                 (envIndex: CodedMap<TimeIndex.TimeIndex<float<environment>,_,_,_>>)
                 t0
@@ -107,7 +107,7 @@ module Solver =
                     |> Map.map (fun _ v -> v |> Tensors.Typed.tail)
 
             let differentialRunner
-                (eqs: CodedMap<GenericModelEquation<``time index``>>)
+                (eqs: CodedMap<ModelSystem.RateEquation<``time index``>>)
                 integrateRoutine
                 (timeline: float<``time index``>[])
                 (envIndex: CodedMap<TimeIndex.TimeIndex<float<environment>,_,_,_>>)

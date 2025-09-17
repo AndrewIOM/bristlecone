@@ -240,7 +240,7 @@ module RungeKutta =
                 match tryAsVector<ModelSystem.state> y with
                 | Some v -> v
                 | None   -> failwithf "wrapRhs: expected vector state input, got shape %A" y.shape
-            let resultMap : CodedMap<TypedTensor<Scalar,ModelSystem.state>> = rhs tScalar yVector
+            let resultMap : CodedMap<TypedTensor<Scalar,ModelSystem.state/``time index``>> = rhs tScalar yVector
             
             // Flatten result back to Tensor
             keys

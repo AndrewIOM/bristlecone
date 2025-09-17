@@ -343,7 +343,7 @@ module Bristlecone =
     /// It is wrapped in an F# Result, indicating if the procedure
     /// was successful or not.</returns>
     let tryTestModel
-        engine
+        (engine: EstimationEngine<'timespan,'modelTimeUnit,'state>)
         (settings: Test.TestSettings<'state, 'date, 'timeunit, 'timespan>)
         (model: ModelSystem<'modelTimeUnit>)
         =
@@ -426,7 +426,7 @@ module Bristlecone =
     /// <param name="settings">Test settings that define how the test will be conducted.</param>
     /// <param name="model">The model system to test against the estimation engine.</param>
     /// <returns>A test result that indicates differences between the expected and actual fit.</returns>
-    let testModel engine settings model =
+    let testModel (engine: EstimationEngine<'timespan,'modelTimeUnit,'state>) settings model =
         tryTestModel engine settings model |> Result.forceOk
 
     /// <summary>Repeat a model fit many times, removing a single data point at random each time.</summary>
