@@ -163,41 +163,31 @@ module Regression =
     open MathNet.Numerics.Statistics
     open MathNet.Numerics.Distributions
 
-    let private sumBy2 f (a: 'T[]) (b: 'U[]) =
-        Array.map2 f a b |> Array.sum
-
-    /// p-value for the slope coefficient in simple linear regression.
-    /// Returns NaN if the data is perfectly flat.
-    let pValueForLinearSlopeCoefficient (x: float[]) (y: float[]) =
-        try
-            let n = float x.Length
-            if n < 3 then nan else
-
-            // Means
+    /// Returns (slope, p-value) for the slope coefficient in simple linear regression.
+    /// p-value is NaN if the data is perfectly flat.
+    let slopeAndPValue (x: float[]) (y: float[]) =
+        let n = float x.Length
+        if n < 3 then nan, nan
+        else
             let meanX = Statistics.Mean x
             let meanY = Statistics.Mean y
 
-            // Sums of squares
             let ssX  = Array.sumBy (fun xi -> (xi - meanX) ** 2.0) x
-            let ssXY = sumBy2 (fun xi yi -> (xi - meanX) * (yi - meanY)) x y
+            let ssXY = Array.map2 (fun xi yi -> (xi - meanX) * (yi - meanY)) x y |> Array.sum
 
-            // Regression coefficients
             let slope     = ssXY / ssX
             let intercept = meanY - slope * meanX
 
-            // Residuals and standard error of slope
             let residuals = Array.map2 (fun xi yi -> yi - (slope * xi + intercept)) x y
             let sse       = Array.sumBy (fun r -> r ** 2.0) residuals
             let seSlope   = sqrt (sse / (n - 2.0)) / sqrt ssX
 
-            // t-statistic
-            let tStat = slope / seSlope
-
-            // Two-tailed p-value from Student's t-distribution
-            let tDist = StudentT(0.0, 1.0, n - 2.0)
-            2.0 * (1.0 - tDist.CumulativeDistribution(abs tStat))
-        with _ ->
-            nan
+            if seSlope = 0.0 then slope, nan
+            else
+                let tStat = slope / seSlope
+                let tDist = MathNet.Numerics.Distributions.StudentT(0.0, 1.0, n - 2.0)
+                let pVal  = 2.0 * (1.0 - tDist.CumulativeDistribution(abs tStat))
+                slope, pVal
 
 
 /// Statistics to determine whether there are trends within series.

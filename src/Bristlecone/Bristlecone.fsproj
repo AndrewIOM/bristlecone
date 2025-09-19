@@ -12,6 +12,7 @@
     <Compile Include="Parameter.fs" />
     <Compile Include="EstimationEngine.fs" />
     <Compile Include="Integration.fs" />
+    <Compile Include="EndConditions.fs" />
     <Compile Include="Optimisation.fs" />
     <Compile Include="Confidence.fs" />
     <Compile Include="ModelSelection.fs" />
@@ -22,8 +23,8 @@
     <Compile Include="Solver.fs" />
     <Compile Include="Test.fs" />
     <Compile Include="Library.fs" />
-    <Compile Include="Equations.fs" />
     <Compile Include="Language.fs" />
+    <Compile Include="Equations.fs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="../../docs/img/logo.png" Pack="true" PackagePath="/">

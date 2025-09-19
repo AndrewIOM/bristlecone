@@ -18,11 +18,11 @@ module Likelihood =
 
     /// Residual sum of squares. Provides a simple metric of distance between
     /// observed data and model predictions.
-    let sumOfSquares keys : Likelihood<'u> =
+    let sumOfSquares (keys: ShortCode.ShortCode list) : Likelihood<'u> =
         fun _ data ->
             keys
             |> List.map (fun k ->
-                let d = data |> getData k
+                let d = data |> getData k.Value
                 let obs = Typed.tail d.Observed
                 let exp = Typed.tail d.Expected // I don't think my original did tail?
                 let diff = obs - exp
@@ -103,10 +103,10 @@ module Likelihood =
     /// Log likelihood function for dual simultaneous system, assuming Gaussian error for both x and y.
     /// Requires parameters 'σ[x]', 'σ[y]' and 'ρ' to be included in any `ModelSystem` that uses it.
     /// </summary>
-    let bivariateGaussian key1 key2 : Likelihood<'u> =
+    let bivariateGaussian (key1: Language.StateId<_>) (key2:Language.StateId<_>) : Likelihood<'u> =
         fun paramAccessor data ->
-            let x = data |> getData key1
-            let y = data |> getData key2
+            let x = data |> getData key1.Code.Value
+            let y = data |> getData key2.Code.Value
 
             let sigmax = paramAccessor.Get "σ[x]" |> Typed.retype<parameter,'u,Scalar>
             let sigmay = paramAccessor.Get "σ[y]" |> Typed.retype<parameter,'u,Scalar>

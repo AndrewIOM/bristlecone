@@ -5,11 +5,6 @@ open Bristlecone.Logging
 open Bristlecone.EstimationEngine
 open Bristlecone.EstimationEngine.Optimisation
 
-type OptimisationError =
-    | OutOfBounds
-    | ModelError
-    | LikelihoodError
-
 module None =
 
     /// An optimisation function that calculates the value of `f` using
@@ -27,118 +22,6 @@ module None =
 
             [ f point |> Tensors.Typed.toFloatScalar, point ]
 
-module EndConditions =
-
-    open Bristlecone.Statistics
-
-    /// End the optimisation procedure when a minimum number of iterations is exceeded.
-    let afterIteration iteration : EndCondition =
-        fun _ currentIteration -> currentIteration >= iteration
-
-    /// An `EndCondition` that calculates that segregates the most recent n results into
-    /// five bins, and runs a regression to detect a temporal variation in the mean
-    /// squared jumping distance (MSJD). The significance of the slope coefficient of a linear
-    /// regression is assessed to determine if the MSJD is increasing through time for every
-    /// parameter sequentially: if all p-values are >0.1, then the `EndCondition` is true.
-    let stationarySquaredJumpDistance' fixedBin pointsRequired : EndCondition =
-        fun results i ->
-            if i % (fixedBin * pointsRequired * 1<iteration>) = 0<iteration> && i > 1<iteration> then
-                let trendSignificance =
-                    results
-                    |> List.take (fixedBin * pointsRequired)
-                    |> List.chunkBySize fixedBin
-                    |> List.map (fun bin ->
-                        bin
-                        |> List.map (snd >> Tensors.Typed.toFloatArray >> Array.toList)
-                        |> List.flip
-                        |> List.map (fun p -> p |> List.map Units.removeUnitFromFloat |> List.pairwise |> List.averageBy (fun (a, b) -> (b - a) ** 2.)))
-                    |> List.flip
-                    |> List.map (fun msjds ->
-                        Regression.pValueForLinearSlopeCoefficient
-                            [| 1. .. msjds |> Seq.length |> float |]
-                            (msjds |> List.toArray))
-
-                not (
-                    trendSignificance |> List.exists (fun p -> p <= 0.1 || System.Double.IsNaN p)
-                    || trendSignificance.Length = 0
-                )
-            else
-                false
-
-    /// True if there is no significant slope in mean squared jumping distances (MSJD),
-    /// binned per 200 iterations and a regression of five bins.
-    let stationarySquaredJumpDistance: EndCondition =
-        stationarySquaredJumpDistance' 200 5
-
-    /// Convergence of results using the Gelman-Rubin Rhat statistic.
-    /// `thin` - Only test for convergence at multiples of the following intervals (when all chains are ready).
-    /// `chainCount` - The number of chains to test for convergence. This makes the agent wait until results for all chains are in.
-    let convergence thin chainCount : EndCondition =
-
-        let assess (chains: Map<int, Solution list>) =
-            printfn "Assessing convergence..."
-
-            if chains.Count < chainCount then
-                None
-            else
-                let shortestChainLength = chains |> Seq.map (fun x -> x.Value.Length) |> Seq.min
-
-                let chainsEqualLength =
-                    chains
-                    |> Seq.map (fun x -> x.Value |> Seq.skip (x.Value.Length - shortestChainLength))
-
-                let parameterValueByChain =
-                    let thetaLength = (chains |> Seq.head).Value |> Seq.head |> snd |> Tensors.Typed.length
-
-                    [ 1..thetaLength ]
-                    |> Seq.map (fun p ->
-                        chainsEqualLength
-                        |> Seq.map (fun chain -> chain |> Seq.map (fun v -> v |> snd |> Tensors.Typed.toFloatValueAt (p - 1) |> Units.removeUnitFromFloat)))
-
-                printfn "Param values by chain: %A" parameterValueByChain
-
-                parameterValueByChain
-                |> Seq.map Convergence.GelmanRubin.rHat
-                |> Seq.toList
-                |> Some
-
-        let convergenceAgent =
-            MailboxProcessor.Start(fun inbox ->
-                let rec messageLoop chainResults =
-                    async {
-                        let! (chainId, results, repl: AsyncReplyChannel<bool>) = inbox.Receive()
-                        let freshResults = chainResults |> Map.add chainId results
-                        let rHats = assess freshResults
-
-                        match rHats with
-                        | Some r ->
-                            printfn "RHats are %A" r
-
-                            let converged =
-                                (r |> List.where (fun i -> i < 1.1) |> List.length) = (r |> List.length)
-
-                            printfn
-                                "Converged on %i / %i parameters"
-                                (r |> List.where (fun i -> i < 1.1) |> List.length)
-                                (r |> List.length)
-
-                            repl.Reply(converged)
-                        | None -> repl.Reply(false)
-
-                        return! messageLoop freshResults
-                    }
-
-                messageLoop Map.empty)
-
-        convergenceAgent.Error.Add(fun e -> printfn "Convergence agent reported an error = %s" e.Message)
-
-        fun results currentIteration ->
-            if results.Length % thin = 0 && results.Length >= thin then
-                printfn "Sending message to convergence agent at %i" currentIteration
-                let threadId = System.Threading.Thread.CurrentThread.ManagedThreadId
-                convergenceAgent.PostAndReply(fun reply -> (threadId, results, reply))
-            else
-                false
 
 module Initialise =
 
@@ -257,7 +140,7 @@ module MonteCarlo =
                     failwith "Bad state: -logL became stuck as NaN or infinity"
                 theta1, l1'
         
-        if endCondition d iteration then
+        if endCondition d iteration <> Continue then
             d, sc
         else
             writeOut
@@ -648,7 +531,7 @@ module MonteCarlo =
                         if var = 0.0<``optim-space``^2> then k, Degenerate
                         else
                             let x = [| 0. .. float (n-1) |]
-                            let p = Regression.pValueForLinearSlopeCoefficient x (y |> Array.map Units.removeUnitFromFloat)
+                            let slope, p = Regression.slopeAndPValue x (y |> Array.map Units.removeUnitFromFloat)
                             if System.Double.IsNaN p then k, Degenerate
                             else if p >= 0.1 then k, Trending p
                             else k, Stationary p
@@ -780,7 +663,7 @@ module MonteCarlo =
                     (results |> Seq.head |> snd)
                     [ { Method = TuneMethod.CovarianceWithScaleTotalHistory 0.750
                         Frequency = 200<iteration>
-                        EndCondition = EndConditions.stationarySquaredJumpDistance } ]
+                        EndCondition = EndConditions.stationarySquaredJumpDistance writeOut } ]
                     random
                     writeOut
                     (EndConditions.afterIteration 0<iteration>)
@@ -825,45 +708,6 @@ module MonteCarlo =
             /// e = new minus old energy (or -logL)
             let boltzmann (t: float) (e: float<``-logL``>) : float = float -e / t |> exp
 
-
-        module EndConditions =
-
-            let defaultTolerance = 1e-06<``-logL``>
-
-            /// Given a list of solutions, which are ordered most recent first,
-            /// returns `true` if there are at least `chains` recent results, and
-            /// the change within the recent results is no more than `tolerance`.
-            let stoppedImproving chains (minimums: Solution list) =
-                if minimums |> List.length < chains then
-                    false
-                else
-                    (minimums
-                     |> List.map fst
-                     |> List.take chains
-                     |> List.pairwise
-                     |> List.sumBy (fun (n, old) -> max 0.<``-logL``> (old - n)) // Captures backwards jumps
-                     |> (fun x ->
-                         printfn "Better by %f" x
-                         x))
-                    <= defaultTolerance
-
-            let noImprovement (chain: Solution list) =
-                (chain
-                 |> List.map fst
-                 |> List.pairwise
-                 |> List.averageBy (fun (n, old) -> if n > old then n - old else old - n) // Mean change in objective value
-                 |> (fun x ->
-                     printfn "Average jump is %f" x
-                     x))
-                <= defaultTolerance
-
-            let improvementCount count interval : EndCondition =
-                fun results iteration ->
-                    if iteration % interval = 0<iteration> then
-                        (results |> List.pairwise |> List.where (fun (x, y) -> fst x < fst y) |> List.length)
-                        >= count
-                    else
-                        false
 
         /// Jump based on a proposal function and probability function
         let tryMove propose probability random (f:Objective) tries (l1, theta1) : Solution option =
@@ -1025,7 +869,7 @@ module MonteCarlo =
                     else
                         let state = newPoint :: d
 
-                        if atEnd state iteration then
+                        if atEnd state iteration <> Continue then
                             state
                         else
                             writeOut
@@ -1343,7 +1187,7 @@ module MonteCarlo =
 
                 let newTrace = result.Value :: trace
 
-                if endWhen trace iteration then
+                if endWhen trace iteration <> Continue then
                     newTrace, newTuningState |> Array.map (fun t -> t.Scale)
                 else
                     writeOut <| OptimisationEvent {
@@ -1487,7 +1331,7 @@ module Amoeba =
                 if cv < valueOf a.Worst then replace a (cv, cpt)
                 else shrink a f s
 
-        let solve settings rng writeOut atEnd domain _ f =
+        let solve settings rng writeOut endCondition domain _ f =
             let dim = Array.length domain
 
             let start =
@@ -1502,13 +1346,13 @@ module Amoeba =
             let amoeba = { Dim = dim; Solutions = start }
 
             let rec search i (trace:Solution list) atEnd (a: Amoeba) =
-                if not <| atEnd trace i then
+                if atEnd trace i = Continue then
                     if trace.Length > 0 then writeOut <| OptimisationEvent { Iteration = i; Likelihood = trace |> Seq.head |> fst; Theta = trace |> Seq.head |> snd |> Tensors.Typed.toFloatArray }
                     search (i + 1<iteration>) (a.Best :: trace) atEnd (update a f settings)
                 else
                     a.Solutions |> Array.toList
 
-            search 0<iteration> [] atEnd amoeba
+            search 0<iteration> [] endCondition amoeba
 
 
         let rec swarm
@@ -1516,7 +1360,7 @@ module Amoeba =
             rng
             logger
             numberOfLevels
-            iterationsPerLevel
+            endCondition
             numberOfAmoeba
             (paramBounds: Domain)
             startPoint
@@ -1527,7 +1371,7 @@ module Amoeba =
                 [| 1..numberOfAmoeba |]
                 |> Array.collect (fun _ ->
                     try
-                        [| solve settings rng logger iterationsPerLevel paramBounds startPoint f |]
+                        [| solve settings rng logger endCondition paramBounds startPoint f |]
                     with e ->
                         logger
                         <| GeneralEvent(
@@ -1569,7 +1413,7 @@ module Amoeba =
             logger <| GeneralEvent(sprintf "Bound width: %f" boundWidth)
 
             if numberOfLevels > 1 && boundWidth > 0.01<``optim-space``> then
-                swarm settings rng logger (numberOfLevels - 1) iterationsPerLevel numberOfAmoeba bounds startPoint f
+                swarm settings rng logger (numberOfLevels - 1) endCondition numberOfAmoeba bounds startPoint f
             else
                 mostLikely
 

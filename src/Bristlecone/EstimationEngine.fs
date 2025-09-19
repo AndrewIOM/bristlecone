@@ -122,9 +122,20 @@ module EstimationEngine =
             -> CodedMap<SeriesPair<'u>>
             -> TypedTensor<Scalar,``-logL``>
 
+    /// Reasons optimisation may stop.
+    type OptimStopReason =
+        | Continue
+        | Stationary
+        | Converged
+        | Stuck
+        | Degenerate
+        | MaxIterations
+        | NoImprovement
+        | Custom of string
+
     /// Determines if the end has been reached based on a list
     /// of tupled Solutions with their iteration number.
-    type EndCondition = Solution list -> int<iteration> -> bool
+    type EndCondition = Solution list -> int<iteration> -> OptimStopReason
     
     /// The domain is fine to be float-based, as it is only
     /// used to initialise the optimisation routine.
