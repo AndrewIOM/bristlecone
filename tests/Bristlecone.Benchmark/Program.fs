@@ -102,7 +102,7 @@ let measureTime fn =
 let runReplicated nTimes work =
     [| 1..nTimes |] |> Array.Parallel.map (fun _ -> measureTime (fun () -> work ()))
 
-let logger = Bristlecone.Logging.Console.logger 100<iteration>
+let logger = Bristlecone.Logging.ConsoleTable.logger 100<iteration>
 let endCondition = EndConditions.stationarySquaredJumpDistance //EndConditions.afterIteration 100000<iteration>
 let accuracy = { absolute = 1e-3; relative = 1e-2 }
 
@@ -274,20 +274,22 @@ module Metrics =
 
 module TimeSeriesTests =
 
-    let settings =
-        Bristlecone.Test.TestSettings.Default
-        |> Bristlecone.Language.Test.withStartValue "lynx" 1.0
-        |> Bristlecone.Language.Test.withStartValue "hare" 1.0
+    let settings = Bristlecone.Test.annualSettings
 
-    let engine optimise =
+    /// An engine that uses annual-based data in an
+    /// annual-based model.
+    /// Inserts a time conversion from int-based years (data) to float-based years (model).
+    let engine optimise : EstimationEngine.EstimationEngine<int<Time.year>,Time.year,'u> =
         Bristlecone.mkContinuous ()
         |> Bristlecone.withCustomOptimisation optimise
         |> Bristlecone.withOutput logger
+        |> Bristlecone.withTimeConversion (fun (ts:int<Time.year>) -> float ts * 1.<Time.year>)
 
-    let runTimeSeriesTests timeModels optimFunctions =
+    let runTimeSeriesTests (timeModels: ('a * ModelSystem.ModelSystem<Time.year> * 'b) list) optimFunctions =
         List.allPairs optimFunctions timeModels
         |> List.map (fun ((optimName: string, optimise), (modelName, modelFn, startValues)) ->
             runReplicated Config.startPointCount (fun () ->
+                let settings = settings |> Test.addStartValues startValues
                 Bristlecone.testModel (engine optimise) settings modelFn)
             |> fun r -> modelName, optimName, Metrics.summariseRuns Config.likTol Config.paramTol r)
 
@@ -322,13 +324,11 @@ let optimFunctions =
     //   MonteCarlo.randomWalk [ { Method = MonteCarlo.TuneMethod.CovarianceWithScale 0.25; Frequency = 500<iteration>; EndCondition = EndConditions.afterIteration 10000<iteration> } ]
     ]
 
-let timeModels () : (string * ModelSystem.ModelSystem<'modelTimeUnit> * (Test.TestSettings<'u, obj, obj, obj> -> Test.TestSettings<'u, obj, obj, obj>)) list =
-    [ "predator-prey (with gaussian noise)",
-      TestFunctions.Timeseries.``predator-prey [with noise]`` (),
-      Test.addStartValues [ "lynx", 1.0; "hare", 1.0 ]
-      "predator-prey",
-      TestFunctions.Timeseries.``predator-prey`` (),
-      Test.addStartValues [ "lynx", 1.0; "hare", 1.0 ] ]
+let timeModels () =
+    [ 
+        "predator-prey", TestFunctions.Timeseries.PredatorPrey.``predator-prey`` (), [ "predator", 1.0; "prey", 1.0 ]
+        "predator-prey (noisy)", TestFunctions.Timeseries.PredatorPrey.``predator-prey [with noise]`` (), [ "predator", 1.0; "prey", 1.0 ]
+    ]
 
 module Output =
 

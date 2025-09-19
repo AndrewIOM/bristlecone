@@ -19,8 +19,7 @@ module Solver =
     // Time conversion tailored for your TypedTensor and time-index
     module internal TimeWrapping =
 
-        // Wrap a model equation written in 'timeUnit so it accepts <time index>.
-        // factor: float<'timeUnit> / float<``time index``> (size of one TI in model units)
+        /// Wrap a model equation written in 'timeUnit so it accepts time index.
         let wrapTime<[<Measure>] 'timeUnit, [<Measure>] 'returnUnit>
             (factor: float<'timeUnit / ``time index``>)
             (eq: GenericModelEquation<'timeUnit, 'returnUnit>)
@@ -31,14 +30,32 @@ module Solver =
                 let tModel  = Typed.ofScalar (tIndexF * factor)
                 eq pars env tModel state
 
+        /// Wrap a model equation written in 'timeUnit so it accepts time index.
+        let wrapTimeDifference<[<Measure>] 'timeUnit, [<Measure>] 'state>
+            (factor: float<'timeUnit / ``time index``>)
+            (eq: StateEquation<'timeUnit>) : StateEquation<``time index``> =
+            fun pars env tIndex state ->
+                let tIndexF = Typed.toFloatScalar tIndex
+                let tModel  = Typed.ofScalar (tIndexF * factor)
+                eq pars env tModel state
+
+        // For differential equations: return unit is 'state / 'timeUnit
+        let wrapTimeDifferential<[<Measure>] 'timeUnit, [<Measure>] 'state>
+            (factor: float<'timeUnit / ``time index``>)
+            (eq: RateEquation<'timeUnit>) : RateEquation<``time index``> =
+            fun pars env tIndex state ->
+                let tIndexF = Typed.toFloatScalar tIndex
+                let tModel  = Typed.ofScalar (tIndexF * factor)
+                eq pars env tModel state |> Typed.retype
+
         // Lift wrapping over a whole model form
         let wrapModelForm<[<Measure>] 'timeUnit>
             (factor: float<'timeUnit / ``time index``>)
             (mf: ModelForm<'timeUnit>)
             : ModelForm<``time index``> =
             match mf with
-            | DifferenceEqs eqs   -> eqs |> Map.map (fun _ e -> wrapTime factor e) |> DifferenceEqs
-            | DifferentialEqs eqs -> eqs |> Map.map (fun _ e -> wrapTime factor e) |> DifferentialEqs
+            | DifferenceEqs eqs   -> eqs |> Map.map (fun _ e -> wrapTimeDifference factor e) |> DifferenceEqs
+            | DifferentialEqs eqs -> eqs |> Map.map (fun _ e -> wrapTimeDifferential factor e) |> DifferentialEqs
 
     
     module SolverRunners =

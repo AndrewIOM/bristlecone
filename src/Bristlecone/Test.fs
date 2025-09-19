@@ -66,21 +66,21 @@ module Test =
                 |> Seq.contains false
 
 
-    type TestSettings<[<Measure>] 'state, 'date, 'timeunit, 'timespan> =
+    type TestSettings<[<Measure>] 'stateUnit, 'date, 'yearUnit, 'timespan> =
         { TimeSeriesLength: int
-          StartValues: CodedMap<float<'state>>
+          StartValues: CodedMap<float<'stateUnit>>
           EndCondition: EndCondition
-          GenerationRules: GenerationRule<'state> list
+          GenerationRules: GenerationRule<'stateUnit> list
           NoiseGeneration:
               Random
                   -> Parameter.Pool.ParameterPool
-                  -> CodedMap<TimeSeries<float<'state>, 'date, 'timeunit, 'timespan>>
-                  -> Result<CodedMap<TimeSeries<float<'state>, 'date, 'timeunit, 'timespan>>, string>
-          EnvironmentalData: CodedMap<TimeSeries<float, 'date, 'timeunit, 'timespan>>
+                  -> CodedMap<TimeSeries<float<'stateUnit>, 'date, 'yearUnit, 'timespan>>
+                  -> Result<CodedMap<TimeSeries<float<'stateUnit>, 'date, 'yearUnit, 'timespan>>, string>
+          EnvironmentalData: CodedMap<TimeSeries<float<'stateUnit>, 'date, 'yearUnit, 'timespan>>
           Resolution: Resolution.FixedTemporalResolution<'timespan>
           Random: Random
           StartDate: 'date
-          DateMode: DateMode.DateMode<'date, 'timeunit, 'timespan>
+          DateMode: DateMode.DateMode<'date, 'yearUnit, 'timespan>
           Attempts: int }
 
         static member Default: TestSettings<1, DateTime, int<year>, TimeSpan> =
@@ -95,6 +95,23 @@ module Test =
               StartDate = DateTime(1970, 01, 01)
               DateMode = DateMode.calendarDateMode
               Attempts = 50000 }
+
+        static member Annual: TestSettings<1, DatingMethods.Annual, int<year>, int<year>> =
+            { Resolution = Resolution.FixedTemporalResolution.Years (PositiveInt.create 1<year>).Value
+              TimeSeriesLength = 30
+              StartValues = Map.empty
+              EndCondition = Optimisation.EndConditions.afterIteration 1000<iteration>
+              GenerationRules = []
+              NoiseGeneration = fun _ -> fun _ -> id >> Ok
+              EnvironmentalData = Map.empty
+              Random = MathNet.Numerics.Random.MersenneTwister()
+              StartDate = DatingMethods.Annual 1970<year>
+              DateMode = DateMode.annualDateMode
+              Attempts = 50000 }
+
+    let defaultSettings = TestSettings<_,_,_,_>.Default
+    let annualSettings = TestSettings<_,_,_,_>.Annual
+
 
     type ParameterTestResult =
         { Identifier: string

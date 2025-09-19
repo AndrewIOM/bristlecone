@@ -91,6 +91,10 @@ module Timeseries =
         [<Measure>] type km
         [<Measure>] type area = km^2
 
+        // States
+        let H = state<prey/area>        "prey"
+        let L = state<predator/area>    "predator"
+
         let predatorPreyBase =
 
             // Parameters
@@ -99,24 +103,26 @@ module Timeseries =
             let δ  = parameter "δ" noConstraints 0.75<1/(prey/area * year)> 1.25<1/(prey/area * year)> // Natural death rate of lynx in the absence of food
             let γ           = parameter "γ" noConstraints 0.01</year> 0.20</year> // Efficiency of turning predated hares into lynx
 
-            // States
-            let H = state<prey/area>        "prey"
-            let L = state<predator/area>    "predator"
-
             let ``dH/dt``: ModelExpression<(prey/area)/year>        = P α * This<prey/area> - P β * This<prey/area> * Environment L
             let ``dL/dt``: ModelExpression<(predator/km^2)/year>    = -P γ * This<predator/area> + P δ * Environment H * This<predator/area>
 
-            Model.empty<year>
-            |> Model.addRateEquation "hare" ``dH/dt``
-            |> Model.addRateEquation "lynx" ``dL/dt``
+            Model.empty
+            |> Model.addRateEquation H ``dH/dt``
+            |> Model.addRateEquation L ``dL/dt``
             |> Model.estimateParameter α // Natural growth rate of hares in absence of predation
             |> Model.estimateParameter β // Death rate per encounter of hares due to predation
             |> Model.estimateParameter δ // Natural death rate of lynx in the absence of food
             |> Model.estimateParameter γ // Efficiency of turning predated hares into lynx
 
+            // continuousModel<year> {
+            //     equationRate H ``dH/dt``
+            //     equationRate L ``dL/dt``
+            //     likelihood (Bristlecone.ModelLibrary.Likelihood.sumOfSquares [ "hare"; "lynx" ])
+            // }
+
         let ``predator-prey`` () =
             predatorPreyBase
-            |> Model.useLikelihoodFunction (Bristlecone.ModelLibrary.Likelihood.sumOfSquares [ "hare"; "lynx" ])
+            |> Model.useLikelihoodFunction (Bristlecone.ModelLibrary.Likelihood.sumOfSquares [ H.Code; L.Code ])
             |> Model.compile
 
         let ``predator-prey [with noise]`` () =
@@ -124,7 +130,7 @@ module Timeseries =
             |> Model.estimateParameterOld "ρ" noConstraints -0.500 0.500
             |> Model.estimateParameterOld "σ[x]" notNegative 0.001 0.100
             |> Model.estimateParameterOld "σ[y]" notNegative 0.001 0.100
-            |> Model.useLikelihoodFunction (Bristlecone.ModelLibrary.Likelihood.bivariateGaussian "hare" "lynx")
+            |> Model.useLikelihoodFunction (Bristlecone.ModelLibrary.Likelihood.bivariateGaussian H L)
             |> Model.compile
 
 
@@ -136,12 +142,14 @@ module Timeseries =
         [<Measure>] type km
         [<Measure>] type area = km^2
 
+        let B = state "B"
+
         let logisticHarvestBase =
 
             // Parameters
             let r = parameter "r" noConstraints 0.1</year> 1.0</year> // intrinsic per‑capita growth rate
             let K = parameter "K" notNegative 50.<biomass/area> 500.<biomass/area> // carrying capacity
-            let h = parameter "h" notNegative 0.0<biomass/area/year> 50.<biomass/area/year> // constant harvest rate
+            let h = parameter "h" notNegative 0.01<biomass/area/year> 50.<biomass/area/year> // constant harvest rate
 
             // Logistic growth with harvest: dB/dt = r * B * (1 - B/K) - h
             let ``dB/dt`` : ModelExpression<(biomass/area)/year> =
@@ -149,7 +157,7 @@ module Timeseries =
                 - P h
 
             Model.empty<year>
-            |> Model.addRateEquation "biomass" ``dB/dt``
+            |> Model.addRateEquation B``dB/dt``
             |> Model.estimateParameter r
             |> Model.estimateParameter K
             |> Model.estimateParameter h
@@ -157,14 +165,14 @@ module Timeseries =
         // Deterministic fit
         let ``logistic-harvest`` () =
             logisticHarvestBase
-            |> Model.useLikelihoodFunction (Bristlecone.ModelLibrary.Likelihood.sumOfSquares [ "biomass" ])
+            |> Model.useLikelihoodFunction (Bristlecone.ModelLibrary.Likelihood.sumOfSquares [ B.Code ])
             |> Model.compile
 
         // Stochastic fit with Gaussian observation noise
         let ``logistic-harvest [with noise]`` () =
             logisticHarvestBase
             |> Model.estimateParameterOld "σ" notNegative 0.001 10.0 // observation noise s.d.
-            |> Model.useLikelihoodFunction (Bristlecone.ModelLibrary.Likelihood.gaussian "biomass")
+            // |> Model.useLikelihoodFunction (Bristlecone.ModelLibrary.Likelihood.gaussian "biomass")
             |> Model.compile
 
 
@@ -178,20 +186,20 @@ module Timeseries =
         [<Measure>] type km
         [<Measure>] type area = km^2
 
+        // States
+        let B = state<biomass/area>  "biomass"   // plant biomass density
+        let S = state<nutrient/area> "soilN"     // soil nutrient availability
+
         // Base model: plant biomass limited by soil nutrient via Monod uptake
         let plantSoilBase =
 
             // Parameters
             let q   = parameter "q"   notNegative 0.01<nutrient/(biomass*year)>  2.0<nutrient/(biomass*year)> // uptake capacity (nutrient per biomass per time)
             let e   = parameter "e"   notNegative 0.10<biomass/nutrient>          2.0<biomass/nutrient> // conversion efficiency of nutrient to biomass
-            let m   = parameter "m"   notNegative 0.00</year>                     1.0</year> // plant mortality/turnover
-            let I   = parameter "I"   notNegative 0.0<nutrient/area/year>        100.0<nutrient/area/year> // external nutrient input (deposition, fertiliser)
-            let l   = parameter "l"   notNegative 0.00</year>                     2.0</year> // nutrient loss (leaching/mineralisation balance)
+            let m   = parameter "m"   notNegative 0.01</year>                     1.0</year> // plant mortality/turnover
+            let I   = parameter "I"   notNegative 0.001<nutrient/area/year>        100.0<nutrient/area/year> // external nutrient input (deposition, fertiliser)
+            let l   = parameter "l"   notNegative 0.01</year>                     2.0</year> // nutrient loss (leaching/mineralisation balance)
             let Ks  = parameter "Ks"  notNegative 1.0<nutrient/area>            100.0<nutrient/area> // half-saturation constant for uptake
-
-            // States
-            let B = state<biomass/area>  "biomass"   // plant biomass density
-            let S = state<nutrient/area> "soilN"     // soil nutrient availability
 
             // Monod (Holling type II) limitation: f(S) = S / (Ks + S)  (dimensionless)
             let fS : ModelExpression<1> =
@@ -208,8 +216,8 @@ module Timeseries =
                 P I - P q * fS * This<biomass/area> - P l * This<nutrient/area>
 
             Model.empty<year>
-            |> Model.addRateEquation "biomass" ``dB/dt``
-            |> Model.addRateEquation "soilN"   ``dS/dt``
+            |> Model.addRateEquation B ``dB/dt``
+            |> Model.addRateEquation S   ``dS/dt``
             |> Model.estimateParameter q
             |> Model.estimateParameter e
             |> Model.estimateParameter m
@@ -220,7 +228,7 @@ module Timeseries =
         // Deterministic fit
         let ``plant-soil monod`` () =
             plantSoilBase
-            |> Model.useLikelihoodFunction (Bristlecone.ModelLibrary.Likelihood.sumOfSquares [ "biomass"; "soilN" ])
+            |> Model.useLikelihoodFunction (Bristlecone.ModelLibrary.Likelihood.sumOfSquares [ B.Code; S.Code ])
             |> Model.compile
 
         // With Gaussian observation noise
@@ -229,6 +237,5 @@ module Timeseries =
             |> Model.estimateParameterOld "ρ" noConstraints -0.500 0.500
             |> Model.estimateParameterOld "σ[x]" notNegative 0.001 0.100
             |> Model.estimateParameterOld "σ[y]" notNegative 0.001 0.100
-            |> Model.useLikelihoodFunction (Bristlecone.ModelLibrary.Likelihood.bivariateGaussian "biomass" "soilN")
+            |> Model.useLikelihoodFunction (Bristlecone.ModelLibrary.Likelihood.bivariateGaussian B S)
             |> Model.compile
-

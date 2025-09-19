@@ -6,6 +6,7 @@ module Language =
 
     [<NoEquality; NoComparison>]
     type StateId<[<Measure>] 'u> = private StateIdInner of ShortCode.ShortCode
+        with member this.Code = this |> fun (StateIdInner c) -> c
 
     [<NoEquality; NoComparison>]
     type ParamId<[<Measure>] 'u> = private ParamIdInner of ShortCode.ShortCode
@@ -80,6 +81,14 @@ module Language =
             | Label of string * ModelExpressionUntyped
             | StateAt of offset:int<Time.``time index``> * string
             | Invalid
+            // Comparisons:
+            | GreaterThan of ModelExpressionUntyped * ModelExpressionUntyped
+            | LessThan    of ModelExpressionUntyped * ModelExpressionUntyped
+            | EqualTo     of ModelExpressionUntyped * ModelExpressionUntyped
+
+
+    [<NoEquality; NoComparison>]
+    type BoolExpression = private BE of Untyped.ModelExpressionUntyped
 
     [<NoEquality; NoComparison>]
     type ModelExpression<[<Measure>] 'u> = private ME of Untyped.ModelExpressionUntyped
@@ -103,6 +112,15 @@ module Language =
         static member (~-) (ME a: ModelExpression<'u>) : ModelExpression<'u> =
             ME (Untyped.Multiply [a; Untyped.Constant -1.0])
 
+        static member op_GreaterThan (ME a : ModelExpression<'u>, ME b : ModelExpression<'u>) : BoolExpression =
+            BE (Untyped.GreaterThan(a, b))
+
+        static member op_LessThan (ME a : ModelExpression<'u>, ME b : ModelExpression<'u>) : BoolExpression =
+            BE (Untyped.LessThan(a, b))
+
+        static member op_Equality (ME a : ModelExpression<'u>, ME b : ModelExpression<'u>) : BoolExpression =
+            BE (Untyped.EqualTo(a, b))
+
         static member Pow (ME a: ModelExpression<'u>, ME p: ModelExpression<1>) : ModelExpression<'u> =
             ME (Untyped.Power (a, p))
 
@@ -124,13 +142,48 @@ module Language =
             let (StateIdInner name) = sid
             ME (Untyped.Environment name.Value)
 
-
     let Constant (x: float<'u>) : ModelExpression<'u> = ME (Untyped.Constant (float x))
     let P<[<Measure>] 'u> name : ModelExpression<'u> = ModelExpression.Parameter name
     let This<[<Measure>] 'u> : ModelExpression<'u> = ME Untyped.This
-    let StateAt (offset: int<Time.``time index``>, name: string) : ModelExpression<'u> = ME (Untyped.StateAt (offset, name))
+    let StateAt (offset: int<Time.``time index``>, sid) : ModelExpression<'u> = ModelExpression.StateAt (offset,sid)
     let Time<[<Measure>] 't> () : ModelExpression<'t> = ME Untyped.Time
     let Environment<[<Measure>] 'u> sid : ModelExpression<'u> = ModelExpression.Environment sid
+    let Invalid<[<Measure>] 'u> : ModelExpression<'u> = ME Untyped.Invalid
+
+    /// For conditional statements, all three branches must have the same unit.
+    let Conditional<[<Measure>] 'u>
+        (cond    : BoolExpression)
+        (ifTrue  : ModelExpression<'u>)
+        (ifFalse : ModelExpression<'u>)
+        : ModelExpression<'u> =
+        let (BE c) = cond
+        let (ME t) = ifTrue
+        let (ME f) = ifFalse
+        ME (Untyped.Conditional(c, t, f))
+
+    let Label<[<Measure>] 'u> (label: string) (expr: ModelExpression<'u>) : ModelExpression<'u> =
+        let (ME e) = expr
+        ME (Untyped.Label(label, e))
+
+    // TODO Units for power.
+    let Power<[<Measure>] 'u>
+        (baseExpr : ModelExpression<'u>)
+        (expExpr  : ModelExpression<1>)
+        : ModelExpression<'u> =
+        let (ME b) = baseExpr
+        let (ME e) = expExpr
+        ME (Untyped.Power(b, e))
+
+    // Logarithm: only makes sense for dimensionless inputs
+    let Logarithm (expr: ModelExpression<1>) : ModelExpression<1> =
+        let (ME e) = expr
+        ME (Untyped.Logarithm e)
+
+    // Exponential: exp(x) is dimensionless if x is dimensionless
+    let Exponential (expr: ModelExpression<1>) : ModelExpression<1> =
+        let (ME e) = expr
+        ME (Untyped.Exponential e)
+
 
     /// Compile model expressions into functions that take
     /// changing state as Tensors.
@@ -365,7 +418,7 @@ module Language =
             |> LeafExpressionConverter.EvaluateQuotation
             |> unbox<Parameter.Pool.ParameterPool -> CodedMap<float> -> float<Time.``time index``> -> float -> float>
 
-        let compileMeasure parameters stateKeys (expr: ModelExpression<'stateUnit>) =
+        let compileMeasure<[<Measure>] 'u> parameters (expr: ModelExpression<'stateUnit>) =
             let pVar      = Var("parameters", typeof<TypedTensor<Vector,``parameter``>>)
             let statesVar = Var("states", typeof<CodedMap<TypedTensor<Scalar,ModelSystem.state>>[]>)
             let tIdxVar   = Var("timeIndex", typeof<int>)
@@ -450,14 +503,14 @@ module Language =
             | Discrete of ShortCode.ShortCode * (Parameter.Pool.ParameterPool -> ShortCode.ShortCode list -> ModelSystem.StateEquation<'time>)
             | Rate     of ShortCode.ShortCode * (Parameter.Pool.ParameterPool -> ShortCode.ShortCode list -> ModelSystem.RateEquation<'time>)
         
-        type MeasureThunk = ShortCode.ShortCode * (unit -> ModelSystem.Measurement<ModelSystem.state>)
+        type MeasureThunk<[<Measure>] 'u> = ShortCode.ShortCode * (Parameter.Pool.ParameterPool -> ModelSystem.Measurement<'u>)
         type LikelihoodThunk = unit -> ModelSystem.Likelihood<ModelSystem.state>
 
         type ModelFragment<[<Measure>] 'time> =
             | EquationFragment  of EquationThunk<'time>
             | ParameterFragment of Parameter.Pool.AnyParameter
             | LikelihoodFragment of LikelihoodThunk
-            | MeasureFragment    of MeasureThunk
+            | MeasureFragment    of MeasureThunk<ModelSystem.state>
 
         type EquationFragment<[<Measure>] 'stateUnit, [<Measure>] 'timeUnit> =
             | DiscreteEq of ModelExpression<'stateUnit>
@@ -498,10 +551,9 @@ module Language =
                 let sc = ShortCode.create name |> Option.get
                 EquationFragment (Discrete (sc, fun p e -> ExpressionCompiler.compileDiscrete<'time, 'state> p e expr))
 
-            // Unify measure/likelihood to internal <state> at add-time via adapters
-            let measure<[<Measure>] 'u> (sc: ShortCode.ShortCode) (m: ModelSystem.Measurement<'u>) : ModelFragment<'time> =
-                let toInternal () = Measurement.adapt<'u> m
-                MeasureFragment (sc, toInternal)
+            let measure<[<Measure>] 'u> (name: string) (expr: ModelExpression<'state>) : ModelFragment<'time> =
+                let sc = ShortCode.create name |> Option.get
+                MeasureFragment ((sc, fun p -> ExpressionCompiler.compileMeasure<'u> p expr |> Measurement.adapt))
 
             let likelihood<[<Measure>] 'u> (l: ModelSystem.Likelihood<'u>) : ModelFragment<'time> =
                 let toInternal () = Likelihood.contramap<'u> l
@@ -513,19 +565,16 @@ module Language =
             ModelBuilder (m.Add(sc, frag), disc)
 
         let addEquationRate
-            (name: string)
+            (name: ShortCode.ShortCode)
             (expr: ModelExpression<'u / 'time>)
             (mb: ModelBuilder<'time>) =
-            let sc = ShortCode.create name |> Option.get
-            add name (Add.equationRate<'time, 'state> sc.Value expr) mb
+            add name.Value (Add.equationRate<'time, 'state> name.Value expr) mb
 
-        let addEquationDiscrete name (expr: ModelExpression<'u>) (mb: ModelBuilder<'time>) =
-            let sc = ShortCode.create name |> Option.get
-            add name (Add.equationDiscrete sc.Value expr) mb
+        let addEquationDiscrete (name: ShortCode.ShortCode) (expr: ModelExpression<'u>) (mb: ModelBuilder<'time>) =
+            add name.Value (Add.equationDiscrete name.Value expr) mb
 
-        let includeMeasure name (m: ModelSystem.Measurement<'u>) mb =
-            let sc = ShortCode.create name |> Option.get
-            add name (Add.measure sc m) mb
+        let includeMeasure name (m: ModelExpression<'u>) mb =
+            add name (Add.measure name m) mb
 
         let useLikelihood<[<Measure>] 'u,[<Measure>] 'time> (l: ModelSystem.Likelihood<'u>) mb =
             add "likelihood" (Add.likelihood<'u> l) mb
@@ -540,7 +589,7 @@ module Language =
                 m |> Map.toSeq |> Seq.choose (function c, ParameterFragment p -> Some (c, p) | _ -> None)
                 |> Map.ofSeq |> Parameter.Pool.Pool
             let measures =
-                m |> Map.toSeq |> Seq.choose (function c, MeasureFragment (sc, mk) -> Some (c, mk()) | _ -> None)
+                m |> Map.toSeq |> Seq.choose (function c, MeasureFragment m -> Some (c, m) | _ -> None)
                 |> Map.ofSeq
             let equations =
                 m |> Map.toSeq |> Seq.choose (function c, EquationFragment e -> Some (c, e) | _ -> None)
@@ -570,6 +619,10 @@ module Language =
                     |> Map.map (fun _ -> function Rate (_sc, k) -> k parameters envKeys | _ -> failwith "Expected rate eq")
                     |> ModelSystem.DifferentialEqs
 
+            // Compile measures by invoking thunks
+            let measures =
+                measures |> Map.map (fun _ (_,m)-> m parameters)
+
             { NegLogLikelihood = like
               Parameters       = parameters
               EnvironmentKeys  = envKeys
@@ -583,10 +636,12 @@ module Language =
         let empty<[<Measure>] 'time> : ModelBuilder.ModelBuilder<'time> = ModelBuilder.create false ()
         let discrete<'time> = ModelBuilder.create true ()
 
-        let addRateEquation<[<Measure>] 'time, [<Measure>] 'state> name (expr: ModelExpression<'state/'time>) (mb: ModelBuilder.ModelBuilder<'time>) =
+        let addRateEquation<[<Measure>] 'time, [<Measure>] 'state> (name:StateId<'state>) (expr: ModelExpression<'state/'time>) (mb: ModelBuilder.ModelBuilder<'time>) =
+            let (StateIdInner name) = name
             ModelBuilder.addEquationRate name expr mb
 
-        let addDiscreteEquation name expr mb =
+        let addDiscreteEquation<[<Measure>] 'time, [<Measure>] 'state> (name:StateId<'state>) (expr: ModelExpression<'state>) (mb: ModelBuilder.ModelBuilder<'time>) =
+            let (StateIdInner name) = name
             ModelBuilder.addEquationDiscrete name expr mb
 
         // Units preserved end-to-end: Parameter.create returns Parameter<'u>; we box to AnyParameter
@@ -665,13 +720,13 @@ module Language =
             (sid: StateId<'u>) (expr: ModelExpression<'stateUnit / 'timeUnit>)
             (mb: ModelBuilderState<'time, 'E, 'L>) =
             let (StateIdInner sc) = sid
-            { mb with Inner = ModelBuilder.addEquationRate sc.Value expr mb.Inner }
+            { mb with Inner = ModelBuilder.addEquationRate sc expr mb.Inner }
 
         let addDiscreteEq
             (sid: StateId<'u>) (expr: ModelExpression<'u>)
             (mb: ModelBuilderState<'time, 'E, 'L>) =
             let (StateIdInner sc) = sid
-            { mb with Inner = ModelBuilder.addEquationDiscrete sc.Value expr mb.Inner }
+            { mb with Inner = ModelBuilder.addEquationDiscrete sc expr mb.Inner }
 
         // let addMeasure<[<Measure>] 'u, [<Measure>] 'time>
         //     (sid: StateId<'u>) (meas: ModelSystem.Measurement<'u>) (mb: ModelBuilderState<'time, 'E, 'L>) =
@@ -710,13 +765,13 @@ module Language =
             member _.EquationDiscrete(state: ModelBuilderState<'time,'E,'L>, sid: StateId<'u>, expr: ModelExpression<'u>)
                 : ModelBuilderState<'time, Present, 'L> =
                 let (StateIdInner sc) = sid
-                { Inner = ModelBuilder.addEquationDiscrete sc.Value expr state.Inner }
+                { Inner = ModelBuilder.addEquationDiscrete sc expr state.Inner }
 
             [<CustomOperation("equationRate")>]
             member _.EquationRate(state: ModelBuilderState<'time,'E,'L>, sid: StateId<'u>, expr: ModelExpression<'u/'time>)
                 : ModelBuilderState<'time, Present, 'L> =
                 let (StateIdInner sc) = sid
-                { Inner = ModelBuilder.addEquationRate sc.Value expr state.Inner }
+                { Inner = ModelBuilder.addEquationRate sc expr state.Inner }
 
             [<CustomOperation("measure")>]
             member _.Measure<'E, 'L>
@@ -768,12 +823,12 @@ module Language =
 
         let ``dB/dt`` = ModelExpression.Parameter r * This<biomass> * (one - This<biomass> / ModelExpression.Parameter K)
 
-        let model =
-            continuousModel<day> {
-                parameter r
-                equationRate B ``dB/dt``
-                likelihood (ModelLibrary.Likelihood.sumOfSquares [])
-            }
+        // let model =
+        //     continuousModel<day> {
+        //         parameter r
+        //         equationRate B ``dB/dt``
+        //         likelihood (ModelLibrary.Likelihood.sumOfSquares [])
+        //     }
 
 
     /// Terms for designing tests for model systems.
@@ -791,27 +846,113 @@ module Language =
 
         let run settings = Bristlecone.testModel
 
-    /// A component with its own parameters and an expression generator
-    type PluggableComponent =
-        { Parameters : CodedMap<Parameter.Pool.AnyParameter>
-          Transform  : Untyped.ModelExpressionUntyped -> Untyped.ModelExpressionUntyped }
 
-    /// Creates a nested component that can be inserted into a base model.
-    let subComponent name transform = name, { Parameters = Map.empty; Transform = transform }
+    module Components =
 
-    let modelComponent name list = name, list
+        /// A component with its own parameters and an expression generator
+        type SubComponent<[<Measure>] 'u> =
+            { Label      : string
+              Parameters : CodedMap<Parameter.Pool.AnyParameter>
+              Expr       : ModelExpression<'u> -> ModelExpression<'u> }
 
-    let estimateParameter<[<Measure>] 'u>
-        name constraintMode (lower: float<'u>) (upper: float<'u>)
-        (compName, comp: PluggableComponent) =
-        match Parameter.create constraintMode lower upper with
-        | Some p ->
-            match code name with
-            | Some c ->
-                let boxed = Parameter.Pool.boxParam<'u> name p
-                compName, { comp with Parameters = comp.Parameters |> Map.add c boxed }
-            | None -> failwithf "Invalid code '%s'" name
-        | None -> failwithf "Invalid bounds %A - %A" lower upper
+        type ModelComponent<[<Measure>] 'u> = {
+            Label: string
+            Implementations: SubComponent<'u> list
+        }
+
+        /// Creates a nested component that can be inserted into a base model.
+        let subComponent name transform = { Label = name; Parameters = Map.empty; Expr = transform }
+
+        let modelComponent name list = { Label = name; Implementations = list }
+
+        let estimateParameter<[<Measure>] 'u, [<Measure>] 'compUnit> p (comp: SubComponent<'u>) =
+            let (ParamIdInner name) = p.ParamId
+            let boxed = Parameter.Pool.boxParam<'u> name.Value p.Parameter
+            { comp with Parameters = comp.Parameters |> Map.add name boxed }
+
+
+
+        type SubComponentState<[<Measure>] 'u> =
+            { Label     : string
+              Expr      : ModelExpression<'u> option
+              Estimates : (string * Parameter.Constraint * float * float) list }
+
+        type ComponentState<[<Measure>] 'u> =
+            { Options : SubComponentState<'u> list }
+
+
+        type SubComponentBuilder<[<Measure>] 'u>(label: string) =
+
+            member _.Yield(_) =
+                { Label = label; Expr = None; Estimates = [] }
+
+            member _.Zero() =
+                { Label = label; Expr = None; Estimates = [] }
+
+            member _.Bind(p: Parameter.Parameter<'p>, cont: Parameter.Parameter<'p> -> SubComponentState<'u>) =
+                cont p
+
+            member _.Parameter<[<Measure>] 'p>
+                (name: string, con, lower: float<'p>, upper: float<'p>, state: SubComponentState<'u>) =
+                let p = parameter name con lower upper
+                { state with Estimates = (name, con, float lower, float upper) :: state.Estimates }, p
+
+            member _.Expression(expr: ModelExpression<'u>, state: SubComponentState<'u>) =
+                { state with Expr = Some expr }
+
+            member _.Run(state: SubComponentState<'u>) =
+                match state.Expr with
+                | Some _ -> state
+                | None   -> failwithf "Subcomponent '%s' has no expression" state.Label
+
+
+        // type ComponentBuilder<[<Measure>] 'u>(name: string) =
+
+        //     member _.Yield(_) =
+        //         { Options = [] }
+
+        //     member _.Yield(sc: SubComponentState<'u>) =
+        //         { Options = [sc] }
+
+        //     member _.Zero() =
+        //         { Options = [] }
+
+        //     member _.Combine(state: ComponentState<'u>, sc: SubComponentState<'u>) =
+        //         { state with Options = sc :: state.Options }
+
+        //     member _.Delay(f: unit -> ComponentState<'u>) = f()
+
+        //     member _.Run(state: ComponentState<'u>) =
+        //         let options =
+        //             state.Options
+        //             |> List.rev
+        //             |> List.map (fun sc ->
+        //                 let expr = sc.Expr.Value
+        //                 (sc.Label, expr)
+        //                 |> fun acc ->
+        //                     sc.Estimates
+        //                     |> List.fold (fun acc (pName, constr, lo, hi) ->
+        //                         estimateParameter pName
+        //                     ) acc
+        //             )
+        //         modelComponent<'u> name options
+
+
+    // let subcomponent<[<Measure>] 'u> label (block: Components.SubComponentBuilder<'u> -> Components.SubComponentState<'u>) =
+    //     block (Components.SubComponentBuilder label)
+    // let modelComponent label : Components.ComponentBuilder<'u> = Components.ComponentBuilder(label)
+
+    // let nLimitation =
+    //     modelComponent "N-limitation" {
+    //         subcomponent "Linear" {
+    //             let! a = parameter "a" notNegative 0.100 0.400
+    //             expression (
+    //                 ModelComponents.GrowthLimitation.linear
+    //                     (P a / Constant 1000.)
+    //                     (Constant 5.00)
+    //             )
+    //         }
+    //     }
 
 
     /// <summary>Types to represent a hypothesis, given that a hypothesis

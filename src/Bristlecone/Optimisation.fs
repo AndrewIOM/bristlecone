@@ -1490,8 +1490,6 @@ module Amoeba =
         let solve settings rng writeOut atEnd domain _ f =
             let dim = Array.length domain
 
-            writeOut <| GeneralEvent (sprintf "Domain = %A" domain)
-
             let start =
                 [| for _ in 1 .. settings.Size -> Initialise.tryGenerateTheta f domain rng 1000 |]
                 |> Array.map (fun r ->

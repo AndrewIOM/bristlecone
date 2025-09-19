@@ -49,6 +49,14 @@ module Bristlecone =
     /// <returns></returns>
     let withOutput out engine = { engine with LogTo = out }
 
+    let withTimeConversion<'timespan, [<Measure>] 'modelTimeUnit, 'o1, [<Measure>] 'o2, [<Measure>] 'u> (fn:'timespan -> float<'modelTimeUnit>) (engine:EstimationEngine<'o1,'o2,'u>) : EstimationEngine<'timespan,'modelTimeUnit,'u> =
+        { TimeHandling = engine.TimeHandling
+          OptimiseWith = engine.OptimiseWith
+          LogTo = engine.LogTo
+          Random = engine.Random
+          ToModelTime = fn
+          Conditioning = engine.Conditioning }
+
     /// Use a mersenne twister random number generator
     /// with a specific seed.
     let withSeed seed engine =
@@ -134,11 +142,10 @@ module Bristlecone =
             //     fixedStep engine.LogTo engine.TimeHandling (startIndex - externalSteps.Head) endIndex t0 forcings
             )
 
-    let private dynamicVariableKeys (models:ModelSystem.ModelForm<_>) =
+    let private dynamicVariableKeys (models:ModelSystem.ModelForm<'modelTimeUnit>) =
         match models with
-        | ModelForm.DifferenceEqs eqs -> eqs
-        | ModelForm.DifferentialEqs eqs -> eqs
-        |> Map.keys
+        | ModelForm.DifferenceEqs eqs -> eqs |> Map.keys
+        | ModelForm.DifferentialEqs eqs -> eqs |> Map.keys
 
     // Temporary helpers until optim-space-transformed can be handled correctly:
     let private unsafeEraseSpace<'space> = unbox<Parameter.Pool.OptimiserConfig<``optim-space``>>
@@ -257,7 +264,6 @@ module Bristlecone =
             let optimise =
                 match engine.OptimiseWith, optimConfig with
                 | Optimisation.InDetachedSpace optim, Parameter.Pool.DetachedConfig cfg ->
-                    engine.LogTo <| GeneralEvent (sprintf "Domain = %A" cfg.Domain)
                     optim engine.Random engine.LogTo endCondition cfg.Domain None
                 | Optimisation.InTransformedSpace optim, Parameter.Pool.TransformedConfig cfg ->
                     optim engine.Random engine.LogTo endCondition (unsafeEraseSpace cfg).Domain None
@@ -310,6 +316,8 @@ module Bristlecone =
                 estimatedHighRes
                 |> Map.map(fun _ v -> v |> Tensors.Typed.toFloatArray)
                 |> Some
+
+            // engine.LogTo CompleteEvent
 
             return
                 { ResultId = resultId
@@ -407,6 +415,8 @@ module Bristlecone =
                     key, errs)
                 |> Map.ofSeq
 
+            engine.LogTo CompleteEvent
+
             return
                 { ErrorStructure = errorStructure
                   IterationsRun = estimated.Trace.Length * 1<iteration>
@@ -426,7 +436,7 @@ module Bristlecone =
     /// <param name="settings">Test settings that define how the test will be conducted.</param>
     /// <param name="model">The model system to test against the estimation engine.</param>
     /// <returns>A test result that indicates differences between the expected and actual fit.</returns>
-    let testModel (engine: EstimationEngine<'timespan,'modelTimeUnit,'state>) settings model =
+    let testModel (engine: EstimationEngine<'timespan,'modelTimeUnit,'state>) (settings: TestSettings<'state, 'date, 'yearUnit, 'timespan>) (model: ModelSystem<'modelTimeUnit>) =
         tryTestModel engine settings model |> Result.forceOk
 
     /// <summary>Repeat a model fit many times, removing a single data point at random each time.</summary>
