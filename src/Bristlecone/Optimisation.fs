@@ -234,6 +234,8 @@ module MonteCarlo =
             |> samplesToMatrix
             |> Bristlecone.Statistics.LinearAlgebra.computeCovariance
 
+        /// Synthesises a full covariance matrix by drawing synthetic
+        /// samples from marginal scales.
         let covarianceFromStandardDeviations<[<Measure>] 'u>
             (n: int)
             (random: System.Random)
@@ -247,7 +249,8 @@ module MonteCarlo =
             |> samplesToMatrix
             |> Bristlecone.Statistics.LinearAlgebra.computeCovariance
 
-        /// Tune previously observed covariance based on most recent period
+        /// Tune previously observed covariance based on most recent period.
+        /// Works directly with the empirical covariance of the chain history.
         let covariance tuneInterval weighting remaining (history: Solution seq) scale =
             if remaining % tuneInterval = 0<iteration> then
                 if (history |> Seq.length) * 1<iteration> >= tuneInterval then
@@ -258,7 +261,7 @@ module MonteCarlo =
                         |> Seq.map Tensors.Typed.toFloatArray
                         |> matrix
                         |> Bristlecone.Statistics.LinearAlgebra.computeCovariance
-                        |> fun c -> tuneCovariance weighting scale c
+                        |> fun recent -> tuneCovariance weighting recent scale
 
                     try
                         sc.Cholesky() |> ignore
@@ -294,7 +297,7 @@ module MonteCarlo =
                     |> Seq.map (snd >> Tensors.Typed.toFloatArray)
                     |> matrix
                     |> Bristlecone.Statistics.LinearAlgebra.computeCovariance
-                    |> fun c -> tuneCovariance weighting scale c
+                    |> fun recent -> tuneCovariance weighting recent scale
 
                 sc.Cholesky() |> ignore // Ensure the matrix is positive definite
                 sc
@@ -330,6 +333,7 @@ module MonteCarlo =
 
     module RandomWalk =
 
+        /// Covariance is the raw empirical covariance of the chain.
         let proposeJump
             (sample: Matrix<float<``optim-space``^2>> -> unit -> Vector<float<``optim-space``>>)
             (domain: Domain)
@@ -337,15 +341,15 @@ module MonteCarlo =
             (theta: Point) : float<``optim-space``>[] =
 
             let dim = theta |> Typed.length |> float
-            let factor = (2.38 ** 2.0) / dim // unitless
-            let covScaled = cov.Map(fun v -> v * factor)
+            let factor = (2.38 ** 2.0) / dim
+            let covScaled = cov.Map(fun v -> v * factor * scale * scale)
 
             sample covScaled ()
             |> Vector.toArray
-            |> Array.map (fun step -> step * scale)
             |> Array.mapi (fun i step -> (step, domain.[i]))
             |> Array.zip (theta |> Typed.toFloatArray)
             |> Array.map (fun (thetai, (zi, (_, _, con))) -> constrainJump thetai zi scale con)
+
 
         let randomWalk'
             initialCovariance
