@@ -133,6 +133,123 @@ module Timeseries =
             |> Model.useLikelihoodFunction (Bristlecone.ModelLibrary.Likelihood.bivariateGaussian H L)
             |> Model.compile
 
+    module SoilCarbon =
+
+        open Bristlecone.Time
+
+        [<Measure>] type carbon   // e.g. g C
+        [<Measure>] type area     // e.g. m^2
+        [<Measure>] type temp     // °C
+
+        // States
+        let Cf = state "Cf"   // fast pool
+        let Cs = state "Cs"   // slow pool
+
+        // Environmental input: soil temperature
+        let Ts = environment "T"
+
+        // Measurement variables
+        let R = measure "Respiration"
+
+        let soilCarbonBase =
+
+            // Parameters
+            let kf = parameter "kf" notNegative 0.001</day> 0.1</day>   // base decay rate fast pool
+            let ks = parameter "ks" notNegative 0.0001</day> 0.01</day> // base decay rate slow pool
+            let Q10 = parameter "Q10" notNegative 1.5 3.0               // temperature sensitivity
+            let alpha = parameter "alpha" notNegative 0.1 0.9           // fraction of fast decay to slow pool
+
+            // Temperature modifier (Q10 function relative to 10 °C)
+            let tempEffect =
+                (P Q10) ** ((Environment Ts - Constant 10.0<temp>) / Constant 10.0<temp>)
+
+            // Rate equations
+            let ``dCf/dt`` : ModelExpression<(carbon/area)/day> =
+                - (P kf * tempEffect) * This
+
+            let ``dCs/dt`` : ModelExpression<(carbon/area)/day> =
+                (P alpha) * (P kf * tempEffect) * Environment Cf
+                - (P ks * tempEffect) * This
+
+            // Derived measurement: soil respiration flux            
+            let respiration : ModelExpression<(carbon/area)/day> =
+                (P kf * tempEffect) * State Cf
+                + (P ks * tempEffect) * State Cs
+
+            Model.empty
+            |> Model.addRateEquation Cf ``dCf/dt``
+            |> Model.addRateEquation Cs ``dCs/dt``
+            |> Model.addMeasure R respiration
+            |> Model.estimateParameter kf
+            |> Model.estimateParameter ks
+            |> Model.estimateParameter Q10
+            |> Model.estimateParameter alpha
+
+        // Deterministic fit
+        let ``soil-carbon`` () =
+            soilCarbonBase
+            |> Model.useLikelihoodFunction (Bristlecone.ModelLibrary.Likelihood.sumOfSquares [ R.Code ])
+            |> Model.compile
+
+        // With Gaussian observation noise
+        let ``soil-carbon [with noise]`` () =
+            soilCarbonBase
+            |> Model.estimateParameterOld "σ" notNegative 0.001 10.0
+            |> Model.compile
+
+
+    module RickerTemperature =
+
+        open Bristlecone.Time
+
+        [<Measure>] type individuals
+        [<Measure>] type degC
+
+        // State: population size
+        let N = state<individuals> "N"
+
+        // Measures
+        let logN = measure "logN"
+
+        // Environmental input: temperature anomaly
+        let T = environment "T" // -5.0<degC> 5.0<degC>
+
+        let rickerBase =
+
+            // Parameters
+            let r     = parameter "r" noConstraints 0.1 2.0        // intrinsic growth rate
+            let K     = parameter "K" notNegative 50.<individuals> 500.<individuals> // carrying capacity
+            let beta  = parameter "beta" noConstraints -1.0 1.0    // temperature effect
+
+            // Discrete‑time update:
+            // N_{t+1} = N_t * exp(r * (1 - N_t/K) + beta * T_t)
+            let update : ModelExpression<individuals> =
+                This *
+                exp ( P r * (Constant 1.0 - This / P K)
+                    + P beta * Environment T )
+
+            let eqLogNM = State N // |> Logarithm
+
+            Model.discrete
+            |> Model.addDiscreteEquation N update
+            |> Model.addMeasure logN eqLogNM
+            |> Model.estimateParameter r
+            |> Model.estimateParameter K
+            |> Model.estimateParameter beta
+
+        // Deterministic fit
+        let ``ricker-temperature`` () =
+            rickerBase
+            |> Model.useLikelihoodFunction (Bristlecone.ModelLibrary.Likelihood.sumOfSquares [ logN.Code ])
+            |> Model.compile
+
+        // With Gaussian observation noise
+        let ``ricker-temperature [with noise]`` () =
+            rickerBase
+            |> Model.estimateParameterOld "σ" notNegative 0.001 10.0
+            |> Model.compile
+
+
 
     module LogisticHarvest =
 

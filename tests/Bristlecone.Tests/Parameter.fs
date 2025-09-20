@@ -40,20 +40,20 @@ module Transforms =
             testCase "scalarTransformOptimSpace is identity for unconstrained" <| fun _ ->
                 let t = Parameter.ParameterTransforms.scalarTransformOptimSpace Parameter.Constraint.Unconstrained
                 let input = tensor1<``optim-space``> 42.0<``optim-space``>
-                let roundTrip = t.Inverse (t.Forward input)
-                Expect.equal roundTrip input "Forward >> Inverse should be identity"
+                let roundTrip = t.Inverse (t.Forward input) |> Tensors.Typed.toFloatScalar |> Units.removeUnitFromFloat
+                Expect.equal roundTrip 42. "Forward >> Inverse should be identity"
 
             testCase "scalarTransformOptimSpace is identity for positive-only" <| fun _ ->
                 let t = Parameter.ParameterTransforms.scalarTransformOptimSpace Parameter.Constraint.PositiveOnly
                 let input = tensor1<``optim-space``> 42.0<``optim-space``>
-                let roundTrip = t.Inverse (t.Forward input)
-                Expect.equal roundTrip input "Forward >> Inverse should be identity"
+                let roundTrip = t.Inverse (t.Forward input) |> Tensors.Typed.toFloatScalar |> Units.removeUnitFromFloat
+                Expect.equal roundTrip 42. "Forward >> Inverse should be identity"
 
             testCase "scalarTransformOptimSpaceTransformed unconstrained is identity" <| fun _ ->
                 let t = Parameter.ParameterTransforms.scalarTransformOptimSpaceTransformed Parameter.Constraint.Unconstrained
                 let input = tensor1<``optim-space-transformed``> -3.5<``optim-space-transformed``>
-                let roundTrip = t.Inverse (t.Forward input)
-                Expect.equal roundTrip input "Forward >> Inverse should be identity"
+                let roundTrip = t.Inverse (t.Forward input) |> Tensors.Typed.toFloatScalar |> Units.removeUnitFromFloat
+                Expect.equal roundTrip -3.5 "Forward >> Inverse should be identity"
 
             testCase "scalarTransformOptimSpaceTransformed positive-only applies exp/log" <| fun _ ->
                 let t = Parameter.ParameterTransforms.scalarTransformOptimSpaceTransformed Parameter.Constraint.PositiveOnly

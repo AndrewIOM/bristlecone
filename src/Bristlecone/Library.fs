@@ -448,12 +448,12 @@ module Bristlecone =
     /// <returns>A list of estimation results (one for each bootstrap) for further analysis</returns>
     let bootstrap
         (engine: EstimationEngine.EstimationEngine<'timespan, 'modelTimeUnit, 'state>)
-        endCondition
+        (endCondition: EndCondition)
         bootstrapCount
-        model
+        (model: ModelSystem<'modelTimeUnit>)
         (series: Map<ShortCode.ShortCode, TimeSeries.TimeSeries<float, 'date, 'timeunit, 'timespan>>)
         =
-        let rec bootstrap s numberOfTimes solutions =
+        let rec bootstrap (s: Map<ShortCode.ShortCode,TimeSeries.TimeSeries<float, 'date, 'timeunit, 'timespan>>) numberOfTimes solutions =
             if numberOfTimes > 0 then
                 let resolution = series |> Seq.head |> (fun s -> s.Value |> TimeSeries.resolution)
 
@@ -503,7 +503,7 @@ module Bristlecone =
                     (engine
                     |> withCustomOptimisation Optimisation.None.none
                     |> withConditioning Conditioning.RepeatFirstDataPoint)
-                    (Optimisation.EndConditions.afterIteration 0<iteration>)
+                    (Optimisation.EndConditions.atIteration 0<iteration>)
                     dataset
                     hypothesisMle
 

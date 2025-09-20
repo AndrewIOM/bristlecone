@@ -35,12 +35,14 @@ let genMultiList minLength maxLength =
         return list
     }
 
+[<Measure>] type testModelUnit
+
 type BristleconeTypesGen() =
     static member ShortCode() : Arbitrary<ShortCode.ShortCode> =
         let createCode code = ShortCode.create code |> Option.get
         genStrings 1 10 |> Gen.map createCode |> Arb.fromGen
 
-    static member EquationList = genStrings 1 10 |> genTuple<ModelExpression> |> Arb.fromGen
+    static member EquationList = genStrings 1 10 |> genTuple<ModelExpression<testModelUnit>> |> Arb.fromGen
 
     static member MeasureList =
         genStrings 1 10 |> genTuple<ModelSystem.Measurement<ModelSystem.state>> |> Arb.fromGen
@@ -81,7 +83,7 @@ type BristleconeTypesGen() =
 
     static member ObservationalTimeSpan =
         Gen.choose (1, TimeSpan.TicksPerDay * int64 (365 * 200) |> int)
-        |> Gen.map (int64 >> TimeSpan.FromTicks >> Time.ObservationalTimeSpan.create >> Option.get)
+        |> Gen.map (int64 >> TimeSpan.FromTicks >> Bristlecone.Time.ObservationalTimeSpan.create >> Option.get)
         |> Arb.fromGen
 
     static member Observations: Arbitrary<(float * DateTime) list> =

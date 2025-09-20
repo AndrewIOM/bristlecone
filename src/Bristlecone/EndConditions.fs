@@ -8,7 +8,7 @@ open Bristlecone.Statistics
 module EndConditions =
 
     /// End the optimisation procedure when a minimum number of iterations is exceeded.
-    let afterIteration iteration : EndCondition =
+    let atIteration iteration : EndCondition =
         fun _ currentIteration ->
             if currentIteration >= iteration then OptimStopReason.MaxIterations
             else OptimStopReason.Continue
@@ -220,7 +220,7 @@ module EndConditions =
         /// When tuning, stop when the chain is well mixed.
         let mcmcTuningStep maxIter log : EndCondition =
             fun results iter ->
-                if afterIteration maxIter results iter <> Continue
+                if atIteration maxIter results iter <> Continue
                 then MaxIterations
                 else
                     if acceptanceRateGate 0.15 0.5 1000<iteration> log results iter <> Continue

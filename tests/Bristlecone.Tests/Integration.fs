@@ -29,7 +29,6 @@ let rk4Tests =
             let tEnd     = 1.<``time index``>
             let tStep    = (tEnd - tInitial) / float steps
             let y0       = [| 1.0 |]
-            printfn "Starting 2..."
             // Tensor-based integration
             let tensorTrajectory : float[,] =
                 rk4WithStepCount
@@ -92,7 +91,7 @@ let rk4EdgeCases =
 
             // RHS: dy/dt = constant 2.0
             let rhs : EstimationEngine.ParameterisedRHS =
-                fun _t _yVec -> Map.ofList [ key, Typed.ofScalar 2.0<state> ]
+                fun _t _yVec -> Map.ofList [ key, Typed.ofScalar 2.0<state/``time index``> ]
 
             let keys, y0 = flattenState t0Map
             let traj = rk4WithStepWidth t0 t1 dt y0 (wrapRhs keys rhs)

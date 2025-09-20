@@ -87,7 +87,7 @@ module Test =
             { Resolution = Resolution.FixedTemporalResolution.Years (PositiveInt.create 1<year>).Value
               TimeSeriesLength = 30
               StartValues = Map.empty
-              EndCondition = Optimisation.EndConditions.afterIteration 1000<iteration>
+              EndCondition = Optimisation.EndConditions.atIteration 1000<iteration>
               GenerationRules = []
               NoiseGeneration = fun _ -> fun _ -> id >> Ok
               EnvironmentalData = Map.empty
@@ -100,7 +100,7 @@ module Test =
             { Resolution = Resolution.FixedTemporalResolution.Years (PositiveInt.create 1<year>).Value
               TimeSeriesLength = 30
               StartValues = Map.empty
-              EndCondition = Optimisation.EndConditions.afterIteration 1000<iteration>
+              EndCondition = Optimisation.EndConditions.atIteration 1000<iteration>
               GenerationRules = []
               NoiseGeneration = fun _ -> fun _ -> id >> Ok
               EnvironmentalData = Map.empty
@@ -266,7 +266,6 @@ module Test =
 
             match tryGenerateData' engine model settings randomPool with
             | Ok series ->
-                engine.LogTo <| Logging.GeneralEvent (sprintf "Series %A" series)
 
                 let extraFiniteRules =
                     series |> Map.keys |> Seq.map (fun s -> s.Value |> GenerationRules.alwaysFinite) |> Seq.toList

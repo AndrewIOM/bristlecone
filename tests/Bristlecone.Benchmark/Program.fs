@@ -304,8 +304,8 @@ let annealSettings =
         BoilingAcceptanceRate = 0.85
         HeatRamp = (fun t -> t + sqrt t)
         TemperatureCeiling = Some 500.
-        HeatStepLength = EndConditions.afterIteration 10000<iteration>
-        AnnealStepLength = fun x -> EndConditions.afterIteration 10000<iteration> x }
+        HeatStepLength = EndConditions.atIteration 10000<iteration>
+        AnnealStepLength = fun x -> EndConditions.atIteration 10000<iteration> x }
 
 let optimFunctions =
     [ //"amoeba single", Amoeba.single Amoeba.Solver.Default

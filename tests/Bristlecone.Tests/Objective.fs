@@ -66,10 +66,13 @@ let initialBounds =
                         else
                             Language.noConstraints
 
+                    let X = Language.state "X"
+                    let a = Language.parameter "a" mode (min b1 b2) (max b1 b2)
+
                     let model =
                         Language.Model.empty
-                        |> Language.Model.addEquation "x" (Language.Parameter "a")
-                        |> Language.Model.estimateParameter "a" mode (min b1 b2) (max b1 b2)
+                        |> Language.Model.addRateEquation X (Language.P a)
+                        |> Language.Model.estimateParameter a
                         |> Language.Model.useLikelihoodFunction fakeLikelihood
                         |> Language.Model.compile
 

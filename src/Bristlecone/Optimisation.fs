@@ -405,7 +405,7 @@ module MonteCarlo =
                 [ { Method = CovarianceWithScale weighting; Frequency = period; EndCondition = n } ]
                 random
                 writeOut
-                (EndConditions.afterIteration 0<iteration>)
+                (EndConditions.atIteration 0<iteration>)
                 domain
                 startPoint
                 f
@@ -450,7 +450,7 @@ module MonteCarlo =
                     metropolisHastings'
                         random
                         ignore
-                        (EndConditions.afterIteration 1<iteration>)
+                        (EndConditions.atIteration 1<iteration>)
                         proposeJump
                         TuningMode.none
                         f
@@ -670,7 +670,7 @@ module MonteCarlo =
                         EndCondition = EndConditions.stationarySquaredJumpDistance writeOut } ]
                     random
                     writeOut
-                    (EndConditions.afterIteration 0<iteration>)
+                    (EndConditions.atIteration 0<iteration>)
                     domain
                     f
 
@@ -842,7 +842,7 @@ module MonteCarlo =
               AnnealStepLength: EndCondition }
 
             static member Default =
-                { HeatStepLength = EndConditions.afterIteration 250<iteration>
+                { HeatStepLength = EndConditions.atIteration 250<iteration>
                   HeatRamp = fun t -> t * 1.10
                   BoilingAcceptanceRate = 0.85
                   TemperatureCeiling = Some 200.
@@ -990,7 +990,7 @@ module MonteCarlo =
             let initialScale = [| 1 .. theta1 |> Typed.length |] |> Array.map (fun _ -> scale)
 
             let tunedScale, l2, theta2 =
-                homogenousChain initialScale (EndConditions.afterIteration settings.PreTuneLength) 1. (l1 |> Typed.toFloatScalar, theta1)
+                homogenousChain initialScale (EndConditions.atIteration settings.PreTuneLength) 1. (l1 |> Typed.toFloatScalar, theta1)
                 |> List.minBy fst
                 // |> tune (initialScale |> Array.map (fun t -> (t, Array.empty))) 1<iteration>
                 |> Tuning.tuneStepSizes
@@ -1084,7 +1084,7 @@ module MonteCarlo =
                 { TuneAfterChanges = 50
                   MaxScaleChange = 100.00
                   MinScaleChange = 0.0010
-                  BurnLength = EndConditions.afterIteration 2000<iteration> }
+                  BurnLength = EndConditions.atIteration 2000<iteration> }
 
         type ParameterTuning<[<Measure>] 'u> =
             { Scale: float<'u>

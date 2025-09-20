@@ -87,7 +87,7 @@ module ProfileLikelihood =
                             results.SaveEvent e }
 
         let rec fit' currentTrace =
-            let a = customFit (EndConditions.afterIteration n) subject hypothesisMle
+            let a = customFit (EndConditions.atIteration n) subject hypothesisMle
 
             let validTrace =
                 a.Trace

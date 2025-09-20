@@ -9,6 +9,10 @@ module Language =
         with member this.Code = this |> fun (StateIdInner c) -> c
 
     [<NoEquality; NoComparison>]
+    type MeasureId<[<Measure>] 'u> = private MeasureIdInner of ShortCode.ShortCode
+        with member this.Code = this |> fun (MeasureIdInner c) -> c
+
+    [<NoEquality; NoComparison>]
     type ParamId<[<Measure>] 'u> = private ParamIdInner of ShortCode.ShortCode
 
     type IncludedParameter<[<Measure>] 'u> = {
@@ -26,6 +30,16 @@ module Language =
     let state<[<Measure>] 'u> name : StateId<'u> =
         match name |> ShortCode.create with
         | Some c -> StateIdInner c
+        | None -> failwithf "Short-code was not valid for state (%s)." name
+
+    let environment<[<Measure>] 'u> name : StateId<'u> =
+        match name |> ShortCode.create with
+        | Some c -> StateIdInner c
+        | None -> failwithf "Short-code was not valid for environment variable (%s)." name
+
+    let measure<[<Measure>] 'u> name: MeasureId<'u>  =
+        match name |> ShortCode.create with
+        | Some c -> MeasureIdInner c
         | None -> failwithf "Short-code was not valid for state (%s)." name
 
     /// A short code representation of an identifier for a parameter,
@@ -146,8 +160,9 @@ module Language =
     let P<[<Measure>] 'u> name : ModelExpression<'u> = ModelExpression.Parameter name
     let This<[<Measure>] 'u> : ModelExpression<'u> = ME Untyped.This
     let StateAt (offset: int<Time.``time index``>, sid) : ModelExpression<'u> = ModelExpression.StateAt (offset,sid)
-    let Time<[<Measure>] 't> () : ModelExpression<'t> = ME Untyped.Time
+    let Time<[<Measure>] 't> : ModelExpression<'t> = ME Untyped.Time
     let Environment<[<Measure>] 'u> sid : ModelExpression<'u> = ModelExpression.Environment sid
+    let State<[<Measure>] 'u> sid : ModelExpression<'u> = ModelExpression.Environment sid
     let Invalid<[<Measure>] 'u> : ModelExpression<'u> = ME Untyped.Invalid
 
     /// For conditional statements, all three branches must have the same unit.
@@ -252,6 +267,9 @@ module Language =
             | ME (StateAt (off, nm)) -> ops.stateAt (off, nm)
             | ME Invalid             -> ops.invalid()
             | ME (Arbitrary _)       -> failwith "Arbitrary not handled"
+            | ME (GreaterThan _)
+            | ME (LessThan _)
+            | ME (EqualTo _)         -> failwith "Comparisons not handled yet (TODO)"
 
 
         // ---- Tensor ops ----
@@ -418,7 +436,7 @@ module Language =
             |> LeafExpressionConverter.EvaluateQuotation
             |> unbox<Parameter.Pool.ParameterPool -> CodedMap<float> -> float<Time.``time index``> -> float -> float>
 
-        let compileMeasure<[<Measure>] 'u> parameters (expr: ModelExpression<'stateUnit>) =
+        let compileMeasure<[<Measure>] 'stateUnit> parameters (expr: ModelExpression<'stateUnit>) =
             let pVar      = Var("parameters", typeof<TypedTensor<Vector,``parameter``>>)
             let statesVar = Var("states", typeof<CodedMap<TypedTensor<Scalar,ModelSystem.state>>[]>)
             let tIdxVar   = Var("timeIndex", typeof<int>)
@@ -426,7 +444,7 @@ module Language =
             buildQuotation (tensorOpsForMeasure pIndex pVar statesVar tIdxVar) expr
             |> fun body -> Expr.Lambda(pVar, Expr.Lambda(statesVar, Expr.Lambda(tIdxVar, body)))
             |> LeafExpressionConverter.EvaluateQuotation
-            |> unbox<ModelSystem.Measurement<'u>>
+            |> unbox<ModelSystem.Measurement<'stateUnit>>
 
 
 
@@ -551,11 +569,11 @@ module Language =
                 let sc = ShortCode.create name |> Option.get
                 EquationFragment (Discrete (sc, fun p e -> ExpressionCompiler.compileDiscrete<'time, 'state> p e expr))
 
-            let measure<[<Measure>] 'u> (name: string) (expr: ModelExpression<'state>) : ModelFragment<'time> =
-                let sc = ShortCode.create name |> Option.get
+            let measure<[<Measure>] 'time, [<Measure>] 'u> (name: string) (expr: ModelExpression<'state>) : ModelFragment<'time> =
+                let sc: ShortCode.ShortCode = ShortCode.create name |> Option.get
                 MeasureFragment ((sc, fun p -> ExpressionCompiler.compileMeasure<'u> p expr |> Measurement.adapt))
 
-            let likelihood<[<Measure>] 'u> (l: ModelSystem.Likelihood<'u>) : ModelFragment<'time> =
+            let likelihood<[<Measure>] 'time, [<Measure>] 'u> (l: ModelSystem.Likelihood<'u>) : ModelFragment<'time> =
                 let toInternal () = Likelihood.contramap<'u> l
                 LikelihoodFragment toInternal
 
@@ -573,11 +591,11 @@ module Language =
         let addEquationDiscrete (name: ShortCode.ShortCode) (expr: ModelExpression<'u>) (mb: ModelBuilder<'time>) =
             add name.Value (Add.equationDiscrete name.Value expr) mb
 
-        let includeMeasure name (m: ModelExpression<'u>) mb =
-            add name (Add.measure name m) mb
+        let includeMeasure<[<Measure>] 'time, [<Measure>] 'u> name (m: ModelExpression<'u>) mb =
+            add name (Add.measure<'time, 'u> name m) mb
 
         let useLikelihood<[<Measure>] 'u,[<Measure>] 'time> (l: ModelSystem.Likelihood<'u>) mb =
-            add "likelihood" (Add.likelihood<'u> l) mb
+            add "likelihood" (Add.likelihood<'time, 'u> l) mb
 
         let compile builder : ModelSystem.ModelSystem<'time> =
             let m, isDiscrete = unwrap builder
@@ -657,17 +675,18 @@ module Language =
                 ModelBuilder.add name (ModelBuilder.ParameterFragment boxed) builder
             | None -> failwithf "The bounds %A - %A cannot be used to estimate a parameter. See docs." lower upper
 
-        let estimateParameter (p:IncludedParameter<'u>) (builder: ModelBuilder.ModelBuilder<'time>) =
+        let estimateParameter<[<Measure>] 'time, [<Measure>] 'u> (p:IncludedParameter<'u>) (builder: ModelBuilder.ModelBuilder<'time>) =
             let (ParamIdInner name) = p.ParamId
             let boxed = Parameter.Pool.boxParam<'u> name.Value p.Parameter
             ModelBuilder.add name.Value (ModelBuilder.ParameterFragment boxed) builder
 
-        let addParameter (name: string) (p:Parameter.Parameter<'u>) (builder: ModelBuilder.ModelBuilder<'time>) =
+        let internal addParameter<[<Measure>] 'time, [<Measure>] 'u> (name: string) (p:Parameter.Parameter<'u>) (builder: ModelBuilder.ModelBuilder<'time>) =
             let boxed = Parameter.Pool.boxParam<'u> name p
             ModelBuilder.add name (ModelBuilder.ParameterFragment boxed) builder
 
-        let includeMeasure name measure builder =
-            ModelBuilder.add name (ModelBuilder.MeasureFragment measure) builder
+        let addMeasure<[<Measure>] 'time, [<Measure>] 'u> (name: MeasureId<'u>) (measure: ModelExpression<'u>) (builder: ModelBuilder.ModelBuilder<'time>) : ModelBuilder.ModelBuilder<'time> =
+            let (MeasureIdInner name) = name
+            ModelBuilder.includeMeasure name.Value measure builder
 
         let useLikelihoodFunction likelihoodFn builder =
             ModelBuilder.add "likelihood" (ModelBuilder.LikelihoodFragment (fun () -> likelihoodFn)) builder
@@ -676,8 +695,6 @@ module Language =
 
 
     module ModelSystemDsl =
-
-        open ModelBuilder
 
         // Structural flags
         type Missing = Missing
@@ -694,28 +711,6 @@ module Language =
             : ModelBuilderState<'time, Missing, Missing> =
             { Inner = ModelBuilder.create isDiscrete () }
 
-        let state<[<Measure>] 'u> c : StateId<'u> = StateIdInner c
-        let param<[<Measure>] 'u> c : ParamId<'u> = ParamIdInner c
-
-        // Register a state with its unit and return a typed handle
-        let declareState<[<Measure>] 'u> name (mb: ModelBuilderState<'time, 'E, 'L>)
-            : StateId<'u> * ModelBuilderState<'time, 'E, 'L> =
-            let sc = ShortCode.create name |> Option.defaultWith (fun () -> failwithf "Bad name %s" name)
-            let sid = state sc
-            // store the state name → box sid in the builder catalog for cross-reference validation
-            sid, mb
-
-        // // Register a parameter with unit and return a typed handle
-        // let declareParam<[<Measure>] 'u> name lower upper constraintMode (mb: ModelBuilderState<'time, 'E, 'L>)
-        //     : ParamId<'u> * ModelBuilderState<'time, 'E, 'L> =
-        //     match Parameter.create constraintMode lower upper with
-        //     | Some p ->
-        //         let pid = declareParam<'u> name
-        //         let boxed = Parameter.Pool.boxParam<'u> name p
-        //         // add to internal pool
-        //         pid, { mb with Inner = ModelBuilder.add name (ModelBuilder.ParameterFragment boxed) mb.Inner }
-        //     | None -> failwith "Invalid bounds"
-
         let addRateEq
             (sid: StateId<'u>) (expr: ModelExpression<'stateUnit / 'timeUnit>)
             (mb: ModelBuilderState<'time, 'E, 'L>) =
@@ -728,31 +723,9 @@ module Language =
             let (StateIdInner sc) = sid
             { mb with Inner = ModelBuilder.addEquationDiscrete sc expr mb.Inner }
 
-        // let addMeasure<[<Measure>] 'u, [<Measure>] 'time>
-        //     (sid: StateId<'u>) (meas: ModelSystem.Measurement<'u>) (mb: ModelBuilderState<'time, 'E, 'L>) =
-        //     let (StateIdInner sc) = sid
-        //     { mb with Inner = ModelBuilder.includeMeasure sc.Value meas mb.Inner }
-
-
         type ModelSystemBuilder<[<Measure>] 'time>(isDiscrete) =
             member _.Yield(_) = emptyState<'time> isDiscrete
             member _.Delay(f) = f()
-
-            // member _.Bind
-            //     ((handle, state): 'handle * ModelBuilderState<'time,'E,'L>, cont: 'handle -> ModelBuilderState<'time,'E,'L>) =
-            //     cont handle
-
-            // member _.Param<[<Measure>] 'u>(name: string, lower: float<'u>, upper: float<'u>, c: Parameter.Constraint,
-            //                             st: ModelBuilderState<'time,'E,'L>)
-            //     : ParamId<'u> * ModelBuilderState<'time,'E,'L> =
-            //     declareParam<'u> name lower upper c st
-
-            // member _.State(state: ModelBuilderState<'time,'E,'L>, name: string)
-            //     : StateId<'u> * ModelBuilderState<'time,'E,'L> = declareState<'u> name state
-
-            // // [<CustomOperation("parameter")>]
-            // // member _.Param(state: ModelBuilderState<'time,'E,'L>, name: string, lower: float<'u>, upper: float<'u>, c: Parameter.Constraint)
-            // //     : ParamId<'u> * ModelBuilderState<'time,'E,'L> = declareParam<'u> name lower upper c state
 
             [<CustomOperation("parameter")>]
             member _.Parameter<[<Measure>] 'u, 'E, 'L>
@@ -774,10 +747,10 @@ module Language =
                 { Inner = ModelBuilder.addEquationRate sc expr state.Inner }
 
             [<CustomOperation("measure")>]
-            member _.Measure<'E, 'L>
+            member _.Measure<[<Measure>] 'u, 'E, 'L>
                 (state: ModelBuilderState<'time, 'E, 'L>,
-                name: string, data) =
-                { Inner = Model.includeMeasure name data state.Inner }
+                mid: MeasureId<'u>, data) =
+                { Inner = Model.addMeasure mid data state.Inner }
 
             /// Add exactly one likelihood function.
             [<CustomOperation("likelihood")>]
@@ -834,7 +807,7 @@ module Language =
     /// Terms for designing tests for model systems.
     module Test =
 
-        let defaultSettings = Bristlecone.Test.TestSettings.Default
+        let defaultSettings = Bristlecone.Test.defaultSettings
 
         /// If the start value has already been set, it will be overwritten with the new value.
         let withStartValue code value (settings: Bristlecone.Test.TestSettings<'state, _, _, _>) =

@@ -59,7 +59,7 @@ module Likelihood =
     /// Log likelihood function for single equation system, assuming Gaussian error for x.
     /// Requires a parameter 'σ[x]' to be included in any `ModelSystem` that uses it.
     /// </summary>
-    let gaussian key : Likelihood<'u> =
+    let gaussian key : Likelihood<parameter> =
         fun paramAccessor data ->
             let x = data |> getData key
             let sigmax = paramAccessor.Get "σ[x]"

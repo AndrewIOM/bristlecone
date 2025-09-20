@@ -13,38 +13,43 @@ let expectSameFloatList a b message =
     Seq.zip a b |> Seq.iter (fun (a, b) -> expectSameFloat a b message)
 
 
-
 module TestModels =
 
     open Bristlecone.Language
 
     let constant bound1 bound2 =
+        let X = state "X"
+        let a = parameter "a" noConstraints (min bound1 bound2) (max bound1 bound2)        
         Model.empty
-        |> Model.addEquation "x" (Parameter "a")
-        |> Model.estimateParameter "a" noConstraints (min bound1 bound2) (max bound1 bound2)
-        |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ "x" ])
+        |> Model.addRateEquation X (P a)
+        |> Model.estimateParameter a
+        |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ X.Code ])
         |> Model.compile
 
     let twoEquationConstant cons bound1 bound2 =
+        let X = state "X"
+        let Y = state "Y"
+        let a = parameter "a" noConstraints (min bound1 bound2) (max bound1 bound2)        
         Model.empty
-        |> Model.addEquation "x" (Parameter "a")
-        |> Model.addEquation "y" (Parameter "a")
-        |> Model.estimateParameter "a" cons (min bound1 bound2) (max bound1 bound2)
-        |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ "x"; "y" ])
+        |> Model.addRateEquation X (P a)
+        |> Model.addRateEquation Y (P a)
+        |> Model.estimateParameter a
+        |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ X.Code; Y.Code ])
         |> Model.compile
+
+
+let indexBySpan (ts : System.TimeSpan) = float ts.Days * 1.<Time.day> * 12.<Time.``time index``/Time.day>
 
 let defaultEngine () =
     { TimeHandling = Continuous <| Integration.RungeKutta.rk4
       OptimiseWith = Optimisation.None.none
       LogTo = ignore
+      ToModelTime = indexBySpan
       Random = MathNet.Numerics.Random.MersenneTwister(1000, true)
       Conditioning = Conditioning.RepeatFirstDataPoint }
 
-let defaultEndCon = Optimisation.EndConditions.afterIteration 1000<iteration>
+let defaultEndCon = Optimisation.EndConditions.atIteration 1000<iteration>
 
-type TimeModeToTest =
-    | TestCalendarDate
-    | TestRadiocarbon
 
 module ``Fit`` =
 

@@ -6,8 +6,8 @@ type LogEvent =
     | OptimisationEvent of ModelFitState
     | CompleteEvent
     | GeneralEvent of string
-    | WorkloadEvent of string
     | DebugEvent of string
+    | OrchestrationEvent of string
 
 and ModelFitState =
     { Iteration: int<iteration>
