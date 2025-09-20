@@ -102,8 +102,8 @@ let measureTime fn =
 let runReplicated nTimes work =
     [| 1..nTimes |] |> Array.Parallel.map (fun _ -> measureTime (fun () -> work ()))
 
-let logger = Bristlecone.Logging.ConsoleTable.logger 100<iteration>
-let endCondition = EndConditions.stationarySquaredJumpDistance //EndConditions.afterIteration 100000<iteration>
+let logger = Logging.Console.logger 1000<iteration>
+let endCondition = EndConditions.Profiles.mcmc 100000<iteration> logger
 let accuracy = { absolute = 1e-3; relative = 1e-2 }
 
 type BenchmarkResult =
@@ -274,7 +274,9 @@ module Metrics =
 
 module TimeSeriesTests =
 
-    let settings = Bristlecone.Test.annualSettings
+    let settings =
+        Test.annualSettings
+        |> Test.endWhen endCondition
 
     /// An engine that uses annual-based data in an
     /// annual-based model.
@@ -319,9 +321,9 @@ let optimFunctions =
     //   "automatic MCMC", MonteCarlo.``Automatic (Adaptive Diagnostics)``
     //   "metropolis-gibbs", MonteCarlo.``Metropolis-within Gibbs``
     //   "adaptive metropolis", MonteCarlo.adaptiveMetropolis 0.250 500<iteration>
-      "random walk MCMC", MonteCarlo.randomWalk []
-    //   "random walk w/ tuning",
-    //   MonteCarlo.randomWalk [ { Method = MonteCarlo.TuneMethod.CovarianceWithScale 0.25; Frequency = 500<iteration>; EndCondition = EndConditions.afterIteration 10000<iteration> } ]
+    //   "random walk MCMC", MonteCarlo.randomWalk []
+      "random walk w/ tuning",
+      MonteCarlo.randomWalk [ { Method = MonteCarlo.TuneMethod.CovarianceWithScale 0.25; Frequency = 500<iteration>; EndCondition = EndConditions.Profiles.mcmcTuningStep 50000<iteration> logger } ]
     ]
 
 let timeModels () =

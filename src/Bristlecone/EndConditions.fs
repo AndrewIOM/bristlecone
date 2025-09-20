@@ -15,6 +15,11 @@ module EndConditions =
 
     let defaultTolerance = 1e-06<``-logL``>
 
+    let internal onlyOnInterval interval i fn =
+        if i % interval = 0<iteration> && i > 1<iteration>
+        then fn ()
+        else Continue
+
     /// Given a list of solutions, which are ordered most recent first,
     /// returns `true` if there are at least `chains` recent results, and
     /// the change within the recent results is no more than `tolerance`.
@@ -87,11 +92,11 @@ module EndConditions =
 
                 let decision =
                     if valid.Length > 0
-                        && valid |> List.forall (fun (slope, p) -> abs slope < slopeTol && p > 0.1)
+                        && valid |> List.forall (fun (slope, pVal) -> abs slope < slopeTol && pVal > 0.1)
                     then Stationary
                     else Continue
             
-                log (GeneralEvent (sprintf "[EndCondition] Decision at iter %d: %A (valid=%d/%d)"
+                log (GeneralEvent (sprintf "[EndCondition] MSJD at i=%d: %A (valid=%d/%d)"
                                         (int i) decision valid.Length slopesAndPs.Length))
 
                 decision
@@ -103,6 +108,7 @@ module EndConditions =
         stationarySquaredJumpDistance' 200 5 1e-3 log
 
     /// Convergence of results using the Gelman-Rubin Rhat statistic.
+    /// TODO Keep track of model-engine-subject ID for unique composition only.
     /// `thin` - Only test for convergence at multiples of the following intervals (when all chains are ready).
     /// `chainCount` - The number of chains to test for convergence. This makes the agent wait until results for all chains are in.
     let convergence thin chainCount : EndCondition =
@@ -172,6 +178,35 @@ module EndConditions =
             else
                 Continue
 
+    /// Stops when acceptance rate is not within the 
+    /// defined range. Used to avoid stopping when not mixing.
+    let acceptanceRateGate min max interval log : EndCondition =
+        fun results iteration ->
+            onlyOnInterval interval iteration <| fun () ->
+                let r =
+                    results 
+                    |> List.truncate (Units.removeUnitFromInt interval)
+                    |> List.pairwise
+                    |> List.map (fun (a,b) -> fst a - fst b)
+                let accepted = r |> List.where((=) 0.<``-logL``> >> not) |> List.length
+                let ar = float accepted / float r.Length
+                let result = if ar >= min && ar <= max then OptimStopReason.Stuck else Continue
+                log (GeneralEvent (sprintf "[EndCondition] Acceptance rate = %f [%A]" ar result))
+                result
+
+    let movementFloorGate movementFloor interval : EndCondition =
+        fun results iteration ->
+            onlyOnInterval interval iteration <| fun () ->
+                let totalMovement =
+                    results 
+                    |> List.truncate (Units.removeUnitFromInt interval)
+                    |> List.pairwise
+                    |> List.map (fun (a,b) -> abs (fst a - fst b))
+                    |> List.sum
+                if totalMovement <= movementFloor then OptimStopReason.Stuck
+                else Continue
+
+
     module Profiles =
 
         /// Combine multiple EndConditions into one, returning the first non-Continue reason.
@@ -182,16 +217,30 @@ module EndConditions =
                 |> Seq.tryFind (fun reason -> reason <> Continue)
                 |> Option.defaultValue Continue
 
-        /// Composite end conditions well-suited to basic MCMC algorithms.
-        let mcmcProfile log =
-            combineEndConditions [
-                stationarySquaredJumpDistance' 200 5 1e-3 log
-                // acceptanceRateGate 0.15 0.5
-                // movementFloorGate 1e-6 ]
-            ]
+        /// When tuning, stop when the chain is well mixed.
+        let mcmcTuningStep maxIter log : EndCondition =
+            fun results iter ->
+                if afterIteration maxIter results iter <> Continue
+                then MaxIterations
+                else
+                    if acceptanceRateGate 0.15 0.5 1000<iteration> log results iter <> Continue
+                        && movementFloorGate 1e-6<``-logL``> 1000<iteration> results iter <> Stuck
+                    then
+                        log (GeneralEvent (sprintf "[EndCondition] Well mixed"))
+                        Custom "Well mixed"
+                    else Continue
+
+        /// Composite end condition that only ends when exploration is not stuck
+        /// and the squared jump distance is stationary. Always ends when max iterations
+        /// is reached.
+        let mcmc maxIter log : EndCondition =
+            fun results iter ->
+                let tuneStatus = mcmcTuningStep maxIter log results iter
+                if tuneStatus = Custom "Well mixed" then stationarySquaredJumpDistance' 200 5 1e-3 log results iter
+                else tuneStatus
 
         /// Composite end conditions well-suited to simulated annealing.
-        let saProfile tol =
+        let simulatedAnneal tol =
             combineEndConditions [
                 noImprovement
                 improvementCount 3 100<iteration>
