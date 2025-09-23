@@ -510,6 +510,8 @@ module TimeSeries =
 
         FixedTimeSeries(dateType, baseline, timePoints)
 
+    let head ts = unwrap ts |> fst
+
     /// <summary>Create a time-series where time is represented by uncalibrated
     /// radiocarbon dates (BP dates).</summary>
     /// <param name="dataset">A sequence of observations, which consist of data and dates / times</param>
@@ -607,6 +609,13 @@ module TimeSeries =
             |> checkMoreThanEqualTo 2
             |> Option.map (fromObservations series.DateMode)
         | None -> None
+
+    let tail series =
+        series
+        |> toObservations
+        |> Seq.toArray
+        |> Array.tail
+        |> fromObservations series.DateMode
 
     /// <summary>Remove all time points that occur after the desired end date.</summary>
     /// <param name="endDate">An end date to clip beyond</param>
@@ -1030,6 +1039,18 @@ module TimeFrame =
     /// <returns>The temporal resolution of the timeframe.</returns>
     let resolution frame =
         (frame |> inner |> Seq.head).Value |> TimeSeries.resolution
+
+    let dropFirstObservation (TimeFrame frame : TimeFrame<'T,'date,'timeunit,'timespan>) =
+        frame
+        |> Map.map (fun _ ts -> TimeSeries.tail ts) // drop first point
+        |> TimeFrame
+
+    let dropFirstObservationIfPresent (predicate: TimeSeries.TimeSeries<'T,'date,'timeunit,'timespan> -> bool) frame =
+        frame
+        |> Map.map (fun _ ts ->
+            if predicate ts then TimeSeries.tail ts else ts)
+        |> TimeFrame
+
 
     type TimeFrame<'T, 'date, 'timeunit, 'timespan> with
         member this.StartDate = (this |> inner |> Seq.head).Value.StartDate |> snd

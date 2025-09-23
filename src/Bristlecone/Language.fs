@@ -369,18 +369,6 @@ module Language =
             Expr.Lambda(v1, Expr.Lambda(v2, Expr.Lambda(v3, Expr.Lambda(v4, body))))
 
         // ---- Public compile functions ----
-        // let compile<[<Measure>] 'timeUnit> parameters envKeys expr =
-        //     let pVar = Var("parameters", typeof<TypedTensor<Vector,``parameter``>>)
-        //     let eVar = Var("environment", typeof<CodedMap<TypedTensor<Scalar,ModelSystem.``environment``>>>)
-        //     let tVar = Var("time", typeof<TypedTensor<Scalar,'timeUnit>>)
-        //     let xVar = Var("thisValue", typeof<TypedTensor<Scalar,ModelSystem.state>>)
-        //     let pIndex = paramIndex parameters
-        //     let eIndex = envIndexFromKeys envKeys
-        //     let core = buildQuotation (tensorOps pIndex eIndex pVar eVar tVar xVar) expr
-        //     <@ tryAsScalar<ModelSystem.state> %core |> Option.get @>
-        //     |> toLambda4 pVar eVar tVar xVar
-        //     |> LeafExpressionConverter.EvaluateQuotation
-        //     |> unbox<ModelSystem.GenericModelEquation<'timeUnit>>
 
         /// Compile a rate-based (e.g. ODE) model expression into an internal
         /// `RateEquation` for use in model-fitting.
@@ -636,6 +624,10 @@ module Language =
                     equations
                     |> Map.map (fun _ -> function Rate (_sc, k) -> k parameters envKeys | _ -> failwith "Expected rate eq")
                     |> ModelSystem.DifferentialEqs
+
+            match eqs with
+            | ModelSystem.DifferenceEqs e -> if e.IsEmpty then failwith "No equations added. Models require at least one difference / differential equation."
+            | ModelSystem.DifferentialEqs e -> if e.IsEmpty then failwith "No equations added. Models require at least one difference / differential equation."
 
             // Compile measures by invoking thunks
             let measures =

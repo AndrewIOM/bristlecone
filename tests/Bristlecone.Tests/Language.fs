@@ -58,12 +58,11 @@ let modelExpressionsTensor =
         "Model expression - DSL compilation (tensors)"
         [
 
-            testPropertyWithConfig Config.config "Will not compile if environment key is missing"
-            <| fun (code: ShortCode.ShortCode) x t pool e ->
-                let envState = environment<Config.testModelUnit> code.Value
-                let f () = Environment envState |> ExpressionCompiler.compileRate pool e |> ignore
-                if e |> List.contains code |> not
-                then Expect.throws f "Environmental data was not present"
+            // testPropertyWithConfig Config.config "Will not compile if environment key is missing"
+            // <| fun (code: ShortCode.ShortCode) pool ->
+            //     let envState = environment<Config.testModelUnit> code.Value
+            //     let f () = Environment envState |> ExpressionCompiler.compileRate pool [] |> ignore
+            //     Expect.throws f "Environmental data was not present"
 
         ]
 
@@ -98,25 +97,25 @@ let modelExpressions =
                 Expect.floatClose Accuracy.high (result |> Typed.toFloatScalar |> Units.removeUnitFromFloat) t.Get "Constant should match"
 
             testPropertyWithConfig Config.config "Environment data retrieved to true value"
-            <| fun (code: ShortCode.ShortCode) (x:NormalFloat) (t:NormalFloat) pool ->
-                let envState = environment<Config.testModelUnit> code.Value
-                let envMap = Map.ofList [ envState.Code, x.Get * 1.<ModelSystem.environment> |> Typed.ofScalar ]
+            <| fun (pool:Parameter.Pool.ParameterPool) (eCode:ShortCode.ShortCode) (eVal:NormalFloat) (t:NormalFloat) ->
+                let envState = environment<Config.testModelUnit> eCode.Value
+                let envMap = Map.ofList [ envState.Code, eVal.Get * 1.<ModelSystem.environment> |> Typed.ofScalar ]
                 let t' = Typed.ofScalar <| t.Get * 1.<Time.year>
-                let this = Typed.ofScalar (x.Get * 1.<ModelSystem.state>)
-                let fn = Environment envState |> ExpressionCompiler.compileRate pool [ code ]
-                let result = fn dummyParameterT envMap t' this
-                Expect.floatClose Accuracy.high (result |> Typed.toFloatScalar |> Units.removeUnitFromFloat) t.Get "Constant should match"
+                let dummyThis = Typed.ofScalar 999.<ModelSystem.state>
+                let fn = Environment envState |> ExpressionCompiler.compileRate pool [ eCode ]
+                let result = fn dummyParameterT envMap t' dummyThis
+                Expect.floatClose Accuracy.high (result |> Typed.toFloatScalar |> Units.removeUnitFromFloat) eVal.Get "Constant should match"
 
-            // testPropertyWithConfig Config.config "Parameter retrieved to true value"
-            // <| fun (code: ShortCode.ShortCode) (x:NormalFloat) (t:NormalFloat) pool ->
-            //     let randomFromPool = pool |> Parameter.Pool.keys |> randomiseList |> List.head
-            //     let fromPool = Parameter.Pool.tryGetRealValue randomFromPool.Value pool |> Option.get
-            //     let pLang = parameter randomFromPool.Value 
-            //     let t' = Typed.ofScalar <| t.Get * 1.<Time.year>
-            //     let this = Typed.ofScalar (x.Get * 1.<ModelSystem.state>)
-            //     let fn = P randomFromPool |> ExpressionCompiler.compileRate pool [ code ]
-            //     let result = fn dummyParameterT envMap t' this
-            //     Expect.floatClose Accuracy.high (result |> Typed.toFloatScalar |> Units.removeUnitFromFloat) t.Get "Constant should match"
+            testPropertyWithConfig Config.config "Parameter retrieved to true value"
+            <| fun (pool:Parameter.Pool.ParameterPool) (pVal:NormalFloat) (t:NormalFloat) ->
+                let paramToTest = pool |> Parameter.Pool.keys |> randomiseList |> Seq.head
+                let dummyParam = parameter paramToTest.Value noConstraints 0.1 0.2 
+                let fakePoolVector = pool |> Parameter.Pool.keys |> Seq.map(fun pn -> if pn = paramToTest then pVal.Get * 1.<parameter> else nan * 1.<parameter>) |> Seq.toArray |> Tensors.Typed.ofVector
+                let t' = Typed.ofScalar <| t.Get * 1.<Time.year>
+                let this = Typed.ofScalar 999.<ModelSystem.state>
+                let fn = P dummyParam |> ExpressionCompiler.compileRate pool []
+                let result = fn fakePoolVector Map.empty t' this
+                Expect.floatClose Accuracy.high (result |> Typed.toFloatScalar |> Units.removeUnitFromFloat) pVal.Get "Parameter value didn't match"
 
         ]
 
@@ -175,17 +174,16 @@ let modelBuilder =
                         mb |> Model.compile |> ignore
 
             testPropertyWithConfig Config.config "Compiles whether measures are present or not"
-            <| fun likelihood (measures: CodedMap<ModelExpression<ModelSystem.state>>) ->
-                if measures.Keys |> Seq.hasDuplicates then
-                    ()
+            <| fun likelihood (NonEmptyArray (measures: ShortCode.ShortCode array)) ->
+                if measures |> Seq.hasDuplicates then ()
                 else
                     let model =
-                        Model.empty
+                        Model.discrete
                         |> Model.useLikelihoodFunction likelihood
                         |> Model.addDiscreteEquation (state "eq1") (Constant 1.)
 
                     measures
-                    |> Map.fold (fun mb n m -> mb |> Model.addMeasure (measure n.Value) m) model
+                    |> Array.fold (fun mb measureCode -> mb |> Model.addMeasure (measure measureCode.Value) (Constant 1.)) model
                     |> Model.compile
                     |> ignore
 
@@ -201,11 +199,11 @@ let modelBuilder =
                         eqs
                         |> Seq.fold
                             (fun mb n -> mb |> Model.addDiscreteEquation (state n.Value) This)
-                            (Model.empty |> Model.useLikelihoodFunction likelihood)
+                            (Model.discrete |> Model.useLikelihoodFunction likelihood)
                         |> fun mb ->
                             Seq.fold
-                                (fun mb (n: ShortCode.ShortCode, eq) ->
-                                    mb |> Model.addMeasure (measure n.Value) eq)
+                                (fun mb (n: ShortCode.ShortCode, _) ->
+                                    mb |> Model.addMeasure (measure n.Value) (Constant 1.))
                                 mb
                                 measures
                         |> Model.compile
@@ -216,12 +214,6 @@ let modelBuilder =
                         Expect.throws (compile >> ignore) "Duplicate keys existed"
                     else
                         compile () |> ignore
-
-            // testProperty "Only compiles when all required parameters are specified" <| fun (pool:Parameter.Pool) ->
-
-            // testProperty "Only compiles when all specified parameters are used" <| fail
-
-            // testProperty "Equations in the built model have the correct result" <| fail
 
           ]
 

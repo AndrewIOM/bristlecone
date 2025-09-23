@@ -120,28 +120,6 @@ module Bristlecone =
             // | Some eRes ->
             Ok(one, two)
 
-        /// Returns a tuple of the start point (t0) and the
-        /// subsequent time-series (t1 .. tn).
-        let t0 timeSeriesData (conditionMode: Conditioning.Conditioning<'u>) logger =
-            timeSeriesData
-            |> Solver.Conditioning.startPoint conditionMode
-            // |> Option.map(fun t0 -> t0, timeSeriesData)
-            |> Option.defaultWith (fun () ->
-                logger
-                <| DebugEvent "No conditioning was specified. Using t1 as conditioning data."
-
-                invalidOp "Not supported"
-            // match t0 with
-            // | Some t0 ->
-            //     let startIndex = timeline |> Seq.head
-            //     // TODO. The environmental data must span the conditioning period - how to ensure this?
-            //     fixedStep engine.LogTo engine.TimeHandling (startIndex - externalSteps.Head) endIndex t0 forcings
-            // | None ->
-            //     engine.LogTo <| DebugEvent "No conditioning was specified. Using t1 as conditioning data."
-            //     let startIndex = timeline |> Seq.tail |> Seq.head
-            //     fixedStep engine.LogTo engine.TimeHandling (startIndex - externalSteps.Head) endIndex t0 forcings
-            )
-
     let private dynamicVariableKeys (models:ModelSystem.ModelForm<'modelTimeUnit>) =
         match models with
         | ModelForm.DifferenceEqs eqs -> eqs |> Map.keys
@@ -201,10 +179,6 @@ module Bristlecone =
 
         let resultId = Guid.NewGuid()
 
-        // A. Setup initial time point values based on conditioning method.
-        let t0 = Fit.t0 timeSeriesData engine.Conditioning engine.LogTo
-
-        // Check there is time-series data actually included and corresponding to correct equations.
         let hasRequiredData =
             if timeSeriesData.IsEmpty then
                 Error "No time-series data was specified"
@@ -219,9 +193,10 @@ module Bristlecone =
 
         result {
 
+            // 1. Check required dynamic time-series are present
             let! tsData = hasRequiredData
 
-            // 1. Set time-series into common timeline
+            // 2. Build common timeline time-frames
             let! commonDynamic = Fit.observationsToCommonTimeFrame (dynamicVariableKeys model.Equations) timeSeriesData
             let! commonEnv =
                 Fit.environmentDataToCommonTimeFrame
@@ -230,6 +205,9 @@ module Bristlecone =
                     timeSeriesData
             do! validateEnvData model.EnvironmentKeys (commonEnv |> Option.map (fun tf -> tf.Series) |> Option.defaultValue Map.empty)
 
+            // 3. Resolve time-series given requested conditioning of t0.
+            let conditioned = Solver.Conditioning.resolve engine.Conditioning commonDynamic commonEnv
+
             engine.LogTo
             <| GeneralEvent(
                 sprintf
@@ -237,11 +215,11 @@ module Bristlecone =
                     commonDynamic.StartDate
                     (commonDynamic |> TimeFrame.resolution)
             )
-            // 2. Ensure that dynamic variables is an exact or subset of environmental variables
+            
+            // TODO Ensure that dynamic variables are an exact or subset of environmental variables
             let! _ = Fit.exactSubsetOf commonDynamic commonEnv
 
-            // Compile solver (auto‑selects discrete/differential)
-            let t0' = t0 |> Map.map(fun _ v -> v |> Units.removeUnitFromFloat |> (*) 1.<state> |> Tensors.Typed.ofScalar)
+            // 4. Compile solver (auto‑selects discrete/differential)
             let solver stepType =
                 Solver.SolverCompiler.compile
                     engine.LogTo
@@ -249,11 +227,11 @@ module Bristlecone =
                     model.Equations
                     engine.TimeHandling
                     stepType
-                    commonDynamic
-                    commonEnv
-                    t0'
+                    conditioned.Dynamic
+                    conditioned.Environment
+                    conditioned.T0
 
-            let data = tsData |> Map.map (fun _ ts -> ts.Values |> Seq.toArray)
+            let observationData = tsData |> Map.map (fun _ ts -> ts.Values |> Seq.toArray)
 
             // A centralised transform for parameters between point and parameter space.
             let optimConfig =
@@ -275,7 +253,7 @@ module Bristlecone =
                     model.Measures
                     (solver Solver.StepType.External)
                     optimConfig
-                    data
+                    observationData
 
             let result = objective |> optimise
             let lowestLikelihood, bestPoint = result |> List.minBy (fun (l, _) -> l)

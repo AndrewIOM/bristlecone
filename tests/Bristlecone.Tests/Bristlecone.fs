@@ -29,7 +29,7 @@ module TestModels =
     let twoEquationConstant cons bound1 bound2 =
         let X = state "X"
         let Y = state "Y"
-        let a = parameter "a" noConstraints (min bound1 bound2) (max bound1 bound2)        
+        let a = parameter "a" cons (min bound1 bound2) (max bound1 bound2)        
         Model.empty
         |> Model.addRateEquation X (P a)
         |> Model.addRateEquation Y (P a)
@@ -54,37 +54,6 @@ let defaultEndCon = Optimisation.EndConditions.atIteration 1000<iteration>
 module ``Fit`` =
 
     [<Tests>]
-    let conditioningTest =
-        testList
-            "Conditioning"
-            [
-
-              testPropertyWithConfig Config.config "Repeating first data point sets t0 as t1"
-              <| fun time resolution (data: float list) ->
-                  if data.IsEmpty || data.Length = 1 then
-                      ()
-                  else
-                      let data =
-                          [ (Language.code "x").Value,
-                            Time.TimeSeries.fromSeq
-                                Time.DateMode.calendarDateMode
-                                time
-                                (Time.Resolution.FixedTemporalResolution.Years resolution)
-                                data ]
-                          |> Map.ofList
-
-                      let result = Bristlecone.Fit.t0 data Conditioning.RepeatFirstDataPoint ignore
-
-                      expectSameFloatList
-                          (result)
-                          (data |> Map.map (fun k v -> v.Values |> Seq.head))
-                          "t0 did not equal t1"
-
-              // testProperty "t0 is set as a custom point when specified" <| fun () ->
-              //     false
-              ]
-
-    [<Tests>]
     let fitTests =
         testList
             "Model-fitting"
@@ -107,7 +76,7 @@ module ``Fit`` =
                             ()
                         else
                             let data =
-                                [ (Language.code "x").Value,
+                                [ (Language.code "X").Value,
                                   Time.TimeSeries.fromSeq
                                       Time.DateMode.calendarDateMode
                                       startDate
@@ -186,7 +155,7 @@ module ``Fit`` =
                         if b1.Get = b2.Get || b1.Get = 0. || b2.Get = 0. then
                             Expect.throws
                                 (fun () -> testModel b1.Get b2.Get |> ignore)
-                                "Model compiled despite having no difference between parameter bounds"
+                                "Model compiled despite having no difference between parameter bounds or zero bound."
                         else
                             let b1 = if b1.Get < 0. then b1.Get * -1. else b1.Get
                             let b2 = if b2.Get < 0. then b2.Get * -1. else b2.Get
@@ -204,7 +173,7 @@ module ``Fit`` =
                                     OptimiseWith = optimTest }
 
                             let data =
-                                [ (ShortCode.create "x").Value; (ShortCode.create "y").Value ]
+                                [ (ShortCode.create "X").Value; (ShortCode.create "Y").Value ]
                                 |> Seq.map (fun c ->
                                     c,
                                     Time.TimeSeries.fromSeq

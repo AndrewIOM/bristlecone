@@ -20,7 +20,14 @@ let genStrings minLength maxLength =
         return String chars
     }
 
-let genTuple<'snd> fn =
+/// Active pattern for two arrays of NormalFloat with same length > 0
+let (|SameLengthArrays|_|) (best: NormalFloat[]) (other: NormalFloat[]) =
+    if best.Length = other.Length && best.Length > 0 then
+        Some (best, other)
+    else
+        None
+
+let genTuple<'fst, 'snd> (fn: Gen<'fst>) =
     gen {
         let! length = Gen.choose (0, 100)
         let! list1 = Gen.listOfLength length fn
@@ -42,10 +49,10 @@ type BristleconeTypesGen() =
         let createCode code = ShortCode.create code |> Option.get
         genStrings 1 10 |> Gen.map createCode |> Arb.fromGen
 
-    static member EquationList = genStrings 1 10 |> genTuple<ModelExpression<testModelUnit>> |> Arb.fromGen
+    static member EquationList = Arb.generate<ShortCode.ShortCode> |> genTuple<ShortCode.ShortCode,ModelExpression<testModelUnit>> |> Arb.fromGen
 
     static member MeasureList =
-        genStrings 1 10 |> genTuple<ModelSystem.Measurement<ModelSystem.state>> |> Arb.fromGen
+        Arb.generate<ShortCode.ShortCode> |> genTuple<ShortCode.ShortCode,ModelSystem.Measurement<ModelSystem.state>> |> Arb.fromGen
 
     static member Pool =
         gen {
@@ -74,6 +81,8 @@ type BristleconeTypesGen() =
             return Seq.zip codes data |> Map.ofSeq
         }
 
+    static member Tuple<'a,'b> () = genTuple<'a,'b> Arb.generate
+    
     static member Floats() : Arbitrary<float list> = genMultiList 2 1000 |> Arb.fromGen
 
     static member PositveInt: Arbitrary<PositiveInt.PositiveInt<1>> =

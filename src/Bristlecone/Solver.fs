@@ -267,14 +267,56 @@ module Solver =
             //     |> Map.ofSeq
 
 
-    /// Conditioning of time-series data, which allows for maximum use of observed time-series data.
+    /// Solver conditioning enables adding synthetic initial time-points
+    /// from which to solve from.
     module Conditioning =
 
-        open Bristlecone.Time
+        type Resolved<'date,'timeunit,'timespan> = {
+            T0: CodedMap<TypedTensor<Scalar,state>>
+            Dynamic: TimeFrame.TimeFrame<float<state>,'date,'timeunit,'timespan>
+            Environment: option<TimeFrame.TimeFrame<float<environment>,'date,'timeunit,'timespan>>
+            Log: string option
+        }
 
-        /// Strategy for assigning a start time - `t0` - to a time series.
-        let startPoint conditioning (series: CodedMap<TimeSeries<float<'u>, 'date, 'timeunit, 'timespan>>) =
+        let internal t0FromFirstObs (tf: TimeFrame.TimeFrame<float<state>,_,_,_>) =
+            tf.Series |> Map.map (fun _ ts -> ts |> TimeSeries.head |> fst |> Typed.ofScalar)
+
+        let internal ensureEnvCoverage
+            (solverStart: 'date)
+            (envTF: TimeFrame.TimeFrame<'T,'date,'timeunit,'timespan>)
+            : TimeFrame.TimeFrame<'T,'date,'timeunit,'timespan> =
+            let firstEnvDate = envTF.StartDate
+            if firstEnvDate > solverStart then
+                invalidOp (sprintf "Environment data starts at %A but solver needs %A" firstEnvDate solverStart)
+            else envTF
+        
+        let resolve
+            (conditioning: Conditioning.Conditioning<'stateUnit>)
+            (dynamicTF: TimeFrame.TimeFrame<float<state>,'date,'timeunit,'timespan>)
+            (envTF: option<TimeFrame.TimeFrame<float<environment>,'date,'timeunit,'timespan>>)
+            : Resolved<'date,'timeunit,'timespan> =
+
             match conditioning with
-            | Conditioning.NoConditioning -> None
-            | Conditioning.RepeatFirstDataPoint -> series |> Map.map (fun _ v -> v.Values |> Seq.head) |> Some
-            | Conditioning.Custom precomputed -> precomputed |> Some
+            | Conditioning.NoConditioning ->
+                let t0 = t0FromFirstObs dynamicTF
+                let trimmedDyn = TimeFrame.dropFirstObservation dynamicTF
+                let solverStartDate = trimmedDyn.StartDate
+                let trimmedEnv =
+                    envTF |> Option.map (ensureEnvCoverage solverStartDate)
+                { T0 = t0; Dynamic = trimmedDyn; Environment = trimmedEnv; Log = Some "No conditioning: using first observation as t0; predictions start at t1." }
+
+            | Conditioning.Custom t0Map ->
+                let trimmedDyn = dynamicTF
+                let solverStartDate = trimmedDyn.StartDate
+                let trimmedEnv =
+                    envTF |> Option.map (ensureEnvCoverage solverStartDate)
+                let t0 = t0Map |> Map.map(fun _ v -> v |> Units.removeUnitFromFloat |> (*) 1.<state> |> Typed.ofScalar)
+                { T0 = t0; Dynamic = trimmedDyn; Environment = trimmedEnv; Log = Some "Custom conditioning: synthetic t0; predictions start at first observation." }
+
+            | Conditioning.RepeatFirstDataPoint ->
+                let t0 = t0FromFirstObs dynamicTF
+                let trimmedDyn = dynamicTF
+                let solverStartDate = trimmedDyn.StartDate
+                let trimmedEnv =
+                    envTF |> Option.map (ensureEnvCoverage solverStartDate)
+                { T0 = t0; Dynamic = trimmedDyn; Environment = trimmedEnv; Log = Some "Repeat-first conditioning: t0 equals first observation; predictions start at that same timestamp (no duplicate emitted)." }

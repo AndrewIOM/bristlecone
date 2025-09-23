@@ -20,9 +20,9 @@ let initialBounds =
         "Objective"
         [
 
-            testPropertyWithConfig Config.config "Time-series are paired to correct years" <| fun (data: float list) pool ->
+            testPropertyWithConfig Config.config "Time-series are paired to correct years" <| fun (NonEmptyArray (data: NormalFloat array)) pool ->
                 let optimConfig = Parameter.Pool.toOptimiserConfigBounded pool
-                let data' = [ (ShortCode.create "x").Value, data |> List.toArray |> Array.map ((*) 1.<state>) |> Tensors.Typed.ofVector ] |> Map.ofList
+                let data' = [ (ShortCode.create "x").Value, data |> Array.map (fun g -> g.Get * 1.<state>) |> Tensors.Typed.ofVector ] |> Map.ofList
                 let point = Parameter.Pool.drawRandom (Random()) pool |> Parameter.Pool.toTensorWithKeysReal |> snd |> optimConfig.Compiled.Inverse
                 let pred =
                     Objective.createPredictor
@@ -42,7 +42,7 @@ let initialBounds =
                     "Prediction was not as expected after pairing"
                 Config.sequenceEqualTol
                     (paired'.Observed |> Tensors.Typed.toFloatArray |> Seq.map Units.removeUnitFromFloat)
-                    (data |> List.map ((*) 1.<state>))
+                    (data |> Array.map (fun g -> g.Get * 1.<state>))
                     "Observed vector was not as expected after pairing"
 
 
