@@ -190,6 +190,7 @@ module ObservationalTimeSpan =
 module Resolution =
 
     /// Represents the width of equally-spaced steps in time.
+    [<NoComparison>]
     type FixedTemporalResolution<'timespan> =
         | Years of PositiveInt.PositiveInt<year>
         | Months of PositiveInt.PositiveInt<month>
@@ -207,6 +208,16 @@ module Resolution =
         | Months i -> Months i
         | Days i -> Days i
         | CustomEpoch ts -> fn ts |> CustomEpoch
+
+    let finestResolution resToSpan totalDays
+                        (r1: FixedTemporalResolution<'ts>)
+                        (r2: FixedTemporalResolution<'ts>) =
+        let span1 = resToSpan r1
+        let span2 = resToSpan r2
+        let days1 = totalDays span1
+        let days2 = totalDays span2
+        if days1 < days2 then r1 else r2
+
 
 /// Contains types representing common dating methods in
 /// long term data analysis.
@@ -319,6 +330,7 @@ module DateMode =
           AddMonths: 'T -> int<month> -> 'T
           AddDays: 'T -> int<day> -> 'T
           AddTime: 'T -> 'timespan -> 'T
+          SubtractTime: 'T -> 'timespan -> 'T
           Difference: 'T -> 'T -> TimeDifference<'timespan>
           SortOldestFirst: 'T -> 'T -> int
           ZeroSpan: 'timespan
@@ -341,6 +353,7 @@ module DateMode =
           AddMonths = fun d months -> months |> Units.removeUnitFromInt |> d.AddMonths
           AddDays = fun d days -> days |> Units.removeUnitFromInt |> d.AddDays
           AddTime = fun d timeSpan -> d + timeSpan
+          SubtractTime = fun d timeSpan -> d - timeSpan
           Difference = DateTime.fractionalDifference
           ZeroSpan = TimeSpan.Zero
           TotalDays = fun ts -> ts.TotalDays * 1.<day>
@@ -376,6 +389,7 @@ module DateMode =
           AddMonths = fun d _ -> d
           AddDays = fun d _ -> d
           AddTime = fun d timeSpan -> d + timeSpan
+          SubtractTime = fun d timeSpan -> d + (timeSpan * -1)
           Difference = fun d1 d2 -> Annual.FractionalDifference d1 d2
           SortOldestFirst = fun d1 d2 -> if d1 < d2 then -1 else 1
           ZeroSpan = 0<year>
@@ -400,6 +414,7 @@ module DateMode =
           AddMonths = fun d months -> d
           AddDays = fun d days -> d
           AddTime = fun d timeSpan -> d + timeSpan
+          SubtractTime = fun d timeSpan -> d + (timeSpan * -1)
           Difference = fun d1 d2 -> Radiocarbon.FractionalDifference d1 d2
           SortOldestFirst = fun d1 d2 -> if d1 > d2 then -1 else 1
           ZeroSpan = 0<``BP (radiocarbon)``>
@@ -416,7 +431,7 @@ module DateMode =
                 invalidOp "Radiocarbon date mode does not support sub-annual fixed resolutions."
           Divide = fun ts1 ts2 -> ts1 / ts2 |> float
           Minus = fun d1 d2 -> d1 - d2 }
-
+    
 
 module TimePoint =
 
@@ -874,9 +889,9 @@ module TimeSeries =
     // Extensions to add convenience methods to time-series
     type TimeSeries<'T, 'date, 'timeunit, 'timespan> with
 
-        member this.Length = this |> innerSeries |> Array.length
+        member this.Length = this |> toObservations |> Seq.length
 
-        member this.Head = this |> innerSeries |> Array.head
+        member this.Head = this |> toObservations |> Seq.head
 
         member this.TimeSteps = this |> innerSeries |> Array.map snd
 
@@ -1039,6 +1054,29 @@ module TimeFrame =
     /// <returns>The temporal resolution of the timeframe.</returns>
     let resolution frame =
         (frame |> inner |> Seq.head).Value |> TimeSeries.resolution
+
+    /// Append a single time point to a time frame.
+    let prepend time timeData (TimeFrame frame : TimeFrame<'T,'date,'timeunit,'timespan>) =
+        frame
+        |> Map.map(fun code ts ->
+            TimeSeries.toObservations ts
+            |> Seq.append [ timeData |> Map.find code, time ]
+            |> TimeSeries.fromObservations ts.DateMode
+        )
+        |> TimeFrame
+
+    /// Get the initial value of each time-series as a coded map.
+    let t0 (TimeFrame frame : TimeFrame<'T,'date,'timeunit,'timespan>) =
+        frame
+        |> Map.map(fun code ts -> ts.Head |> fst)
+
+    /// Get all dates across all series in the timeframe for which
+    /// values are registered.
+    let dates (TimeFrame frame : TimeFrame<'T,'date,'timeunit,'timespan>) =
+        frame
+        |> Seq.collect(fun kv -> kv.Value |> TimeSeries.dates)
+        |> Seq.distinct
+        |> Seq.toList
 
     let dropFirstObservation (TimeFrame frame : TimeFrame<'T,'date,'timeunit,'timespan>) =
         frame

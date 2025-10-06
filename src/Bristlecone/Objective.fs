@@ -73,14 +73,10 @@ module Objective =
         (measures: CodedMap<ModelSystem.Measurement<state>>)
         (solver: Solver.ConfiguredSolver)
         config
-        (observed: CodedMap<float<'state>[]>) : EstimationEngine.Objective =
+        (observed: CodedMap<float<state>[]>) : EstimationEngine.Objective =
 
             let compiled = compiledFromConfig config
-            let observedTensors =
-                observed
-                |> Map.map (fun _ arr ->
-                    arr |> Array.map (Units.removeUnitFromFloat >> (*) 1.<state>) |> Tensors.Typed.ofVector)
-            
+            let observedTensors = observed |> Map.map (fun _ v -> v |> Tensors.Typed.ofVector)
             fun point ->
                 let thetaReal = compiled.Forward point
                 let accessor  = accessorFromRealVector compiled thetaReal

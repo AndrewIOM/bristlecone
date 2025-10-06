@@ -29,6 +29,8 @@ module Bristlecone =
           LogTo = Console.logger 1000<iteration>
           Random = MathNet.Numerics.Random.MersenneTwister true
           ToModelTime = indexBySpan
+          InterpolationGlobal = Solver.InterpolationMode.Lower
+          InterpolationPerVariable = Map.empty
           Conditioning = Conditioning.NoConditioning }
 
     /// <summary>A basic estimation engine for ordinary differential equations, using a Nelder-Mead optimiser.</summary>
@@ -38,6 +40,8 @@ module Bristlecone =
           LogTo = Bristlecone.Logging.Console.logger 1000<iteration>
           Random = MathNet.Numerics.Random.MersenneTwister true
           ToModelTime = indexBySpan
+          InterpolationGlobal = Solver.InterpolationMode.Lower
+          InterpolationPerVariable = Map.empty
           Conditioning = Conditioning.RepeatFirstDataPoint }
 
 
@@ -55,6 +59,8 @@ module Bristlecone =
           LogTo = engine.LogTo
           Random = engine.Random
           ToModelTime = fn
+          InterpolationGlobal = engine.InterpolationGlobal
+          InterpolationPerVariable = engine.InterpolationPerVariable
           Conditioning = engine.Conditioning }
 
     /// Use a mersenne twister random number generator
@@ -119,6 +125,15 @@ module Bristlecone =
             // | None -> ()
             // | Some eRes ->
             Ok(one, two)
+
+        /// Determines which interpolation scheme to use for a particular
+        /// environmental time-series, for cases when the exact time is not
+        /// present.
+        let interpolationFor engine key =
+            engine.InterpolationPerVariable
+            |> Map.tryFind key
+            |> Option.defaultValue engine.InterpolationGlobal
+
 
     let private dynamicVariableKeys (models:ModelSystem.ModelForm<'modelTimeUnit>) =
         match models with
@@ -211,9 +226,9 @@ module Bristlecone =
             engine.LogTo
             <| GeneralEvent(
                 sprintf
-                    "Time-series start at %A with resolution %A."
-                    commonDynamic.StartDate
-                    (commonDynamic |> TimeFrame.resolution)
+                    "Time-series (conditioned) start at %A with resolution %A."
+                    conditioned.DynamicForSolver.StartDate
+                    (conditioned.DynamicForSolver |> TimeFrame.resolution)
             )
             
             // TODO Ensure that dynamic variables are an exact or subset of environmental variables
@@ -227,11 +242,9 @@ module Bristlecone =
                     model.Equations
                     engine.TimeHandling
                     stepType
-                    conditioned.Dynamic
+                    conditioned.DynamicForSolver
                     conditioned.Environment
-                    conditioned.T0
-
-            let observationData = tsData |> Map.map (fun _ ts -> ts.Values |> Seq.toArray)
+                    (Fit.interpolationFor engine)
 
             // A centralised transform for parameters between point and parameter space.
             let optimConfig =
@@ -247,13 +260,15 @@ module Bristlecone =
                     optim engine.Random engine.LogTo endCondition (unsafeEraseSpace cfg).Domain None
                 | _ -> invalidOp "Mode/config mismatch"
 
+            let obsDataForObjective = Solver.Conditioning.toObservationData conditioned.DynamicForPairing
+            let obsTimes = conditioned.DynamicForPairing |> TimeFrame.dates
             let objective =
                 Objective.create
                     model.NegLogLikelihood
                     model.Measures
-                    (solver Solver.StepType.External)
+                    (solver (Solver.StepType.External obsTimes))
                     optimConfig
-                    observationData
+                    obsDataForObjective
 
             let result = objective |> optimise
             let lowestLikelihood, bestPoint = result |> List.minBy (fun (l, _) -> l)
@@ -261,7 +276,7 @@ module Bristlecone =
             let estimatedSeries =
                 Objective.createPredictor
                     model.Measures
-                    (solver Solver.StepType.External)
+                    (solver (Solver.StepType.External obsTimes))
                     optimConfig
                     bestPoint
 
@@ -273,7 +288,7 @@ module Bristlecone =
                     bestPoint
 
             let paired =
-                timeSeriesData
+                conditioned.DynamicForPairing.Series
                 |> Map.filter (fun key _ -> estimatedSeries |> Map.containsKey key)
                 |> Map.map (fun k observedSeries ->
                     let expected = estimatedSeries |> Map.find k |> Tensors.Typed.toFloatArray

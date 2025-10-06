@@ -84,7 +84,7 @@ let initialBounds =
                             Map.empty
                             (dummySolver (fun _ -> 2.0<state>) data.Length)
                             optimConfig
-                            ([ (ShortCode.create "x").Value, data |> List.toArray ] |> Map.ofList)
+                            ([ (ShortCode.create "x").Value, data |> List.map ((*) 1.<state>) |> List.toArray ] |> Map.ofList)
 
                     // The point given to the objective should be in optim-space.
                     let optimPoint =

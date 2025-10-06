@@ -222,6 +222,9 @@ module Test =
                 testSettings.StartValues
                 |> Map.map(fun _ v -> v |> Units.removeUnitFromFloat |> (*) 1.<state> |> Tensors.Typed.ofScalar)
 
+            let conditioned = Solver.Conditioning.resolve engine.Conditioning dynSeries envSeries
+            let obsTimes = conditioned.DynamicForPairing |> TimeFrame.dates
+
             // Configure solver
             let solver =
                 Solver.SolverCompiler.compile
@@ -229,10 +232,10 @@ module Test =
                     engine.ToModelTime
                     model.Equations
                     engine.TimeHandling
-                    Solver.StepType.External
-                    dynSeries
-                    envSeries
-                    t0
+                    (Solver.StepType.External obsTimes)
+                    conditioned.DynamicForSolver
+                    conditioned.Environment
+                    (fun _ -> Solver.Exact)
 
             // Get real-space vector from pool
             let _, thetaReal = Parameter.Pool.toTensorWithKeysReal thetaPool

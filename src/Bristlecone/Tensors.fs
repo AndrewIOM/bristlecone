@@ -150,7 +150,7 @@ module Tensors =
         /// The mask length must match the vector length.
         let filterByMask (mask:bool[]) (v: TypedTensor<Vector,'u>) =
             if v.Value.dim <> 1 then invalidArg "v" "Expected 1‑D vector"
-            if mask.Length <> v.Value.shape.[0] then invalidArg "mask" "Mask length mismatch"
+            if mask.Length <> v.Value.shape.[0] then invalidArg "mask" (sprintf "Mask length mismatch (%i vs %i data length)" mask.Length v.Value.shape.[0])
 
             let idx =
                 mask

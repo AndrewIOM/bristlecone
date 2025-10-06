@@ -190,6 +190,14 @@ module EstimationEngine =
             TypedTensor<Vector,``parameter``> // parameters
                 -> CodedMap<TypedTensor<Vector,state>>
 
+        /// A solver may configure environmental forcing variables
+        /// to be interpolated if they are not available at an exact
+        /// time t requested by integration.
+        type InterpolationMode =
+            | Exact
+            | Lower
+            | Linear
+
 
     module Integration =
 
@@ -199,6 +207,7 @@ module EstimationEngine =
         /// the initial state, and returns a function that
         /// is compiled to only require the current time
         /// and current state.
+        /// Must return the baseline state plus evolutions.
         type IntegrationRoutine =
             TypedTensor<Scalar,``time index``> // tInitial
                 -> TypedTensor<Scalar,``time index``> // tEnd
@@ -237,4 +246,6 @@ module EstimationEngine =
           Conditioning: Conditioning<'state>
           LogTo: WriteOut
           ToModelTime: 'timespan -> float<'modelTimeUnit>
+          InterpolationGlobal : Solver.InterpolationMode
+          InterpolationPerVariable : CodedMap<Solver.InterpolationMode>
           Random: Random }

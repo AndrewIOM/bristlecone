@@ -290,8 +290,10 @@ module Language =
                 <@
                     (%%Expr.Var eVar : CodedMap<TypedTensor<Scalar,ModelSystem.``environment``>>)
                     |> Map.tryFindBy(fun k -> k.Value = name)
-                    |> Option.get
-                    |> fun t -> t.Value
+                    |> fun o -> 
+                        match o with
+                        | Some o -> o.Value
+                        | None -> failwithf "Environmental data not available: %s" name
                 @>
             timeVal     = <@ (%%Expr.Var tVar : TypedTensor<Scalar,'timeUnit>).Value @>
             thisVal     = <@ (%%Expr.Var xVar : TypedTensor<Scalar,ModelSystem.state>).Value @>
@@ -315,7 +317,7 @@ module Language =
             parameter   = fun name -> <@ (%%Expr.Var pVar : Tensor).[pIndex.[name]] @>
             environment = fun _ -> failwith "Environment not used in measures"
             timeVal     = <@ dsharp.tensor (float (%%Expr.Var tIdxVar : int)) @>
-            thisVal     = failwith "Not used in measures"
+            thisVal     = <@ dsharp.tensor nan @> // not used in measures
             add         = List.reduce (fun l r -> <@ dsharp.add(%l, %r) @>)
             sub         = fun (l,r) -> <@ dsharp.sub(%l, %r) @>
             mul         = List.reduce (fun l r -> <@ %l * %r @>)
@@ -425,11 +427,13 @@ module Language =
             |> unbox<Parameter.Pool.ParameterPool -> CodedMap<float> -> float<Time.``time index``> -> float -> float>
 
         let compileMeasure<[<Measure>] 'stateUnit> parameters (expr: ModelExpression<'stateUnit>) =
-            let pVar      = Var("parameters", typeof<TypedTensor<Vector,``parameter``>>)
-            let statesVar = Var("states", typeof<CodedMap<TypedTensor<Scalar,ModelSystem.state>>[]>)
+            let pVar      = Var("parameters", typeof<TypedTensor<Vector,parameter>>)
+            let statesVar = Var("states", typeof<CodedMap<TypedTensor<Vector,ModelSystem.state>>>)
             let tIdxVar   = Var("timeIndex", typeof<int>)
             let pIndex    = paramIndex parameters
-            buildQuotation (tensorOpsForMeasure pIndex pVar statesVar tIdxVar) expr
+            let core = buildQuotation (tensorOpsForMeasure pIndex pVar statesVar tIdxVar) expr
+            
+            <@ tryAsScalar<ModelSystem.state> %core |> Option.get @>
             |> fun body -> Expr.Lambda(pVar, Expr.Lambda(statesVar, Expr.Lambda(tIdxVar, body)))
             |> LeafExpressionConverter.EvaluateQuotation
             |> unbox<ModelSystem.Measurement<'stateUnit>>
@@ -513,10 +517,10 @@ module Language =
         type LikelihoodThunk = unit -> ModelSystem.Likelihood<ModelSystem.state>
 
         type ModelFragment<[<Measure>] 'time> =
-            | EquationFragment  of EquationThunk<'time>
+            | EquationFragment  of ExpressionParser.Requirement list * EquationThunk<'time>
             | ParameterFragment of Parameter.Pool.AnyParameter
             | LikelihoodFragment of LikelihoodThunk
-            | MeasureFragment    of MeasureThunk<ModelSystem.state>
+            | MeasureFragment    of ExpressionParser.Requirement list * MeasureThunk<ModelSystem.state>
 
         type EquationFragment<[<Measure>] 'stateUnit, [<Measure>] 'timeUnit> =
             | DiscreteEq of ModelExpression<'stateUnit>
@@ -551,15 +555,21 @@ module Language =
         
             let equationRate<[<Measure>] 'time, [<Measure>] 'state> (name: string) (expr: ModelExpression<'state/'time>) : ModelFragment<'time> =
                 let sc = ShortCode.create name |> Option.get
-                EquationFragment (Rate (sc, fun p e -> ExpressionCompiler.compileRate<'time, 'state> p e expr))
+                let (ME eUntyped) = expr
+                let envReqs = ExpressionParser.requirements eUntyped |> Writer.run |> snd
+                EquationFragment (envReqs, Rate (sc, fun p e -> ExpressionCompiler.compileRate<'time, 'state> p e expr))
 
             let equationDiscrete<[<Measure>] 'time, [<Measure>] 'state> (name: string) (expr: ModelExpression<'state>) : ModelFragment<'time> =
                 let sc = ShortCode.create name |> Option.get
-                EquationFragment (Discrete (sc, fun p e -> ExpressionCompiler.compileDiscrete<'time, 'state> p e expr))
+                let (ME eUntyped) = expr
+                let envReqs = ExpressionParser.requirements eUntyped |> Writer.run |> snd
+                EquationFragment (envReqs, Discrete (sc, fun p e -> ExpressionCompiler.compileDiscrete<'time, 'state> p e expr))
 
             let measure<[<Measure>] 'time, [<Measure>] 'u> (name: string) (expr: ModelExpression<'state>) : ModelFragment<'time> =
                 let sc: ShortCode.ShortCode = ShortCode.create name |> Option.get
-                MeasureFragment ((sc, fun p -> ExpressionCompiler.compileMeasure<'u> p expr |> Measurement.adapt))
+                let (ME eUntyped) = expr
+                let envReqs = ExpressionParser.requirements eUntyped |> Writer.run |> snd
+                MeasureFragment (envReqs, (sc, fun p -> ExpressionCompiler.compileMeasure<'u> p expr |> Measurement.adapt))
 
             let likelihood<[<Measure>] 'time, [<Measure>] 'u> (l: ModelSystem.Likelihood<'u>) : ModelFragment<'time> =
                 let toInternal () = Likelihood.contramap<'u> l
@@ -595,10 +605,10 @@ module Language =
                 m |> Map.toSeq |> Seq.choose (function c, ParameterFragment p -> Some (c, p) | _ -> None)
                 |> Map.ofSeq |> Parameter.Pool.Pool
             let measures =
-                m |> Map.toSeq |> Seq.choose (function c, MeasureFragment m -> Some (c, m) | _ -> None)
+                m |> Map.toSeq |> Seq.choose (function c, MeasureFragment (reqs,m) -> Some (c, m) | _ -> None)
                 |> Map.ofSeq
             let equations =
-                m |> Map.toSeq |> Seq.choose (function c, EquationFragment e -> Some (c, e) | _ -> None)
+                m |> Map.toSeq |> Seq.choose (function c, EquationFragment (reqs,e) -> Some (c, e) | _ -> None)
                 |> Map.ofSeq
 
             // Validate likelihoods
@@ -610,9 +620,16 @@ module Language =
 
             // Collect requirements from your original untyped parser if you still rely on it.
             // Alternatively, compute envKeys directly from typed expressions at add-time and capture them into the thunk.
+            let reqs =
+                m |> Map.toSeq 
+                |> Seq.collect (function kv -> match snd kv with | ModelFragment.EquationFragment (r,_) -> r | ModelFragment.MeasureFragment (r,_) -> r | _ -> [])
+
             let envKeys =
-                // existing requirement discovery or pre-collected keys
-                []
+                reqs |> Seq.choose(fun r ->
+                    match r with
+                    | ExpressionParser.Requirement.EnvironmentRequirement e -> Some (e |> ShortCode.create |> Option.get)
+                    | _ -> None)
+                |> Seq.toList
 
             // Compile equations by invoking thunks
             let eqs =
@@ -644,13 +661,13 @@ module Language =
     module Model =
 
         let empty<[<Measure>] 'time> : ModelBuilder.ModelBuilder<'time> = ModelBuilder.create false ()
-        let discrete<'time> = ModelBuilder.create true ()
+        let discrete<[<Measure>] 'time> : ModelBuilder.ModelBuilder<'time> = ModelBuilder.create true ()
 
         let addRateEquation<[<Measure>] 'time, [<Measure>] 'state> (name:StateId<'state>) (expr: ModelExpression<'state/'time>) (mb: ModelBuilder.ModelBuilder<'time>) =
             let (StateIdInner name) = name
             ModelBuilder.addEquationRate name expr mb
 
-        let addDiscreteEquation<[<Measure>] 'time, [<Measure>] 'state> (name:StateId<'state>) (expr: ModelExpression<'state>) (mb: ModelBuilder.ModelBuilder<'time>) =
+        let addDiscreteEquation<[<Measure>] 'time, [<Measure>] 'state> (name:StateId<'state>) (expr: ModelExpression<'state>) (mb: ModelBuilder.ModelBuilder<'time>) : ModelBuilder.ModelBuilder<'time> =
             let (StateIdInner name) = name
             ModelBuilder.addEquationDiscrete name expr mb
 
@@ -760,40 +777,6 @@ module Language =
 
     let continuousModel<[<Measure>] 'time> : ModelSystemDsl.ModelSystemBuilder<'time> =
         ModelSystemDsl.ModelSystemBuilder false
-
-    // TODO delete this module:
-    module Example =
-
-        [<Measure>] type day
-        [<Measure>] type year
-        [<Measure>] type g
-        [<Measure>] type m
-        [<Measure>] type mg
-        [<Measure>] type kg
-        [<Measure>] type biomass = g / m^2
-        [<Measure>] type soilN = mg / kg
-        [<Measure>] type perDay = 1 / day
-
-        // State handles:
-        let B = state<biomass> "biomass"
-        let N = state<kg> "soilN"
-
-        // Parameter handles:
-        let K  = parameter "K" notNegative 20.<biomass> 30.<biomass>
-        let r  = parameter "r" notNegative 0.1</day> 1.0</day>
-        
-        // Build expressions using typed handles
-        let one = Constant 1.0
-        let biomass   = ModelExpression.StateAt(0<Time.``time index``>, N)
-
-        let ``dB/dt`` = ModelExpression.Parameter r * This<biomass> * (one - This<biomass> / ModelExpression.Parameter K)
-
-        // let model =
-        //     continuousModel<day> {
-        //         parameter r
-        //         equationRate B ``dB/dt``
-        //         likelihood (ModelLibrary.Likelihood.sumOfSquares [])
-        //     }
 
 
     /// Terms for designing tests for model systems.
