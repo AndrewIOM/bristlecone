@@ -86,7 +86,7 @@ fun modelResults subjectIds hypothesisIds ->
     |> Seq.map (fun (s, h, (a, b)) -> (s, h, a, b))
     |> Bristlecone.Data.ModelSelection.save "/some/dir"
 
-fun (hypothesisResults: ModelSelection.ResultSet.ResultSet<string, Hypotheses.Hypothesis<float>,_,_,_> seq) ->
+fun (hypothesisResults: ModelSelection.ResultSet.ResultSet<string, Hypotheses.Hypothesis<'u>,_,_,_> seq) ->
     hypothesisResults
     |> ModelSelection.Akaike.akaikeWeightsForSet (fun h -> h.ReferenceCode)
     |> Bristlecone.Data.ModelSelection.save "/some/dir"

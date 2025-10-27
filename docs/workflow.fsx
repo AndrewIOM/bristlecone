@@ -50,7 +50,7 @@ is given below:
 open Bristlecone
 
 let replicates = 3 // number of replications per analysis
-let endCondition = Optimisation.EndConditions.afterIteration 100000
+let endCondition = Optimisation.EndConditions.atIteration 100000<iteration>
 
 let workPackages datasets hypotheses engine =
     seq {
@@ -103,7 +103,7 @@ First, let's use one of Bristlecone's built-in loggers to print the progress of 
 work package:
 *)
 
-let logger = Logging.Console.logger 1000
+let logger = Logging.Console.logger 1000<iteration>
 
 (**
 This logger will print the current point in parameter space each thousand
@@ -111,17 +111,19 @@ iteration, for each chain (along with process IDs). Next, let's create and setup
 the orchestration agent:
 *)
 
-let orchestrator =
+let orchestrator () =
     Orchestration.OrchestrationAgent(logger, System.Environment.ProcessorCount, false)
 
-fun datasets hypotheses (engine:EstimationEngine.EstimationEngine<float,System.DateTime,System.TimeSpan,System.TimeSpan>) ->
+fun datasets hypotheses engine ->
+
+    let orch = orchestrator ()
 
     // Orchestrate the analyses
     let work = workPackages datasets hypotheses engine
 
     let run () =
         work
-        |> Seq.iter (Orchestration.OrchestrationMessage.StartWorkPackage >> orchestrator.Post)
+        |> Seq.iter (Orchestration.OrchestrationMessage.StartWorkPackage >> orch.Post)
 
     run ()
 
