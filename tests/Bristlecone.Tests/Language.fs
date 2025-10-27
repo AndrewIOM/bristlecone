@@ -66,6 +66,28 @@ let modelExpressionsTensor =
 
         ]
 
+[<Tests>]
+let inverseTests =
+    testList
+        "Inverse node"
+        [
+
+            testPropertyWithConfig Config.config "Round trip" <| fun pool ->
+                let f r : ModelExpression<Config.testModelUnit ^2> = r * r
+                let y = f (Constant 3.0<Config.testModelUnit>)
+                let x' = Inverse f y (Constant 0.0<Config.testModelUnit>) (Constant 10.0<Config.testModelUnit>)
+
+                let compiled = ExpressionCompiler.compileRate pool [] x'
+                let t, this = Typed.ofScalar 0., Typed.ofScalar 0.<ModelSystem.state>
+                let result = compiled dummyParameterT Map.empty t this |> Typed.toFloatScalar
+
+                let compiledF = ExpressionCompiler.compileFloat x'
+                let resultF = compiledF pool Map.empty 0.<Time.``time index``> 0.
+
+                Config.floatEqualTol result 3.0<ModelSystem.state/Time.``time index``> "Round-trip did not return expected value (tensor-mode)"
+                Config.floatEqualTol resultF 3.0 "Round-trip did not return expected value (float-mode)"
+        ]
+
 
 [<Tests>]
 let modelExpressions =

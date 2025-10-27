@@ -249,6 +249,26 @@ module RootFinding =
             else
                 bisect (n + 1) N f a c t
 
+    module Tensor =
+
+        open DiffSharp
+
+        /// Bisect method for finding root of non-linear equations.
+        let bisect
+            (f: Tensor -> Tensor)
+            (target: Tensor) (lo: Tensor) (hi: Tensor)
+            (tol: float) (maxIter: int) : Tensor =
+            let rec loop (a: Tensor) (b: Tensor) i =
+                let c = (a + b) * dsharp.tensor 0.5
+                let fc = f c - target
+                if dsharp.abs(fc) < dsharp.tensor tol || (b - a) * dsharp.tensor 0.5 < dsharp.tensor tol || i >= maxIter then c
+                else
+                    let fa = f a - target
+                    if (fa * fc) > dsharp.tensor 0.0 then loop c b (i+1)
+                    else loop a c (i+1)
+            loop lo hi 0
+
+
 /// Statistics to measure the convergence of multiple trajectories,
 /// for example for chains in a Monte Carlo analysis.
 module Convergence =

@@ -1164,6 +1164,16 @@ module GrowthSeries =
     let asCumulative plant = plant |> cumulative |> Cumulative
     let asRelative plant = plant |> relative |> Relative
 
+    let tail growth =
+        match growth with
+        | Cumulative g -> 
+            g 
+            |> TimeSeries.toObservations 
+            |> Seq.tail
+            |> TimeSeries.fromObservations g.DateMode
+            |> Cumulative
+        | _ -> invalidOp "Not implemented"
+
     let internal stripUnits growth =
         match growth with
         | Absolute ts -> ts |> TimeSeries.map (fun (t, v) -> Units.removeUnitFromFloat t)

@@ -7,11 +7,15 @@ open Bristlecone
 open Bristlecone.Language
 open FsCheck
 
+// Helpers
+let floatEqualTol actual exp message =
+    Expect.floatClose Accuracy.high (Units.removeUnitFromFloat actual) (Units.removeUnitFromFloat exp) message
+
 let sequenceEqualTol (arr: float<_> seq) (expected: float<_> seq) message =
     arr
     |> Seq.iteri (fun i actual ->
         let exp = expected |> Seq.item i
-        Expect.floatClose Accuracy.high (Units.removeUnitFromFloat actual) (Units.removeUnitFromFloat exp) message)
+        floatEqualTol actual exp message)
 
 let genStrings minLength maxLength =
     gen {

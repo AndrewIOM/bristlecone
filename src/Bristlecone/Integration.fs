@@ -73,7 +73,6 @@ module Base =
             |> Map.map (fun k v ->
                 match Map.tryFind k externalEnv with
                 | Some vec ->
-                    // Grab scalar tensor and wrap via tryAsScalar (no float conversion)
                     match tryAsScalar<``environment``> vec.Value.[timeIdx] with
                     | Some s -> s
                     | None   -> invalidOp "Expected scalar from external environment vector"
@@ -81,7 +80,24 @@ module Base =
 
         let tInitial = tInitial |> Typed.ofScalar
         let tStep = tStep |> Typed.ofScalar
-        let tEnd = tEnd |> Typed.ofScalar
+
+        // Read in environment values from external env if not specified
+        // within initial env.
+        let baselineEnv =
+            [ Map.keys externalEnvTensors; Map.keys initialEnv ]
+            |> Seq.concat
+            |> Seq.map(fun k ->
+                match Map.tryFind k initialEnv with
+                | Some initial -> k, initial
+                | None ->
+                    match Map.tryFind k externalEnvTensors with
+                    | Some vec ->
+                        match tryAsScalar<``environment``> vec.Value.[0] with
+                        | Some s -> k, s
+                        | None   -> invalidOp "Expected scalar from external environment vector"
+                    | None -> failwithf "Could not assign initial value to state / environment %s" k.Value
+            )
+            |> Map.ofSeq
 
         // STAGE 2. Make a parameter-specific concrete RHS.
         fun (parameters: TypedTensor<Vector,``parameter``>) ->
@@ -93,12 +109,9 @@ module Base =
                 let idx = int ((t.Value - tInitial.Value) / tStep.Value)
 
                 let env =
-                    if idx = 0 then
-                        applyDynamicVariablesT x modelKeys initialEnv
-                    else
-                        initialEnv
-                        |> applyExternalEnvironmentTensor idx externalEnvTensors
-                        |> applyDynamicVariablesT x modelKeys
+                    baselineEnv
+                    |> applyExternalEnvironmentTensor idx externalEnvTensors
+                    |> applyDynamicVariablesT x modelKeys
 
                 // Compute derivatives for all variables
                 modelEqs

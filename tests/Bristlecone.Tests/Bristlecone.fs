@@ -4,13 +4,7 @@ open Bristlecone
 open Expecto
 open FsCheck
 open Bristlecone.EstimationEngine
-
-// Helpers
-let expectSameFloat a b message =
-    Expect.isTrue (LanguagePrimitives.GenericEqualityER a b) message
-
-let expectSameFloatList a b message =
-    Seq.zip a b |> Seq.iter (fun (a, b) -> expectSameFloat a b message)
+open Bristlecone.Time
 
 module TestModels =
     open Bristlecone.Language
@@ -57,12 +51,42 @@ module TestModels =
         |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ X.Code ])
         |> Model.compile
 
+    let tempDrivenModelDiscrete () =
+        let X = state "X"
+        let temp = environment "Temp"
+        let dummy = parameter "a" noConstraints (min 0.1 0.2) (max 0.1 0.2)        
+        Model.discrete
+        |> Model.addDiscreteEquation X (Environment temp)   // derivative of X is just the env forcing
+        |> Model.estimateParameter dummy
+        |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ X.Code ])
+        |> Model.compile
+
+    let diffSingleEnv (dynCode:ShortCode.ShortCode) (envCode:ShortCode.ShortCode) =
+        let X = state dynCode.Value
+        let temp = environment envCode.Value
+        let dummy = parameter "a" noConstraints (min 0.1 0.2) (max 0.1 0.2)        
+        Model.empty<year>
+        |> Model.addRateEquation X (Environment temp)   // derivative of X is just the env forcing
+        |> Model.estimateParameter dummy
+        |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ dynCode ])
+        |> Model.compile
+
 
 let indexBySpan (ts:System.TimeSpan) =
     float ts.Days * 1.<Time.day> * 12.<Time.``time index``/Time.day>
 
 let defaultEngine () =
     { TimeHandling = Continuous <| Integration.RungeKutta.rk4
+      OptimiseWith = Optimisation.None.none
+      LogTo = ignore
+      ToModelTime = indexBySpan
+      Random = MathNet.Numerics.Random.MersenneTwister(1000,true)
+      InterpolationGlobal = Solver.InterpolationMode.Lower
+      InterpolationPerVariable = Map.empty
+      Conditioning = Conditioning.RepeatFirstDataPoint }
+
+let defaultEngineDiscrete () =
+    { TimeHandling = Discrete
       OptimiseWith = Optimisation.None.none
       LogTo = ignore
       ToModelTime = indexBySpan
@@ -136,13 +160,40 @@ module ``Fit`` =
             Config.sequenceEqualTol (xs.Values |> Seq.map(fun v -> v.Obs)) (if useRepeat then obs.Values else Seq.tail obs.Values)  "True observed data was not returned by tryFit"
 
 
-        // --- Optimiser trace length ---
-        // testCase "Trace length equals optimiser iterations" <| fun _ ->
-        //     // TODO: plug in dummy optimiser that runs N iterations, assert result.Trace.Length = N
-
         // // --- Resolution combinations ---
         // testCase "Fixed-step dynamic with matching env resolution" <| fun _ ->
-        //     // TODO: build fixed-step dynamic + env, run tryFit, assert no error
+        testPropertyWithConfig Config.config "Fixed-step differential with matching env resolution"
+        <| fun dynCode envCode (PositiveInt steps) (offset:NormalFloat) (useRepeat:bool) ->
+            
+            // Annual environmental and observation data:
+            let steps = max 4 steps
+            let startDate = 1850
+            let env =
+                [ startDate - 1 .. startDate + steps ]
+                |> List.map(fun y -> float y + offset.Get, DatingMethods.Annual (y * 1<year>))
+                |> TimeSeries.fromObservations DateMode.annualDateMode
+            let obs =
+                [ startDate .. startDate + steps ]
+                |> List.map(fun y -> float y, DatingMethods.Annual (y * 1<year>))
+                |> TimeSeries.fromObservations DateMode.annualDateMode
+            let data = Map.ofList [ envCode, env; dynCode, obs ]
+
+            // Test engine / settings:
+            let engine = defaultEngine() |> Bristlecone.withTimeConversion Units.intToFloat
+            let model = TestModels.diffSingleEnv dynCode envCode
+            let result = Bristlecone.tryFit engine defaultEndCon data model |> fun r -> Expect.wantOk r "Fit failed"
+
+            let actual = result.Series.[dynCode].Values |> Seq.map (fun v -> v.Fit |> Units.removeUnitFromFloat) |> Seq.toArray
+            let actual2 = result.Series.[dynCode].Values |> Seq.map (fun v -> v.Obs |> Units.removeUnitFromFloat) |> Seq.toArray
+            let expected = env |> TimeSeries.toObservations |> Seq.skip 1 |> Seq.map fst |> Seq.toList
+
+            printfn "Actual %A / %A Exp %A" actual actual2 expected
+
+            Expect.hasLength actual (steps + 1) "Result should have length of timesteps"
+            Expect.sequenceEqual actual expected "Output was not the environment data."
+
+
+
 
         // testCase "Fixed-step dynamic with higher-res env" <| fun _ ->
         //     // TODO: build env with sub-daily resolution, dynamic daily, assert interpolation/downsampling works
@@ -166,6 +217,10 @@ module ``Fit`` =
         // testCase "Environment coverage missing at solver start fails" <| fun _ ->
         //     // TODO: build env starting after dynamic start, assert invalidOp
 
+        // --- Optimiser trace length ---
+        // testCase "Trace length equals optimiser iterations" <| fun _ ->
+        //     // TODO: plug in dummy optimiser that runs N iterations, assert result.Trace.Length = N
+
         // // --- Internal vs External ---
         // testCase "Internal vs External step types differ in length" <| fun _ ->
         //     // TODO: run solver with both step types, assert Internal length > External length
@@ -185,8 +240,46 @@ module ``Fit`` =
             // - Cannot run with 0 parameters
             // - Cannot run without environmental coverage of conditioning period
 
-            // - Environment can have negative index values, so that e.g. a time-point far before
+            // - Environment should be able to have negative index values, so that e.g. a time-point far before
             // the conditioning period can be interpolated from.
+
+            testCase "Interpolation provides correct value at correct time" <| fun _ ->
+                let startDate = System.DateTime(2000,1,1)
+
+                // Environment sampled coarsely: 0 at day 0, 10 at day 10
+                let env =
+                    [ (-3., startDate.AddDays -1); (0., startDate); (10., startDate.AddDays 10.) ]
+                    |> Time.TimeSeries.fromNeoObservations
+
+                let obs =
+                    [| for i in 0. .. 10. -> i, startDate.AddDays(float i) |]
+                    |> Time.TimeSeries.fromNeoObservations
+
+                let data =
+                    Map.ofList [
+                        (ShortCode.create "Temp").Value, env
+                        (ShortCode.create "X").Value, obs
+                    ]
+
+                let engineLower =
+                    { defaultEngineDiscrete() with InterpolationGlobal = Solver.InterpolationMode.Lower }
+
+                let engineLinear =
+                    { defaultEngineDiscrete() with InterpolationGlobal = Solver.InterpolationMode.Linear }
+
+                let model = TestModels.tempDrivenModelDiscrete()
+
+                let resultLower = Bristlecone.tryFit engineLower defaultEndCon data model |> fun r -> Expect.wantOk r "Fit failed"
+                let resultLinear = Bristlecone.tryFit engineLinear defaultEndCon data model |> fun r -> Expect.wantOk r "Fit failed"
+
+                let xsLower = resultLower.Series.[(ShortCode.create "X").Value].Values |> Seq.map (fun v -> v.Fit) |> Seq.toArray
+                let xsLinear = resultLinear.Series.[(ShortCode.create "X").Value].Values |> Seq.map (fun v -> v.Fit) |> Seq.toArray
+
+                let expectedLower = [|0.0; 0.0; 0.0; 0.0; 0.0; 0.0; 0.0; 0.0; 0.0; 0.0; 10.0|] |> Array.map ((*) 1.<ModelSystem.state>)
+                let expectedLinear = [| 0. .. 1. .. 10. |] |> Array.map ((*) 1.<ModelSystem.state>)
+                Expect.sequenceEqual xsLower expectedLower "Interpolation lower should return 0 until next value at t=10"
+                Expect.sequenceEqual xsLinear expectedLinear "Interpolation linear should ramp up by 1 each timestep"
+
 
             testCase "Interpolation mode affects state trajectory" <| fun _ ->
                 let startDate = System.DateTime(2000,1,1)
