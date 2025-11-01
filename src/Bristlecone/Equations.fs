@@ -59,9 +59,9 @@ module Likelihood =
     /// Log likelihood function for single equation system, assuming Gaussian error for x.
     /// Requires a parameter 'σ[x]' to be included in any `ModelSystem` that uses it.
     /// </summary>
-    let gaussian key : Likelihood<parameter> =
+    let gaussian (key:ShortCode.ShortCode) : Likelihood<parameter> =
         fun paramAccessor data ->
-            let x = data |> getData key
+            let x = data |> getData key.Value
             let sigmax = paramAccessor.Get "σ[x]"
 
             let obsx = Typed.tail x.Observed
@@ -103,10 +103,10 @@ module Likelihood =
     /// Log likelihood function for dual simultaneous system, assuming Gaussian error for both x and y.
     /// Requires parameters 'σ[x]', 'σ[y]' and 'ρ' to be included in any `ModelSystem` that uses it.
     /// </summary>
-    let bivariateGaussian (key1: Language.StateId<_>) (key2:Language.StateId<_>) : Likelihood<'u> =
+    let bivariateGaussian (key1: ShortCode.ShortCode) (key2:ShortCode.ShortCode) : Likelihood<'u> =
         fun paramAccessor data ->
-            let x = data |> getData key1.Code.Value
-            let y = data |> getData key2.Code.Value
+            let x = data |> getData key1.Value
+            let y = data |> getData key2.Value
 
             let sigmax = paramAccessor.Get "σ[x]" |> Typed.retype<parameter,'u,Scalar>
             let sigmay = paramAccessor.Get "σ[y]" |> Typed.retype<parameter,'u,Scalar>

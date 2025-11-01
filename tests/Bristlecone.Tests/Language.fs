@@ -139,6 +139,11 @@ let modelExpressions =
                 let result = fn fakePoolVector Map.empty t' this
                 Expect.floatClose Accuracy.high (result |> Typed.toFloatScalar |> Units.removeUnitFromFloat) pVal.Get "Parameter value didn't match"
 
+            testPropertyWithConfig Config.config "Greater than short-circuits on invalid (nan)" <| fun _ ->
+                let safe = Conditional (Constant 200. .> Constant 100.) (Constant 1.0) (Invalid)
+                let r = ExpressionCompiler.compileSimple safe
+                Expect.floatClose Accuracy.high r 1.0
+
         ]
 
 

@@ -240,36 +240,36 @@ module Series =
 
     module internal Row =
 
-        let fromResult subject hypothesisId result =
+        let fromResult dateToString subject hypothesisId (result: EstimationResult<'d,'a,'b>) =
             result.Series
             |> Map.toList
             |> Seq.collect (fun (name, series) ->
                 series
                 |> TimeSeries.toObservations
                 |> Seq.map (fun (v, t) ->
-                    IndividualSeries.Row(subject, hypothesisId, name.Value, t, float v.Fit, float v.Obs, float result.Likelihood)))
+                    IndividualSeries.Row(subject, hypothesisId, name.Value, dateToString t, float v.Fit, float v.Obs, float result.Likelihood)))
 
-        let toSeries (data: IndividualSeries) =
+        let toSeries toTimeSeries (data: IndividualSeries) =
             data.Rows
             |> Seq.groupBy (fun r -> r.Variable)
             |> Seq.choose (fun (g, r) ->
                 let ts =
                     r
                     |> Seq.map (fun r -> ({ Fit = r.Expected * 1.<state>; Obs = r.Observed * 1.<state> }, r.Time))
-                    |> TimeSeries.fromObservations DateMode.calendarDateMode
+                    |> toTimeSeries
 
                 ShortCode.create g |> Option.map (fun c -> c, ts))
             |> Map.ofSeq
 
-    let save directory subject modelId result =
-        let csv = new IndividualSeries(result |> Row.fromResult subject modelId)
+    let save dateToString directory subject modelId result =
+        let csv = new IndividualSeries(result |> Row.fromResult dateToString subject modelId)
 
         let filePath =
             Config.filePath directory subject modelId result.ResultId Config.DataType.Series
 
-        csv.Save(filePath)
+        csv.Save filePath
 
-    let load directory subject modelId =
+    let load toSeries directory subject modelId =
         let seriesFiles = Config.fileMatch directory subject modelId Config.DataType.Series
 
         seriesFiles
@@ -278,7 +278,7 @@ module Series =
 
             match data.Rows |> Seq.length with
             | 0 -> None
-            | _ -> (i, data |> Row.toSeries) |> Some)
+            | _ -> (i, data |> Row.toSeries toSeries) |> Some)
 
 [<RequireQualifiedAccess>]
 module EstimationResult =
@@ -291,21 +291,21 @@ module EstimationResult =
     /// <param name="thinTraceBy">If Some, an integer representing the nth traces to keep from the optimisation trace.
     /// If None, does not thin the trace.</param>
     /// <param name="result">The estimation result to save</param>
-    let saveAll directory subject modelId thinTraceBy result =
+    let saveAll dateToString directory subject modelId thinTraceBy (result: EstimationResult<'d,'a,'b>) =
         Trace.save directory subject modelId thinTraceBy result
         MLE.save directory subject modelId result
-        Series.save directory subject modelId result
+        Series.save dateToString directory subject modelId result
 
     /// Load an `EstimationResult` that has previously been saved as
     /// three seperate dataframes. Results will only be reconstructed
     /// when file names and formats are in original Bristlecone format.
-    let loadAll directory subject (modelSystem: ModelSystem<'modelTimeUnit>) modelId =
+    let loadAll toSeries directory subject (modelSystem: ModelSystem<'modelTimeUnit>) modelId =
         let mles =
             MLE.load directory subject modelSystem modelId
             |> Seq.map (fun (k, v) -> k.ToString(), v)
 
         let series =
-            Series.load directory subject modelId |> Seq.map (fun (k, v) -> k.ToString(), v)
+            Series.load toSeries directory subject modelId |> Seq.map (fun (k, v) -> k.ToString(), v)
 
         let traces =
             Trace.load directory subject modelId |> Seq.map (fun (k, v) -> k.ToString(), v)
@@ -408,13 +408,7 @@ module NStepAhead =
                 NStepAhead.Row(subjectId, hypothesisId, analysisId, t, float fit.Obs, nSteps, float fit.Fit)))
 
     let internal toStatCsvRows
-        (results:
-            seq<
-                string *
-                string *
-                CodedMap<ModelSystem.FitSeries<'date, 'timeunit, 'timespan> * Statistics.NStepStatistics>
-             >)
-        =
+        (results: seq<string * string * CodedMap<ModelSystem.FitSeries<'date, 'timeunit, 'timespan> * Statistics.NStepStatistics>>) =
         results
         |> Seq.collect (fun (s, h, r) ->
             r

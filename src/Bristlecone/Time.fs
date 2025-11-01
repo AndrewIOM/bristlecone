@@ -1137,11 +1137,21 @@ module GrowthSeries =
         match growth with
         | Absolute g ->
             let time = g |> TimeSeries.toObservations |> Seq.map snd
-            let agr = g |> TimeSeries.toObservations |> Seq.map fst
-            let biomass = agr |> Seq.scan (+) 0.<_> |> Seq.tail |> Seq.toList
+            let agr = g |> TimeSeries.toObservations |> Seq.toList
+            let increments = agr |> Seq.map (fun (rate, t) -> rate * LanguagePrimitives.FloatWithMeasure<'time> 1.)
+            let biomass: float<'u> list = increments |> Seq.scan (+) (LanguagePrimitives.FloatWithMeasure<'u> 0.) |> Seq.tail |> Seq.toList
             TimeSeries.fromObservations g.DateMode (Seq.zip biomass time)
         | Relative _ -> failwith "Not implemented"
         | Cumulative g -> g
+
+    let absolute
+        (growth: GrowthSeries<'u, 'time, 'date, 'timeunit, 'timespan>)
+        : TimeSeries<float<'u/'time>, 'date, 'timeunit, 'timespan> =
+        match growth with
+        | Absolute g -> g
+        | Cumulative _
+        | Relative _ -> failwith "Not implemented"
+
 
     /// <summary>Converts the given growth series into its
     /// relative representation (i.e. current growth rate divided
@@ -1173,9 +1183,3 @@ module GrowthSeries =
             |> TimeSeries.fromObservations g.DateMode
             |> Cumulative
         | _ -> invalidOp "Not implemented"
-
-    let internal stripUnits growth =
-        match growth with
-        | Absolute ts -> ts |> TimeSeries.map (fun (t, v) -> Units.removeUnitFromFloat t)
-        | Cumulative ts -> ts |> TimeSeries.map (fun (t, v) -> Units.removeUnitFromFloat t)
-        | Relative ts -> ts |> TimeSeries.map (fun (t, v) -> Units.removeUnitFromFloat t)

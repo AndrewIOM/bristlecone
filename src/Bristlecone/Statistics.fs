@@ -258,14 +258,32 @@ module RootFinding =
             (f: Tensor -> Tensor)
             (target: Tensor) (lo: Tensor) (hi: Tensor)
             (tol: float) (maxIter: int) : Tensor =
+            
+            let tolT = dsharp.tensor(tol, dtype = Float64)
+            
             let rec loop (a: Tensor) (b: Tensor) i =
-                let c = (a + b) * dsharp.tensor 0.5
+                let c = (a + b) * dsharp.tensor(0.5, dtype = Float64) // Midpoint
                 let fc = f c - target
-                if dsharp.abs(fc) < dsharp.tensor tol || (b - a) * dsharp.tensor 0.5 < dsharp.tensor tol || i >= maxIter then c
+                
+                // 1.0 if either condition is true:
+                let stopMask =
+                    dsharp.lt(dsharp.abs fc, tolT) + // Is midpoint close enough to root?
+                    dsharp.lt((b - a) * dsharp.tensor 0.5, tolT) // Is interval small enough?
+                
+                if i >= maxIter then c
                 else
-                    let fa = f a - target
-                    if (fa * fc) > dsharp.tensor 0.0 then loop c b (i+1)
-                    else loop a c (i+1)
+                    let fa   = f a - target // left side of bracket
+                    let prod = fa * fc
+
+                    let mask = dsharp.cast(dsharp.gt(prod, dsharp.tensor(0.0, dtype = Float64)), a.dtype)
+                    let invMask = 1.0 - mask
+
+                    let stopF = dsharp.cast(stopMask, a.dtype)
+                    let contF = 1.0 - stopF
+                    let a' = a * stopF + (a * invMask + c * mask) * contF
+                    let b' = b * stopF + (b * mask    + c * invMask) * contF
+
+                    loop a' b' (i+1)
             loop lo hi 0
 
 

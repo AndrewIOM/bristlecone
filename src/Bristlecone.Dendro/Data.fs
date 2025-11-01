@@ -32,13 +32,12 @@ module PlantIndividual =
                         (float i.``Increment (mm)`` * 1.<millimetre / year>, i.Year * 1<year> |> DatingMethods.Annual))
                     |> TimeSeries.fromObservations DateMode.annualDateMode
                     |> GrowthSeries.Absolute
-                    |> PlantIndividual.PlantGrowth.RingWidth
 
                 { Identifier = code |> ShortCode.create |> Option.get
                   Growth = growth
                   InternalControls = [] |> Map.ofList
                   Environment = [] |> Map.ofList }
-                : PlantIndividual.PlantIndividual<DatingMethods.Annual, int<year>, int<year>>)
+                : PlantIndividual.PlantIndividual<millimetre, DatingMethods.Annual, int<year>, int<year>>)
             |> Seq.toList
 
         /// <summary>Load plant-specific environmental time-series from
