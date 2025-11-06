@@ -58,17 +58,15 @@ module Language =
     let noConstraints = Parameter.Constraint.Unconstrained
     let notNegative = Parameter.Constraint.PositiveOnly
 
+    module Require =
+        let state (s: StateId<'u>)   = ModelSystem.LikelihoodRequirement.State s.Code
+        let measure (m: MeasureId<'u>) = ModelSystem.LikelihoodRequirement.Measure m.Code
+
     let lookup name (map: CodedMap<float>) =
         match map |> Map.tryFindBy (fun k -> k.Value = name) with
         | Some k -> k
         | None -> invalidOp (sprintf "Could not find %s in the map" name)
 
-    let (|NotEmptyList|_|) list =
-        if list |> List.isEmpty then None else Some list
-
-    type ArbitraryRequirement =
-        | ArbitraryParameter of string
-        | ArbitraryEnvironment of string
 
     module Untyped =
 
@@ -78,6 +76,8 @@ module Language =
             | This
             | Time
             | Environment of string
+            | State of string
+            | StateAt of offset:int<Time.``time index``> * string
             | Parameter of string
             | Constant of float
             | Add of ModelExpressionUntyped list
@@ -90,7 +90,6 @@ module Language =
             | Exponential of ModelExpressionUntyped
             | Conditional of cond: ModelExpressionUntyped * ifTrue: ModelExpressionUntyped * ifFalse: ModelExpressionUntyped
             | Label of string * ModelExpressionUntyped
-            | StateAt of offset:int<Time.``time index``> * string
             | Invalid
             // Comparisons:
             | GreaterThan of ModelExpressionUntyped * ModelExpressionUntyped
@@ -150,6 +149,10 @@ module Language =
             let (StateIdInner sc) = sid
             ME (Untyped.StateAt(offset, sc.Value))
 
+        static member State(sid: StateId<'u>) : ModelExpression<'u> =
+            let (StateIdInner sc) = sid
+            ME (Untyped.State sc.Value)
+
         static member Parameter(pid: IncludedParameter<'u>) : ModelExpression<'u> =
             let (ParamIdInner name) = pid.ParamId
             ME (Untyped.Parameter name.Value)
@@ -161,10 +164,10 @@ module Language =
     let Constant (x: float<'u>) : ModelExpression<'u> = ME (Untyped.Constant (float x))
     let P<[<Measure>] 'u> name : ModelExpression<'u> = ModelExpression.Parameter name
     let This<[<Measure>] 'u> : ModelExpression<'u> = ME Untyped.This
-    let StateAt (offset: int<Time.``time index``>, sid) : ModelExpression<'u> = ModelExpression.StateAt (offset,sid)
+    let State<[<Measure>] 'u> sId : ModelExpression<'u> = ModelExpression.State sId
+    let StateAt (offset: int<Time.``time index``>, sId) : ModelExpression<'u> = ModelExpression.StateAt (offset,sId)
     let Time<[<Measure>] 't> : ModelExpression<'t> = ME Untyped.Time
     let Environment<[<Measure>] 'u> sid : ModelExpression<'u> = ModelExpression.Environment sid
-    let State<[<Measure>] 'u> sid : ModelExpression<'u> = ModelExpression.Environment sid
     let Invalid<[<Measure>] 'u> : ModelExpression<'u> = ME Untyped.Invalid
 
     /// Operations for boolean model expressions.
@@ -233,6 +236,8 @@ module Language =
             | ME (Constant n) -> sprintf "C[%A]" n
             | ME (Parameter n) -> sprintf "P[%s]" n
             | ME (Environment n) -> sprintf "E[%s]" n
+            | ME (State nm) -> sprintf "St[%s]" nm
+            | ME (StateAt (off,nm)) -> sprintf "StOff[%A;%s]" off nm
             | ME Time -> "T"
             | ME This -> "X"
             | ME (Add xs) -> "A[" + (xs |> List.map (fun x -> exprCode (ME x)) |> String.concat ";") + "]"
@@ -243,7 +248,6 @@ module Language =
             | ME (Conditional (c,t,f)) ->
                 sprintf "If[%s;%s;%s]" (exprCode (ME c)) (exprCode (ME t)) (exprCode (ME f))
             | ME (Label (n,m)) -> sprintf "L[%s;%s]" n (exprCode (ME m))
-            | ME (StateAt (off,nm)) -> sprintf "St[%A;%s]" off nm
             | ME Invalid -> "Invalid"
             | ME (Symbol s) -> sprintf "Sym[%s]" s
             | ME (Inverse (fn, targetSymbol, targetVal, lo, hi)) ->
@@ -320,40 +324,99 @@ module Language =
               -> Expr<'r>
         }
 
-        type QuotationCache<'r, [<Measure>] 'u> =
-            { TryGet : ModelExpression<'u> -> Expr<'r> option
-              Store  : ModelExpression<'u> -> Expr<'r> -> unit }
+        module Caching =
 
-        let rec buildBool<'r> buildQuotation (cache: QuotationCache<'r,'u>) (ops: Ops<'r>) (symbols: Map<string, Var>) (BE bexpr: BoolExpression) : Expr<Bool<'r>> =
+            type QuotationCache<'r, [<Measure>] 'u> = {
+                TryGet : ModelExpression<'u> -> Expr<'r> option
+                Store  : ModelExpression<'u> -> Expr<'r> -> Expr<'r> }
+
+            module Policies =
+                let noCaching = fun _ -> false
+                let cacheEverything = fun _ -> true
+                let cacheHeavy = function
+                    | ME (Conditional _) -> true
+                    | ME (Inverse _) -> true
+                    | ME (Power _) -> true
+                    | ME (Multiply xs) when xs.Length > 2 -> true
+                    | _ -> false
+
+            let makeBindingCache<'r,[<Measure>] 'u>() : QuotationCache<'r,'u> * System.Collections.Generic.List<Var * Expr<'r>> =
+                let vars = System.Collections.Generic.Dictionary<string, Var>()
+                let bindings = System.Collections.Generic.List<Var * Expr<'r>>()
+                let cache =
+                    {
+                        TryGet = fun expr ->
+                            let key = ExpressionDescribe.exprCode expr
+                            match vars.TryGetValue key with
+                            | true, v -> Some (Expr.Var v |> Expr.Cast<'r>)
+                            | _       -> None
+                        Store = fun expr rhs ->
+                            let key = ExpressionDescribe.exprCode expr
+                            let v   = Var(sprintf "tmp_%s" key, typeof<'r>)
+                            vars.[key] <- v
+                            bindings.Add(v, rhs)
+                            Expr.Var v |> Expr.Cast<'r>
+                    }
+                cache, bindings
+
+            /// Use caching if shouldCache returns true for the given expression.
+            let apply cache shouldCache (expr: ModelExpression<'u>) (rhs: unit -> Expr<'r>) =
+                if shouldCache expr then
+                    match cache.TryGet expr with
+                    | Some vref -> vref
+                    | None -> cache.Store expr (rhs())
+                else rhs()
+        
+        let rec buildBool<'r> (buildQuotation: (ModelExpression<'u> -> Expr<'r>)) (ops: Ops<'r>) (symbols: Map<string, Var>) (BE bexpr: BoolExpression) : Expr<Bool<'r>> =
             match bexpr with
-            | GreaterThan (l,r) ->
-                ops.greaterThan (buildQuotation cache ops symbols (ME l), buildQuotation cache ops symbols (ME r))
-            | LessThan (l,r) ->
-                ops.lessThan (buildQuotation cache ops symbols (ME l), buildQuotation cache ops symbols (ME r))
-            | EqualTo (l,r) ->
-                ops.equalTo (buildQuotation cache ops symbols (ME l), buildQuotation cache ops symbols (ME r))
-            | IsFinite ex ->
-                ops.isFinite (buildQuotation cache ops symbols (ME ex))
+            | GreaterThan (l,r) -> ops.greaterThan (buildQuotation (ME l), buildQuotation (ME r))
+            | LessThan (l,r) -> ops.lessThan (buildQuotation (ME l), buildQuotation (ME r))
+            | EqualTo (l,r) -> ops.equalTo (buildQuotation (ME l), buildQuotation (ME r))
+            | IsFinite ex -> ops.isFinite (buildQuotation (ME ex))
             | _ -> failwith "Unexpected boolean form"
 
-        let rec private buildQuotationCore<'r, [<Measure>] 'u> (cache: QuotationCache<'r, 'u>) (ops: Ops<'r>) (symbols: Map<string, Var>) (expr: ModelExpression<'u>) =
+        let rec private buildQuotationCore<'r, [<Measure>] 'u> (shouldCache: ModelExpression<'u> -> bool) (cache: Caching.QuotationCache<'r, 'u>) (ops: Ops<'r>) (symbols: Map<string, Var>) (expr: ModelExpression<'u>) =
+            let build = buildQuotationCore shouldCache cache ops symbols
+            let withCache expr mk = Caching.apply cache shouldCache expr mk            
+            
             match expr with
-            | ME (Constant n)        -> ops.constVal n
-            | ME (Parameter n)       -> ops.parameter n
-            | ME (Environment n)     -> ops.environment n
-            | ME Time                -> ops.timeVal
-            | ME This                -> ops.thisVal
-            | ME (Add xs)            -> xs |> List.map (fun x -> buildQuotationCore cache ops symbols (ME x)) |> ops.add
-            | ME (Multiply xs)       -> xs |> List.map (fun x -> buildQuotationCore cache ops symbols (ME x)) |> ops.mul
-            | ME (Subtract (l,r))    -> ops.sub (buildQuotationCore cache ops symbols (ME l), buildQuotationCore cache ops symbols (ME r))
-            | ME (Divide (l,r))      -> ops.div (buildQuotationCore cache ops symbols (ME l), buildQuotationCore cache ops symbols (ME r))
-            | ME (Power (l,r))       -> ops.pow (buildQuotationCore cache ops symbols (ME l), buildQuotationCore cache ops symbols (ME r))
-            | ME (Logarithm e)       -> ops.log (buildQuotationCore cache ops symbols (ME e))
-            | ME (Exponential e)     -> ops.exp (buildQuotationCore cache ops symbols (ME e))
-            | ME (Mod (l,r))         -> ops.modulo (buildQuotationCore cache ops symbols (ME l), buildQuotationCore cache ops symbols (ME r))
-            | ME (Label (n,m))       -> ops.label (n, buildQuotationCore cache ops symbols (ME m))
-            | ME (StateAt (off, nm)) -> ops.stateAt (off, nm)
+            | ME (Constant n) -> ops.constVal n
+            | ME (Parameter n) -> ops.parameter n
+            | ME (Environment n) -> ops.environment n
+            | ME (State nm) -> ops.environment nm
+            | ME Time -> ops.timeVal
+            | ME This -> ops.thisVal
             | ME Invalid -> ops.invalid()
+
+            | ME (Add xs) ->
+                withCache expr (fun () ->
+                    xs |> List.map (fun x -> build (ME x)) |> ops.add)
+
+            | ME (Multiply xs) ->
+                withCache expr (fun () ->
+                    xs |> List.map (fun x -> build (ME x)) |> ops.mul)
+
+            | ME (Subtract (l,r)) ->
+                withCache expr (fun () -> ops.sub (build (ME l), build (ME r)))
+
+            | ME (Divide (l,r))   ->
+                withCache expr (fun () -> ops.div (build (ME l), build (ME r)))
+
+            | ME (Power (l,r))    ->
+                withCache expr (fun () -> ops.pow (build (ME l), build (ME r)))
+
+            | ME (Logarithm e)    ->
+                withCache expr (fun () -> ops.log (build (ME e)))
+
+            | ME (Exponential e)  ->
+                withCache expr (fun () -> ops.exp (build (ME e)))
+
+            | ME (Mod (l,r))      ->
+                withCache expr (fun () -> ops.modulo (build (ME l), build (ME r)))
+
+            | ME (Label (n,m)) -> ops.label (n, build (ME m))
+            | ME (StateAt (off,n))-> ops.stateAt (off, n)
+
             | ME (Symbol s) ->
                 let v =
                     match symbols.TryFind s with
@@ -362,35 +425,37 @@ module Language =
                 Expr.Var v |> Expr.Cast<'r>
 
             | ME (Conditional (c,t,f)) ->
-                cache.TryGet expr
-                |> Option.defaultWith (fun _ ->
-                    let c' = buildBool buildQuotationCore cache ops symbols (BE c)
-                    let t' = buildQuotationCore cache ops symbols (ME t)
-                    let f' = buildQuotationCore cache ops symbols (ME f)
-                    let q = ops.cond (c', t', f')
-                    let v  = Var(sprintf "cond_%s" (ExpressionDescribe.exprCode expr), typeof<'r>)
-                    let body = Expr.Var v |> Expr.Cast<'r>
-                    let lifted: Expr<'r> = Expr.Let(v, q, body) |> Expr.Cast<'r>
-                    cache.Store expr lifted
-                    lifted )
+                withCache expr (fun () ->
+                    let c' = buildBool build ops symbols (BE c)
+                    let t' = build (ME t)
+                    let f' = build (ME f)
+                    ops.cond (c', t', f')
+                )
 
             | ME (Inverse (fn, targetSymbol, targetVal, lo, hi)) ->
-                cache.TryGet expr
-                |> Option.defaultWith(fun _ ->
+                withCache expr (fun () ->
                     let xVar = Var(targetSymbol, typeof<'r>)
-                    let symbols'  = Map.empty.Add(targetSymbol, xVar)
-                    let fBody = buildQuotationCore cache ops symbols' (ME fn)
-                    let fLambda = Expr.Lambda(xVar, fBody) |> Expr.Cast<'r -> 'r>
-                    let targetExpr = buildQuotationCore cache ops symbols' (ME targetVal)
-                    let loExpr = buildQuotationCore cache ops symbols' (ME lo)
-                    let hiExpr = buildQuotationCore cache ops symbols' (ME hi)
+                    let symbolsForFn  = Map.empty.Add(targetSymbol, xVar)
+                    
+                    let innerCache, innerBindings = Caching.makeBindingCache()
+                    let fBody = buildQuotationCore shouldCache innerCache ops symbolsForFn (ME fn)
+                    
+                    let innerPairs: (Var * Expr<'r>) list = innerBindings |> Seq.toList
+                    let fBodyWithLets: Expr<'r> =
+                        List.foldBack
+                            (fun (v, rhs) (acc: Expr<'r>) -> Expr.Cast<'r>(Expr.Let(v, rhs, acc)))
+                            innerPairs
+                            fBody
+                    
+                    let fLambda = Expr.Lambda(xVar, fBodyWithLets) |> Expr.Cast<'r -> 'r>
+
+                    let targetExpr = build (ME targetVal)
+                    let loExpr = build (ME lo)
+                    let hiExpr = build (ME hi)
+                    
                     let tol, maxIter = 1e-6, 50
-                    let q = ops.inverse (fLambda, targetExpr, loExpr, hiExpr, tol, maxIter)
-                    let v  = Var(sprintf "inverse_%s" (ExpressionDescribe.exprCode expr), typeof<'r>)
-                    let body = Expr.Var v |> Expr.Cast<'r>
-                    let lifted: Expr<'r> = Expr.Let(v, q, body) |> Expr.Cast<'r>
-                    cache.Store expr lifted
-                    lifted )
+                    ops.inverse (fLambda, targetExpr, loExpr, hiExpr, tol, maxIter)
+                )
 
             | ME (GreaterThan _)
             | ME (LessThan _)
@@ -398,26 +463,35 @@ module Language =
             | ME (EqualTo _) -> failwith "Numeric builder received a boolean node"
 
 
-        /// Builds a quotation from a model expression tree.
-        let rec buildQuotation<'r, [<Measure>] 'u> (ops: Ops<'r>) (symbols: Map<string, Var>) (expr: ModelExpression<'u>) =
-            let cache = { TryGet = (fun _ -> None); Store  = fun _ _ -> () }
-            buildQuotationCore cache ops symbols expr
+        let internal buildQuotation'<'r, [<Measure>] 'u> (policy: ModelExpression<'u> -> bool) (ops: Ops<'r>) (symbols: Map<string, Var>) (expr: ModelExpression<'u>) : Expr<'r> =
+            let (bindingCache: Caching.QuotationCache<'r,'u>), bindings = Caching.makeBindingCache()
+            let body: Expr<'r> = buildQuotationCore policy bindingCache ops symbols expr
+            let full : Expr<'r> =
+                List.foldBack
+                    (fun (v,rhs) (acc: Expr<'r>) -> Expr.Let(v, rhs, acc) |> Expr.Cast<'r>)
+                    (bindings |> Seq.toList)
+                    body
+            full
+
+        /// Builds a quotation from a model expression tree simply,
+        /// with no internal caching or let bindings.
+        let buildQuotation ops symbols expr =
+            buildQuotation' Caching.Policies.noCaching ops symbols expr
 
         /// Builds a quotation from a model expression tree,
         /// using an internal cache to avoid rebuilding 'heavy'
-        /// nodes that have already been built.
+        /// nodes that have already been built. 'Heavy' nodes
+        /// are introduced as let bindings to minimise repetition
+        /// of work in computation.
         let buildQuotationCached<'r, [<Measure>] 'u> (ops: Ops<'r>) (symbols: Map<string, Var>) (expr: ModelExpression<'u>) : Expr<'r> =
-            let cache =
-                let dict = System.Collections.Generic.Dictionary<string, Expr<'r>>()
-                { TryGet = fun expr ->
-                    let key = ExpressionDescribe.exprCode expr
-                    match dict.TryGetValue key with
-                    | true, q -> Some q
-                    | _ -> None
-                  Store = fun expr q ->
-                    let key = ExpressionDescribe.exprCode expr
-                    dict.[key] <- q }
-            buildQuotationCore cache ops symbols expr
+            let bindingCache, bindings = Caching.makeBindingCache()
+            let body: Expr<'r> = buildQuotationCore Caching.Policies.cacheHeavy bindingCache ops symbols expr
+            let full : Expr<'r> =
+                List.foldBack
+                    (fun (v,rhs) (acc: Expr<'r>) -> Expr.Let(v, rhs, acc) |> Expr.Cast<'r>)
+                    (bindings |> Seq.toList)
+                    body
+            full
 
         let private mkTensor (v:float) = dsharp.tensor(v, dtype = Float64)
 
@@ -504,27 +578,33 @@ module Language =
                 <@
                     let nanMask = dsharp.isnan %ex
                     let infMask = dsharp.isinf %ex
-                    let bad = dsharp.gt (nanMask + infMask, mkTensor 0.)
-                    let m = dsharp.cast(bad, Dtype.Float64)
-                    let finiteMask = dsharp.cast(1.0f - m, Dtype.Bool)
+                    let badMask = Tensors.Unsafe.logicalOr nanMask infMask
+                    let finiteMask = Tensors.Unsafe.logicalNot badMask
                     Bool finiteMask
                 @>
             inverse = fun (fLambda, targetExpr, loExpr, hiExpr, tol, maxIter) ->
-                <@ Statistics.RootFinding.Tensor.bisect (%%fLambda : Tensor -> Tensor)
-                                    %targetExpr %loExpr %hiExpr tol maxIter @>
+                <@
+                    let loVal = %loExpr
+                    let hiVal = %hiExpr
+                    let range = dsharp.sub(hiVal, loVal)
+                    let n = System.Math.Log((float range) / tol, 2.0)
+                    let maxIter = min (int (System.Math.Ceiling n)) 50
+                    Statistics.RootFinding.Tensor.bisect (%%fLambda : Tensor -> Tensor)
+                                        %targetExpr %loExpr %hiExpr tol maxIter
+                @>
         }
 
         let private tensorOpsForMeasure
             (pIndex: Map<string,int>)
             (pVar: Var) (statesVar: Var) (tIdxVar: Var) = {
             constVal    = fun n -> <@ mkTensor n @>
-            parameter   = fun name -> <@ (%%Expr.Var pVar : Tensor).[pIndex.[name]] @>
+            parameter   = fun name -> <@ (%%Expr.Var pVar : TypedTensor<Vector,``parameter``>).Value.[pIndex.[name]] @>
             environment = fun _ -> failwith "Environment not used in measures"
             timeVal     = <@ mkTensor (float (%%Expr.Var tIdxVar : int)) @>
             thisVal     = <@ mkTensor nan @> // not used in measures
-            add         = List.reduce (fun l r -> <@ dsharp.add(%l, %r) @>)
+            add         = tensorSum
             sub         = fun (l,r) -> <@ dsharp.sub(%l, %r) @>
-            mul         = List.reduce (fun l r -> <@ %l * %r @>)
+            mul         = mul
             div         = fun (l,r) -> <@ dsharp.div(%l, %r) @>
             pow         = fun (l,r) -> <@ dsharp.pow(%l, %r) @>
             log         = fun e -> <@ dsharp.log %e @>
@@ -532,7 +612,7 @@ module Language =
             modulo      = fun (l,r) -> <@ %l - %r * dsharp.floor(%l / %r) @>
             cond        = fun (c,t,f) -> blendConditional c t f
             label       = fun (_,m) -> m
-            invalid     = fun () -> <@ mkTensor nan @>
+            invalid     = fun () -> <@ mkTensor invalidPenalty @>
             stateAt     = fun (offset,name) ->
                 <@
                     let states = %%Expr.Var statesVar : CodedMap<TypedTensor<Vector,ModelSystem.state>>
@@ -546,14 +626,20 @@ module Language =
                 <@
                     let nanMask = dsharp.isnan %ex
                     let infMask = dsharp.isinf %ex
-                    let bad = dsharp.gt (nanMask + infMask, mkTensor 0.)
-                    let m = dsharp.cast(bad, Dtype.Float64)
-                    let finiteMask = dsharp.cast(1.0f - m, Dtype.Bool)
+                    let badMask = Tensors.Unsafe.logicalOr nanMask infMask
+                    let finiteMask = Tensors.Unsafe.logicalNot badMask
                     Bool finiteMask
                 @>
             inverse = fun (fLambda, targetExpr, loExpr, hiExpr, tol, maxIter) ->
-                <@ Statistics.RootFinding.Tensor.bisect (%%fLambda : Tensor -> Tensor)
-                                    %targetExpr %loExpr %hiExpr tol maxIter @>
+                <@
+                    let loVal = %loExpr
+                    let hiVal = %hiExpr
+                    let range = dsharp.sub(hiVal, loVal)
+                    let n = System.Math.Log((float range) / tol, 2.0)
+                    let maxIter = min (int (System.Math.Ceiling n)) 50
+                    Statistics.RootFinding.Tensor.bisect (%%fLambda : Tensor -> Tensor)
+                                        %targetExpr %loExpr %hiExpr tol maxIter
+                @>
         }
 
         // ---- Float ops ----
@@ -659,7 +745,6 @@ module Language =
             | :? TypedTensor<Scalar,'u> as t -> Typed.toFloatScalar t
             | _ -> failwith "Expected a scalar tensor result"
 
-
         let compileFloat expr =
             let fpVar = Var("parameters", typeof<Parameter.Pool.ParameterPool>)
             let feVar = Var("environment", typeof<CodedMap<float>>)
@@ -676,7 +761,7 @@ module Language =
             let tIdxVar   = Var("timeIndex", typeof<int>)
             let pIndex    = paramIndex parameters
             let core = buildQuotationCached (tensorOpsForMeasure pIndex pVar statesVar tIdxVar) Map.empty expr
-            
+
             <@ tryAsScalar<ModelSystem.state> %core |> Option.get @>
             |> fun body -> Expr.Lambda(pVar, Expr.Lambda(statesVar, Expr.Lambda(tIdxVar, body)))
             |> LeafExpressionConverter.EvaluateQuotation
@@ -760,16 +845,21 @@ module Language =
                     (m p s i).Value |> Tensors.tryAsScalar<ModelSystem.state> |> Option.get
 
         module Likelihood =
+            
             open ModelSystem
 
             let contramap<[<Measure>] 'u> (l: ModelSystem.Likelihood<'u>) : ModelSystem.Likelihood<ModelSystem.state> =
-                fun param series->
-                    let s =
-                        series |> Map.map(fun _ v ->
-                            { Expected = v.Expected |> Tensors.Typed.retype<ModelSystem.state, 'u, Tensors.Vector>
-                              Observed = v.Observed |> Tensors.Typed.retype<ModelSystem.state, 'u, Tensors.Vector> }
-                        )
-                    l param s
+                {
+                    RequiredCodes = l.RequiredCodes
+                    Evaluate =
+                        fun param series ->
+                            let s =
+                                series |> Map.map(fun _ v ->
+                                    { Expected = v.Expected |> Tensors.Typed.retype<ModelSystem.state, 'u, Tensors.Vector>
+                                      Observed = v.Observed |> Tensors.Typed.retype<ModelSystem.state, 'u, Tensors.Vector> }
+                                )
+                            l.Evaluate param s
+                }
 
         module private Add =
         
@@ -838,8 +928,6 @@ module Language =
                 | []  -> failwith "You did not specify a likelihood function."
                 | _   -> failwith "Multiple likelihoods specified."
 
-            // Collect requirements from your original untyped parser if you still rely on it.
-            // Alternatively, compute envKeys directly from typed expressions at add-time and capture them into the thunk.
             let reqs =
                 m |> Map.toSeq 
                 |> Seq.collect (function kv -> match snd kv with | ModelFragment.EquationFragment (r,_) -> r | ModelFragment.MeasureFragment (r,_) -> r | _ -> [])

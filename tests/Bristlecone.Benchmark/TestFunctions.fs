@@ -356,3 +356,45 @@ module Timeseries =
             |> Model.estimateParameterOld "σ[y]" notNegative 0.001 0.100
             |> Model.useLikelihoodFunction (Bristlecone.ModelLibrary.Likelihood.bivariateGaussian B S)
             |> Model.compile
+
+
+    module Housing =
+
+        open Bristlecone.Time
+
+        // Units
+        [<Measure>] type person
+        [<Measure>] type dwelling
+        [<Measure>] type household
+
+        // Parameters
+        let theta = parameter "theta" noConstraints 0.1<dwelling/person> 0.2<dwelling/person>
+        let h65_slope = parameter "h65_slope" noConstraints 0.1<(household/person)/year> 0.2<(household/person)/year>
+        let r_sec = parameter "r_sec" noConstraints 0.1</year> 0.2</year>
+        let r_str = parameter "r_str" noConstraints 0.1</year> 0.2</year>
+        let str_sat = parameter "str_sat" noConstraints 0.1 0.2
+        let k_reno = parameter "k_reno" noConstraints 0.1</year> 0.2</year>
+        let reno_target = parameter "reno_target" noConstraints 0.1 0.2
+
+        // States
+        let H = state<household/person> "headship"
+        let SH = state<1> "second home share"
+        let STR = state<1> "STR?"
+        let R = state<1> "renovation"
+        let O = state<dwelling> "occupied dwellings"
+
+
+        // External forcings
+        let age65plus: StateId<person> = environment "Age65Plus"
+        
+
+        // State equations (ODEs)
+        let ``dH/dt`` = P h65_slope * Environment age65plus
+        let ``dSH/dt``: ModelExpression</year> = P r_sec + State SH * (Constant 1. - State SH)
+        let ``dSTR/dt``: ModelExpression</year> = P r_str + State STR * (P str_sat - State STR)
+        let ``dR/dt`` = - P k_reno * (State R - P reno_target)
+        let ``dO/dt``: ModelExpression<dwelling/year> =
+            P theta * State H * (Constant 1. - State SH)
+                * (Constant 1. - State STR) * (Constant 1. - State R)
+
+        

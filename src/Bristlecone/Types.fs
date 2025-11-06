@@ -328,19 +328,6 @@ module Result =
         | Ok x -> x
         | Error e -> failwithf "Error occurred: %s" e
 
-[<AutoOpen>]
-module ListExtensions =
-
-    let (|Single|Empty|AllIdentical|Neither|) (lst: 'a list) =
-        if lst.Length = 1 then
-            Single
-        elif lst.Length = 0 then
-            Empty
-        elif List.forall (fun elem -> elem = lst.[0]) lst then
-            AllIdentical
-        else
-            Neither
-
 
 module Writer =
     type Writer<'a,'log> = AWriter of 'a * 'log list

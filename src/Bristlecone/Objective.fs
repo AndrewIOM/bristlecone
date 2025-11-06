@@ -19,22 +19,31 @@ module Objective =
             | Some i -> asScalar<``parameter``> thetaReal.Value.[i]
             | None   -> invalidOp $"Parameter '{name}' not found")
 
+    let prependInitialConditions initial expected =
+        expected
+        |> Map.map(fun k v ->
+            let i = initial |> Map.find k
+            Typed.prepend1D i v)
+
     /// Compute the system's `Measures` from the dynamic variables produced by the solver.
-    /// All operations happen in Tensor-space.
+    /// All operations happen in Tensor-space. Initial conditions (t0) are added to the front
+    /// of the predictions to enable previous value lookup where needed.
     let measure
         (measures: CodedMap<Measurement<state>>)
         (parameters: TypedTensor<Vector,``parameter``>)
         (expectedDynamic: CodedMap<TypedTensor<Vector,state>>)
+        (initialConditions: CodedMap<TypedTensor<Scalar,state>>)
         : CodedMap<TypedTensor<Vector,state>> =
 
-        let length = expectedDynamic |> Seq.head |> fun kv -> kv.Value |> Typed.length
+        let expectedWithT0 = prependInitialConditions initialConditions expectedDynamic
+        let length = expectedWithT0 |> Seq.head |> fun kv -> kv.Value |> Typed.length
 
         let measuredSeries =
             measures
             |> Map.map (fun _ measFn ->
                 let buf = ResizeArray()
-                for i = 0 to length - 1 do
-                    let value = measFn parameters expectedDynamic i
+                for i = 1 to length - 1 do
+                    let value = measFn parameters expectedWithT0 i
                     buf.Add value
                 buf.ToArray() |> Typed.stack1D)
 
@@ -59,8 +68,8 @@ module Objective =
         | Parameter.Pool.TransformedConfig cfg -> unbox cfg.Compiled // TODO remove this unbox and coercion.
 
     let predict solver measures parameters =
-        let dynamics = solver parameters
-        let measured = measure measures parameters dynamics
+        let dynamics, initialConditions = solver parameters
+        let measured = measure measures parameters dynamics initialConditions
         Map.fold (fun acc k v -> acc |> Map.add k v) dynamics measured
 
     /// Computes measurement variables and appends to expected data.
@@ -83,7 +92,7 @@ module Objective =
                 thetaReal
                 |> predict solver measures
                 |> pairObservationsToExpected observedTensors
-                |> negLogLikFn accessor
+                |> negLogLikFn.Evaluate accessor
 
     let createPredictor (measures: CodedMap<ModelSystem.Measurement<state>>) (solver: Solver.ConfiguredSolver) config =
             let compiled = compiledFromConfig config            

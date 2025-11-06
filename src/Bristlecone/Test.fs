@@ -183,7 +183,7 @@ module Test =
 
     module Compute =
 
-        let tryMakeDummySeries<[<Measure>] 'state,'T,'yearType,[<Measure>]'timeunit,'timespan when 'T: equality>
+        let tryMakeDummySeries<[<Measure>] 'state,'T,'yearType,[<Measure>]'timeunit,'timespan when 'T: comparison>
             (startDate: 'T)
             (resolution: Resolution.FixedTemporalResolution<'timespan>)
             (length: int)
@@ -222,8 +222,9 @@ module Test =
                 testSettings.StartValues
                 |> Map.map(fun _ v -> v |> Units.removeUnitFromFloat |> (*) 1.<state> |> Tensors.Typed.ofScalar)
 
-            let conditioned = Solver.Conditioning.resolve engine.Conditioning dynSeries envSeries
-            let obsTimes = conditioned.DynamicForPairing |> TimeFrame.dates
+            let conditioned = Solver.Conditioning.resolve engine.Conditioning dynSeries envSeries [] // TODO
+            conditioned.Log |> Option.iter (Logging.GeneralEvent >> engine.LogTo)
+            let obsTimes = conditioned.ObservedForPairing |> TimeFrame.dates
 
             // Configure solver
             let solver =
@@ -233,8 +234,9 @@ module Test =
                     model.Equations
                     engine.TimeHandling
                     (Solver.StepType.External obsTimes)
-                    conditioned.DynamicForSolver
-                    conditioned.Environment
+                    conditioned.StatesObservedForSolver
+                    conditioned.StatesHiddenForSolver
+                    conditioned.ExogenousForSolver
                     (fun _ -> Solver.Exact)
 
             // Get real-space vector from pool

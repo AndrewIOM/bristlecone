@@ -118,6 +118,6 @@ module PlantIndividual =
     let private stripUnits ts =
         ts |> TimeSeries.map (fun (t, v) -> Units.removeUnitFromFloat t)
 
-    let internal forFittingCumulative plant =
+    let internal forFittingCumulative (code:ShortCode.ShortCode) plant =
         let g = plant.Growth |> GrowthSeries.cumulative |> stripUnits
-        plant.Environment |> Map.add (ShortCode.create "x" |> Option.get) g
+        plant.Environment |> Map.add code g

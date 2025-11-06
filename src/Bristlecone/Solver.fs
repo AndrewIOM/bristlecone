@@ -302,30 +302,43 @@ module Solver =
             (modelEquations: ModelForm<'modelTimeUnit>)
             engineTimeMode
             (stepType: StepType<'date>)
-            (dynamicSeries: TimeFrame.TimeFrame<float<state>, 'date, 'timeunit, 'timespan>)
+            (observedStates: TimeFrame.TimeFrame<float<state>, 'date, 'timeunit, 'timespan>)
+            (hiddenStatesT0: CodedMap<Tensors.TypedTensor<Tensors.Scalar,state>>)
             (environment: TimeFrame.TimeFrame<float<environment>, 'date, 'timeunit, 'timespan> option)
             (interpolationModeFor: ShortCode.ShortCode -> Solver.InterpolationMode)
             : Solver.ConfiguredSolver =
 
             // 1. Initial setup; identify t0 and start date.
-            let headSeries = (dynamicSeries.Series |> Seq.head).Value
+            let headSeries = (observedStates.Series |> Seq.head).Value
             let dateMode = headSeries.DateMode
-            let startDate = dynamicSeries.StartDate
-            let t0 = dynamicSeries |> TimeFrame.t0 |> Map.map(fun k v -> Typed.ofScalar v)
+            let startDate = observedStates.StartDate
+            let t0 =
+                observedStates
+                |> TimeFrame.t0
+                |> Map.map(fun k v -> Typed.ofScalar v)
+                |> Map.fold (fun acc k v -> Map.add k v acc) hiddenStatesT0
+
+            logTo <| Logging.GeneralEvent (sprintf "Solver: to = %A" t0)
 
             // 2. Decide resolutions
-            let integrationRes = decideIntegrationResolution dynamicSeries environment
+            let integrationRes = decideIntegrationResolution observedStates environment
 
             // 3. Compute factor and wrap equations
             let factor = computeFactor dataTimeToModelTime dateMode integrationRes
             let modelInTI = TimeWrapping.wrapModelForm factor modelEquations
 
             // 4. Build timeline and env index
-            let dataResolution = TimeFrame.resolution dynamicSeries
+            let dataResolution = TimeFrame.resolution observedStates
             let envIndex = buildEnvIndex interpolationModeFor startDate integrationRes environment
 
             // 4. Precompute a keep-mask for External mode
             let maskOutput = Masking.makeMaskOutput stepType dateMode startDate factor dataTimeToModelTime
+
+            logTo <| Logging.GeneralEvent (sprintf "Solver: starting at date %A" startDate)
+            environment |> Option.iter (fun s -> logTo <| Logging.GeneralEvent (sprintf "Solver: env data start = %A" s.StartDate))
+            envIndex |> Map.iter(fun k v ->
+                logTo <| Logging.GeneralEvent( sprintf "%A Baseline %A, values %A" k v.Baseline v.Values)
+                )
 
             // 5. Pick runner automatically
             let runner =
@@ -337,6 +350,8 @@ module Solver =
                         |> TimeIndex.create startDate integrationRes
                         |> Seq.map fst
                         |> Seq.toArray
+
+                    logTo <| Logging.GeneralEvent (sprintf "Fixed timeline is %A" fixedTimeline)
 
                     match modelInTI, engineTimeMode with
                     | DifferentialEqs eqs, Continuous i ->
@@ -350,7 +365,7 @@ module Solver =
                 | Resolution.Variable ->
 
                     let obsTimes =
-                        dynamicSeries
+                        observedStates
                         |> TimeFrame.dates
                         |> Seq.map (fun d ->
                             let diff = dateMode.Difference startDate d
@@ -370,7 +385,7 @@ module Solver =
             fun point ->
                 point
                 |> runner
-                |> maskOutput
+                |> maskOutput, t0
 
 
     /// Solver conditioning enables adding synthetic initial time-points
@@ -379,14 +394,18 @@ module Solver =
 
         type Resolved<'date,'timeunit,'timespan> = {
             T0: CodedMap<TypedTensor<Scalar,state>>
-            DynamicForSolver: TimeFrame.TimeFrame<float<state>,'date,'timeunit,'timespan>
-            DynamicForPairing: TimeFrame.TimeFrame<float<state>,'date,'timeunit,'timespan>
-            Environment: option<TimeFrame.TimeFrame<float<environment>,'date,'timeunit,'timespan>>
+            StatesHiddenForSolver: CodedMap<TypedTensor<Scalar,state>>
+            StatesObservedForSolver: TimeFrame.TimeFrame<float<state>,'date,'timeunit,'timespan>
+            ExogenousForSolver: option<TimeFrame.TimeFrame<float<environment>,'date,'timeunit,'timespan>>
+            ObservedForPairing: TimeFrame.TimeFrame<float<state>,'date,'timeunit,'timespan>
             Log: string option
         }
 
         let internal t0FromFirstObs (tf: TimeFrame.TimeFrame<float<state>,_,_,_>) =
             tf.Series |> Map.map (fun _ ts -> ts |> TimeSeries.head |> fst |> Typed.ofScalar)
+
+        let internal toEquationStatesOnly (equationKeys: seq<ShortCode.ShortCode>) data =
+            data |> TimeFrame.filter equationKeys
 
         let internal ensureEnvCoverage
             (solverStart: 'date)
@@ -409,52 +428,66 @@ module Solver =
 
         let private resolveWithConditionedT0
             (t0: CodedMap<TypedTensor<Scalar,state>>)
-            (dynamicTF: TimeFrame.TimeFrame<float<state>,'date,'timeunit,'timespan>)
+            (observedTF: TimeFrame.TimeFrame<float<state>,'date,'timeunit,'timespan>)
             (envTF: option<TimeFrame.TimeFrame<float<environment>,'date,'timeunit,'timespan>>)
+            equationKeys
             logMessage =
             
+            // Error if t0 does not contain all required values.
+            let t0Missing = Set.difference (Map.keys observedTF.Series |> Set.ofSeq)(Map.keys t0 |> Set.ofSeq)
+            if not t0Missing.IsEmpty
+            then failwithf "t0 value(s) were missing for: %A" t0Missing
+
             // Work out one step backwards
-            let firstSeries = dynamicTF.Series |> Seq.head |> fun kv -> kv.Value
+            let firstSeries = observedTF.Series |> Seq.head |> fun kv -> kv.Value
             let dm = firstSeries.DateMode
             let stepSpan =
-                match TimeFrame.resolution dynamicTF with
+                match TimeFrame.resolution observedTF with
                 | Resolution.Fixed res -> dm.ResolutionToSpan res
                 | Resolution.Variable ->
                     invalidOp "Conditioning requires fixed dynamic resolution."
 
-            let solverStartDate = dm.SubtractTime dynamicTF.StartDate stepSpan
+            let solverStartDate = dm.SubtractTime observedTF.StartDate stepSpan
 
             let dynamicForSolver =
-                dynamicTF
+                observedTF
                 |> TimeFrame.prepend solverStartDate (t0 |> Map.map (fun _ v -> Typed.toFloatScalar v))
 
             let trimmedEnv = envTF |> Option.map (ensureEnvCoverage solverStartDate)
 
+            let hiddenT0 = t0 |> Map.filter(fun k _ -> observedTF.Series |> Map.containsKey k |> not)
+
             { T0 = t0
-              DynamicForSolver = dynamicForSolver
-              DynamicForPairing = dynamicTF
-              Environment = trimmedEnv
+              StatesObservedForSolver = toEquationStatesOnly equationKeys dynamicForSolver
+              StatesHiddenForSolver = hiddenT0
+              ObservedForPairing = observedTF
+              ExogenousForSolver = trimmedEnv
               Log = Some logMessage }
 
         let resolve
             (conditioning: Conditioning.Conditioning<'stateUnit>)
-            (dynamicTF: TimeFrame.TimeFrame<float<state>,'date,'timeunit,'timespan>)
-            (envTF: option<TimeFrame.TimeFrame<float<environment>,'date,'timeunit,'timespan>>)
+            (observedTF: TimeFrame.TimeFrame<float<state>,'date,'timeunit,'timespan>)
+            (exogenousTF: option<TimeFrame.TimeFrame<float<environment>,'date,'timeunit,'timespan>>)
+            equationKeys
             : Resolved<'date,'timeunit,'timespan> =
 
             match conditioning with
             | Conditioning.NoConditioning ->
                 // Solver baseline = obs[0]; predictions (External) align to obs[1..]
-                let solverStartDate = dynamicTF.StartDate
-                let env = envTF |> Option.map (ensureEnvCoverage solverStartDate)
-                let t0 = t0FromFirstObs dynamicTF
-                let trimmedDyn = TimeFrame.dropFirstObservation dynamicTF
-                { T0 = t0; DynamicForSolver = dynamicTF; DynamicForPairing = trimmedDyn; Environment = env; Log = Some "No conditioning: predictions start at t1; baseline = first observation." }
+                let solverStartDate = observedTF.StartDate
+                let env = exogenousTF |> Option.map (ensureEnvCoverage solverStartDate)
+                let t0 = t0FromFirstObs observedTF
+                let trimmedDyn = TimeFrame.dropFirstObservation observedTF
+                { T0 = t0; StatesObservedForSolver = toEquationStatesOnly equationKeys observedTF
+                  StatesHiddenForSolver = Map.empty
+                  ObservedForPairing = trimmedDyn
+                  ExogenousForSolver = env
+                  Log = Some "No conditioning: predictions start at t1; baseline = first observation." }
 
             | Conditioning.Custom t0Map ->
                 let t0 = t0Map |> Map.map (fun _ v -> v |> Units.removeUnitFromFloat |> (*) 1.<state> |> Typed.ofScalar)
-                resolveWithConditionedT0 t0 dynamicTF envTF "Custom conditioning: synthetic t0 one step before first observation; pairs include obs[0]."
+                resolveWithConditionedT0 t0 observedTF exogenousTF equationKeys "Custom conditioning: synthetic t0 one step before first observation; pairs include obs[0]."
 
             | Conditioning.RepeatFirstDataPoint ->
-                let t0 = t0FromFirstObs dynamicTF
-                resolveWithConditionedT0 t0 dynamicTF envTF "Repeat-first conditioning: duplicated first obs one step earlier; pairs include obs[0]."
+                let t0 = t0FromFirstObs observedTF
+                resolveWithConditionedT0 t0 observedTF exogenousTF equationKeys "Repeat-first conditioning: duplicated first obs one step earlier; pairs include obs[0]."

@@ -140,6 +140,12 @@ module Tensors =
             let stacked = dsharp.stack(rawTensors, dim = 0)
             { Inner = stacked }
 
+        /// Prepend a scalar to the front of a vector, keeping it differentiable
+        let prepend1D (head: TypedTensor<Scalar,'u>) (tail: TypedTensor<Vector,'u>) : TypedTensor<Vector,'u> =
+            let headTensor = head.Value.unsqueeze(0)
+            let concatenated = dsharp.cat([headTensor; tail.Value], dim = 0)
+            { Inner = concatenated }
+        
         let matMul
             (a: TypedTensor<Matrix, 'u>)
             (b: TypedTensor<Matrix, 'v>)
@@ -280,3 +286,10 @@ module Tensors =
         match classify t with
         | UScalar s -> { Inner = s } : TypedTensor<Scalar,'u>
         | _ -> failwithf "%A is not a valid scalar" t
+
+    /// Operators that rely on the 0/1 encoding of booleans
+    /// in DiffSharp for working with raw tensors.
+    module Unsafe =
+        let logicalNot (b: Tensor) = dsharp.eq(b, dsharp.zerosLike b)
+        let logicalOr (a: Tensor) (b: Tensor) = dsharp.gt(a + b, dsharp.zerosLike a)
+        let logicalAnd (a: Tensor) (b: Tensor) = dsharp.eq(a + b, dsharp.onesLike a)

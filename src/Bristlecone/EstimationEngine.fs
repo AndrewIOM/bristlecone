@@ -58,10 +58,18 @@ module ModelSystem =
     /// The negative log likelihood given the predicted and observed
     /// per-variable time-series and a function to retrieve parameters
     /// required by the likelihood function.
-    type Likelihood<[<Measure>] 'u> =
+    type LikelihoodEval<[<Measure>] 'u> =
         ParameterValueAccessor
             -> CodedMap<SeriesPair<'u>>
             -> TypedTensor<Scalar,``-logL``>
+
+    type Likelihood<[<Measure>] 'u> =
+        { RequiredCodes : LikelihoodRequirement list
+          Evaluate : LikelihoodEval<'u> }
+
+    and LikelihoodRequirement =
+        | State of ShortCode.ShortCode
+        | Measure of ShortCode.ShortCode
 
     /// A function that computes a measured system property given a
     /// current (time t) and previous (time t-1) system state.
@@ -188,7 +196,7 @@ module EstimationEngine =
 
         type ConfiguredSolver =
             TypedTensor<Vector,``parameter``> // parameters
-                -> CodedMap<TypedTensor<Vector,state>>
+                -> CodedMap<TypedTensor<Vector,state>> * CodedMap<TypedTensor<Scalar,state>> // predictions * initial state
 
         /// A solver may configure environmental forcing variables
         /// to be interpolated if they are not available at an exact

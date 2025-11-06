@@ -12,7 +12,7 @@ let dummySolver returnValue len : Solver.ConfiguredSolver =
     fun _ ->
         [ (ShortCode.create "x").Value,
           Array.init len (fun i -> returnValue i |> Units.removeUnitFromFloat |> (*) 1.<state>) |> Typed.ofVector ]
-        |> Map.ofList
+        |> Map.ofList, Map.empty
 
 [<Tests>]
 let initialBounds =
@@ -50,9 +50,9 @@ let initialBounds =
             <| fun shouldTransform (data: float list) (b1: NormalFloat) (b2: NormalFloat) ->
 
                 // Returns the parameter value
-                let fakeLikelihood: ModelSystem.Likelihood<'u> =
-                    fun paramAccessor _ ->
-                        paramAccessor.Get "a" |> Tensors.Typed.retype
+                let fakeLikelihood code : ModelSystem.Likelihood<'u> =
+                    { Evaluate = fun paramAccessor _ -> paramAccessor.Get "a" |> Tensors.Typed.retype
+                      RequiredCodes = code }
 
                 if b1.Get = b2.Get || b1.Get = 0. || b2.Get = 0. then
                     ()
@@ -73,7 +73,7 @@ let initialBounds =
                         Language.Model.empty
                         |> Language.Model.addRateEquation X (Language.P a)
                         |> Language.Model.estimateParameter a
-                        |> Language.Model.useLikelihoodFunction fakeLikelihood
+                        |> Language.Model.useLikelihoodFunction (fakeLikelihood [ Language.Require.state X ])
                         |> Language.Model.compile
 
                     let optimConfig = Parameter.Pool.DetachedConfig (Parameter.Pool.toOptimiserConfigBounded model.Parameters)

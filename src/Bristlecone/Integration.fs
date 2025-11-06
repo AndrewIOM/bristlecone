@@ -49,7 +49,7 @@ module Base =
                 |> Typed.ofVector)
 
         // Merge helpers (typed, AD-safe)
-        let inline applyDynamicVariablesT
+        let inline injectStatesIntoContext
             (newValues: TypedTensor<Vector,ModelSystem.state>)
             (newValueKeys: ShortCode.ShortCode[])
             (environment: CodedMap<TypedTensor<Scalar,ModelSystem.``environment``>>) =
@@ -64,7 +64,7 @@ module Base =
             let merged = Array.zip newValueKeys scalars |> Map.ofArray
             environment |> Map.map (fun k v -> Map.tryFind k merged |> Option.defaultValue v)
 
-        let inline applyExternalEnvironmentTensor
+        let inline overlayExogenousAtTime
             (timeIdx: int)
             (externalEnv: CodedMap<TypedTensor<Vector,``environment``>>)
             (currentEnv: CodedMap<TypedTensor<Scalar,``environment``>>) =
@@ -110,8 +110,8 @@ module Base =
 
                 let env =
                     baselineEnv
-                    |> applyExternalEnvironmentTensor idx externalEnvTensors
-                    |> applyDynamicVariablesT x modelKeys
+                    |> overlayExogenousAtTime idx externalEnvTensors
+                    |> injectStatesIntoContext x modelKeys
 
                 // Compute derivatives for all variables
                 modelEqs
@@ -121,21 +121,6 @@ module Base =
                         |> Option.defaultWith (fun () -> invalidOp "Expected scalar state component")
                     modelKeys.[i], m parameters env t xi)
                 |> Map.ofArray
-
-
-    // let mkIntegrator : EstimationEngine.Integrate<'date, 'timeunit, 'timespan> =
-    //     fun log tInitial tEnd tStep initialConditions externalEnvironment modelMap ->
-    //         match modelMap with
-    //         | EstimationEngine.FloatODEs odes ->
-    //             failwith "not implemented"
-    //             // odes |> Base.makeIntegrator log rk4float tInitial tEnd tStep initialConditions externalEnvironment
-    //         | EstimationEngine.TensorODEs odes ->
-                
-    //             let initialConditionsT : CodedMap<Tensors.TypedTensor<Tensors.Scalar,ModelSystem.environment>> =
-    //                 initialConditions
-    //                 |> Map.map(fun _ v -> v |> (*) 1.<ModelSystem.environment> |> Tensors.Typed.ofScalar)                
-                
-    //             makeCompiledFunctionForIntegration tInitial tEnd tStep initialConditionsT externalEnvironment odes                
 
 
 module RungeKutta =

@@ -15,18 +15,18 @@ module Bristlecone =
     /// <param name="system">The compiled model system for analysis</param>
     /// <param name="plant">A plant individual</param>
     /// <returns>An estimation result for the given plant, model and fitting method (engine)</returns>
-    let fitDendro engine endCondition system fitMethod plant =
+    let fitDendro engine endCondition system fitMethod growthSeriesId plant =
         let data =
             match fitMethod with
             | AbsoluteGrowth -> failwith "absolute not implemented"
-            | CumulativeGrowth -> PlantIndividual.forFittingCumulative plant
+            | CumulativeGrowth -> PlantIndividual.forFittingCumulative growthSeriesId plant
         Bristlecone.fit engine endCondition data system
 
-    let tryFitDendro engine endCondition system fitMethod plant =
+    let tryFitDendro engine endCondition system fitMethod growthSeriesId plant =
         let data =
             match fitMethod with
             | AbsoluteGrowth -> failwith "absolute not implemented"
-            | CumulativeGrowth -> PlantIndividual.forFittingCumulative plant
+            | CumulativeGrowth -> PlantIndividual.forFittingCumulative growthSeriesId plant
         Bristlecone.tryFit engine endCondition data system
 
     /// <summary> Perform n-step-ahead computation on the hypothesis and plant. The plant individual's growth data is always labelled as `x`.</summary>
@@ -36,9 +36,9 @@ module Bristlecone =
     /// <param name="preTransform"></param>
     /// <param name="estimate"></param>
     /// <returns></returns>
-    let oneStepAheadDendro engine system fitMethod plant preTransform estimate =
+    let oneStepAheadDendro engine system fitMethod growthSeriesId plant preTransform estimate =
         let predictors =
             match fitMethod with
             | AbsoluteGrowth -> failwith "absolute not implemented"
-            | CumulativeGrowth -> PlantIndividual.forFittingCumulative plant
+            | CumulativeGrowth -> PlantIndividual.forFittingCumulative growthSeriesId plant
         Bristlecone.oneStepAhead engine system preTransform predictors estimate

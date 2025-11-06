@@ -156,8 +156,8 @@ module DateTime =
     let totalMonthsElapsed (d1: DateTime) (d2: DateTime) =
         (d2.Month - d1.Month) + (d2.Year - d1.Year) * 12 |> float |> (*) 1.<month>
 
-    let fractionalDifference d1 d2 =
-        let d1, d2 = if d1 < d2 then d1, d2 else d2, d1
+    let fractionalDifference isSigned d1 d2 =
+        let d1, d2 = if d1 < d2 || isSigned then d1, d2 else d2, d1
 
         { YearFraction = totalYearsElapsed d1 d2
           MonthFraction = totalMonthsElapsed d1 d2
@@ -261,8 +261,8 @@ module DatingMethods =
             else
                 Radiocarbon.Unwrap d1 - Radiocarbon.Unwrap d2
 
-        static member FractionalDifference d1 d2 =
-            let d1, d2 = if d1 < d2 then d1, d2 else d2, d1
+        static member FractionalDifference isSigned d1 d2 =
+            let d1, d2 = if d1 < d2 || isSigned then d1, d2 else d2, d1
 
             let yearFraction =
                 Radiocarbon.Unwrap d2 - Radiocarbon.Unwrap d1 |> float |> (*) 1.<year>
@@ -294,8 +294,8 @@ module DatingMethods =
             else
                 Annual.Unwrap d1 - Annual.Unwrap d2
 
-        static member FractionalDifference d1 d2 =
-            let d1, d2 = if d1 < d2 then d1, d2 else d2, d1
+        static member FractionalDifference isSigned d1 d2 =
+            let d1, d2 = if d1 < d2 || isSigned then d1, d2 else d2, d1
             let yearFraction = Annual.Unwrap d2 - Annual.Unwrap d1 |> float |> (*) 1.<year>
 
             { YearFraction = yearFraction
@@ -332,6 +332,7 @@ module DateMode =
           AddTime: 'T -> 'timespan -> 'T
           SubtractTime: 'T -> 'timespan -> 'T
           Difference: 'T -> 'T -> TimeDifference<'timespan>
+          SignedDifference: 'T -> 'T -> TimeDifference<'timespan>
           SortOldestFirst: 'T -> 'T -> int
           ZeroSpan: 'timespan
           TotalDays: 'timespan -> float<day>
@@ -354,7 +355,8 @@ module DateMode =
           AddDays = fun d days -> days |> Units.removeUnitFromInt |> d.AddDays
           AddTime = fun d timeSpan -> d + timeSpan
           SubtractTime = fun d timeSpan -> d - timeSpan
-          Difference = DateTime.fractionalDifference
+          Difference = DateTime.fractionalDifference false
+          SignedDifference = DateTime.fractionalDifference true
           ZeroSpan = TimeSpan.Zero
           TotalDays = fun ts -> ts.TotalDays * 1.<day>
           SpanToResolution =
@@ -390,7 +392,8 @@ module DateMode =
           AddDays = fun d _ -> d
           AddTime = fun d timeSpan -> d + timeSpan
           SubtractTime = fun d timeSpan -> d + (timeSpan * -1)
-          Difference = fun d1 d2 -> Annual.FractionalDifference d1 d2
+          Difference = fun d1 d2 -> Annual.FractionalDifference false d1 d2
+          SignedDifference = fun d1 d2 -> Annual.FractionalDifference true d1 d2
           SortOldestFirst = fun d1 d2 -> if d1 < d2 then -1 else 1
           ZeroSpan = 0<year>
           TotalDays =
@@ -415,7 +418,8 @@ module DateMode =
           AddDays = fun d days -> d
           AddTime = fun d timeSpan -> d + timeSpan
           SubtractTime = fun d timeSpan -> d + (timeSpan * -1)
-          Difference = fun d1 d2 -> Radiocarbon.FractionalDifference d1 d2
+          Difference = fun d1 d2 -> Radiocarbon.FractionalDifference false d1 d2
+          SignedDifference = fun d1 d2 -> Radiocarbon.FractionalDifference true d1 d2
           SortOldestFirst = fun d1 d2 -> if d1 > d2 then -1 else 1
           ZeroSpan = 0<``BP (radiocarbon)``>
           TotalDays =
@@ -831,14 +835,17 @@ module TimeSeries =
     /// <returns>An array of 'timespan containing the epochs of the common timeline,
     /// or `None` if there is no common timeline.</returns>
     let commonTimeline (series: TimeSeries<'T, 'date, 'timeunit, 'timespan> seq) =
-        let timeSteps =
-            series |> Seq.map (toObservations >> Seq.map snd >> Seq.toList) |> Seq.toList
+        let timePointSets =
+            series
+            |> Seq.map (toObservations >> Seq.map snd >> Set.ofSeq)
+            |> Seq.toList
 
-        match timeSteps with
-        | Single
-        | AllIdentical -> Some(series |> Seq.head |> epochs)
-        | Empty
-        | Neither -> None
+        match timePointSets with
+        | [] -> None
+        | first :: rest ->
+            let common = List.fold Set.intersect first rest
+            if Set.isEmpty common then None
+            else Some (common |> Set.toArray)
 
     /// Contains functions for bootstrapping one or many time series.
     module Bootstrap =
@@ -938,28 +945,28 @@ module TimeIndex =
             | Resolution.FixedTemporalResolution.Years y ->
                 obs
                 |> Seq.map (fun (v, tn) ->
-                    (((series.DateMode.Difference t0 tn).YearFraction / Units.intToFloat y.Value)
+                    (((series.DateMode.SignedDifference t0 tn).YearFraction / Units.intToFloat y.Value)
                      |> float
                      |> (*) 1.0<``time index``>,
                      v))
             | Resolution.FixedTemporalResolution.Months m ->
                 obs
                 |> Seq.map (fun (v, tn) ->
-                    (((series.DateMode.Difference t0 tn).MonthFraction / Units.intToFloat m.Value
+                    (((series.DateMode.SignedDifference t0 tn).MonthFraction / Units.intToFloat m.Value
                       |> float
                       |> (*) 1.0<``time index``>),
                      v))
             | Resolution.FixedTemporalResolution.Days d ->
                 obs
                 |> Seq.map (fun (v, tn) ->
-                    (((series.DateMode.Difference t0 tn).DayFraction / Units.intToFloat d.Value)
+                    (((series.DateMode.SignedDifference t0 tn).DayFraction / Units.intToFloat d.Value)
                      |> float
                      |> (*) 1.<``time index``>,
                      v))
             | Resolution.FixedTemporalResolution.CustomEpoch(t: 'timespan) ->
                 obs
                 |> Seq.map (fun (v, tn) ->
-                    (series.DateMode.Divide (series.DateMode.Difference tn t0).RealDifference t)
+                    (series.DateMode.Divide (series.DateMode.SignedDifference t0 tn).RealDifference t)
                     |> Units.removeUnitFromFloat
                     |> (*) 1.0<``time index``>,
                     v)
@@ -969,7 +976,7 @@ module TimeIndex =
             | Resolution.FixedTemporalResolution.Years y ->
                 obs
                 |> Seq.map (fun (value, tn) ->
-                    (((series.DateMode.Difference tn t0).YearFraction / Units.intToFloat y.Value)
+                    (((series.DateMode.SignedDifference t0 tn).YearFraction / Units.intToFloat y.Value)
                      * 1.0<``time index``>,
                      value))
             | Resolution.FixedTemporalResolution.CustomEpoch t ->
@@ -1009,6 +1016,7 @@ module TimeIndex =
                         with
                         | Some((k1, v1), (k2, v2)) -> interpolateFn (k1, v1) (k2, v2) t
                         | None ->
+                            printfn "TEST DEBUG - time keys %A" (Map.keys table)
                             invalidOp
                             <| sprintf
                                 "Could not interpolate to time %f because it falls outside the range of the temporal index"
@@ -1065,6 +1073,11 @@ module TimeFrame =
         )
         |> TimeFrame
 
+    let filter keys (TimeFrame frame) =
+        frame
+        |> Map.filter(fun k _ -> keys |> Seq.contains k)
+        |> TimeFrame
+
     /// Get the initial value of each time-series as a coded map.
     let t0 (TimeFrame frame : TimeFrame<'T,'date,'timeunit,'timespan>) =
         frame
@@ -1093,6 +1106,7 @@ module TimeFrame =
     type TimeFrame<'T, 'date, 'timeunit, 'timespan> with
         member this.StartDate = (this |> inner |> Seq.head).Value.StartDate |> snd
         member this.Series = this |> inner
+        member this.Keys = this |> inner |> Map.keys |> Seq.toList
 
 
 /// <summary>A specific type of time series that represents

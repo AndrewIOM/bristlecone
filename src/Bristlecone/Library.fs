@@ -135,15 +135,15 @@ module Bristlecone =
             |> Option.defaultValue engine.InterpolationGlobal
 
 
+    // Temporary helpers until optim-space-transformed can be handled correctly:
+    let private unsafeEraseSpace<'space> = unbox<Parameter.Pool.OptimiserConfig<``optim-space``>>
+    let private unsafeEraseSpaceForward<'space> = unbox<Tensors.TypedTensor<Tensors.Vector,``optim-space-transformed``>>
+    
     let private dynamicVariableKeys (models:ModelSystem.ModelForm<'modelTimeUnit>) =
         match models with
         | ModelForm.DifferenceEqs eqs -> eqs |> Map.keys
         | ModelForm.DifferentialEqs eqs -> eqs |> Map.keys
 
-    // Temporary helpers until optim-space-transformed can be handled correctly:
-    let private unsafeEraseSpace<'space> = unbox<Parameter.Pool.OptimiserConfig<``optim-space``>>
-    let private unsafeEraseSpaceForward<'space> = unbox<Tensors.TypedTensor<Tensors.Vector,``optim-space-transformed``>>
-    
     /// Convert a list of optimiser-space solutions into real-space solutions
     let internal toRealSpaceSolutions
         (config: Parameter.Pool.AnyOptimiserConfig)
@@ -166,9 +166,10 @@ module Bristlecone =
     let internal validateEnvData expectedKeys actualMap =
         let expectedSet = expectedKeys |> Set.ofList
         let actualSet   = actualMap |> Map.keys |> Set.ofSeq
-        if expectedSet <> actualSet then
-            Error <| sprintf "Environment data keys do not match model definition. Expected [%A] but provided with [%A]." expectedKeys actualMap
-        else Ok ()
+        if Set.isSubset expectedSet actualSet
+        then Ok ()
+        else
+            Error <| sprintf "Environment data keys do not match model definition. Expected %A but provided with %A." expectedKeys (Map.keys actualMap)
 
     /// <summary>
     /// Fit a time-series model to data.
@@ -189,50 +190,86 @@ module Bristlecone =
     let tryFit
         (engine: EstimationEngine<'timespan, 'modelTimeUnit, 'stateUnit>)
         endCondition
-        (timeSeriesData: CodedMap<TimeSeries<float<'stateUnit>,'date, 'yearType, 'timespan>>)
+        (observedSeries: CodedMap<TimeSeries<float<'stateUnit>,'date, 'yearType, 'timespan>>)
         (model: ModelSystem<'modelTimeUnit>) =
 
         let resultId = Guid.NewGuid()
 
-        let hasRequiredData =
-            if timeSeriesData.IsEmpty then
+        let requiredByLikelihood =
+            model.NegLogLikelihood.RequiredCodes |> List.map(fun c ->
+                match c with
+                | Measure c -> c
+                | State c -> c)
+
+        // TODO Ensure that ODEs + measures actually produce the states required by likelihood function.
+
+        let requireObservedForLikelihood: Result<CodedMap<TimeSeries<float<'stateUnit>,'date,'yearType,'timespan>>,string> =
+            if model.NegLogLikelihood.RequiredCodes.IsEmpty then
+                Error "The set likelihood function required no data"
+            else if observedSeries.IsEmpty then
                 Error "No time-series data was specified"
-            else if Set.isSubset (model.Equations |> dynamicVariableKeys |> set) (timeSeriesData |> Map.keys |> set) then
-                Ok timeSeriesData
+            else if Set.isSubset (requiredByLikelihood |> set) (observedSeries |> Map.keys |> set) then
+                Ok observedSeries
             else
                 Error(
                     sprintf
                         "Required time-series data were missing. Need: %A"
-                        (model.Equations |> dynamicVariableKeys |> Seq.map (fun k -> k.Value) |> String.concat " + ")
+                        (requiredByLikelihood |> Seq.map (fun k -> k.Value) |> String.concat " + ")
                 )
 
         result {
 
             // 1. Check required dynamic time-series are present
-            let! tsData = hasRequiredData
+            let! tsData = requireObservedForLikelihood
 
             // 2. Build common timeline time-frames
-            let! commonDynamic = Fit.observationsToCommonTimeFrame (dynamicVariableKeys model.Equations) timeSeriesData
-            let! commonEnv =
+            let! observedOnCommonTimeline = Fit.observationsToCommonTimeFrame requiredByLikelihood observedSeries
+            let! exogenousOnCommonTimeline =
                 Fit.environmentDataToCommonTimeFrame
-                    (dynamicVariableKeys model.Equations)
+                    requiredByLikelihood
                     (Map.keys model.Measures)
-                    timeSeriesData
-            do! validateEnvData model.EnvironmentKeys (commonEnv |> Option.map (fun tf -> tf.Series) |> Option.defaultValue Map.empty)
+                    observedSeries
+            do! validateEnvData model.EnvironmentKeys (exogenousOnCommonTimeline |> Option.map (fun tf -> tf.Series) |> Option.defaultValue Map.empty)
 
             // 3. Resolve time-series given requested conditioning of t0.
-            let conditioned = Solver.Conditioning.resolve engine.Conditioning commonDynamic commonEnv
+            let equationKeys = dynamicVariableKeys model.Equations
+            let conditioned = Solver.Conditioning.resolve engine.Conditioning observedOnCommonTimeline exogenousOnCommonTimeline equationKeys
+            conditioned.Log |> Option.iter (GeneralEvent >> engine.LogTo)
+
+            engine.LogTo
+            <| GeneralEvent(
+                sprintf
+                    "Conditioned state at t0 is %A; hidden t0 = %A" conditioned.T0 conditioned.StatesHiddenForSolver
+            )
 
             engine.LogTo
             <| GeneralEvent(
                 sprintf
                     "Time-series (conditioned) start at %A with resolution %A."
-                    conditioned.DynamicForSolver.StartDate
-                    (conditioned.DynamicForSolver |> TimeFrame.resolution)
+                    conditioned.StatesObservedForSolver.StartDate
+                    (conditioned.StatesObservedForSolver |> TimeFrame.resolution)
+            )
+
+            // Log out variables
+            engine.LogTo
+            <| GeneralEvent(
+                sprintf
+                    "Observed states: %A. Hidden states: %A. Used in likelihood: %A\nExogeneous time-series: %A"
+                    conditioned.StatesObservedForSolver.Keys
+                    (Map.keys conditioned.StatesHiddenForSolver)
+                    conditioned.ObservedForPairing.Keys
+                    (conditioned.ExogenousForSolver |> Option.map(fun t -> t.Keys))
             )
             
+            observedOnCommonTimeline.Series |> Map.iter(fun k v ->
+                engine.LogTo <| GeneralEvent(sprintf "Common timeline (states and measures): %s (start at %A)" k.Value v.StartDate)
+                )
+            exogenousOnCommonTimeline |> Option.iter(fun c -> c.Series |> Map.iter(fun k v ->
+                engine.LogTo <| GeneralEvent(sprintf "Common timeline (environment): %s (start at %A)" k.Value v.StartDate)
+                ))
+
             // TODO Ensure that dynamic variables are an exact or subset of environmental variables
-            let! _ = Fit.exactSubsetOf commonDynamic commonEnv
+            let! _ = Fit.exactSubsetOf observedOnCommonTimeline exogenousOnCommonTimeline
 
             // 4. Compile solver (auto‑selects discrete/differential)
             let solver stepType =
@@ -242,8 +279,9 @@ module Bristlecone =
                     model.Equations
                     engine.TimeHandling
                     stepType
-                    conditioned.DynamicForSolver
-                    conditioned.Environment
+                    conditioned.StatesObservedForSolver
+                    conditioned.StatesHiddenForSolver
+                    conditioned.ExogenousForSolver
                     (Fit.interpolationFor engine)
 
             // A centralised transform for parameters between point and parameter space.
@@ -260,8 +298,16 @@ module Bristlecone =
                     optim engine.Random engine.LogTo endCondition (unsafeEraseSpace cfg).Domain None
                 | _ -> invalidOp "Mode/config mismatch"
 
-            let obsDataForObjective = Solver.Conditioning.toObservationData conditioned.DynamicForPairing
-            let obsTimes = conditioned.DynamicForPairing |> TimeFrame.dates
+            let obsDataForObjective = Solver.Conditioning.toObservationData conditioned.ObservedForPairing
+            
+            engine.LogTo
+            <| GeneralEvent(
+                sprintf
+                    "Time-series used within objective: %A."
+                    (Map.keys obsDataForObjective)
+            )
+            
+            let obsTimes = conditioned.ObservedForPairing |> TimeFrame.dates
             let objective =
                 Objective.create
                     model.NegLogLikelihood
@@ -288,7 +334,7 @@ module Bristlecone =
                     bestPoint
 
             let paired =
-                conditioned.DynamicForPairing.Series
+                conditioned.ObservedForPairing.Series
                 |> Map.filter (fun key _ -> estimatedSeries |> Map.containsKey key)
                 |> Map.map (fun k observedSeries ->
                     let expected = estimatedSeries |> Map.find k |> Tensors.Typed.toFloatArray

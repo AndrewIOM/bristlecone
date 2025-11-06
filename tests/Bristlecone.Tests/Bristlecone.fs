@@ -8,14 +8,13 @@ open Bristlecone.Time
 
 module TestModels =
     open Bristlecone.Language
-
     let rateConstant bound1 bound2 =
         let X = state "X"
         let a = parameter "a" noConstraints (min bound1 bound2) (max bound1 bound2)        
         Model.empty
         |> Model.addRateEquation X (P a)
         |> Model.estimateParameter a
-        |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ X.Code ])
+        |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ Require.state X ])
         |> Model.compile
 
     /// Scaffold a discrete model where there is one parameter (a)
@@ -26,7 +25,7 @@ module TestModels =
         Model.discrete
         |> Model.addDiscreteEquation X (P a)
         |> Model.estimateParameter a
-        |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ X.Code ])
+        |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ Require.state X ])
         |> Model.compile
 
     let rateTwoEquationConstant cons bound1 bound2 =
@@ -37,7 +36,7 @@ module TestModels =
         |> Model.addRateEquation X (P a)
         |> Model.addRateEquation Y (P a)
         |> Model.estimateParameter a
-        |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ X.Code; Y.Code ])
+        |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ Require.state X; Require.state Y ])
         |> Model.compile
 
     /// dX/dt = Temperature
@@ -48,7 +47,7 @@ module TestModels =
         Model.empty
         |> Model.addRateEquation X (Environment temp)   // derivative of X is just the env forcing
         |> Model.estimateParameter dummy
-        |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ X.Code ])
+        |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ Require.state X ])
         |> Model.compile
 
     let tempDrivenModelDiscrete () =
@@ -58,7 +57,7 @@ module TestModels =
         Model.discrete
         |> Model.addDiscreteEquation X (Environment temp)   // derivative of X is just the env forcing
         |> Model.estimateParameter dummy
-        |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ X.Code ])
+        |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ Require.state X ])
         |> Model.compile
 
     let diffSingleEnv (dynCode:ShortCode.ShortCode) (envCode:ShortCode.ShortCode) =
@@ -68,7 +67,7 @@ module TestModels =
         Model.empty<year>
         |> Model.addRateEquation X (Environment temp)   // derivative of X is just the env forcing
         |> Model.estimateParameter dummy
-        |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ dynCode ])
+        |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ Require.state X ])
         |> Model.compile
 
 
@@ -191,8 +190,7 @@ module ``Fit`` =
 
             Expect.hasLength actual (steps + 1) "Result should have length of timesteps"
             Expect.sequenceEqual actual expected "Output was not the environment data."
-
-
+            
 
 
         // testCase "Fixed-step dynamic with higher-res env" <| fun _ ->
