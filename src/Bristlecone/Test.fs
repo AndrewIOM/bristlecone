@@ -222,14 +222,14 @@ module Test =
                 testSettings.StartValues
                 |> Map.map(fun _ v -> v |> Units.removeUnitFromFloat |> (*) 1.<state> |> Tensors.Typed.ofScalar)
 
-            let conditioned = Solver.Conditioning.resolve engine.Conditioning dynSeries envSeries [] // TODO
-            conditioned.Log |> Option.iter (Logging.GeneralEvent >> engine.LogTo)
+            let dynamicKeys = dynSeries.Keys
+            let conditioned = Solver.Conditioning.resolve engine.Conditioning dynSeries envSeries dynamicKeys
             let obsTimes = conditioned.ObservedForPairing |> TimeFrame.dates
 
             // Configure solver
             let solver =
                 Solver.SolverCompiler.compile
-                    engine.LogTo
+                    ignore
                     engine.ToModelTime
                     model.Equations
                     engine.TimeHandling
@@ -271,6 +271,8 @@ module Test =
 
             match tryGenerateData' engine model settings randomPool with
             | Ok series ->
+
+                engine.LogTo <| Logging.GeneralEvent (sprintf "Series = %A" series)
 
                 let extraFiniteRules =
                     series |> Map.keys |> Seq.map (fun s -> s.Value |> GenerationRules.alwaysFinite) |> Seq.toList

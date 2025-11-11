@@ -253,38 +253,56 @@ module RootFinding =
 
         open DiffSharp
 
+        let private one = Bristlecone.Tensors.allocateTensor 1.0
+        let private half = Bristlecone.Tensors.allocateTensor 0.5
+        let private zero = Bristlecone.Tensors.allocateTensor 0.
+
         /// Bisect method for finding root of non-linear equations.
+        /// `adSafe` keeps within tensor space for all operations,
+        /// but is substantially slower owing to two casts.
         let bisect
             (f: Tensor -> Tensor)
             (target: Tensor) (lo: Tensor) (hi: Tensor)
-            (tol: float) (maxIter: int) : Tensor =
-            
-            let tolT = dsharp.tensor(tol, dtype = Float64)
-            
+            (tol: Tensor) (maxIter: int) : Tensor =
+
             let rec loop (a: Tensor) (b: Tensor) i =
-                let c = (a + b) * dsharp.tensor(0.5, dtype = Float64) // Midpoint
+                let c = (a + b) * half
                 let fc = f c - target
-                
-                // 1.0 if either condition is true:
-                let stopMask =
-                    dsharp.lt(dsharp.abs fc, tolT) + // Is midpoint close enough to root?
-                    dsharp.lt((b - a) * dsharp.tensor 0.5, tolT) // Is interval small enough?
-                
+                                
                 if i >= maxIter then c
                 else
-                    let fa   = f a - target // left side of bracket
-                    let prod = fa * fc
+                    let stopMask =
+                        dsharp.lt(dsharp.abs fc, tol) +
+                        dsharp.lt((b - a) * half, tol)
 
-                    let mask = dsharp.cast(dsharp.gt(prod, dsharp.tensor(0.0, dtype = Float64)), a.dtype)
-                    let invMask = 1.0 - mask
-
+                    let fa   = f a - target
+                    let prod = (fa * fc)
+                    let mask = dsharp.cast(dsharp.gt(prod, zero), a.dtype)
+                    let invMask = one - mask
                     let stopF = dsharp.cast(stopMask, a.dtype)
-                    let contF = 1.0 - stopF
+                    let contF = one - stopF
                     let a' = a * stopF + (a * invMask + c * mask) * contF
                     let b' = b * stopF + (b * mask    + c * invMask) * contF
-
                     loop a' b' (i+1)
+
             loop lo hi 0
+
+        /// Newton–Raphson root finder using AD for derivative.
+        let newtonRaphson
+            (f: Tensor -> Tensor)
+            (target: Tensor)
+            (x0: Tensor)
+            (lo: Tensor) (hi: Tensor)
+            (maxIter: int) : Tensor =
+
+            let step x _ =
+                let fLifted z = f z - target
+                let fx  = fLifted x
+                let dfx = dsharp.grad fLifted x
+                let xNext = x - fx / dfx
+                dsharp.max(lo, dsharp.min(hi, xNext))
+
+            [1 .. maxIter] |> List.fold step x0
 
 
 /// Statistics to measure the convergence of multiple trajectories,

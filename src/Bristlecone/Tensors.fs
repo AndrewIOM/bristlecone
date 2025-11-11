@@ -287,6 +287,8 @@ module Tensors =
         | UScalar s -> { Inner = s } : TypedTensor<Scalar,'u>
         | _ -> failwithf "%A is not a valid scalar" t
 
+    let allocateTensor value = dsharp.tensor(value, dtype = Dtype.Float64)
+
     /// Operators that rely on the 0/1 encoding of booleans
     /// in DiffSharp for working with raw tensors.
     module Unsafe =

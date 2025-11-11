@@ -294,6 +294,7 @@ module Language =
         // ---- Generic AST traversal ----
         type Ops<'r> = {
             constVal    : float -> Expr<'r>
+            constValLift: Expr<'r> -> float -> Expr<'r>
             parameter   : string -> Expr<'r>
             environment : string -> Expr<'r>
             timeVal     : Expr<'r>
@@ -320,7 +321,7 @@ module Language =
               * Expr<'r>  // target
               * Expr<'r>  // lo
               * Expr<'r>  // hi
-              * float * int
+              * float * int // tolerance * maxiter
               -> Expr<'r>
         }
 
@@ -436,9 +437,15 @@ module Language =
                 withCache expr (fun () ->
                     let xVar = Var(targetSymbol, typeof<'r>)
                     let symbolsForFn  = Map.empty.Add(targetSymbol, xVar)
-                    
+
+                    // Build x and one = x/x for AD lifting
+                    let xExpr: Expr<'r> = Expr.Var xVar |> Expr.Cast<'r>
+                    let oneVar = Var("one", typeof<'r>)
+                    let oneExpr: Expr<'r> = ops.div(xExpr,xExpr)
+                    let opsScoped: Ops<'r> = { ops with constVal = ops.constValLift (Expr.Var oneVar |> Expr.Cast<'r>) }
+
                     let innerCache, innerBindings = Caching.makeBindingCache()
-                    let fBody = buildQuotationCore shouldCache innerCache ops symbolsForFn (ME fn)
+                    let fBody = buildQuotationCore shouldCache innerCache opsScoped symbolsForFn (ME fn)
                     
                     let innerPairs: (Var * Expr<'r>) list = innerBindings |> Seq.toList
                     let fBodyWithLets: Expr<'r> =
@@ -446,8 +453,9 @@ module Language =
                             (fun (v, rhs) (acc: Expr<'r>) -> Expr.Cast<'r>(Expr.Let(v, rhs, acc)))
                             innerPairs
                             fBody
-                    
-                    let fLambda = Expr.Lambda(xVar, fBodyWithLets) |> Expr.Cast<'r -> 'r>
+                    let fBodyWithOne: Expr<'r> = Expr.Let(oneVar, oneExpr, fBodyWithLets) |> Expr.Cast<'r>
+
+                    let fLambda = Expr.Lambda(xVar, fBodyWithOne) |> Expr.Cast<'r -> 'r>
 
                     let targetExpr = build (ME targetVal)
                     let loExpr = build (ME lo)
@@ -495,19 +503,23 @@ module Language =
 
         let private mkTensor (v:float) = dsharp.tensor(v, dtype = Float64)
 
-        let invalidPenalty = 1e30
+        let invalidPenalty = mkTensor 1e30
+        let internal one = mkTensor 1.0
 
         /// If a tensor is infinite or nan, replaces its value with a high
         /// penalty value (1e30).
-        let nonFiniteToPenalty (x: Tensor) =
-            let nanMask = dsharp.isnan x
-            let infMask = dsharp.isinf x
-            let nanF = dsharp.cast(nanMask, Dtype.Float64)
-            let infF = dsharp.cast(infMask, Dtype.Float64)
-            let badMask = nanF + infF
-            let goodMask = 1.0 - badMask
-            let penalty = dsharp.tensor(invalidPenalty, dtype = Dtype.Float64)
-            x * goodMask + penalty * badMask
+        let nonFiniteToPenalty (x:Tensor) =
+            // x.clamp(low = -1e30, high = 1e30)
+            // let nanMask = dsharp.isnan x
+            // let infMask = dsharp.isinf x
+            // let nanF = dsharp.cast(nanMask, Dtype.Float64)
+            // let infF = dsharp.cast(infMask, Dtype.Float64)
+            // let badMask = nanF + infF
+            // let goodMask = 1.0 - badMask
+            // let penalty = dsharp.tensor(invalidPenalty, dtype = Dtype.Float64)
+            // x * goodMask + penalty * badMask
+            let d = x.toDouble()
+            if System.Double.IsFinite d then x else invalidPenalty
 
         /// Blends the true and false cases for AD-safe operation, but eagerly
         /// evaluates both sides. If a NaN is present, it will contaminate the
@@ -517,7 +529,7 @@ module Language =
                 match %c with
                 | Bool mask ->
                     let m = dsharp.cast(mask, Dtype.Float64)
-                    nonFiniteToPenalty %t * m + nonFiniteToPenalty %f * (1.0 - m)
+                    nonFiniteToPenalty %t * m + nonFiniteToPenalty %f * (one - m)
             @>
 
         let private tensorSum (xs: Expr<Tensor> list) : Expr<Tensor> =
@@ -534,11 +546,29 @@ module Language =
 
         let mul (xs: Expr<Tensor> list) : Expr<Tensor> =
             match xs with
-            | []      -> <@ dsharp.tensor(1.0, dtype=Dtype.Float64) @>
+            | []      -> <@ mkTensor 1.0 @>
             | [x]     -> x
             | _ ->
                 let arrExpr = Expr.NewArray(typeof<Tensor>, xs |> List.map (fun e -> e :> Expr))
                 <@ tensorProduct (%%arrExpr : Tensor[]) @>
+
+        let private two = allocateTensor 2.0
+        let private half = allocateTensor 0.5
+
+        let inverse fLambda targetExpr loExpr hiExpr tol  maxIter =
+            let tol = allocateTensor tol
+            <@
+                let loVal = %loExpr
+                let hiVal = %hiExpr
+                let range = dsharp.sub(hiVal, loVal)
+                let n = dsharp.log(range / tol) / dsharp.log two
+                let maxIter = min (int (System.Math.Ceiling (n.toDouble()))) maxIter
+                let midpoint = (loVal + hiVal) * half
+                Statistics.RootFinding.Tensor.newtonRaphson (%%fLambda : Tensor -> Tensor)
+                    %targetExpr midpoint %loExpr %hiExpr maxIter
+                // Statistics.RootFinding.Tensor.bisect (%%fLambda : Tensor -> Tensor)
+                //                     %targetExpr %loExpr %hiExpr tol maxIter
+            @>
 
         // let pVar      = Var("parameters", typeof<TypedTensor<Vector,``parameter``>>)
         // let statesVar = Var("states", typeof<CodedMap<TypedTensor<Scalar,ModelSystem.state>>[]>)
@@ -546,7 +576,12 @@ module Language =
         // let pIndex    = paramIndex parameters
         let private tensorOps<[<Measure>] 'timeUnit> (pIndex: Map<string,int>) (eIndex: Map<string,int>)
                             (pVar: Var) (eVar: Var) (tVar: Var) (xVar: Var) = {
-            constVal    = fun n -> <@ mkTensor n @>
+            constVal    = fun n ->
+                let tensor = mkTensor n
+                <@ tensor @>
+            constValLift = fun one n ->
+                let tensor = mkTensor n
+                <@ %one * tensor @>
             parameter   = fun name -> <@ (%%Expr.Var pVar : TypedTensor<Vector,``parameter``>).Value.[pIndex.[name]] @>
             environment = fun name ->
                 <@
@@ -570,7 +605,7 @@ module Language =
             cond        = fun (c,t,f) -> blendConditional c t f
             label       = fun (_,m) -> m
             stateAt     = fun _ -> failwith "State lookup not supported in equations"
-            invalid     = fun () -> <@ mkTensor invalidPenalty @>
+            invalid     = fun () -> <@ invalidPenalty @>
             greaterThan = fun (l,r) -> <@ dsharp.gt(%l, %r) |> Bool @>
             lessThan    = fun (l,r) -> <@ dsharp.lt(%l, %r) |> Bool @>
             equalTo     = fun (l,r) -> <@ dsharp.eq(%l, %r) |> Bool @>
@@ -583,21 +618,18 @@ module Language =
                     Bool finiteMask
                 @>
             inverse = fun (fLambda, targetExpr, loExpr, hiExpr, tol, maxIter) ->
-                <@
-                    let loVal = %loExpr
-                    let hiVal = %hiExpr
-                    let range = dsharp.sub(hiVal, loVal)
-                    let n = System.Math.Log((float range) / tol, 2.0)
-                    let maxIter = min (int (System.Math.Ceiling n)) 50
-                    Statistics.RootFinding.Tensor.bisect (%%fLambda : Tensor -> Tensor)
-                                        %targetExpr %loExpr %hiExpr tol maxIter
-                @>
+                inverse fLambda targetExpr loExpr hiExpr tol maxIter
         }
 
         let private tensorOpsForMeasure
             (pIndex: Map<string,int>)
             (pVar: Var) (statesVar: Var) (tIdxVar: Var) = {
-            constVal    = fun n -> <@ mkTensor n @>
+            constVal    = fun n ->
+                let tensor = mkTensor n
+                <@ tensor @>
+            constValLift = fun one n ->
+                let tensor = mkTensor n
+                <@ %one * tensor @>
             parameter   = fun name -> <@ (%%Expr.Var pVar : TypedTensor<Vector,``parameter``>).Value.[pIndex.[name]] @>
             environment = fun _ -> failwith "Environment not used in measures"
             timeVal     = <@ mkTensor (float (%%Expr.Var tIdxVar : int)) @>
@@ -612,7 +644,7 @@ module Language =
             modulo      = fun (l,r) -> <@ %l - %r * dsharp.floor(%l / %r) @>
             cond        = fun (c,t,f) -> blendConditional c t f
             label       = fun (_,m) -> m
-            invalid     = fun () -> <@ mkTensor invalidPenalty @>
+            invalid     = fun () -> <@ invalidPenalty @>
             stateAt     = fun (offset,name) ->
                 <@
                     let states = %%Expr.Var statesVar : CodedMap<TypedTensor<Vector,ModelSystem.state>>
@@ -631,20 +663,13 @@ module Language =
                     Bool finiteMask
                 @>
             inverse = fun (fLambda, targetExpr, loExpr, hiExpr, tol, maxIter) ->
-                <@
-                    let loVal = %loExpr
-                    let hiVal = %hiExpr
-                    let range = dsharp.sub(hiVal, loVal)
-                    let n = System.Math.Log((float range) / tol, 2.0)
-                    let maxIter = min (int (System.Math.Ceiling n)) 50
-                    Statistics.RootFinding.Tensor.bisect (%%fLambda : Tensor -> Tensor)
-                                        %targetExpr %loExpr %hiExpr tol maxIter
-                @>
+                inverse fLambda targetExpr loExpr hiExpr tol maxIter
         }
 
         // ---- Float ops ----
         let private floatOps (pVar: Var) (eVar: Var) (tVar: Var) (xVar: Var) = {
             constVal    = fun n -> <@ n @>
+            constValLift = fun _ n -> <@ n @>
             parameter = fun name -> <@
                 match (%%Expr.Var pVar : Parameter.Pool.ParameterPool)
                     |> Parameter.Pool.tryGetRealValue name with

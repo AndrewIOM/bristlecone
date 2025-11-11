@@ -406,14 +406,20 @@ module Bristlecone =
 
         result {
 
+
             // Validate settings and generate synthetic data
             let! settings = Test.isValidSettings model settings
+
+            // Set conditioning for solver to be the custom start values
+            let engine = engine |> withConditioning (Conditioning.Custom settings.StartValues)
             let! trueData, trueParamPool =
                 Test.Compute.tryGenerateData engine settings model settings.Attempts
 
             // Merge dynamic + environmental data into one coded map
             let mergedData =
                 Map.merge trueData settings.EnvironmentalData (fun dyn _env -> dyn)
+
+            engine.LogTo <| GeneralEvent(sprintf "Dataset is %A" mergedData)
 
             engine.LogTo <| GeneralEvent(sprintf "Parameters to test are %A" (trueParamPool |> Parameter.Pool.toTensorWithKeysReal))
 

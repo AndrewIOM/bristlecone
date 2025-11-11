@@ -318,8 +318,6 @@ module Solver =
                 |> Map.map(fun k v -> Typed.ofScalar v)
                 |> Map.fold (fun acc k v -> Map.add k v acc) hiddenStatesT0
 
-            logTo <| Logging.GeneralEvent (sprintf "Solver: to = %A" t0)
-
             // 2. Decide resolutions
             let integrationRes = decideIntegrationResolution observedStates environment
 

@@ -60,14 +60,12 @@ module Initialise =
             Error "Could not generate a starting point given the domain"
         else
             let t = initialise domain random
-            printfn "n = %i, t = %A" n t
             let isInvalid = isInvalidTheta (Tensors.Typed.toFloatArray t) (domain |> Seq.map (fun (_, _, c) -> c))
 
             if isInvalid then
                 tryGenerateTheta f domain random (n - 1)
             else
                 let result = f t |> Tensors.Typed.toFloatScalar
-                printfn "Resultant value of objective = %f<-logL>" result
                 if Units.isFinite result then
                     Ok t
                 else

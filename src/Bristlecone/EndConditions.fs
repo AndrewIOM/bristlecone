@@ -83,10 +83,10 @@ module EndConditions =
                         let x = [| 1. .. float (List.length msjds) |]
                         Statistics.Regression.slopeAndPValue x (msjds |> List.toArray))
 
-                slopesAndPs
-                |> List.iteri (fun paramIdx (slope, p) ->
-                    log (GeneralEvent (sprintf "[EndCondition] Param %d: slope=%.6g, p=%.4f"
-                                            (paramIdx + 1) slope p)))
+                // slopesAndPs
+                // |> List.iteri (fun paramIdx (slope, p) ->
+                //     log (GeneralEvent (sprintf "[EndCondition] Param %d: slope=%.6g, p=%.4f"
+                //                             (paramIdx + 1) slope p)))
 
                 let valid = slopesAndPs |> List.filter (fun (_, p) -> not (System.Double.IsNaN p))
 
@@ -96,8 +96,8 @@ module EndConditions =
                     then Stationary
                     else Continue
             
-                log (GeneralEvent (sprintf "[EndCondition] MSJD at i=%d: %A (valid=%d/%d)"
-                                        (int i) decision valid.Length slopesAndPs.Length))
+                // log (GeneralEvent (sprintf "[EndCondition] MSJD at i=%d: %A (valid=%d/%d)"
+                //                         (int i) decision valid.Length slopesAndPs.Length))
 
                 decision
             else Continue

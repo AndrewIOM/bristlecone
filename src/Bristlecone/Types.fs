@@ -73,7 +73,7 @@ module ShortCode =
 
     let create str =
         if System.String.IsNullOrEmpty(str) then None
-        else if str.Length > 10 then None
+        else if str.Length > 20 then None
         else str |> ShortCode |> Some
 
     type ShortCode with

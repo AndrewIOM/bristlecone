@@ -130,6 +130,9 @@ module RungeKutta =
     open DiffSharp
     open Tensors
     
+    let private two = allocateTensor 2.0
+    let private six = allocateTensor 6.0
+
     let private rk4Core
         (tInitial: TypedTensor<Scalar,``time index``>)
         (steps   : int)
@@ -141,13 +144,16 @@ module RungeKutta =
         let mutable y = y0
         let outputs = ResizeArray<Tensor>()
         outputs.Add y
+        let halfDt  = dt / two
+        let sixthDt = dt / six
+        let dtScalar = Tensors.asScalar dt
         for _ in 1 .. steps do
             let k1 = f t.Value           y
-            let k2 = f (t.Value + dt/2.0) (y + (dt/2.0) * k1)
-            let k3 = f (t.Value + dt/2.0) (y + (dt/2.0) * k2)
+            let k2 = f (t.Value + halfDt) (y + halfDt * k1)
+            let k3 = f (t.Value + halfDt) (y + halfDt * k2)
             let k4 = f (t.Value + dt)     (y + dt * k3)
-            y <- y + (dt/6.0) * (k1 + dsharp.tensor 2.0 * k2 + dsharp.tensor 2.0 * k3 + k4)
-            t <- Tensors.Typed.addScalar t (dt |> Tensors.asScalar)
+            y <- y + sixthDt * (k1 + two * k2 + two * k3 + k4)
+            t <- Tensors.Typed.addScalar t dtScalar
             outputs.Add y
         dsharp.stack outputs
 
@@ -157,7 +163,7 @@ module RungeKutta =
         (steps   : int)
         (y0      : Tensor)
         (f       : Tensor -> Tensor -> Tensor) =
-        let dt = (tFinal.Value - tInitial.Value) / dsharp.tensor (float steps)
+        let dt = (tFinal.Value - tInitial.Value) / allocateTensor (float steps)
         rk4Core tInitial steps dt y0 f
 
     let rk4WithStepWidth
@@ -221,18 +227,7 @@ module RungeKutta =
             if y.shape.[0] <> keys.Length then
                 failwithf "wrapRhs: state length %d does not match keys length %d"
                         y.shape.[0] keys.Length
-
-            // Rebuild state map from flat vector
-            let stateMap : CodedMap<TypedTensor<Scalar, ModelSystem.state>> =
-                (keys, y.unstack())
-                ||> Seq.map2 (fun k comp ->
-                    match tryAsScalar<ModelSystem.state> comp with
-                    | Some s -> k, s
-                    | None   -> failwithf "wrapRhs: expected scalar for state '%s', got shape %A"
-                                        k.Value comp.shape)
-                |> Map.ofSeq
             
-            // Call original RHS
             let tScalar = asScalar<``time index``> t
             let yVector =
                 match tryAsVector<ModelSystem.state> y with
