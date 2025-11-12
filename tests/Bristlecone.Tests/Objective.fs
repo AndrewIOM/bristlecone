@@ -8,11 +8,10 @@ open Bristlecone.ModelSystem
 open Bristlecone.EstimationEngine
 open Bristlecone.Tensors
 
-let dummySolver returnValue len : Solver.ConfiguredSolver =
+let dummySolver code returnValue len : Solver.ConfiguredSolver =
     fun _ ->
-        [ (ShortCode.create "x").Value,
-          Array.init len (fun i -> returnValue i |> Units.removeUnitFromFloat |> (*) 1.<state>) |> Typed.ofVector ]
-        |> Map.ofList, Map.empty
+        Map.ofList [ code, Array.init len (fun i -> returnValue i |> Units.removeUnitFromFloat |> (*) 1.<state>) |> Typed.ofVector ],
+        Map.ofList [ code, returnValue 0 |> Units.removeUnitFromFloat |> (*) 1.<state> |> Typed.ofScalar ]
 
 [<Tests>]
 let initialBounds =
@@ -22,12 +21,13 @@ let initialBounds =
 
             testPropertyWithConfig Config.config "Time-series are paired to correct years" <| fun (NonEmptyArray (data: NormalFloat array)) pool ->
                 let optimConfig = Parameter.Pool.toOptimiserConfigBounded pool
-                let data' = [ (ShortCode.create "x").Value, data |> Array.map (fun g -> g.Get * 1.<state>) |> Tensors.Typed.ofVector ] |> Map.ofList
+                let code = ShortCode.create "x" |> Option.get
+                let data' = [ code, data |> Array.map (fun g -> g.Get * 1.<state>) |> Tensors.Typed.ofVector ] |> Map.ofList
                 let point = Parameter.Pool.drawRandom (Random()) pool |> Parameter.Pool.toTensorWithKeysReal |> snd |> optimConfig.Compiled.Inverse
                 let pred =
                     Objective.createPredictor
                         Map.empty
-                        (dummySolver (fun i -> float i * 1.2) data.Length)
+                        (dummySolver code (fun i -> float i * 1.2) data.Length)
                         (Parameter.Pool.DetachedConfig optimConfig)
                         point
                 
@@ -66,7 +66,7 @@ let initialBounds =
                         else
                             Language.noConstraints
 
-                    let X = Language.state "X"
+                    let X = Language.state "x"
                     let a = Language.parameter "a" mode (min b1 b2) (max b1 b2)
 
                     let model =
@@ -78,13 +78,14 @@ let initialBounds =
 
                     let optimConfig = Parameter.Pool.DetachedConfig (Parameter.Pool.toOptimiserConfigBounded model.Parameters)
 
+                    let code = (ShortCode.create "x").Value
                     let testObjective =
                         Objective.create
                             model.NegLogLikelihood
                             Map.empty
-                            (dummySolver (fun _ -> 2.0<state>) data.Length)
+                            (dummySolver code (fun _ -> 2.0<state>) data.Length)
                             optimConfig
-                            ([ (ShortCode.create "x").Value, data |> List.map ((*) 1.<state>) |> List.toArray ] |> Map.ofList)
+                            ([ code, data |> List.map ((*) 1.<state>) |> List.toArray ] |> Map.ofList)
 
                     // The point given to the objective should be in optim-space.
                     let optimPoint =

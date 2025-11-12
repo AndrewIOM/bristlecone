@@ -19,10 +19,10 @@ let shortCode =
               else
                   ()
 
-          testProperty "Must be between one and ten characters"
+          testProperty "Must be between one and 20 characters"
           <| fun s ->
               match ShortCode.create s with
-              | Some c -> c.Value.Length > 0 && c.Value.Length <= 10
+              | Some c -> c.Value.Length > 0 && c.Value.Length <= 20
               | None -> true ]
 
 module Transforms =
