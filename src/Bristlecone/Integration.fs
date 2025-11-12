@@ -26,12 +26,12 @@ module Base =
     /// the function should only be run at times as specified in tInitial, tEnd,
     /// and tStep.
     let makeCompiledFunctionForIntegration
-        (tInitial       : float<``time index``>)
-        (tEnd           : float<``time index``>)
-        (tStep          : float<``time index``>)
-        (initialEnv     : CodedMap<TypedTensor<Scalar,``environment``>>)
-        (externalEnv    : CodedMap<TimeIndex.TimeIndex<float<``environment``>,'date,'timeunit,'timespan>>)
-        (modelMap : CodedMap<TensorODE>)
+        (tInitial: float<``time index``>)
+        (tEnd: float<``time index``>)
+        (tStep: float<``time index``>)
+        (initialEnv: CodedMap<TypedTensor<Scalar, ``environment``>>)
+        (externalEnv: CodedMap<TimeIndex.TimeIndex<float<``environment``>, 'date, 'timeunit, 'timespan>>)
+        (modelMap: CodedMap<TensorODE>)
         : EstimationEngine.UnparameterisedRHS =
 
         // STAGE 1. Static scaffolding.
@@ -40,34 +40,36 @@ module Base =
         let modelKeys, modelEqs = modelMap |> Map.toArray |> Array.unzip
 
         // Precompute external env timeline (constant, non-diff)
-        let timeline = [| tInitial .. tStep .. tEnd |]
-        let externalEnvTensors : CodedMap<TypedTensor<Vector,``environment``>> =
+        let timeline = [| tInitial..tStep..tEnd |]
+
+        let externalEnvTensors: CodedMap<TypedTensor<Vector, ``environment``>> =
             externalEnv
-            |> Map.map (fun _ ti ->
-                timeline
-                |> Array.map (fun t -> ti.[t])
-                |> Typed.ofVector)
+            |> Map.map (fun _ ti -> timeline |> Array.map (fun t -> ti.[t]) |> Typed.ofVector)
 
         // Merge helpers (typed, AD-safe)
         let inline injectStatesIntoContext
-            (newValues: TypedTensor<Vector,ModelSystem.state>)
+            (newValues: TypedTensor<Vector, ModelSystem.state>)
             (newValueKeys: ShortCode.ShortCode[])
-            (environment: CodedMap<TypedTensor<Scalar,ModelSystem.``environment``>>) =
+            (environment: CodedMap<TypedTensor<Scalar, ModelSystem.``environment``>>)
+            =
 
             // Extract typed scalars from the vector without converting to float
             let scalars =
                 [| for i in 0 .. newValues.Value.shape.[0] - 1 ->
-                    match Tensors.tryAsScalar<``environment``> newValues.Value.[i] with
-                    | Some s -> s
-                    | None   -> invalidOp "Expected scalar when injecting dynamic variables" |]
+                       match Tensors.tryAsScalar<``environment``> newValues.Value.[i] with
+                       | Some s -> s
+                       | None -> invalidOp "Expected scalar when injecting dynamic variables" |]
 
             let merged = Array.zip newValueKeys scalars |> Map.ofArray
-            environment |> Map.map (fun k v -> Map.tryFind k merged |> Option.defaultValue v)
+
+            environment
+            |> Map.map (fun k v -> Map.tryFind k merged |> Option.defaultValue v)
 
         let inline overlayExogenousAtTime
             (timeIdx: int)
-            (externalEnv: CodedMap<TypedTensor<Vector,``environment``>>)
-            (currentEnv: CodedMap<TypedTensor<Scalar,``environment``>>) =
+            (externalEnv: CodedMap<TypedTensor<Vector, ``environment``>>)
+            (currentEnv: CodedMap<TypedTensor<Scalar, ``environment``>>)
+            =
 
             currentEnv
             |> Map.map (fun k v ->
@@ -75,7 +77,7 @@ module Base =
                 | Some vec ->
                     match tryAsScalar<``environment``> vec.Value.[timeIdx] with
                     | Some s -> s
-                    | None   -> invalidOp "Expected scalar from external environment vector"
+                    | None -> invalidOp "Expected scalar from external environment vector"
                 | None -> v)
 
         let tInitial = tInitial |> Typed.ofScalar
@@ -86,7 +88,7 @@ module Base =
         let baselineEnv =
             [ Map.keys externalEnvTensors; Map.keys initialEnv ]
             |> Seq.concat
-            |> Seq.map(fun k ->
+            |> Seq.map (fun k ->
                 match Map.tryFind k initialEnv with
                 | Some initial -> k, initial
                 | None ->
@@ -94,17 +96,15 @@ module Base =
                     | Some vec ->
                         match tryAsScalar<``environment``> vec.Value.[0] with
                         | Some s -> k, s
-                        | None   -> invalidOp "Expected scalar from external environment vector"
-                    | None -> failwithf "Could not assign initial value to state / environment %s" k.Value
-            )
+                        | None -> invalidOp "Expected scalar from external environment vector"
+                    | None -> failwithf "Could not assign initial value to state / environment %s" k.Value)
             |> Map.ofSeq
 
         // STAGE 2. Make a parameter-specific concrete RHS.
-        fun (parameters: TypedTensor<Vector,``parameter``>) ->
+        fun (parameters: TypedTensor<Vector, ``parameter``>) ->
 
             // The bound RHS now closes over `parameters` but reuses all static prep
-            fun (t: TypedTensor<Scalar,``time index``>)
-                (x: TypedTensor<Vector,ModelSystem.state>) ->
+            fun (t: TypedTensor<Scalar, ``time index``>) (x: TypedTensor<Vector, ModelSystem.state>) ->
 
                 let idx = int ((t.Value - tInitial.Value) / tStep.Value)
 
@@ -119,6 +119,7 @@ module Base =
                     let xi =
                         Tensors.tryAsScalar x.Value.[i]
                         |> Option.defaultWith (fun () -> invalidOp "Expected scalar state component")
+
                     modelKeys.[i], m parameters env t xi)
                 |> Map.ofArray
 
@@ -129,95 +130,92 @@ module RungeKutta =
     open Bristlecone.Time
     open DiffSharp
     open Tensors
-    
+
     let private two = allocateTensor 2.0
     let private six = allocateTensor 6.0
 
     let private rk4Core
-        (tInitial: TypedTensor<Scalar,``time index``>)
-        (steps   : int)
-        (dt      : Tensor)
-        (y0      : Tensor)
-        (f       : Tensor -> Tensor -> Tensor) =
+        (tInitial: TypedTensor<Scalar, ``time index``>)
+        (steps: int)
+        (dt: Tensor)
+        (y0: Tensor)
+        (f: Tensor -> Tensor -> Tensor)
+        =
 
         let mutable t = tInitial
         let mutable y = y0
         let outputs = ResizeArray<Tensor>()
         outputs.Add y
-        let halfDt  = dt / two
+        let halfDt = dt / two
         let sixthDt = dt / six
         let dtScalar = Tensors.asScalar dt
-        for _ in 1 .. steps do
-            let k1 = f t.Value           y
+
+        for _ in 1..steps do
+            let k1 = f t.Value y
             let k2 = f (t.Value + halfDt) (y + halfDt * k1)
             let k3 = f (t.Value + halfDt) (y + halfDt * k2)
-            let k4 = f (t.Value + dt)     (y + dt * k3)
+            let k4 = f (t.Value + dt) (y + dt * k3)
             y <- y + sixthDt * (k1 + two * k2 + two * k3 + k4)
             t <- Tensors.Typed.addScalar t dtScalar
             outputs.Add y
+
         dsharp.stack outputs
 
     let rk4WithStepCount
-        (tInitial: TypedTensor<Scalar,``time index``>)
-        (tFinal  : TypedTensor<Scalar,``time index``>)
-        (steps   : int)
-        (y0      : Tensor)
-        (f       : Tensor -> Tensor -> Tensor) =
+        (tInitial: TypedTensor<Scalar, ``time index``>)
+        (tFinal: TypedTensor<Scalar, ``time index``>)
+        (steps: int)
+        (y0: Tensor)
+        (f: Tensor -> Tensor -> Tensor)
+        =
         let dt = (tFinal.Value - tInitial.Value) / allocateTensor (float steps)
         rk4Core tInitial steps dt y0 f
 
     let rk4WithStepWidth
-        (tInitial: TypedTensor<Scalar,``time index``>)
-        (tFinal  : TypedTensor<Scalar,``time index``>)
-        (dt      : TypedTensor<Scalar,``time index``>)
-        (y0      : Tensor)
-        (f       : Tensor -> Tensor -> Tensor) =
+        (tInitial: TypedTensor<Scalar, ``time index``>)
+        (tFinal: TypedTensor<Scalar, ``time index``>)
+        (dt: TypedTensor<Scalar, ``time index``>)
+        (y0: Tensor)
+        (f: Tensor -> Tensor -> Tensor)
+        =
         let steps = int ((tFinal.Value - tInitial.Value) / dt.Value)
         rk4Core tInitial steps dt.Value y0 f
 
-    let rk4float 
-        (tInitial: float<``time index``>) 
+    let rk4float
+        (tInitial: float<``time index``>)
         (tFinal: float<``time index``>)
-        (steps: float<``time index``>) 
-        (initialVector: float[]) 
+        (steps: float<``time index``>)
+        (initialVector: float[])
         (f: float -> float[] -> float[])
         : float[][] =
-        
-        let tInit  = tInitial |> Typed.ofScalar
+
+        let tInit = tInitial |> Typed.ofScalar
         let tFinal = tFinal |> Typed.ofScalar
         let steps = steps |> Typed.ofScalar
-        let y0    = dsharp.tensor(initialVector, dtype = Dtype.Float64)
+        let y0 = dsharp.tensor (initialVector, dtype = Dtype.Float64)
 
         let tensorTrajectory =
-            rk4WithStepWidth
-                tInit
-                tFinal
-                steps
-                y0
-                (fun t x ->
-                    let arrDoubles =
-                        match x.toArray() with
-                        | :? array<float>  as doubles -> doubles
-                        | :? array<single> as singles -> singles |> Array.map float
-                        | other -> failwithf "Unexpected tensor storage: %A" (other.GetType())
-                    dsharp.tensor(f (t.toDouble()) arrDoubles, dtype = Dtype.Float64)
-                )
+            rk4WithStepWidth tInit tFinal steps y0 (fun t x ->
+                let arrDoubles =
+                    match x.toArray () with
+                    | :? array<float> as doubles -> doubles
+                    | :? array<single> as singles -> singles |> Array.map float
+                    | other -> failwithf "Unexpected tensor storage: %A" (other.GetType())
 
-        let arr2d : float[,] = tensorTrajectory.toArray2D()
-        Array.init (Array2D.length1 arr2d) (fun i ->
-            Array.init (Array2D.length2 arr2d) (fun j -> arr2d.[i, j])
-        )
+                dsharp.tensor (f (t.toDouble ()) arrDoubles, dtype = Dtype.Float64))
+
+        let arr2d: float[,] = tensorTrajectory.toArray2D ()
+        Array.init (Array2D.length1 arr2d) (fun i -> Array.init (Array2D.length2 arr2d) (fun j -> arr2d.[i, j]))
 
     // Flatten a CodedMap<Scalar> into (keys, Tensor vector)
-    let flattenState (stateMap: CodedMap<TypedTensor<Scalar,ModelSystem.state>>) =
-        let keys, vals =
-            stateMap
-            |> Map.toList
-            |> List.unzip
+    let flattenState (stateMap: CodedMap<TypedTensor<Scalar, ModelSystem.state>>) =
+        let keys, vals = stateMap |> Map.toList |> List.unzip
+
         let vec =
             vals
             |> List.map (fun s -> s.Value) // Tensor scalar
             |> dsharp.stack // stack into a 1‑D state vector
+
         keys, vec
 
     // Wrap a ParameterisedRHS so it works on flat Tensors
@@ -225,37 +223,36 @@ module RungeKutta =
         fun (t: Tensor) (y: Tensor) ->
 
             if y.shape.[0] <> keys.Length then
-                failwithf "wrapRhs: state length %d does not match keys length %d"
-                        y.shape.[0] keys.Length
-            
+                failwithf "wrapRhs: state length %d does not match keys length %d" y.shape.[0] keys.Length
+
             let tScalar = asScalar<``time index``> t
+
             let yVector =
                 match tryAsVector<ModelSystem.state> y with
                 | Some v -> v
-                | None   -> failwithf "wrapRhs: expected vector state input, got shape %A" y.shape
-            let resultMap : CodedMap<TypedTensor<Scalar,ModelSystem.state/``time index``>> = rhs tScalar yVector
-            
+                | None -> failwithf "wrapRhs: expected vector state input, got shape %A" y.shape
+
+            let resultMap: CodedMap<TypedTensor<Scalar, ModelSystem.state / ``time index``>> =
+                rhs tScalar yVector
+
             // Flatten result back to Tensor
-            keys
-            |> List.map (fun k -> resultMap.[k].Value)
-            |> dsharp.stack
+            keys |> List.map (fun k -> resultMap.[k].Value) |> dsharp.stack
 
     /// Unflatten trajectory Tensor back into ``CodedMap<Vector,state>``.
     /// traj has shape [timeSteps; stateCount].
     let unflattenTrajectory (keys: ShortCode.ShortCode list) (traj: Tensor) =
-        let comps = traj.unstack(1) // one column per state key
+        let comps = traj.unstack (1) // one column per state key
+
         (keys, comps)
         ||> Seq.map2 (fun k comp ->
             match tryAsVector<ModelSystem.state> comp with
             | Some v -> k, v
-            | None   -> failwithf "Expected vector trajectory component for '%s', got shape %A"
-                                k.Value comp.shape)
+            | None -> failwithf "Expected vector trajectory component for '%s', got shape %A" k.Value comp.shape)
         |> Map.ofSeq
 
-    let rk4 : EstimationEngine.Integration.IntegrationRoutine =
+    let rk4: EstimationEngine.Integration.IntegrationRoutine =
         fun tInitial tEnd tStep t0 rhs ->
             let keys, y0 = flattenState t0
             let fWrapped = wrapRhs keys rhs
             let traj = rk4WithStepWidth tInitial tEnd tStep y0 fWrapped
             unflattenTrajectory keys traj
-            

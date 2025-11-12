@@ -10,15 +10,18 @@ module EndConditions =
     /// End the optimisation procedure when a minimum number of iterations is exceeded.
     let atIteration iteration : EndCondition =
         fun _ currentIteration ->
-            if currentIteration >= iteration then OptimStopReason.MaxIterations
-            else OptimStopReason.Continue
+            if currentIteration >= iteration then
+                OptimStopReason.MaxIterations
+            else
+                OptimStopReason.Continue
 
     let defaultTolerance = 1e-06<``-logL``>
 
     let internal onlyOnInterval interval i fn =
-        if i % interval = 0<iteration> && i > 1<iteration>
-        then fn ()
-        else Continue
+        if i % interval = 0<iteration> && i > 1<iteration> then
+            fn ()
+        else
+            Continue
 
     /// Given a list of solutions, which are ordered most recent first,
     /// returns `true` if there are at least `chains` recent results, and
@@ -28,32 +31,38 @@ module EndConditions =
             false
         else
             (minimums
-            |> List.map fst
-            |> List.take chains
-            |> List.pairwise
-            |> List.sumBy (fun (n, old) -> max 0.<``-logL``> (old - n)) // Captures backwards jumps
-            |> (fun x ->
-                printfn "Better by %f" x
-                x))
+             |> List.map fst
+             |> List.take chains
+             |> List.pairwise
+             |> List.sumBy (fun (n, old) -> max 0.<``-logL``> (old - n)) // Captures backwards jumps
+             |> (fun x ->
+                 printfn "Better by %f" x
+                 x))
             <= defaultTolerance
 
-    let noImprovement : EndCondition =
+    let noImprovement: EndCondition =
         fun results iteration ->
-        let imp =
-            results
-            |> List.map fst
-            |> List.pairwise
-            |> List.averageBy (fun (n, old) -> if n > old then n - old else old - n) // Mean change in objective value
-        if imp <= defaultTolerance then NoImprovement
-        else Continue
+            let imp =
+                results
+                |> List.map fst
+                |> List.pairwise
+                |> List.averageBy (fun (n, old) -> if n > old then n - old else old - n) // Mean change in objective value
+
+            if imp <= defaultTolerance then NoImprovement else Continue
 
     let improvementCount count interval : EndCondition =
         fun results iteration ->
             if iteration % interval = 0<iteration> then
-                let i = results |> List.pairwise |> List.where (fun (x, y) -> fst x < fst y) |> List.length
-                if  i >= count
-                then OptimStopReason.NoImprovement
-                else Continue
+                let i =
+                    results
+                    |> List.pairwise
+                    |> List.where (fun (x, y) -> fst x < fst y)
+                    |> List.length
+
+                if i >= count then
+                    OptimStopReason.NoImprovement
+                else
+                    Continue
             else
                 Continue
 
@@ -64,7 +73,10 @@ module EndConditions =
     /// parameter sequentially: if all p-values are >0.1, then the `EndCondition` is true.
     let stationarySquaredJumpDistance' fixedBin pointsRequired slopeTol (log: LogEvent -> unit) : EndCondition =
         fun results i ->
-            if i % (fixedBin * pointsRequired * 1<iteration>) = 0<iteration> && i > 1<iteration> then
+            if
+                i % (fixedBin * pointsRequired * 1<iteration>) = 0<iteration>
+                && i > 1<iteration>
+            then
                 let slopesAndPs =
                     results
                     |> List.take (fixedBin * pointsRequired)
@@ -91,20 +103,24 @@ module EndConditions =
                 let valid = slopesAndPs |> List.filter (fun (_, p) -> not (System.Double.IsNaN p))
 
                 let decision =
-                    if valid.Length > 0
+                    if
+                        valid.Length > 0
                         && valid |> List.forall (fun (slope, pVal) -> abs slope < slopeTol && pVal > 0.1)
-                    then Stationary
-                    else Continue
-            
+                    then
+                        Stationary
+                    else
+                        Continue
+
                 // log (GeneralEvent (sprintf "[EndCondition] MSJD at i=%d: %A (valid=%d/%d)"
                 //                         (int i) decision valid.Length slopesAndPs.Length))
 
                 decision
-            else Continue
+            else
+                Continue
 
     /// True if there is no significant slope in mean squared jumping distances (MSJD),
     /// binned per 200 iterations and a regression of five bins.
-    let stationarySquaredJumpDistance log: EndCondition =
+    let stationarySquaredJumpDistance log : EndCondition =
         stationarySquaredJumpDistance' 200 5 1e-3 log
 
     /// Convergence of results using the Gelman-Rubin Rhat statistic.
@@ -126,12 +142,16 @@ module EndConditions =
                     |> Seq.map (fun x -> x.Value |> Seq.skip (x.Value.Length - shortestChainLength))
 
                 let parameterValueByChain =
-                    let thetaLength = (chains |> Seq.head).Value |> Seq.head |> snd |> Tensors.Typed.length
+                    let thetaLength =
+                        (chains |> Seq.head).Value |> Seq.head |> snd |> Tensors.Typed.length
 
                     [ 1..thetaLength ]
                     |> Seq.map (fun p ->
                         chainsEqualLength
-                        |> Seq.map (fun chain -> chain |> Seq.map (fun v -> v |> snd |> Tensors.Typed.toFloatValueAt (p - 1) |> Units.removeUnitFromFloat)))
+                        |> Seq.map (fun chain ->
+                            chain
+                            |> Seq.map (fun v ->
+                                v |> snd |> Tensors.Typed.toFloatValueAt (p - 1) |> Units.removeUnitFromFloat)))
 
                 printfn "Param values by chain: %A" parameterValueByChain
 
@@ -178,33 +198,45 @@ module EndConditions =
             else
                 Continue
 
-    /// Stops when acceptance rate is not within the 
+    /// Stops when acceptance rate is not within the
     /// defined range. Used to avoid stopping when not mixing.
     let acceptanceRateGate min max interval log : EndCondition =
         fun results iteration ->
-            onlyOnInterval interval iteration <| fun () ->
+            onlyOnInterval interval iteration
+            <| fun () ->
                 let r =
-                    results 
+                    results
                     |> List.truncate (Units.removeUnitFromInt interval)
                     |> List.pairwise
-                    |> List.map (fun (a,b) -> fst a - fst b)
-                let accepted = r |> List.where((=) 0.<``-logL``> >> not) |> List.length
+                    |> List.map (fun (a, b) -> fst a - fst b)
+
+                let accepted = r |> List.where ((=) 0.<``-logL``> >> not) |> List.length
                 let ar = float accepted / float r.Length
-                let result = if ar >= min && ar <= max then OptimStopReason.Stuck else Continue
-                log (GeneralEvent (sprintf "[EndCondition] Acceptance rate = %f [%A]" ar result))
+
+                let result =
+                    if ar >= min && ar <= max then
+                        OptimStopReason.Stuck
+                    else
+                        Continue
+
+                log (GeneralEvent(sprintf "[EndCondition] Acceptance rate = %f [%A]" ar result))
                 result
 
     let movementFloorGate movementFloor interval : EndCondition =
         fun results iteration ->
-            onlyOnInterval interval iteration <| fun () ->
+            onlyOnInterval interval iteration
+            <| fun () ->
                 let totalMovement =
-                    results 
+                    results
                     |> List.truncate (Units.removeUnitFromInt interval)
                     |> List.pairwise
-                    |> List.map (fun (a,b) -> abs (fst a - fst b))
+                    |> List.map (fun (a, b) -> abs (fst a - fst b))
                     |> List.sum
-                if totalMovement <= movementFloor then OptimStopReason.Stuck
-                else Continue
+
+                if totalMovement <= movementFloor then
+                    OptimStopReason.Stuck
+                else
+                    Continue
 
 
     module Profiles =
@@ -220,15 +252,16 @@ module EndConditions =
         /// When tuning, stop when the chain is well mixed.
         let mcmcTuningStep maxIter log : EndCondition =
             fun results iter ->
-                if atIteration maxIter results iter <> Continue
-                then MaxIterations
+                if atIteration maxIter results iter <> Continue then
+                    MaxIterations
+                else if
+                    acceptanceRateGate 0.15 0.5 1000<iteration> log results iter <> Continue
+                    && movementFloorGate 1e-6<``-logL``> 1000<iteration> results iter <> Stuck
+                then
+                    log (GeneralEvent(sprintf "[EndCondition] Well mixed"))
+                    Custom "Well mixed"
                 else
-                    if acceptanceRateGate 0.15 0.5 1000<iteration> log results iter <> Continue
-                        && movementFloorGate 1e-6<``-logL``> 1000<iteration> results iter <> Stuck
-                    then
-                        log (GeneralEvent (sprintf "[EndCondition] Well mixed"))
-                        Custom "Well mixed"
-                    else Continue
+                    Continue
 
         /// Composite end condition that only ends when exploration is not stuck
         /// and the squared jump distance is stationary. Always ends when max iterations
@@ -236,12 +269,12 @@ module EndConditions =
         let mcmc maxIter log : EndCondition =
             fun results iter ->
                 let tuneStatus = mcmcTuningStep maxIter log results iter
-                if tuneStatus = Custom "Well mixed" then stationarySquaredJumpDistance' 200 5 1e-3 log results iter
-                else tuneStatus
+
+                if tuneStatus = Custom "Well mixed" then
+                    stationarySquaredJumpDistance' 200 5 1e-3 log results iter
+                else
+                    tuneStatus
 
         /// Composite end conditions well-suited to simulated annealing.
         let simulatedAnneal tol =
-            combineEndConditions [
-                noImprovement
-                improvementCount 3 100<iteration>
-            ]
+            combineEndConditions [ noImprovement; improvementCount 3 100<iteration> ]

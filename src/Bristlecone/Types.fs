@@ -20,28 +20,44 @@ module internal Units =
     let round<[<Measure>] 'u> (x: float<'u>) : float<'u> =
         System.Math.Round(float x) |> LanguagePrimitives.FloatWithMeasure
 
-    let floatMap<[<Measure>] 'u> fn (x:float<'u>) : float<'u> =
-        fn(float x) |> LanguagePrimitives.FloatWithMeasure
+    let floatMap<[<Measure>] 'u> fn (x: float<'u>) : float<'u> =
+        fn (float x) |> LanguagePrimitives.FloatWithMeasure
 
-    let isNan<[<Measure>] 'u> (v:float<'u>) =
-        System.Double.IsNaN (removeUnitFromFloat v)
+    let isNan<[<Measure>] 'u> (v: float<'u>) =
+        System.Double.IsNaN(removeUnitFromFloat v)
 
-    let inInfinite<[<Measure>] 'u> (v:float<'u>) =
-        System.Double.IsInfinity (removeUnitFromFloat v)
+    let inInfinite<[<Measure>] 'u> (v: float<'u>) =
+        System.Double.IsInfinity(removeUnitFromFloat v)
 
-    let isFinite<[<Measure>] 'u> (v:float<'u>) =
-        not (inInfinite v) && not (isNan v)
+    let isFinite<[<Measure>] 'u> (v: float<'u>) = not (inInfinite v) && not (isNan v)
 
-    let isNotFinite<[<Measure>] 'u> (v:float<'u>) =
-        inInfinite v || isNan v
+    let isNotFinite<[<Measure>] 'u> (v: float<'u>) = inInfinite v || isNan v
 
 
-[<Measure>] type iteration
-[<Measure>] type ``parameter``
-[<Measure>] type ``-logL``
+[<Measure>]
+type iteration
 
-[<Measure>] type ``optim-space`` // bounded, real parameter space
-[<Measure>] type ``optim-space-transformed``  // unconstrained transformed space
+[<Measure>]
+type ``parameter``
+
+[<Measure>]
+type ``-logL``
+
+[<Measure>]
+type ``optim-space`` // bounded, real parameter space
+
+
+
+
+
+
+[<Measure>]
+type ``optim-space-transformed`` // unconstrained transformed space
+
+
+
+
+
 
 
 [<RequireQualifiedAccess>]
@@ -330,24 +346,28 @@ module Result =
 
 
 module Writer =
-    type Writer<'a,'log> = AWriter of 'a * 'log list
+    type Writer<'a, 'log> = AWriter of 'a * 'log list
 
-    let run (AWriter (a, log)) = a, log
-    let return' x = AWriter (x, [])
-    let bind f (AWriter (a, log)) =
-        let (AWriter (b, log2)) = f a
-        AWriter (b, log @ log2)
+    let run (AWriter(a, log)) = a, log
+    let return' x = AWriter(x, [])
+
+    let bind f (AWriter(a, log)) =
+        let (AWriter(b, log2)) = f a
+        AWriter(b, log @ log2)
+
     let map f w =
-        let (AWriter (a, log)) = w
-        AWriter (f a, log)
+        let (AWriter(a, log)) = w
+        AWriter(f a, log)
+
     let flatMap f w = bind f w
-    let tell entry = AWriter ((), [entry])
+    let tell entry = AWriter((), [ entry ])
 
     // Computation expression
     type WriterBuilder() =
         member _.Return(x) = return' x
         member _.Bind(m, f) = bind f m
         member _.Zero() = return' ()
+
         member _.For(seq, body) =
             seq |> Seq.fold (fun acc x -> bind (fun () -> body x) acc) (return' ())
 

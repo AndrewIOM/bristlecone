@@ -2,12 +2,6 @@
   "version": 1,
   "isRoot": true,
   "tools": {
-    "fake-cli": {
-      "version": "6.0.0",
-      "commands": [
-        "fake"
-      ]
-    },
     "paket": {
       "version": "10.0.0-alpha011",
       "commands": [
@@ -15,7 +9,7 @@
       ]
     },
     "fantomas": {
-      "version": "6.3.1",
+      "version": "7.0.3",
       "commands": [
         "fantomas"
       ]

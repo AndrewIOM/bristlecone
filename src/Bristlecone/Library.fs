@@ -18,8 +18,11 @@ module Bristlecone =
     open Bristlecone.Statistics
 
     // TODO Current default conversions, but may not be most appropriate defaults.
-    let private indexByMonth (ts : int<year>) = (float ts) * 1.<year> * 12.<Time.``time index``/year>
-    let private indexBySpan (ts : TimeSpan) = float ts.Days * 1.<day> * 12.<Time.``time index``/day>
+    let private indexByMonth (ts: int<year>) =
+        (float ts) * 1.<year> * 12.<Time.``time index`` / year>
+
+    let private indexBySpan (ts: TimeSpan) =
+        float ts.Days * 1.<day> * 12.<Time.``time index`` / day>
 
 
     /// <summary>A basic estimation engine for discrete-time equations, using a Nelder-Mead optimiser.</summary>
@@ -53,7 +56,10 @@ module Bristlecone =
     /// <returns></returns>
     let withOutput out engine = { engine with LogTo = out }
 
-    let withTimeConversion<'timespan, [<Measure>] 'modelTimeUnit, 'o1, [<Measure>] 'o2, [<Measure>] 'u> (fn:'timespan -> float<'modelTimeUnit>) (engine:EstimationEngine<'o1,'o2,'u>) : EstimationEngine<'timespan,'modelTimeUnit,'u> =
+    let withTimeConversion<'timespan, [<Measure>] 'modelTimeUnit, 'o1, [<Measure>] 'o2, [<Measure>] 'u>
+        (fn: 'timespan -> float<'modelTimeUnit>)
+        (engine: EstimationEngine<'o1, 'o2, 'u>)
+        : EstimationEngine<'timespan, 'modelTimeUnit, 'u> =
         { TimeHandling = engine.TimeHandling
           OptimiseWith = engine.OptimiseWith
           LogTo = engine.LogTo
@@ -94,7 +100,9 @@ module Bristlecone =
         /// an `Error`.
         let observationsToCommonTimeFrame (dynamicEquationKeys: ShortCode.ShortCode seq) timeSeriesData =
             timeSeriesData
-            |> Map.map(fun _ v -> v |> TimeSeries.map(fun (v,_) -> v |> Units.removeUnitFromFloat |> (*) 1.<state>))
+            |> Map.map (fun _ v ->
+                v
+                |> TimeSeries.map (fun (v, _) -> v |> Units.removeUnitFromFloat |> (*) 1.<state>))
             |> Map.filter (fun k _ -> dynamicEquationKeys |> Seq.contains k)
             |> TimeFrame.tryCreate
             |> Result.ofOption "Observations for dynamic variables must share a common sampling time sequence"
@@ -105,7 +113,9 @@ module Bristlecone =
         let environmentDataToCommonTimeFrame dynamicVariableKeys measureKeys timeSeriesData =
             let environmentSeries =
                 timeSeriesData
-                |> Map.map(fun _ v -> v |> TimeSeries.map(fun (v,_) -> v |> Units.removeUnitFromFloat |> (*) 1.<environment>))
+                |> Map.map (fun _ v ->
+                    v
+                    |> TimeSeries.map (fun (v, _) -> v |> Units.removeUnitFromFloat |> (*) 1.<environment>))
                 |> Map.filter (fun k _ -> dynamicVariableKeys |> Seq.append measureKeys |> Seq.contains k |> not)
 
             match environmentSeries.Count with
@@ -136,10 +146,13 @@ module Bristlecone =
 
 
     // Temporary helpers until optim-space-transformed can be handled correctly:
-    let private unsafeEraseSpace<'space> = unbox<Parameter.Pool.OptimiserConfig<``optim-space``>>
-    let private unsafeEraseSpaceForward<'space> = unbox<Tensors.TypedTensor<Tensors.Vector,``optim-space-transformed``>>
-    
-    let private dynamicVariableKeys (models:ModelSystem.ModelForm<'modelTimeUnit>) =
+    let private unsafeEraseSpace<'space> =
+        unbox<Parameter.Pool.OptimiserConfig<``optim-space``>>
+
+    let private unsafeEraseSpaceForward<'space> =
+        unbox<Tensors.TypedTensor<Tensors.Vector, ``optim-space-transformed``>>
+
+    let private dynamicVariableKeys (models: ModelSystem.ModelForm<'modelTimeUnit>) =
         match models with
         | ModelForm.DifferenceEqs eqs -> eqs |> Map.keys
         | ModelForm.DifferentialEqs eqs -> eqs |> Map.keys
@@ -160,16 +173,21 @@ module Bristlecone =
         | Parameter.Pool.TransformedConfig cfg ->
             solutions
             |> List.map (fun (ll, pointOptSpace) ->
-                let realVec = cfg.Compiled.Forward (unsafeEraseSpaceForward pointOptSpace)
+                let realVec = cfg.Compiled.Forward(unsafeEraseSpaceForward pointOptSpace)
                 ll, realVec |> Tensors.Typed.toFloatArray)
 
     let internal validateEnvData expectedKeys actualMap =
         let expectedSet = expectedKeys |> Set.ofList
-        let actualSet   = actualMap |> Map.keys |> Set.ofSeq
-        if Set.isSubset expectedSet actualSet
-        then Ok ()
+        let actualSet = actualMap |> Map.keys |> Set.ofSeq
+
+        if Set.isSubset expectedSet actualSet then
+            Ok()
         else
-            Error <| sprintf "Environment data keys do not match model definition. Expected %A but provided with %A." expectedKeys (Map.keys actualMap)
+            Error
+            <| sprintf
+                "Environment data keys do not match model definition. Expected %A but provided with %A."
+                expectedKeys
+                (Map.keys actualMap)
 
     /// <summary>
     /// Fit a time-series model to data.
@@ -190,20 +208,23 @@ module Bristlecone =
     let tryFit
         (engine: EstimationEngine<'timespan, 'modelTimeUnit, 'stateUnit>)
         endCondition
-        (observedSeries: CodedMap<TimeSeries<float<'stateUnit>,'date, 'yearType, 'timespan>>)
-        (model: ModelSystem<'modelTimeUnit>) =
+        (observedSeries: CodedMap<TimeSeries<float<'stateUnit>, 'date, 'yearType, 'timespan>>)
+        (model: ModelSystem<'modelTimeUnit>)
+        =
 
         let resultId = Guid.NewGuid()
 
         let requiredByLikelihood =
-            model.NegLogLikelihood.RequiredCodes |> List.map(fun c ->
+            model.NegLogLikelihood.RequiredCodes
+            |> List.map (fun c ->
                 match c with
                 | Measure c -> c
                 | State c -> c)
 
         // TODO Ensure that ODEs + measures actually produce the states required by likelihood function.
 
-        let requireObservedForLikelihood: Result<CodedMap<TimeSeries<float<'stateUnit>,'date,'yearType,'timespan>>,string> =
+        let requireObservedForLikelihood
+            : Result<CodedMap<TimeSeries<float<'stateUnit>, 'date, 'yearType, 'timespan>>, string> =
             if model.NegLogLikelihood.RequiredCodes.IsEmpty then
                 Error "The set likelihood function required no data"
             else if observedSeries.IsEmpty then
@@ -224,22 +245,32 @@ module Bristlecone =
 
             // 2. Build common timeline time-frames
             let! observedOnCommonTimeline = Fit.observationsToCommonTimeFrame requiredByLikelihood observedSeries
+
             let! exogenousOnCommonTimeline =
-                Fit.environmentDataToCommonTimeFrame
-                    requiredByLikelihood
-                    (Map.keys model.Measures)
-                    observedSeries
-            do! validateEnvData model.EnvironmentKeys (exogenousOnCommonTimeline |> Option.map (fun tf -> tf.Series) |> Option.defaultValue Map.empty)
+                Fit.environmentDataToCommonTimeFrame requiredByLikelihood (Map.keys model.Measures) observedSeries
+
+            do!
+                validateEnvData
+                    model.EnvironmentKeys
+                    (exogenousOnCommonTimeline
+                     |> Option.map (fun tf -> tf.Series)
+                     |> Option.defaultValue Map.empty)
 
             // 3. Resolve time-series given requested conditioning of t0.
             let equationKeys = dynamicVariableKeys model.Equations
-            let conditioned = Solver.Conditioning.resolve engine.Conditioning observedOnCommonTimeline exogenousOnCommonTimeline equationKeys
+
+            let conditioned =
+                Solver.Conditioning.resolve
+                    engine.Conditioning
+                    observedOnCommonTimeline
+                    exogenousOnCommonTimeline
+                    equationKeys
+
             conditioned.Log |> Option.iter (GeneralEvent >> engine.LogTo)
 
             engine.LogTo
             <| GeneralEvent(
-                sprintf
-                    "Conditioned state at t0 is %A; hidden t0 = %A" conditioned.T0 conditioned.StatesHiddenForSolver
+                sprintf "Conditioned state at t0 is %A; hidden t0 = %A" conditioned.T0 conditioned.StatesHiddenForSolver
             )
 
             engine.LogTo
@@ -258,15 +289,20 @@ module Bristlecone =
                     conditioned.StatesObservedForSolver.Keys
                     (Map.keys conditioned.StatesHiddenForSolver)
                     conditioned.ObservedForPairing.Keys
-                    (conditioned.ExogenousForSolver |> Option.map(fun t -> t.Keys))
+                    (conditioned.ExogenousForSolver |> Option.map (fun t -> t.Keys))
             )
-            
-            observedOnCommonTimeline.Series |> Map.iter(fun k v ->
-                engine.LogTo <| GeneralEvent(sprintf "Common timeline (states and measures): %s (start at %A)" k.Value v.StartDate)
-                )
-            exogenousOnCommonTimeline |> Option.iter(fun c -> c.Series |> Map.iter(fun k v ->
-                engine.LogTo <| GeneralEvent(sprintf "Common timeline (environment): %s (start at %A)" k.Value v.StartDate)
-                ))
+
+            observedOnCommonTimeline.Series
+            |> Map.iter (fun k v ->
+                engine.LogTo
+                <| GeneralEvent(sprintf "Common timeline (states and measures): %s (start at %A)" k.Value v.StartDate))
+
+            exogenousOnCommonTimeline
+            |> Option.iter (fun c ->
+                c.Series
+                |> Map.iter (fun k v ->
+                    engine.LogTo
+                    <| GeneralEvent(sprintf "Common timeline (environment): %s (start at %A)" k.Value v.StartDate)))
 
             // TODO Ensure that dynamic variables are an exact or subset of environmental variables
             let! _ = Fit.exactSubsetOf observedOnCommonTimeline exogenousOnCommonTimeline
@@ -287,8 +323,10 @@ module Bristlecone =
             // A centralised transform for parameters between point and parameter space.
             let optimConfig =
                 match engine.OptimiseWith with
-                | Optimisation.InDetachedSpace _    -> Parameter.Pool.DetachedConfig    (Parameter.Pool.toOptimiserConfigBounded model.Parameters)
-                | Optimisation.InTransformedSpace _ -> Parameter.Pool.TransformedConfig (Parameter.Pool.toOptimiserConfigTransformed model.Parameters)
+                | Optimisation.InDetachedSpace _ ->
+                    Parameter.Pool.DetachedConfig(Parameter.Pool.toOptimiserConfigBounded model.Parameters)
+                | Optimisation.InTransformedSpace _ ->
+                    Parameter.Pool.TransformedConfig(Parameter.Pool.toOptimiserConfigTransformed model.Parameters)
 
             let optimise =
                 match engine.OptimiseWith, optimConfig with
@@ -298,16 +336,14 @@ module Bristlecone =
                     optim engine.Random engine.LogTo endCondition (unsafeEraseSpace cfg).Domain None
                 | _ -> invalidOp "Mode/config mismatch"
 
-            let obsDataForObjective = Solver.Conditioning.toObservationData conditioned.ObservedForPairing
-            
+            let obsDataForObjective =
+                Solver.Conditioning.toObservationData conditioned.ObservedForPairing
+
             engine.LogTo
-            <| GeneralEvent(
-                sprintf
-                    "Time-series used within objective: %A."
-                    (Map.keys obsDataForObjective)
-            )
-            
+            <| GeneralEvent(sprintf "Time-series used within objective: %A." (Map.keys obsDataForObjective))
+
             let obsTimes = conditioned.ObservedForPairing |> TimeFrame.dates
+
             let objective =
                 Objective.create
                     model.NegLogLikelihood
@@ -327,11 +363,7 @@ module Bristlecone =
                     bestPoint
 
             let estimatedHighRes =
-                Objective.createPredictor
-                    model.Measures
-                    (solver Solver.StepType.Internal)
-                    optimConfig
-                    bestPoint
+                Objective.createPredictor model.Measures (solver Solver.StepType.Internal) optimConfig bestPoint
 
             let paired =
                 conditioned.ObservedForPairing.Series
@@ -342,19 +374,21 @@ module Bristlecone =
                     observedSeries
                     |> TimeSeries.toObservations
                     |> Seq.zip expected
-                    |> Seq.map (fun (e, (o, d)) -> ({ Obs = o |> Units.removeUnitFromFloat |> (*) 1.<state> ; Fit = e }, d))
+                    |> Seq.map (fun (e, (o, d)) ->
+                        ({ Obs = o |> Units.removeUnitFromFloat |> (*) 1.<state>
+                           Fit = e },
+                         d))
                     |> TimeSeries.fromObservations observedSeries.DateMode)
 
             let bestPoint =
                 match optimConfig with
                 | Parameter.Pool.DetachedConfig o -> o.Compiled.Forward bestPoint
-                | Parameter.Pool.TransformedConfig o -> o.Compiled.Forward (unbox bestPoint) // TODO Remove unbox
+                | Parameter.Pool.TransformedConfig o -> o.Compiled.Forward(unbox bestPoint) // TODO Remove unbox
+
             let bestPointPool = Parameter.Pool.fromRealVector bestPoint model.Parameters
 
             let estimatedHighResFloat =
-                estimatedHighRes
-                |> Map.map(fun _ v -> v |> Tensors.Typed.toFloatArray)
-                |> Some
+                estimatedHighRes |> Map.map (fun _ v -> v |> Tensors.Typed.toFloatArray) |> Some
 
             // engine.LogTo CompleteEvent
 
@@ -390,12 +424,13 @@ module Bristlecone =
     /// It is wrapped in an F# Result, indicating if the procedure
     /// was successful or not.</returns>
     let tryTestModel
-        (engine: EstimationEngine<'timespan,'modelTimeUnit,'state>)
+        (engine: EstimationEngine<'timespan, 'modelTimeUnit, 'state>)
         (settings: Test.TestSettings<'state, 'date, 'timeunit, 'timespan>)
         (model: ModelSystem<'modelTimeUnit>)
         =
 
         engine.LogTo <| GeneralEvent "Attempting to generate parameter set."
+
         engine.LogTo
         <| GeneralEvent(
             sprintf
@@ -412,51 +447,51 @@ module Bristlecone =
 
             // Set conditioning for solver to be the custom start values
             let engine = engine |> withConditioning (Conditioning.Custom settings.StartValues)
-            let! trueData, trueParamPool =
-                Test.Compute.tryGenerateData engine settings model settings.Attempts
+            let! trueData, trueParamPool = Test.Compute.tryGenerateData engine settings model settings.Attempts
 
             // Merge dynamic + environmental data into one coded map
-            let mergedData =
-                Map.merge trueData settings.EnvironmentalData (fun dyn _env -> dyn)
+            let mergedData = Map.merge trueData settings.EnvironmentalData (fun dyn _env -> dyn)
 
             engine.LogTo <| GeneralEvent(sprintf "Dataset is %A" mergedData)
 
-            engine.LogTo <| GeneralEvent(sprintf "Parameters to test are %A" (trueParamPool |> Parameter.Pool.toTensorWithKeysReal))
+            engine.LogTo
+            <| GeneralEvent(sprintf "Parameters to test are %A" (trueParamPool |> Parameter.Pool.toTensorWithKeysReal))
 
             // Fit with true parameters (no optimisation)
             let! realEstimate =
                 tryFit
-                    { engine with OptimiseWith = Optimisation.None.none }
+                    { engine with
+                        OptimiseWith = Optimisation.None.none }
                     settings.EndCondition
                     mergedData
-                    { model with Parameters = Parameter.Pool.fromEstimated trueParamPool }
+                    { model with
+                        Parameters = Parameter.Pool.fromEstimated trueParamPool }
 
             // Fit normally (optimisation enabled)
-            let! estimated =
-                tryFit engine settings.EndCondition mergedData model
+            let! estimated = tryFit engine settings.EndCondition mergedData model
 
-            let paramDiffs : Test.ParameterTestResult list =
+            let paramDiffs: Test.ParameterTestResult list =
                 estimated.Parameters
                 |> Parameter.Pool.toList
                 |> List.map (fun (sc, _) ->
-                    match Parameter.Pool.tryGetRealValue sc.Value estimated.Parameters,
-                        Parameter.Pool.tryGetRealValue sc.Value trueParamPool with
+                    match
+                        Parameter.Pool.tryGetRealValue sc.Value estimated.Parameters,
+                        Parameter.Pool.tryGetRealValue sc.Value trueParamPool
+                    with
                     | Some e, Some r ->
                         { Identifier = sc.Value
                           RealValue = r
                           EstimatedValue = e }
-                    | _ ->
-                        failwithf "Missing estimate for parameter %s" sc.Value)
+                    | _ -> failwithf "Missing estimate for parameter %s" sc.Value)
 
             // Per-series squared error
             let errorStructure =
-                let squared (x:float<state>) = x * x
+                let squared (x: float<state>) = x * x
+
                 estimated.Series
                 |> Seq.map (fun kv ->
                     let key = kv.Key.Value
-                    let errs =
-                        kv.Value.Values
-                        |> Seq.map (fun t -> t.Fit - t.Obs |> squared)
+                    let errs = kv.Value.Values |> Seq.map (fun t -> t.Fit - t.Obs |> squared)
                     key, errs)
                 |> Map.ofSeq
 
@@ -466,10 +501,7 @@ module Bristlecone =
                 { ErrorStructure = errorStructure
                   IterationsRun = estimated.Trace.Length * 1<iteration>
                   Parameters = paramDiffs
-                  Series =
-                    estimated.Series
-                    |> Seq.map (fun k -> k.Key.Value, k.Value)
-                    |> Map.ofSeq
+                  Series = estimated.Series |> Seq.map (fun k -> k.Key.Value, k.Value) |> Map.ofSeq
                   RealLikelihood = realEstimate.Likelihood
                   EstimatedLikelihood = estimated.Likelihood }
         }
@@ -481,7 +513,11 @@ module Bristlecone =
     /// <param name="settings">Test settings that define how the test will be conducted.</param>
     /// <param name="model">The model system to test against the estimation engine.</param>
     /// <returns>A test result that indicates differences between the expected and actual fit.</returns>
-    let testModel (engine: EstimationEngine<'timespan,'modelTimeUnit,'state>) (settings: TestSettings<'state, 'date, 'yearUnit, 'timespan>) (model: ModelSystem<'modelTimeUnit>) =
+    let testModel
+        (engine: EstimationEngine<'timespan, 'modelTimeUnit, 'state>)
+        (settings: TestSettings<'state, 'date, 'yearUnit, 'timespan>)
+        (model: ModelSystem<'modelTimeUnit>)
+        =
         tryTestModel engine settings model |> Result.forceOk
 
     /// <summary>Repeat a model fit many times, removing a single data point at random each time.</summary>
@@ -498,7 +534,11 @@ module Bristlecone =
         (model: ModelSystem<'modelTimeUnit>)
         (series: Map<ShortCode.ShortCode, TimeSeries.TimeSeries<float, 'date, 'timeunit, 'timespan>>)
         =
-        let rec bootstrap (s: Map<ShortCode.ShortCode,TimeSeries.TimeSeries<float, 'date, 'timeunit, 'timespan>>) numberOfTimes solutions =
+        let rec bootstrap
+            (s: Map<ShortCode.ShortCode, TimeSeries.TimeSeries<float, 'date, 'timeunit, 'timespan>>)
+            numberOfTimes
+            solutions
+            =
             if numberOfTimes > 0 then
                 let resolution = series |> Seq.head |> (fun s -> s.Value |> TimeSeries.resolution)
 
@@ -534,10 +574,12 @@ module Bristlecone =
         (hypothesis: ModelSystem<'modelTimeUnit>)
         preTransform
         (timeSeries: Map<ShortCode.ShortCode, TimeSeries.TimeSeries<float, 'date, 'timeunit, 'timespan>>)
-        estimatedTheta =
+        estimatedTheta
+        =
 
         let hypothesisMle =
-            { hypothesis with Parameters = Parameter.Pool.fromEstimated estimatedTheta }
+            { hypothesis with
+                Parameters = Parameter.Pool.fromEstimated estimatedTheta }
 
         let dateMode = (timeSeries |> Seq.head).Value.DateMode
 
@@ -546,23 +588,26 @@ module Bristlecone =
             let est =
                 fit
                     (engine
-                    |> withCustomOptimisation Optimisation.None.none
-                    |> withConditioning Conditioning.RepeatFirstDataPoint)
+                     |> withCustomOptimisation Optimisation.None.none
+                     |> withConditioning Conditioning.RepeatFirstDataPoint)
                     (Optimisation.EndConditions.atIteration 0<iteration>)
                     dataset
                     hypothesisMle
 
             let nextObs =
                 dataset
-                |> Map.map (fun _ ts ->
-                    ts |> TimeSeries.toObservations |> Seq.skip 1 |> Seq.head)
+                |> Map.map (fun _ ts -> ts |> TimeSeries.toObservations |> Seq.skip 1 |> Seq.head)
 
             nextObs
             |> Seq.map (fun kv ->
-                let nextFit = est.Series.[kv.Key].Values |> Seq.head |> fun p -> p.Fit
-                kv.Key, { Obs = kv.Value |> fst |> (*) 1.<state>; Fit = nextFit }, kv.Value |> snd)
+                let nextFit = est.Series.[kv.Key].Values |> Seq.head |> (fun p -> p.Fit)
 
-        let squared (x:float<state>) = x * x
+                kv.Key,
+                { Obs = kv.Value |> fst |> (*) 1.<state>
+                  Fit = nextFit },
+                kv.Value |> snd)
+
+        let squared (x: float<state>) = x * x
 
         // Stream over each time step, building 2‑point datasets on the fly
         timeSeries
@@ -581,19 +626,19 @@ module Bristlecone =
                         |> Seq.truncate 2
                         |> TimeSeries.fromObservations fullTs.DateMode)
                     |> preTransform
+
                 dataset))
         |> Seq.collect predictNext
         |> Seq.groupBy (fun (k, _, _) -> k)
         |> Seq.map (fun (name, triples) ->
             let rmse =
-                triples
-                |> Seq.averageBy (fun (_, v, _) -> squared (v.Obs - v.Fit))
-                |> sqrt
+                triples |> Seq.averageBy (fun (_, v, _) -> squared (v.Obs - v.Fit)) |> sqrt
+
             name,
             (triples
-            |> Seq.map (fun (_, v, t) -> v, t)
-            |> TimeSeries.fromObservations dateMode,
-            { RMSE = rmse |> Units.removeUnitFromFloat }))
+             |> Seq.map (fun (_, v, t) -> v, t)
+             |> TimeSeries.fromObservations dateMode,
+             { RMSE = rmse |> Units.removeUnitFromFloat }))
         |> Map.ofSeq
 
 

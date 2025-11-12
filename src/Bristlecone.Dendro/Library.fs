@@ -20,6 +20,7 @@ module Bristlecone =
             match fitMethod with
             | AbsoluteGrowth -> failwith "absolute not implemented"
             | CumulativeGrowth -> PlantIndividual.forFittingCumulative growthSeriesId plant
+
         Bristlecone.fit engine endCondition data system
 
     let tryFitDendro engine endCondition system fitMethod growthSeriesId plant =
@@ -27,6 +28,7 @@ module Bristlecone =
             match fitMethod with
             | AbsoluteGrowth -> failwith "absolute not implemented"
             | CumulativeGrowth -> PlantIndividual.forFittingCumulative growthSeriesId plant
+
         Bristlecone.tryFit engine endCondition data system
 
     /// <summary> Perform n-step-ahead computation on the hypothesis and plant. The plant individual's growth data is always labelled as `x`.</summary>
@@ -41,4 +43,5 @@ module Bristlecone =
             match fitMethod with
             | AbsoluteGrowth -> failwith "absolute not implemented"
             | CumulativeGrowth -> PlantIndividual.forFittingCumulative growthSeriesId plant
+
         Bristlecone.oneStepAhead engine system preTransform predictors estimate

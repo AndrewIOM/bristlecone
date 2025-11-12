@@ -109,8 +109,8 @@ module Test =
               DateMode = DateMode.annualDateMode
               Attempts = 50000 }
 
-    let defaultSettings = TestSettings<_,_,_,_>.Default
-    let annualSettings = TestSettings<_,_,_,_>.Annual
+    let defaultSettings = TestSettings<_, _, _, _>.Default
+    let annualSettings = TestSettings<_, _, _, _>.Annual
 
 
     type ParameterTestResult =
@@ -183,47 +183,64 @@ module Test =
 
     module Compute =
 
-        let tryMakeDummySeries<[<Measure>] 'state,'T,'yearType,[<Measure>]'timeunit,'timespan when 'T: comparison>
+        let tryMakeDummySeries<[<Measure>] 'state, 'T, 'yearType, [<Measure>] 'timeunit, 'timespan when 'T: comparison>
             (startDate: 'T)
             (resolution: Resolution.FixedTemporalResolution<'timespan>)
             (length: int)
             (eqs: ModelForm<'timeunit>)
-            (dateMode: DateMode.DateMode<'T, 'yearType,'timespan>) =
-            
-            let ts = TimeSeries.fromSeq dateMode startDate resolution (Seq.init length (fun _ -> nan |> LanguagePrimitives.FloatWithMeasure<'state>))
+            (dateMode: DateMode.DateMode<'T, 'yearType, 'timespan>)
+            =
+
+            let ts =
+                TimeSeries.fromSeq
+                    dateMode
+                    startDate
+                    resolution
+                    (Seq.init length (fun _ -> nan |> LanguagePrimitives.FloatWithMeasure<'state>))
+
             let stateNames =
                 match eqs with
                 | DifferenceEqs e -> Map.keys e
                 | DifferentialEqs e -> Map.keys e
-            
-            stateNames
-            |> Seq.map(fun s -> s, ts)
-            |> Map.ofSeq
-            |> TimeFrame.tryCreate
+
+            stateNames |> Seq.map (fun s -> s, ts) |> Map.ofSeq |> TimeFrame.tryCreate
 
         /// Generate time-series for a given engine and model, and
         /// for a particular point in optim-space.
-        let tryGenerateData' engine (model: ModelSystem<'modelTimeUnit>) (testSettings: TestSettings<'T,'date,'timeunit,'timespan>) thetaPool =
+        let tryGenerateData'
+            engine
+            (model: ModelSystem<'modelTimeUnit>)
+            (testSettings: TestSettings<'T, 'date, 'timeunit, 'timespan>)
+            thetaPool
+            =
 
             // Build environment index
             let envSeries =
                 testSettings.EnvironmentalData
-                |> Map.map(fun k v -> v |> TimeSeries.map(fun (v,_) -> v |> Units.removeUnitFromFloat |> (*) 1.<environment>))
+                |> Map.map (fun k v ->
+                    v
+                    |> TimeSeries.map (fun (v, _) -> v |> Units.removeUnitFromFloat |> (*) 1.<environment>))
                 |> TimeFrame.tryCreate
 
             // Setup dummy timeline for solver (all values = nan)
             let dynSeries =
                 tryMakeDummySeries
-                    testSettings.StartDate testSettings.Resolution
-                    testSettings.TimeSeriesLength model.Equations testSettings.DateMode
+                    testSettings.StartDate
+                    testSettings.Resolution
+                    testSettings.TimeSeriesLength
+                    model.Equations
+                    testSettings.DateMode
                 |> Option.get
 
             let t0 =
                 testSettings.StartValues
-                |> Map.map(fun _ v -> v |> Units.removeUnitFromFloat |> (*) 1.<state> |> Tensors.Typed.ofScalar)
+                |> Map.map (fun _ v -> v |> Units.removeUnitFromFloat |> (*) 1.<state> |> Tensors.Typed.ofScalar)
 
             let dynamicKeys = dynSeries.Keys
-            let conditioned = Solver.Conditioning.resolve engine.Conditioning dynSeries envSeries dynamicKeys
+
+            let conditioned =
+                Solver.Conditioning.resolve engine.Conditioning dynSeries envSeries dynamicKeys
+
             let obsTimes = conditioned.ObservedForPairing |> TimeFrame.dates
 
             // Configure solver
@@ -243,16 +260,19 @@ module Test =
             let _, thetaReal = Parameter.Pool.toTensorWithKeysReal thetaPool
 
             // Predict series
-            let timeline = dynSeries.Series |> Seq.head |> fun kv -> kv.Value |> TimeSeries.toObservations |> Seq.map snd |> Seq.toArray
+            let timeline =
+                dynSeries.Series
+                |> Seq.head
+                |> fun kv -> kv.Value |> TimeSeries.toObservations |> Seq.map snd |> Seq.toArray
+
             let predicted =
                 Objective.predict solver model.Measures thetaReal
-                |> Map.map(fun _ v ->                    
+                |> Map.map (fun _ v ->
                     Tensors.Typed.toFloatArray v
                     |> Array.map (Units.removeUnitFromFloat >> LanguagePrimitives.FloatWithMeasure<'T>)
                     |> Array.zip timeline
-                    |> Array.map(fun (a,b) -> b,a)
-                    |> TimeSeries.fromObservations testSettings.DateMode
-                )
+                    |> Array.map (fun (a, b) -> b, a)
+                    |> TimeSeries.fromObservations testSettings.DateMode)
 
             // Add noise if needed
             let noisy = testSettings.NoiseGeneration testSettings.Random thetaPool predicted
@@ -262,20 +282,24 @@ module Test =
         /// Generate data and check that it complies with the
         /// given ruleset.
         let rec tryGenerateData
-            (engine: EstimationEngine.EstimationEngine<'timespan,'modelTimeUnit,'state>)
-            (settings: TestSettings<'state,'date,'timeunit,'timespan>)
+            (engine: EstimationEngine.EstimationEngine<'timespan, 'modelTimeUnit, 'state>)
+            (settings: TestSettings<'state, 'date, 'timeunit, 'timespan>)
             (model: ModelSystem.ModelSystem<'modelTimeUnit>)
             attempts
             =
-            let randomPool = Parameter.Pool.drawRandom engine.Random model.Parameters                
+            let randomPool = Parameter.Pool.drawRandom engine.Random model.Parameters
 
             match tryGenerateData' engine model settings randomPool with
             | Ok series ->
 
-                engine.LogTo <| Logging.GeneralEvent (sprintf "Series = %A" series)
+                engine.LogTo <| Logging.GeneralEvent(sprintf "Series = %A" series)
 
                 let extraFiniteRules =
-                    series |> Map.keys |> Seq.map (fun s -> s.Value |> GenerationRules.alwaysFinite) |> Seq.toList
+                    series
+                    |> Map.keys
+                    |> Seq.map (fun s -> s.Value |> GenerationRules.alwaysFinite)
+                    |> Seq.toList
+
                 let rules = extraFiniteRules @ settings.GenerationRules
 
                 let rulesPassed =
@@ -286,10 +310,7 @@ module Test =
                         |> Option.map (fun k ->
                             Map.find k series |> TimeSeries.toObservations |> Seq.map fst |> ruleFn))
 
-                if
-                    (rulesPassed |> List.contains false)
-                    || rulesPassed.Length <> rules.Length
-                then
+                if (rulesPassed |> List.contains false) || rulesPassed.Length <> rules.Length then
                     if attempts = 0 then
                         Error "Could not generate data that complies with the given ruleset"
                     else

@@ -2,10 +2,6 @@
 // FAKE build script
 // --------------------------------------------------------------------------------------
 
-#if FAKE
-#r "paket: groupref Build //"
-#load "./.fake/build.fsx/intellisense.fsx"
-#else
 #r "nuget: FAKE.Core.Target"
 #r "nuget: FAKE.Core.ReleaseNotes"
 #r "nuget: FAKE.DotNet.Cli"
@@ -14,11 +10,10 @@
 #r "nuget: FAKE.Tools.Git"
 #r "nuget: FAKE.DotNet.Testing.XUnit2"
 #r "nuget: System.Reactive"
-#r "nuget: MSBuild.StructuredLogger, 2.1.820"
+#r "nuget: MSBuild.StructuredLogger, 2.3.71"
 
 let execContext = Fake.Core.Context.FakeExecutionContext.Create false "build.fsx" []
 Fake.Core.Context.setExecutionContext (Fake.Core.Context.RuntimeContext.Fake execContext)
-#endif
 
 open Fake.Core
 open Fake.Core.TargetOperators

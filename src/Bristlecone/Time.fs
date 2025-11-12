@@ -24,6 +24,11 @@ type ``cal yr BP`` // calibrated calendar years before present
 
 
 
+
+
+
+
+
 [<Measure>]
 type ``BP (radiocarbon)`` // uncalibrated years before present
 
@@ -33,8 +38,18 @@ type ``BP (radiocarbon)`` // uncalibrated years before present
 
 
 
+
+
+
+
+
 [<Measure>]
 type CE // common era
+
+
+
+
+
 
 
 
@@ -76,7 +91,7 @@ module TimeExtensions =
         static member Multiply (two: int) (one: TimeSpan) = one.Ticks * (int64 two) |> TimeSpan
 
     type DateTime with
-        static member Create day month (year:int) =
+        static member Create day month (year: int) =
             let d = DateTime(year, month, day)
             DateTime.SpecifyKind(d, DateTimeKind.Utc)
 
@@ -209,9 +224,7 @@ module Resolution =
         | Days i -> Days i
         | CustomEpoch ts -> fn ts |> CustomEpoch
 
-    let finestResolution resToSpan totalDays
-                        (r1: FixedTemporalResolution<'ts>)
-                        (r2: FixedTemporalResolution<'ts>) =
+    let finestResolution resToSpan totalDays (r1: FixedTemporalResolution<'ts>) (r2: FixedTemporalResolution<'ts>) =
         let span1 = resToSpan r1
         let span2 = resToSpan r2
         let days1 = totalDays span1
@@ -372,11 +385,15 @@ module DateMode =
                 let days = Units.removeUnitFromInt d.Value |> float
                 TimeSpan.FromDays days
             | Resolution.FixedTemporalResolution.Months m ->
-                let months = Units.removeUnitFromInt m.Value |> float |> LanguagePrimitives.FloatWithMeasure
+                let months =
+                    Units.removeUnitFromInt m.Value |> float |> LanguagePrimitives.FloatWithMeasure
+
                 let days: float<day> = months * 30.
                 TimeSpan.FromDays(Units.removeUnitFromFloat days)
             | Resolution.FixedTemporalResolution.Years y ->
-                let years = Units.removeUnitFromInt y.Value |> float |> LanguagePrimitives.FloatWithMeasure
+                let years =
+                    Units.removeUnitFromInt y.Value |> float |> LanguagePrimitives.FloatWithMeasure
+
                 let days: float<day> = years * daysPerYearInOldDates
                 TimeSpan.FromDays(Units.removeUnitFromFloat days)
             | Resolution.FixedTemporalResolution.CustomEpoch t -> t
@@ -404,7 +421,7 @@ module DateMode =
           ResolutionToSpan =
             function
             | Resolution.FixedTemporalResolution.Years y -> y.Value
-            | Resolution.FixedTemporalResolution.Months _ 
+            | Resolution.FixedTemporalResolution.Months _
             | Resolution.FixedTemporalResolution.Days _ ->
                 invalidOp "Annual date mode does not support sub-annual fixed resolutions."
           Divide = fun ts1 ts2 -> ts1 / ts2 |> float
@@ -429,13 +446,14 @@ module DateMode =
           SpanToResolution = fun epoch -> oldYearsToResolution epoch
           ResolutionToSpan =
             function
-            | Resolution.FixedTemporalResolution.Years y -> y.Value |> Units.removeUnitFromInt |> (*) 1<``BP (radiocarbon)``>
-            | Resolution.FixedTemporalResolution.Months _ 
+            | Resolution.FixedTemporalResolution.Years y ->
+                y.Value |> Units.removeUnitFromInt |> (*) 1<``BP (radiocarbon)``>
+            | Resolution.FixedTemporalResolution.Months _
             | Resolution.FixedTemporalResolution.Days _ ->
                 invalidOp "Radiocarbon date mode does not support sub-annual fixed resolutions."
           Divide = fun ts1 ts2 -> ts1 / ts2 |> float
           Minus = fun d1 d2 -> d1 - d2 }
-    
+
 
 module TimePoint =
 
@@ -836,16 +854,17 @@ module TimeSeries =
     /// or `None` if there is no common timeline.</returns>
     let commonTimeline (series: TimeSeries<'T, 'date, 'timeunit, 'timespan> seq) =
         let timePointSets =
-            series
-            |> Seq.map (toObservations >> Seq.map snd >> Set.ofSeq)
-            |> Seq.toList
+            series |> Seq.map (toObservations >> Seq.map snd >> Set.ofSeq) |> Seq.toList
 
         match timePointSets with
         | [] -> None
         | first :: rest ->
             let common = List.fold Set.intersect first rest
-            if Set.isEmpty common then None
-            else Some (common |> Set.toArray)
+
+            if Set.isEmpty common then
+                None
+            else
+                Some(common |> Set.toArray)
 
     /// Contains functions for bootstrapping one or many time series.
     module Bootstrap =
@@ -952,7 +971,8 @@ module TimeIndex =
             | Resolution.FixedTemporalResolution.Months m ->
                 obs
                 |> Seq.map (fun (v, tn) ->
-                    (((series.DateMode.SignedDifference t0 tn).MonthFraction / Units.intToFloat m.Value
+                    (((series.DateMode.SignedDifference t0 tn).MonthFraction
+                      / Units.intToFloat m.Value
                       |> float
                       |> (*) 1.0<``time index``>),
                      v))
@@ -1017,6 +1037,7 @@ module TimeIndex =
                         | Some((k1, v1), (k2, v2)) -> interpolateFn (k1, v1) (k2, v2) t
                         | None ->
                             printfn "TEST DEBUG - time keys %A" (Map.keys table)
+
                             invalidOp
                             <| sprintf
                                 "Could not interpolate to time %f because it falls outside the range of the temporal index"
@@ -1064,42 +1085,40 @@ module TimeFrame =
         (frame |> inner |> Seq.head).Value |> TimeSeries.resolution
 
     /// Append a single time point to a time frame.
-    let prepend time timeData (TimeFrame frame : TimeFrame<'T,'date,'timeunit,'timespan>) =
+    let prepend time timeData (TimeFrame frame: TimeFrame<'T, 'date, 'timeunit, 'timespan>) =
         frame
-        |> Map.map(fun code ts ->
+        |> Map.map (fun code ts ->
             TimeSeries.toObservations ts
             |> Seq.append [ timeData |> Map.find code, time ]
-            |> TimeSeries.fromObservations ts.DateMode
-        )
+            |> TimeSeries.fromObservations ts.DateMode)
         |> TimeFrame
 
     let filter keys (TimeFrame frame) =
-        frame
-        |> Map.filter(fun k _ -> keys |> Seq.contains k)
-        |> TimeFrame
+        frame |> Map.filter (fun k _ -> keys |> Seq.contains k) |> TimeFrame
 
     /// Get the initial value of each time-series as a coded map.
-    let t0 (TimeFrame frame : TimeFrame<'T,'date,'timeunit,'timespan>) =
-        frame
-        |> Map.map(fun code ts -> ts.Head |> fst)
+    let t0 (TimeFrame frame: TimeFrame<'T, 'date, 'timeunit, 'timespan>) =
+        frame |> Map.map (fun code ts -> ts.Head |> fst)
 
     /// Get all dates across all series in the timeframe for which
     /// values are registered.
-    let dates (TimeFrame frame : TimeFrame<'T,'date,'timeunit,'timespan>) =
+    let dates (TimeFrame frame: TimeFrame<'T, 'date, 'timeunit, 'timespan>) =
         frame
-        |> Seq.collect(fun kv -> kv.Value |> TimeSeries.dates)
+        |> Seq.collect (fun kv -> kv.Value |> TimeSeries.dates)
         |> Seq.distinct
         |> Seq.toList
 
-    let dropFirstObservation (TimeFrame frame : TimeFrame<'T,'date,'timeunit,'timespan>) =
+    let dropFirstObservation (TimeFrame frame: TimeFrame<'T, 'date, 'timeunit, 'timespan>) =
         frame
         |> Map.map (fun _ ts -> TimeSeries.tail ts) // drop first point
         |> TimeFrame
 
-    let dropFirstObservationIfPresent (predicate: TimeSeries.TimeSeries<'T,'date,'timeunit,'timespan> -> bool) frame =
+    let dropFirstObservationIfPresent
+        (predicate: TimeSeries.TimeSeries<'T, 'date, 'timeunit, 'timespan> -> bool)
         frame
-        |> Map.map (fun _ ts ->
-            if predicate ts then TimeSeries.tail ts else ts)
+        =
+        frame
+        |> Map.map (fun _ ts -> if predicate ts then TimeSeries.tail ts else ts)
         |> TimeFrame
 
 
@@ -1152,15 +1171,24 @@ module GrowthSeries =
         | Absolute g ->
             let time = g |> TimeSeries.toObservations |> Seq.map snd
             let agr = g |> TimeSeries.toObservations |> Seq.toList
-            let increments = agr |> Seq.map (fun (rate, t) -> rate * LanguagePrimitives.FloatWithMeasure<'time> 1.)
-            let biomass: float<'u> list = increments |> Seq.scan (+) (LanguagePrimitives.FloatWithMeasure<'u> 0.) |> Seq.tail |> Seq.toList
+
+            let increments =
+                agr
+                |> Seq.map (fun (rate, t) -> rate * LanguagePrimitives.FloatWithMeasure<'time> 1.)
+
+            let biomass: float<'u> list =
+                increments
+                |> Seq.scan (+) (LanguagePrimitives.FloatWithMeasure<'u> 0.)
+                |> Seq.tail
+                |> Seq.toList
+
             TimeSeries.fromObservations g.DateMode (Seq.zip biomass time)
         | Relative _ -> failwith "Not implemented"
         | Cumulative g -> g
 
     let absolute
         (growth: GrowthSeries<'u, 'time, 'date, 'timeunit, 'timespan>)
-        : TimeSeries<float<'u/'time>, 'date, 'timeunit, 'timespan> =
+        : TimeSeries<float<'u / 'time>, 'date, 'timeunit, 'timespan> =
         match growth with
         | Absolute g -> g
         | Cumulative _
@@ -1190,9 +1218,9 @@ module GrowthSeries =
 
     let tail growth =
         match growth with
-        | Cumulative g -> 
-            g 
-            |> TimeSeries.toObservations 
+        | Cumulative g ->
+            g
+            |> TimeSeries.toObservations
             |> Seq.tail
             |> TimeSeries.fromObservations g.DateMode
             |> Cumulative

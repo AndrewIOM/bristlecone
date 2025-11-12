@@ -14,7 +14,9 @@ type ConfidenceInterval =
       ``68%``: Interval
       Estimate: float }
 
-and Interval = { Lower: float<parameter>; Upper: float<parameter> }
+and Interval =
+    { Lower: float<parameter>
+      Upper: float<parameter> }
 
 /// <summary>Keeps a list of all optimisation events that occur for further analysis.</summary>
 type internal OptimisationEventStash() =
@@ -51,7 +53,7 @@ module ProfileLikelihood =
     open Bristlecone.Optimisation
 
     type EstimateFunction<[<Measure>] 'modelTimeUnit, [<Measure>] 'state, 'subject, 'date, 'timeunit, 'timespan> =
-        EstimationEngine<'timespan,'modelTimeUnit,'state>
+        EstimationEngine<'timespan, 'modelTimeUnit, 'state>
             -> ModelSystem<'modelTimeUnit>
             -> 'subject
             -> EstimationResult<'date, 'timeunit, 'timespan>
@@ -61,7 +63,9 @@ module ProfileLikelihood =
         |> List.filter (fun (l, p) -> (l - mle) < limit)
         |> List.fold
             (fun best (l, p) -> best |> Array.zip p |> Array.map (fun (v, (mn, mx)) -> ((min v mn), (max v mx))))
-            (Array.init nParam (fun _ -> (System.Double.MaxValue |> LanguagePrimitives.FloatWithMeasure<parameter>, System.Double.MinValue |> LanguagePrimitives.FloatWithMeasure<parameter>)))
+            (Array.init nParam (fun _ ->
+                (System.Double.MaxValue |> LanguagePrimitives.FloatWithMeasure<parameter>,
+                 System.Double.MinValue |> LanguagePrimitives.FloatWithMeasure<parameter>)))
 
     /// The profile likelihood method samples the likelihood space
     /// around the Maximum Likelihood Estimate
@@ -80,7 +84,9 @@ module ProfileLikelihood =
         let customFit =
             fit
                 { engine with
-                    OptimiseWith = MonteCarlo.SimulatedAnnealing.Tuning.perturb MonteCarlo.SimulatedAnnealing.Tuning.TuningSettings.Default
+                    OptimiseWith =
+                        MonteCarlo.SimulatedAnnealing.Tuning.perturb
+                            MonteCarlo.SimulatedAnnealing.Tuning.TuningSettings.Default
                     LogTo =
                         fun e ->
                             engine.LogTo e
@@ -102,8 +108,14 @@ module ProfileLikelihood =
         fit' [] |> ignore
 
         let trace =
-            results.GetAll() |> List.map (fun s ->
-                (s.Likelihood, s.Theta |> Seq.toArray |> Tensors.Typed.ofVector |> transforms.Forward |> Tensors.Typed.toFloatArray))
+            results.GetAll()
+            |> List.map (fun s ->
+                (s.Likelihood,
+                 s.Theta
+                 |> Seq.toArray
+                 |> Tensors.Typed.ofVector
+                 |> transforms.Forward
+                 |> Tensors.Typed.toFloatArray))
 
         // 3. Calculate min and max at the specified limit for each parameter
         let lowerInterval =

@@ -55,7 +55,7 @@ jobs:
     - name: Restore dependencies
       run: dotnet restore bristlecone.sln
     - name: Build
-      run: dotnet fake build -t All
+      run: dotnet fsi build.fsx
     - name: Deploy documentation from master
       if: matrix.os == 'macos-latest'
       uses: peaceiris/actions-gh-pages@v3

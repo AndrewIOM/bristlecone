@@ -32,18 +32,20 @@ module PlantIndividual =
           InternalControls: CodedMap<Trait<'date, 'timeunit, 'timespan>>
           Environment: CodedMap<TimeSeries<float, 'date, 'timeunit, 'timespan>> }
 
-    let enforceMinimumSize minSize (plant:PlantIndividual<'growthUnit,'date,'timeunit,'timespan>) =
+    let enforceMinimumSize minSize (plant: PlantIndividual<'growthUnit, 'date, 'timeunit, 'timespan>) =
         let cumulative = plant.Growth |> GrowthSeries.cumulative
+
         let trimmed =
             cumulative
             |> TimeSeries.toObservations
-            |> Seq.skipWhile (fun (x,_) -> x < minSize)
+            |> Seq.skipWhile (fun (x, _) -> x < minSize)
             |> TimeSeries.fromObservations cumulative.DateMode
             |> GrowthSeries.Cumulative
+
         { plant with Growth = trimmed }
 
-    let tailGrowth (plant:PlantIndividual<'growthUnit, 'date,'timeunit,'timespan>) =
-        let bounded =  plant.Growth |> GrowthSeries.tail
+    let tailGrowth (plant: PlantIndividual<'growthUnit, 'date, 'timeunit, 'timespan>) =
+        let bounded = plant.Growth |> GrowthSeries.tail
         { plant with Growth = bounded }
 
     /// <summary>Attach an environmental time-series to a plant individual,
@@ -107,6 +109,7 @@ module PlantIndividual =
             common |> TimeSeries.fromObservations y.DateMode
 
         let commonPlant = plant.Growth |> GrowthSeries.filter commonDates
+
         { plant with
             Environment =
                 plant.Environment
@@ -118,6 +121,6 @@ module PlantIndividual =
     let private stripUnits ts =
         ts |> TimeSeries.map (fun (t, v) -> Units.removeUnitFromFloat t)
 
-    let internal forFittingCumulative (code:ShortCode.ShortCode) plant =
+    let internal forFittingCumulative (code: ShortCode.ShortCode) plant =
         let g = plant.Growth |> GrowthSeries.cumulative |> stripUnits
         plant.Environment |> Map.add code g

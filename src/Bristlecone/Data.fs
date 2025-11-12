@@ -110,7 +110,13 @@ module Trace =
                 result.Parameters
                 |> Parameter.Pool.toList
                 |> Seq.mapi (fun i (name, _) ->
-                    (subject, modelId, iterationNumber + 1, result.ResultId, name.Value, float likelihood, float values.[i])
+                    (subject,
+                     modelId,
+                     iterationNumber + 1,
+                     result.ResultId,
+                     name.Value,
+                     float likelihood,
+                     float values.[i])
                     |> BristleconeTrace.Row))
             |> if (thinBy |> Option.isSome) then
                    Seq.everyNth thinBy.Value
@@ -159,7 +165,7 @@ module MLE =
         let fromResult subject hypothesisId result =
             result.Parameters
             |> Parameter.Pool.toTensorWithKeysReal
-            |> fun (k,v) -> Seq.zip k (v |> Tensors.Typed.toFloatArray)
+            |> fun (k, v) -> Seq.zip k (v |> Tensors.Typed.toFloatArray)
             |> Seq.map (fun (name, v) ->
                 (subject,
                  hypothesisId,
@@ -176,11 +182,12 @@ module MLE =
                 let mle = (data.Rows |> Seq.head).NegativeLogLikelihood
 
                 let pKeys = Parameter.Pool.keys modelSystem.Parameters
+
                 let estimatedTheta =
                     pKeys
-                    |> List.map(fun pName ->
+                    |> List.map (fun pName ->
                         let e = data.Rows |> Seq.find (fun r -> r.ParameterCode = pName.Value)
-                        e.ParameterValue * 1.<parameter> )
+                        e.ParameterValue * 1.<parameter>)
                     |> List.toArray
                     |> Tensors.Typed.ofVector
 
@@ -240,14 +247,22 @@ module Series =
 
     module internal Row =
 
-        let fromResult dateToString subject hypothesisId (result: EstimationResult<'d,'a,'b>) =
+        let fromResult dateToString subject hypothesisId (result: EstimationResult<'d, 'a, 'b>) =
             result.Series
             |> Map.toList
             |> Seq.collect (fun (name, series) ->
                 series
                 |> TimeSeries.toObservations
                 |> Seq.map (fun (v, t) ->
-                    IndividualSeries.Row(subject, hypothesisId, name.Value, dateToString t, float v.Fit, float v.Obs, float result.Likelihood)))
+                    IndividualSeries.Row(
+                        subject,
+                        hypothesisId,
+                        name.Value,
+                        dateToString t,
+                        float v.Fit,
+                        float v.Obs,
+                        float result.Likelihood
+                    )))
 
         let toSeries toTimeSeries (data: IndividualSeries) =
             data.Rows
@@ -255,14 +270,18 @@ module Series =
             |> Seq.choose (fun (g, r) ->
                 let ts =
                     r
-                    |> Seq.map (fun r -> ({ Fit = r.Expected * 1.<state>; Obs = r.Observed * 1.<state> }, r.Time))
+                    |> Seq.map (fun r ->
+                        ({ Fit = r.Expected * 1.<state>
+                           Obs = r.Observed * 1.<state> },
+                         r.Time))
                     |> toTimeSeries
 
                 ShortCode.create g |> Option.map (fun c -> c, ts))
             |> Map.ofSeq
 
     let save dateToString directory subject modelId result =
-        let csv = new IndividualSeries(result |> Row.fromResult dateToString subject modelId)
+        let csv =
+            new IndividualSeries(result |> Row.fromResult dateToString subject modelId)
 
         let filePath =
             Config.filePath directory subject modelId result.ResultId Config.DataType.Series
@@ -291,7 +310,7 @@ module EstimationResult =
     /// <param name="thinTraceBy">If Some, an integer representing the nth traces to keep from the optimisation trace.
     /// If None, does not thin the trace.</param>
     /// <param name="result">The estimation result to save</param>
-    let saveAll dateToString directory subject modelId thinTraceBy (result: EstimationResult<'d,'a,'b>) =
+    let saveAll dateToString directory subject modelId thinTraceBy (result: EstimationResult<'d, 'a, 'b>) =
         Trace.save directory subject modelId thinTraceBy result
         MLE.save directory subject modelId result
         Series.save dateToString directory subject modelId result
@@ -305,7 +324,8 @@ module EstimationResult =
             |> Seq.map (fun (k, v) -> k.ToString(), v)
 
         let series =
-            Series.load toSeries directory subject modelId |> Seq.map (fun (k, v) -> k.ToString(), v)
+            Series.load toSeries directory subject modelId
+            |> Seq.map (fun (k, v) -> k.ToString(), v)
 
         let traces =
             Trace.load directory subject modelId |> Seq.map (fun (k, v) -> k.ToString(), v)
@@ -320,8 +340,9 @@ module EstimationResult =
               Parameters = p
               Series = s
               InternalDynamics = None
-              Trace = t |> List.map(fun (x,y) -> x * 1.<``-logL``>, y |> Array.map ((*) 1.<parameter>)) }
-        )
+              Trace =
+                t
+                |> List.map (fun (x, y) -> x * 1.<``-logL``>, y |> Array.map ((*) 1.<parameter>)) })
 
 [<RequireQualifiedAccess>]
 module Confidence =
@@ -338,7 +359,13 @@ module Confidence =
             |> Seq.collect (fun (name, ci) ->
                 [ 68., ci.``68%``; 95., ci.``95%`` ]
                 |> Seq.map (fun (i, iv) ->
-                    (subject, hypothesisId, runId, name.Value, i, iv.Lower |> Units.removeUnitFromFloat, iv.Upper |> Units.removeUnitFromFloat)
+                    (subject,
+                     hypothesisId,
+                     runId,
+                     name.Value,
+                     i,
+                     iv.Lower |> Units.removeUnitFromFloat,
+                     iv.Upper |> Units.removeUnitFromFloat)
                     |> IndividualCI.Row))
 
     let save directory subject modelId runId result =
@@ -408,7 +435,13 @@ module NStepAhead =
                 NStepAhead.Row(subjectId, hypothesisId, analysisId, t, float fit.Obs, nSteps, float fit.Fit)))
 
     let internal toStatCsvRows
-        (results: seq<string * string * CodedMap<ModelSystem.FitSeries<'date, 'timeunit, 'timespan> * Statistics.NStepStatistics>>) =
+        (results:
+            seq<
+                string *
+                string *
+                CodedMap<ModelSystem.FitSeries<'date, 'timeunit, 'timespan> * Statistics.NStepStatistics>
+             >)
+        =
         results
         |> Seq.collect (fun (s, h, r) ->
             r
