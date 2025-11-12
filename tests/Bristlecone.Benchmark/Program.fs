@@ -42,32 +42,31 @@ module TestSuite =
     let multidim f (x: float[]) = f x
     let twoDimT f (x: TypedTensor<Vector,'a>) = f (Typed.itemAt 0 x) (Typed.itemAt 1 x)
 
-    // let dims = [ 2; 3; 5; 7 ]
-
     // Functions, input domain, global minimum, and global minimum point(s)
     let fixedDimension =
         [ "Ackley (2D)", ackley |> multidim, [ (-32.768, 32.768); (-32.768, 32.768) ], 0., [ [ 0.; 0. ] ]
-        //   "Bukin Sixth", bukinSixth |> twoDim, [ (-15., -5.); (-3., 3.) ], 0., [ [ -10.; 1. ] ]
-        //   "Holder Table",
-        //   holderTable |> twoDim,
-        //   [ (-10., 10.); (-10., 10.) ],
-        //   -19.20850257,
-        //   [ [ 8.05502; 9.66459 ]
-        //     [ 8.05502; -9.66459 ]
-        //     [ -8.05502; 9.66459 ]
-        //     [ -8.05502; -9.66459 ] ]
-        //   "Cross in tray",
-        //   crossInTray |> twoDim,
-        //   [ (-10., 10.); (-10., 10.) ],
-        //   -2.06261185,
-        //   [ [ 1.3491; -1.3491 ]
-        //     [ 1.3491; 1.3491 ]
-        //     [ -1.3491; 1.3491 ]
-        //     [ -1.3491; -1.3491 ] ]
-        //   "Dropwave",       dropWave |> twoDim,     [ (-512., 512.) ], 1., [[0.;0.]]
-        //   "Eggholder",      eggHolder |> twoDim,    [ (-512., 512.) ], -959.6406627, [[512.; 404.2319]]
-        //   "Gramarcy-Lee",   gramacyLee |> oneDim,   [ (0.5, 2.5) ], -0.869011134989500, [[0.548563444114526]]
-        //   "Langermann",     langermann |> twoDim,   [(0., 10.); (0., 10.)], -5.1621259, [[2.00299219; 1.006096]]
+          "Bukin Sixth", bukinSixth |> twoDim, [ (-15., -5.); (-3., 3.) ], 0., [ [ -10.; 1. ] ]
+          "Griewank", griewank |> multidim, [ -600., 600.; -600., 600. ], 0., [ [ 0.; 0. ] ]
+          "Holder Table",
+          holderTable |> twoDim,
+          [ (-10., 10.); (-10., 10.) ],
+          -19.20850257,
+          [ [ 8.05502; 9.66459 ]
+            [ 8.05502; -9.66459 ]
+            [ -8.05502; 9.66459 ]
+            [ -8.05502; -9.66459 ] ]
+          "Cross in tray",
+          crossInTray |> twoDim,
+          [ (-10., 10.); (-10., 10.) ],
+          -2.06261185,
+          [ [ 1.3491; -1.3491 ]
+            [ 1.3491; 1.3491 ]
+            [ -1.3491; 1.3491 ]
+            [ -1.3491; -1.3491 ] ]
+          "Dropwave",       dropWave |> twoDim,     [ (-512., 512.); (-512., 512.) ], -1., [[0.;0.]]
+          "Eggholder",      eggHolder |> twoDim,    [ (-512., 512.) ], -959.6406627, [[512.; 404.2319]]
+          "Gramarcy-Lee",   gramacyLee |> oneDim,   [ (0.5, 2.5) ], -0.869011134989500, [[0.548563444114526]]
+          "Langermann",     langermann |> twoDim,   [(0., 10.); (0., 10.)], -5.1621259, [[2.00299219; 1.006096]]
           ]
 
     // let nDimensional = [
@@ -308,20 +307,20 @@ let annealSettings =
         AnnealStepLength = fun x -> EndConditions.atIteration 10000<iteration> x }
 
 let optimFunctions =
-    [ //"amoeba single", Amoeba.single Amoeba.Solver.Default
-    //   "amoeba swarm", Amoeba.swarm 5 20 Amoeba.Solver.Default
-    //   "anneal classic", MonteCarlo.SimulatedAnnealing.classicalSimulatedAnnealing 0.01<``optim-space``> false annealSettings
-    //   "anneal cauchy", MonteCarlo.SimulatedAnnealing.fastSimulatedAnnealing 0.01<``optim-space``> false annealSettings
-    //   "filzbach",
-    //   MonteCarlo.Filzbach.filzbach
-    //       { TuneAfterChanges = 10000
-    //         MaxScaleChange = 0.5
-    //         MinScaleChange = 0.5
-    //         BurnLength = EndConditions.afterIteration 10000<iteration> }
-    //   "automatic MCMC", MonteCarlo.``Automatic (Adaptive Diagnostics)``
-    //   "metropolis-gibbs", MonteCarlo.``Metropolis-within Gibbs``
-    //   "adaptive metropolis", MonteCarlo.adaptiveMetropolis 0.250 500<iteration>
-    //   "random walk MCMC", MonteCarlo.randomWalk []
+    [ "amoeba single", Amoeba.single Amoeba.Solver.Default
+      "amoeba swarm", Amoeba.swarm 5 20 Amoeba.Solver.Default
+      "anneal classic", MonteCarlo.SimulatedAnnealing.classicalSimulatedAnnealing 0.01<``optim-space``> false annealSettings
+      "anneal cauchy", MonteCarlo.SimulatedAnnealing.fastSimulatedAnnealing 0.01<``optim-space``> false annealSettings
+      "filzbach",
+      MonteCarlo.Filzbach.filzbach
+          { TuneAfterChanges = 10000
+            MaxScaleChange = 0.5
+            MinScaleChange = 0.5
+            BurnLength = EndConditions.atIteration 10000<iteration> }
+      "automatic MCMC", MonteCarlo.``Automatic (Adaptive Diagnostics)``
+      "metropolis-gibbs", MonteCarlo.``Metropolis-within Gibbs``
+      "adaptive metropolis", MonteCarlo.adaptiveMetropolis 0.250 500<iteration>
+      "random walk MCMC", MonteCarlo.randomWalk []
       "random walk w/ tuning",
       MonteCarlo.randomWalk [ { Method = MonteCarlo.TuneMethod.CovarianceWithScale 0.25; Frequency = 500<iteration>; EndCondition = EndConditions.Profiles.mcmcTuningStep 50000<iteration> logger } ]
     ]

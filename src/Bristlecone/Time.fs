@@ -76,7 +76,7 @@ module TimeExtensions =
         static member Multiply (two: int) (one: TimeSpan) = one.Ticks * (int64 two) |> TimeSpan
 
     type DateTime with
-        static member Create day month year =
+        static member Create day month (year:int) =
             let d = DateTime(year, month, day)
             DateTime.SpecifyKind(d, DateTimeKind.Utc)
 

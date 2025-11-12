@@ -35,7 +35,7 @@ module LocalMinima =
           ** 0.1
 
     let dropWave (WithinBounds -5.12 5.12 x1) (WithinBounds -5.12 5.12 x2) =
-        (1. + cos (12. * sqrt (x1 ** 2. + x2 ** 2.)))
+        - (1. + cos (12. * sqrt (x1 ** 2. + x2 ** 2.)))
         / (0.5 * (x1 ** 2. + x2 ** 2.) + 2.)
 
     let eggHolder (WithinBounds -512.0 512.0 x1) (WithinBounds -512.0 512.0 x2) =
@@ -43,13 +43,13 @@ module LocalMinima =
         - x1 * sin (sqrt (abs (x1 - (x2 + 47.))))
 
     let gramacyLee (WithinBounds 0.5 2.5 x) =
-        (sin (10. * pi * x) / 2. * pi) + (x - 1.) ** 4.
+        (sin (10. * pi * x) / (2. * x)) + (x - 1.) ** 4.
 
     let griewank x =
         let x = x |> Array.map ((|WithinBounds|) -600. 600.)
         let f x = (x ** 2. / 4000.)
-        let g i x = (x / sqrt (float i)) + 1.
-        (x |> Array.sumBy f) - (x |> Array.mapi g |> Array.fold (*) 1.)
+        let g i x = cos (x / sqrt (float (i + 1)))
+        1. + (x |> Array.sumBy f) - (x |> Array.mapi g |> Array.fold (*) 1.)
 
     let holderTable (WithinBounds -10.0 10.0 x1) (WithinBounds -10.0 10.0 x2) =
         - abs(sin x1 * cos x2 * exp (abs (1. - (sqrt (x1 ** 2. + x2 ** 2.) / pi))))
@@ -62,6 +62,7 @@ module LocalMinima =
         |> List.sumBy (fun i ->
             let z1 = ([ 1..d ] |> List.sumBy (fun j -> (x.[j - 1] - a.[i - 1, j - 1]) ** 2.))
             c.[i - 1] * exp ((-1. / pi) * z1) * cos (pi * z1))
+        |> (*) -1.
 
     /// 2D Langermann function using recommended values of A and c
     let langermann x1 x2 =
@@ -98,13 +99,13 @@ module Timeseries =
         let predatorPreyBase =
 
             // Parameters
-            let α           = parameter "α" noConstraints 0.75</year> 1.25</year> // Maximum prey per capita growth rate
-            let β  = parameter "β" noConstraints 0.01<1/(predator/area * year)> 0.20<1/(predator/area * year)> // Effect of the presence of predators on the prey death rate
-            let δ  = parameter "δ" noConstraints 0.75<1/(prey/area * year)> 1.25<1/(prey/area * year)> // Natural death rate of lynx in the absence of food
-            let γ           = parameter "γ" noConstraints 0.01</year> 0.20</year> // Efficiency of turning predated hares into lynx
+            let α = parameter "α" notNegative 0.5</year> 1.5</year>   // Maximum prey per capita growth rate
+            let β = parameter "β" notNegative 0.01<1/(predator/area * year)> 0.05<1/(predator/area * year)> // Predation rate
+            let δ = parameter "δ" notNegative 0.5</year> 1.0</year>   // Natural death rate of lynx in the absence of food
+            let γ = parameter "γ" notNegative 0.01<1/(prey/area * year)> 0.1<1/(prey/area * year)> // Predator growth efficiency
 
-            let ``dH/dt``: ModelExpression<(prey/area)/year>        = P α * This<prey/area> - P β * This<prey/area> * Environment L
-            let ``dL/dt``: ModelExpression<(predator/km^2)/year>    = -P γ * This<predator/area> + P δ * Environment H * This<predator/area>
+            let ``dH/dt``: ModelExpression<(prey/area)/year> = P α * This<prey/area> - P β * This<prey/area> * State L
+            let ``dL/dt``: ModelExpression<(predator/area)/year> = P γ * State H * This<predator/area> - P δ * This<predator/area>
 
             Model.empty
             |> Model.addRateEquation H ``dH/dt``
@@ -114,15 +115,10 @@ module Timeseries =
             |> Model.estimateParameter δ // Natural death rate of lynx in the absence of food
             |> Model.estimateParameter γ // Efficiency of turning predated hares into lynx
 
-            // continuousModel<year> {
-            //     equationRate H ``dH/dt``
-            //     equationRate L ``dL/dt``
-            //     likelihood (Bristlecone.ModelLibrary.Likelihood.sumOfSquares [ "hare"; "lynx" ])
-            // }
 
         let ``predator-prey`` () =
             predatorPreyBase
-            |> Model.useLikelihoodFunction (Bristlecone.ModelLibrary.Likelihood.sumOfSquares [ H.Code; L.Code ])
+            |> Model.useLikelihoodFunction (Bristlecone.ModelLibrary.Likelihood.sumOfSquares [ Require.state H; Require.state L ])
             |> Model.compile
 
         let ``predator-prey [with noise]`` () =
@@ -130,7 +126,7 @@ module Timeseries =
             |> Model.estimateParameterOld "ρ" noConstraints -0.500 0.500
             |> Model.estimateParameterOld "σ[x]" notNegative 0.001 0.100
             |> Model.estimateParameterOld "σ[y]" notNegative 0.001 0.100
-            |> Model.useLikelihoodFunction (Bristlecone.ModelLibrary.Likelihood.bivariateGaussian H L)
+            |> Model.useLikelihoodFunction (Bristlecone.ModelLibrary.Likelihood.bivariateGaussian ( Require.state H) (Require.state L))
             |> Model.compile
 
     module SoilCarbon =
@@ -188,7 +184,7 @@ module Timeseries =
         // Deterministic fit
         let ``soil-carbon`` () =
             soilCarbonBase
-            |> Model.useLikelihoodFunction (Bristlecone.ModelLibrary.Likelihood.sumOfSquares [ R.Code ])
+            |> Model.useLikelihoodFunction (Bristlecone.ModelLibrary.Likelihood.sumOfSquares [ Require.measure R ])
             |> Model.compile
 
         // With Gaussian observation noise
@@ -214,7 +210,7 @@ module Timeseries =
         // Environmental input: temperature anomaly
         let T = environment "T" // -5.0<degC> 5.0<degC>
 
-        let rickerBase =
+        let rickerBase: ModelBuilder.ModelBuilder<1> =
 
             // Parameters
             let r     = parameter "r" noConstraints 0.1 2.0        // intrinsic growth rate
@@ -240,7 +236,7 @@ module Timeseries =
         // Deterministic fit
         let ``ricker-temperature`` () =
             rickerBase
-            |> Model.useLikelihoodFunction (Bristlecone.ModelLibrary.Likelihood.sumOfSquares [ logN.Code ])
+            |> Model.useLikelihoodFunction (Bristlecone.ModelLibrary.Likelihood.sumOfSquares [ Require.measure logN ])
             |> Model.compile
 
         // With Gaussian observation noise
@@ -282,7 +278,7 @@ module Timeseries =
         // Deterministic fit
         let ``logistic-harvest`` () =
             logisticHarvestBase
-            |> Model.useLikelihoodFunction (Bristlecone.ModelLibrary.Likelihood.sumOfSquares [ B.Code ])
+            |> Model.useLikelihoodFunction (Bristlecone.ModelLibrary.Likelihood.sumOfSquares [ Require.state B ])
             |> Model.compile
 
         // Stochastic fit with Gaussian observation noise
@@ -345,7 +341,7 @@ module Timeseries =
         // Deterministic fit
         let ``plant-soil monod`` () =
             plantSoilBase
-            |> Model.useLikelihoodFunction (Bristlecone.ModelLibrary.Likelihood.sumOfSquares [ B.Code; S.Code ])
+            |> Model.useLikelihoodFunction (Bristlecone.ModelLibrary.Likelihood.sumOfSquares [ Require.state B; Require.state S ])
             |> Model.compile
 
         // With Gaussian observation noise
@@ -354,7 +350,7 @@ module Timeseries =
             |> Model.estimateParameterOld "ρ" noConstraints -0.500 0.500
             |> Model.estimateParameterOld "σ[x]" notNegative 0.001 0.100
             |> Model.estimateParameterOld "σ[y]" notNegative 0.001 0.100
-            |> Model.useLikelihoodFunction (Bristlecone.ModelLibrary.Likelihood.bivariateGaussian B S)
+            |> Model.useLikelihoodFunction (Bristlecone.ModelLibrary.Likelihood.bivariateGaussian ( Require.state B) ( Require.state S))
             |> Model.compile
 
 
@@ -388,13 +384,13 @@ module Timeseries =
         let age65plus: StateId<person> = environment "Age65Plus"
         
 
-        // State equations (ODEs)
-        let ``dH/dt`` = P h65_slope * Environment age65plus
-        let ``dSH/dt``: ModelExpression</year> = P r_sec + State SH * (Constant 1. - State SH)
-        let ``dSTR/dt``: ModelExpression</year> = P r_str + State STR * (P str_sat - State STR)
-        let ``dR/dt`` = - P k_reno * (State R - P reno_target)
-        let ``dO/dt``: ModelExpression<dwelling/year> =
-            P theta * State H * (Constant 1. - State SH)
-                * (Constant 1. - State STR) * (Constant 1. - State R)
+        // // State equations (ODEs)
+        // let ``dH/dt`` = P h65_slope * Environment age65plus
+        // let ``dSH/dt``: ModelExpression</year> = P r_sec + State SH * (Constant 1. - State SH)
+        // let ``dSTR/dt``: ModelExpression</year> = P r_str + State STR * (P str_sat - State STR)
+        // let ``dR/dt`` = - P k_reno * (State R - P reno_target)
+        // let ``dO/dt``: ModelExpression<dwelling/year> =
+        //     P theta * State H * (Constant 1. - State SH)
+        //         * (Constant 1. - State STR) * (Constant 1. - State R)
 
         
