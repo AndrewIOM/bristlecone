@@ -1,3 +1,8 @@
+#### 3.0.0 - UNRELEASED
+* FEATURE: Whole library and language is Tensor-based using DiffSharp.
+* FEATURE: Units of measure in language (model definitions).
+* FEATURE: Inverse functions in language using Newton–Raphson or bisection.
+
 #### 2.0.0 - 2024-04-24
 * FEATURE: Domain Specific Language (DSL) for scaffolding models.
 * FEATURE: User-definable RNG seeds.
