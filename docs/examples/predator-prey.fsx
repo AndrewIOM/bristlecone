@@ -14,7 +14,7 @@ index: 1
 #nowarn "211"
 #r "nuget: MathNet.Numerics.FSharp,5.0.0"
 #r "nuget: FSharp.Data,6.3"
-#r "../../src/Bristlecone/bin/Debug/net5.0/Bristlecone.dll"
+#r "../../src/Bristlecone/bin/Debug/net10.0/Bristlecone.dll"
 
 #r "nuget: Plotly.NET, 4.2.0"
 

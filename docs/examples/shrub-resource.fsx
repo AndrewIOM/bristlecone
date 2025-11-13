@@ -9,8 +9,8 @@ index: 3
 
 (*** condition: prepare ***)
 #nowarn "211"
-#r "../../src/Bristlecone/bin/Debug/net5.0/Bristlecone.dll"
-#r "../../src/Bristlecone.Dendro/bin/Debug/net5.0/Bristlecone.Dendro.dll"
+#r "../../src/Bristlecone/bin/Debug/net10.0/Bristlecone.dll"
+#r "../../src/Bristlecone.Dendro/bin/Debug/net10.0/Bristlecone.Dendro.dll"
 #r "nuget: MathNet.Numerics.FSharp,5.0.0"
 (*** condition: fsx ***)
 #if FSX

@@ -11,8 +11,8 @@ index: 1
 *)
 (*** condition: prepare ***)
 #nowarn "211"
-#r "../src/Bristlecone/bin/Debug/net5.0/Bristlecone.dll"
-#r "../src/Bristlecone.Dendro/bin/Debug/net5.0/Bristlecone.Dendro.dll"
+#r "../src/Bristlecone/bin/Debug/net10.0/Bristlecone.dll"
+#r "../src/Bristlecone.Dendro/bin/Debug/net10.0/Bristlecone.Dendro.dll"
 (*** condition: fsx ***)
 #if FSX
 #r "nuget: Bristlecone,{{fsdocs-package-version}}"
