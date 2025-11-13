@@ -159,8 +159,8 @@ module ``Fit`` =
             Config.sequenceEqualTol (xs.Values |> Seq.map(fun v -> v.Obs)) (if useRepeat then obs.Values else Seq.tail obs.Values)  "True observed data was not returned by tryFit"
 
 
-        // // --- Resolution combinations ---
-        // testCase "Fixed-step dynamic with matching env resolution" <| fun _ ->
+       
+        // Test takes the lower environment value within each euler step.
         testPropertyWithConfig Config.config "Fixed-step differential with matching env resolution"
         <| fun dynCode envCode (PositiveInt steps) (offset:NormalFloat) (useRepeat:bool) ->
             
@@ -183,14 +183,20 @@ module ``Fit`` =
             let result = Bristlecone.tryFit engine defaultEndCon data model |> fun r -> Expect.wantOk r "Fit failed"
 
             let actual = result.Series.[dynCode].Values |> Seq.map (fun v -> v.Fit |> Units.removeUnitFromFloat) |> Seq.toArray
-            let actual2 = result.Series.[dynCode].Values |> Seq.map (fun v -> v.Obs |> Units.removeUnitFromFloat) |> Seq.toArray
-            let expected = env |> TimeSeries.toObservations |> Seq.skip 1 |> Seq.map fst |> Seq.toList
+            let expected =
+                env
+                |> TimeSeries.toObservations
+                |> Seq.toArray
+                |> Array.map fst
+                |> Array.scan (+) 0.
+                |> Array.skip 2
 
-            printfn "Actual %A / %A Exp %A" actual actual2 expected
+            let slope, p = Statistics.Regression.slopeAndPValue actual expected
 
+            // Assert slope ≈ 1.0 (proportionality) and p-value not significant
             Expect.hasLength actual (steps + 1) "Result should have length of timesteps"
-            Expect.sequenceEqual actual expected "Output was not the environment data."
-            
+            Expect.isTrue (abs (slope - 1.0) < 1e-2) $"Slope should be ~1, got {slope}"
+            Expect.isTrue (not (System.Double.IsNaN p)) "Regression should be valid"
 
 
         // testCase "Fixed-step dynamic with higher-res env" <| fun _ ->

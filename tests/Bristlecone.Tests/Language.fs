@@ -84,8 +84,8 @@ let inverseTests =
                 let compiledF = ExpressionCompiler.compileFloat x'
                 let resultF = compiledF pool Map.empty 0.<Time.``time index``> 0.
 
-                Config.floatEqualTol result 3.0<ModelSystem.state/Time.``time index``> "Round-trip did not return expected value (tensor-mode)"
-                Config.floatEqualTol resultF 3.0 "Round-trip did not return expected value (float-mode)"
+                Config.floatEqualTol Accuracy.high result 3.0<ModelSystem.state/Time.``time index``> "Round-trip did not return expected value (tensor-mode)"
+                Config.floatEqualTol Accuracy.high resultF 3.0 "Round-trip did not return expected value (float-mode)"
         ]
 
 

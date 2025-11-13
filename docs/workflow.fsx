@@ -104,11 +104,17 @@ work package:
 *)
 
 let logger = Logging.Console.logger 1000<iteration>
+let loggerTable = Logging.ConsoleTable.logger 1000<iteration>
 
 (**
-This logger will print the current point in parameter space each thousand
-iteration, for each chain (along with process IDs). Next, let's create and setup
-the orchestration agent:
+There are two main built-in loggers. The first logger will print the current point
+in parameter space each thousand iteration, for each chain (along with process IDs).
+The second logger is a multi-threaded table logger, which presents the current status
+of each thread's optimiser in a table form as below:
+
+![img/console-logging-table.png](img/console-logging-table.png)
+
+Next, let's create and setup the orchestration agent:
 *)
 
 let orchestrator () =
