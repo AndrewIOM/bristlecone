@@ -10,56 +10,136 @@ module Distributions =
     [<RequireQualifiedAccess>]
     module ContinuousUniform =
 
-        let draw random min max =
+        let draw<[<Measure>] 'u> random (min: float<'u>) (max: float<'u>) : unit -> float<'u> =
+            let min, max =
+                Bristlecone.Units.removeUnitFromFloat min, Bristlecone.Units.removeUnitFromFloat max
+
             let distribution =
                 MathNet.Numerics.Distributions.ContinuousUniform(min, max, random)
 
-            fun () -> distribution.Sample()
+            fun () -> distribution.Sample() |> LanguagePrimitives.FloatWithMeasure<'u>
+
+    [<RequireQualifiedAccess>]
+    module DiscreteUniform =
+
+        let draw<[<Measure>] 'u> random (min: int<'u>) (max: int<'u>) : unit -> int<'u> =
+            let min, max =
+                Bristlecone.Units.removeUnitFromInt min, Bristlecone.Units.removeUnitFromInt max
+
+            let distribution = MathNet.Numerics.Distributions.DiscreteUniform(min, max, random)
+
+            fun () -> distribution.Sample() |> LanguagePrimitives.Int32WithMeasure<'u>
 
     [<RequireQualifiedAccess>]
     module Normal =
 
-        let draw random mean stdev =
-            let distribution = MathNet.Numerics.Distributions.Normal(mean, stdev, random)
-            fun () -> distribution.Sample()
+        /// Unit-generic normal draw
+        let draw<[<Measure>] 'u> (random: System.Random) (mean: float<'u>) (stdev: float<'u>) : unit -> float<'u> =
+
+            // Strip units for MathNet
+            let meanF = float mean
+            let stdevF = float stdev
+
+            let distribution = MathNet.Numerics.Distributions.Normal(meanF, stdevF, random)
+
+            // Return a function that samples and reapplies the unit
+            fun () ->
+                let sample = distribution.Sample()
+                LanguagePrimitives.FloatWithMeasure<'u> sample
+
 
     [<RequireQualifiedAccess>]
-    module MutlivariateNormal =
+    module MultivariateNormal =
 
-        let internal mapply (m: Matrix<float>) f =
-            m.EnumerateIndexed() |> Seq.iter (fun struct (i, j, v) -> m.[i, j] <- f v)
-            m
+        // Helpers to strip/apply units for matrices
+        let private stripUnitsM (m: Matrix<float<'u>>) : Matrix<float> = m.Map float
 
-        // See: https://stackoverflow.com/questions/11277146/multivariate-normal-distribution-with-math-net
-        let sample' (rnd: System.Random) =
-            fun () ->
-                let rec randomNormal () =
-                    let u1, u2 = rnd.NextDouble(), rnd.NextDouble()
-                    let r = sqrt (-2. * (log u1))
-                    let theta = 2. * System.Math.PI * u2
+        let private applyUnitsM<[<Measure>] 'u> (m: Matrix<float>) : Matrix<float<'u>> =
+            m.Map LanguagePrimitives.FloatWithMeasure<'u>
 
-                    seq {
-                        yield r * sin theta
-                        yield r * cos theta
-                        yield! randomNormal ()
-                    }
+        /// Compute factor A such that A * A^T = cov
+        let private factorFromCov<[<Measure>] 'u> (cov: Matrix<float<'u^2>>) : Matrix<float<'u>> =
 
-                randomNormal ()
+            let covF = stripUnitsM cov
 
-        let sample (cov: Matrix<float>) rnd =
-            let r =
-                if cov.Determinant() = 0. then
-                    let t = cov.Svd true
-                    let u, d = t.U, t.W
-                    let a = (mapply d sqrt) * u.Transpose()
-                    let qr = a.QR() in
-                    qr.R.Transpose()
+            let factorF =
+                if covF.Determinant() = 0.0 then
+                    let svd = covF.Svd(true)
+                    let u, d = svd.U, svd.W
+                    let sqrtD = d.Map(fun x -> if x > 0.0 then sqrt x else 0.0)
+                    (sqrtD * u.Transpose()).QR().R.Transpose()
                 else
-                    cov.Cholesky().Factor
+                    covF.Cholesky().Factor
+
+            applyUnitsM<'u> factorF
+
+        /// Unit-generic multivariate normal sampler
+        let sample<[<Measure>] 'u> (cov: Matrix<float<'u^2>>) (random: System.Random) : unit -> Vector<float<'u>> =
+
+            let factor = factorFromCov<'u> cov
+            let dim = cov.ColumnCount
 
             fun () ->
-                let v = vector (sample' rnd () |> Seq.take cov.ColumnCount |> List.ofSeq)
-                r * v
+                // Use unit-generic Normal.draw to get each component
+                let stdDraw =
+                    Normal.draw
+                        random
+                        (LanguagePrimitives.FloatWithMeasure<'u> 0.)
+                        (LanguagePrimitives.FloatWithMeasure<'u> 1.)
+
+                let z = Array.init dim (fun _ -> stdDraw ()) |> vector
+                factor * z
+
+
+    [<RequireQualifiedAccess>]
+    module Cauchy =
+
+        /// Unit-generic Cauchy draw
+        let draw<[<Measure>] 'u> (random: System.Random) (location: float<'u>) (scale: float<'u>) : unit -> float<'u> =
+
+            // Strip units for MathNet
+            let locF = float location
+            let scaleF = float scale
+
+            let dist = MathNet.Numerics.Distributions.Cauchy(locF, scaleF, random)
+
+            fun () -> dist.Sample() |> LanguagePrimitives.FloatWithMeasure<'u>
+
+
+module LinearAlgebra =
+
+    open MathNet.Numerics.LinearAlgebra
+
+    /// Generate a covariance matrix
+    let covarianceMatrix parameterCount (scale: float) =
+        let m4 = DiagonalMatrix.identity<float> parameterCount
+        (m4 * scale) / sqrt (float parameterCount)
+
+    /// Calculates the covariance of a given matrix
+    let computeCovariance<[<Measure>] 'u> (matrix: Matrix<float<'u>>) =
+        let columnAverages =
+            matrix.ColumnSums()
+            / LanguagePrimitives.FloatWithMeasure<'u>(float matrix.RowCount)
+
+        let centredColumns =
+            matrix.EnumerateColumns()
+            |> Seq.zip columnAverages
+            |> Seq.map (fun (col, avg) -> col - avg)
+            |> Seq.toList
+
+        let centred = DenseMatrix.ofColumns centredColumns
+
+        let normalisationFactor =
+            float <| if matrix.RowCount = 1 then 1 else matrix.RowCount - 1
+
+        // MathNet does not propagate units correctly during multiply. Manual override.
+        let rawCov = centred.TransposeThisAndMultiply(centred)
+
+        let covWithUnits =
+            rawCov.Map(fun x -> LanguagePrimitives.FloatWithMeasure<'u> 1. * x)
+
+        covWithUnits / LanguagePrimitives.FloatWithMeasure<'u^2> normalisationFactor
+
 
 module Interpolate =
 
@@ -78,16 +158,37 @@ module Interpolate =
 
 module Regression =
 
-    open Accord.Statistics.Analysis
+    open MathNet.Numerics.Statistics
+    open MathNet.Numerics.Distributions
 
-    let pValueForLinearSlopeCoefficient (x: float[]) y =
-        try
-            let x' = x |> Array.map (fun a -> [| a |])
-            let mlr = MultipleLinearRegressionAnalysis(true)
-            mlr.Learn(x', y) |> ignore
-            (mlr.Coefficients |> Seq.head).TTest.PValue
-        with _ ->
-            nan
+    /// Returns (slope, p-value) for the slope coefficient in simple linear regression.
+    /// p-value is NaN if the data is perfectly flat.
+    let slopeAndPValue (x: float[]) (y: float[]) =
+        let n = float x.Length
+
+        if n < 3 then
+            nan, nan
+        else
+            let meanX = Statistics.Mean x
+            let meanY = Statistics.Mean y
+
+            let ssX = Array.sumBy (fun xi -> (xi - meanX) ** 2.0) x
+            let ssXY = Array.map2 (fun xi yi -> (xi - meanX) * (yi - meanY)) x y |> Array.sum
+
+            let slope = ssXY / ssX
+            let intercept = meanY - slope * meanX
+
+            let residuals = Array.map2 (fun xi yi -> yi - (slope * xi + intercept)) x y
+            let sse = Array.sumBy (fun r -> r ** 2.0) residuals
+            let seSlope = sqrt (sse / (n - 2.0)) / sqrt ssX
+
+            if seSlope = 0.0 then
+                slope, nan
+            else
+                let tStat = slope / seSlope
+                let tDist = MathNet.Numerics.Distributions.StudentT(0.0, 1.0, n - 2.0)
+                let pVal = 2.0 * (1.0 - tDist.CumulativeDistribution(abs tStat))
+                slope, pVal
 
 
 /// Statistics to determine whether there are trends within series.
@@ -148,6 +249,67 @@ module RootFinding =
                 bisect (n + 1) N f c b t
             else
                 bisect (n + 1) N f a c t
+
+    module Tensor =
+
+        open DiffSharp
+
+        let private one = Bristlecone.Tensors.allocateTensor 1.0
+        let private half = Bristlecone.Tensors.allocateTensor 0.5
+        let private zero = Bristlecone.Tensors.allocateTensor 0.
+
+        /// Bisect method for finding root of non-linear equations.
+        /// `adSafe` keeps within tensor space for all operations,
+        /// but is substantially slower owing to two casts.
+        let bisect
+            (f: Tensor -> Tensor)
+            (target: Tensor)
+            (lo: Tensor)
+            (hi: Tensor)
+            (tol: Tensor)
+            (maxIter: int)
+            : Tensor =
+
+            let rec loop (a: Tensor) (b: Tensor) i =
+                let c = (a + b) * half
+                let fc = f c - target
+
+                if i >= maxIter then
+                    c
+                else
+                    let stopMask = dsharp.lt (dsharp.abs fc, tol) + dsharp.lt ((b - a) * half, tol)
+
+                    let fa = f a - target
+                    let prod = (fa * fc)
+                    let mask = dsharp.cast (dsharp.gt (prod, zero), a.dtype)
+                    let invMask = one - mask
+                    let stopF = dsharp.cast (stopMask, a.dtype)
+                    let contF = one - stopF
+                    let a' = a * stopF + (a * invMask + c * mask) * contF
+                    let b' = b * stopF + (b * mask + c * invMask) * contF
+                    loop a' b' (i + 1)
+
+            loop lo hi 0
+
+        /// Newton–Raphson root finder using AD for derivative.
+        let newtonRaphson
+            (f: Tensor -> Tensor)
+            (target: Tensor)
+            (x0: Tensor)
+            (lo: Tensor)
+            (hi: Tensor)
+            (maxIter: int)
+            : Tensor =
+
+            let step x _ =
+                let fLifted z = f z - target
+                let fx = fLifted x
+                let dfx = dsharp.grad fLifted x
+                let xNext = x - fx / dfx
+                dsharp.max (lo, dsharp.min (hi, xNext))
+
+            [ 1..maxIter ] |> List.fold step x0
+
 
 /// Statistics to measure the convergence of multiple trajectories,
 /// for example for chains in a Monte Carlo analysis.

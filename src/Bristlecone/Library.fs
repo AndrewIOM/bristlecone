@@ -17,21 +17,36 @@ module Bristlecone =
     open Bristlecone.EstimationEngine
     open Bristlecone.Statistics
 
+    // TODO Current default conversions, but may not be most appropriate defaults.
+    let private indexByMonth (ts: int<year>) =
+        (float ts) * 1.<year> * 12.<Time.``time index`` / year>
+
+    let private indexBySpan (ts: TimeSpan) =
+        float ts.Days * 1.<day> * 12.<Time.``time index`` / day>
+
+
     /// <summary>A basic estimation engine for discrete-time equations, using a Nelder-Mead optimiser.</summary>
-    let mkDiscrete: EstimationEngine<float, obj, obj, obj> =
+    let mkDiscrete () =
         { TimeHandling = Discrete
           OptimiseWith = Optimisation.Amoeba.single Optimisation.Amoeba.Solver.Default
-          LogTo = Console.logger (1000)
-          Random = MathNet.Numerics.Random.MersenneTwister(true)
+          LogTo = Console.logger 1000<iteration>
+          Random = MathNet.Numerics.Random.MersenneTwister true
+          ToModelTime = indexBySpan
+          InterpolationGlobal = Solver.InterpolationMode.Lower
+          InterpolationPerVariable = Map.empty
           Conditioning = Conditioning.NoConditioning }
 
     /// <summary>A basic estimation engine for ordinary differential equations, using a Nelder-Mead optimiser.</summary>
-    let mkContinuous<'date, 'timeunit, 'timespan> : EstimationEngine<float, 'date, 'timeunit, 'timespan> =
-        { TimeHandling = Continuous <| Integration.MathNet.integrate
+    let mkContinuous () =
+        { TimeHandling = Continuous <| Integration.RungeKutta.rk4
           OptimiseWith = Optimisation.Amoeba.single Optimisation.Amoeba.Solver.Default
-          LogTo = Bristlecone.Logging.Console.logger (1000)
-          Random = MathNet.Numerics.Random.MersenneTwister(true)
+          LogTo = Bristlecone.Logging.Console.logger 1000<iteration>
+          Random = MathNet.Numerics.Random.MersenneTwister true
+          ToModelTime = indexBySpan
+          InterpolationGlobal = Solver.InterpolationMode.Lower
+          InterpolationPerVariable = Map.empty
           Conditioning = Conditioning.RepeatFirstDataPoint }
+
 
     /// <summary>Substitute a specific logger into</summary>
     /// <param name="out"></param>
@@ -40,6 +55,19 @@ module Bristlecone =
     /// <typeparam name="'b"></typeparam>
     /// <returns></returns>
     let withOutput out engine = { engine with LogTo = out }
+
+    let withTimeConversion<'timespan, [<Measure>] 'modelTimeUnit, 'o1, [<Measure>] 'o2, [<Measure>] 'u>
+        (fn: 'timespan -> float<'modelTimeUnit>)
+        (engine: EstimationEngine<'o1, 'o2, 'u>)
+        : EstimationEngine<'timespan, 'modelTimeUnit, 'u> =
+        { TimeHandling = engine.TimeHandling
+          OptimiseWith = engine.OptimiseWith
+          LogTo = engine.LogTo
+          Random = engine.Random
+          ToModelTime = fn
+          InterpolationGlobal = engine.InterpolationGlobal
+          InterpolationPerVariable = engine.InterpolationPerVariable
+          Conditioning = engine.Conditioning }
 
     /// Use a mersenne twister random number generator
     /// with a specific seed.
@@ -70,11 +98,12 @@ module Bristlecone =
         /// Places a map of `TimeSeries` into a `TimeFrame` that has data
         /// that shares a common timeline. If no timeline is shared, returns
         /// an `Error`.
-        let observationsToCommonTimeFrame (equations: CodedMap<ModelEquation<'data>>) timeSeriesData =
-            let equationKeys = equations |> Map.keys
-
+        let observationsToCommonTimeFrame (dynamicEquationKeys: ShortCode.ShortCode seq) timeSeriesData =
             timeSeriesData
-            |> Map.filter (fun k _ -> equationKeys |> Seq.contains k)
+            |> Map.map (fun _ v ->
+                v
+                |> TimeSeries.map (fun (v, _) -> v |> Units.removeUnitFromFloat |> (*) 1.<state>))
+            |> Map.filter (fun k _ -> dynamicEquationKeys |> Seq.contains k)
             |> TimeFrame.tryCreate
             |> Result.ofOption "Observations for dynamic variables must share a common sampling time sequence"
 
@@ -84,6 +113,9 @@ module Bristlecone =
         let environmentDataToCommonTimeFrame dynamicVariableKeys measureKeys timeSeriesData =
             let environmentSeries =
                 timeSeriesData
+                |> Map.map (fun _ v ->
+                    v
+                    |> TimeSeries.map (fun (v, _) -> v |> Units.removeUnitFromFloat |> (*) 1.<environment>))
                 |> Map.filter (fun k _ -> dynamicVariableKeys |> Seq.append measureKeys |> Seq.contains k |> not)
 
             match environmentSeries.Count with
@@ -104,28 +136,58 @@ module Bristlecone =
             // | Some eRes ->
             Ok(one, two)
 
-        /// Returns a tuple of the start point (t0) and the
-        /// subsequent time-series (t1 .. tn).
-        let t0 timeSeriesData (conditionMode: Conditioning.Conditioning<'a>) logger =
-            timeSeriesData
-            |> Solver.Conditioning.startPoint conditionMode
-            // |> Option.map(fun t0 -> t0, timeSeriesData)
-            |> Option.defaultWith (fun () ->
-                logger
-                <| DebugEvent "No conditioning was specified. Using t1 as conditioning data."
+        /// Determines which interpolation scheme to use for a particular
+        /// environmental time-series, for cases when the exact time is not
+        /// present.
+        let interpolationFor engine key =
+            engine.InterpolationPerVariable
+            |> Map.tryFind key
+            |> Option.defaultValue engine.InterpolationGlobal
 
-                invalidOp "Not supported"
-            // match t0 with
-            // | Some t0 ->
-            //     let startIndex = timeline |> Seq.head
-            //     // TODO. The environmental data must span the conditioning period - how to ensure this?
-            //     fixedStep engine.LogTo engine.TimeHandling (startIndex - externalSteps.Head) endIndex t0 forcings
-            // | None ->
-            //     engine.LogTo <| DebugEvent "No conditioning was specified. Using t1 as conditioning data."
-            //     let startIndex = timeline |> Seq.tail |> Seq.head
-            //     fixedStep engine.LogTo engine.TimeHandling (startIndex - externalSteps.Head) endIndex t0 forcings
-            )
 
+    // Temporary helpers until optim-space-transformed can be handled correctly:
+    let private unsafeEraseSpace<'space> =
+        unbox<Parameter.Pool.OptimiserConfig<``optim-space``>>
+
+    let private unsafeEraseSpaceForward<'space> =
+        unbox<Tensors.TypedTensor<Tensors.Vector, ``optim-space-transformed``>>
+
+    let private dynamicVariableKeys (models: ModelSystem.ModelForm<'modelTimeUnit>) =
+        match models with
+        | ModelForm.DifferenceEqs eqs -> eqs |> Map.keys
+        | ModelForm.DifferentialEqs eqs -> eqs |> Map.keys
+
+    /// Convert a list of optimiser-space solutions into real-space solutions
+    let internal toRealSpaceSolutions
+        (config: Parameter.Pool.AnyOptimiserConfig)
+        (solutions: Solution list)
+        : (float<``-logL``> * float<``parameter``>[]) list =
+
+        match config with
+        | Parameter.Pool.DetachedConfig cfg ->
+            solutions
+            |> List.map (fun (ll, pointOptSpace) ->
+                let realVec = cfg.Compiled.Forward pointOptSpace
+                ll, realVec |> Tensors.Typed.toFloatArray)
+
+        | Parameter.Pool.TransformedConfig cfg ->
+            solutions
+            |> List.map (fun (ll, pointOptSpace) ->
+                let realVec = cfg.Compiled.Forward(unsafeEraseSpaceForward pointOptSpace)
+                ll, realVec |> Tensors.Typed.toFloatArray)
+
+    let internal validateEnvData expectedKeys actualMap =
+        let expectedSet = expectedKeys |> Set.ofList
+        let actualSet = actualMap |> Map.keys |> Set.ofSeq
+
+        if Set.isSubset expectedSet actualSet then
+            Ok()
+        else
+            Error
+            <| sprintf
+                "Environment data keys do not match model definition. Expected %A but provided with %A."
+                expectedKeys
+                (Map.keys actualMap)
 
     /// <summary>
     /// Fit a time-series model to data.
@@ -143,136 +205,200 @@ module Bristlecone =
     /// <param name="timeSeriesData"></param>
     /// <param name="model"></param>
     /// <returns></returns>
-    let tryFit engine endCondition timeSeriesData (model: ModelSystem<float>) =
+    let tryFit
+        (engine: EstimationEngine<'timespan, 'modelTimeUnit, 'stateUnit>)
+        endCondition
+        (observedSeries: CodedMap<TimeSeries<float<'stateUnit>, 'date, 'yearType, 'timespan>>)
+        (model: ModelSystem<'modelTimeUnit>)
+        =
 
-        // A. Setup initial time point values based on conditioning method.
-        let t0 = Fit.t0 timeSeriesData engine.Conditioning engine.LogTo
+        let resultId = Guid.NewGuid()
 
-        // Check there is time-series data actually included and corresponding to correct equations.
-        let hasRequiredData =
-            if timeSeriesData.IsEmpty then
+        let requiredByLikelihood =
+            model.NegLogLikelihood.RequiredCodes
+            |> List.map (fun c ->
+                match c with
+                | Measure c -> c
+                | State c -> c)
+
+        // TODO Ensure that ODEs + measures actually produce the states required by likelihood function.
+
+        let requireObservedForLikelihood
+            : Result<CodedMap<TimeSeries<float<'stateUnit>, 'date, 'yearType, 'timespan>>, string> =
+            if model.NegLogLikelihood.RequiredCodes.IsEmpty then
+                Error "The set likelihood function required no data"
+            else if observedSeries.IsEmpty then
                 Error "No time-series data was specified"
-            else if Set.isSubset (model.Equations |> Map.keys |> set) (timeSeriesData |> Map.keys |> set) then
-                Ok timeSeriesData
+            else if Set.isSubset (requiredByLikelihood |> set) (observedSeries |> Map.keys |> set) then
+                Ok observedSeries
             else
                 Error(
                     sprintf
                         "Required time-series data were missing. Need: %A"
-                        (model.Equations |> Map.keys |> Seq.map (fun k -> k.Value) |> String.concat " + ")
+                        (requiredByLikelihood |> Seq.map (fun k -> k.Value) |> String.concat " + ")
                 )
-
-        // B. Create a continuous-time that outputs float[]
-        // containing only the values for the dynamic variable resolution.
-        let continuousSolver =
-            result {
-
-                let! timeSeriesData = hasRequiredData
-
-                // 1. Set time-series into common timeline
-                let! commonDynamicTimeFrame = Fit.observationsToCommonTimeFrame model.Equations timeSeriesData
-
-                let! commonForcingsTimeFrame =
-                    Fit.environmentDataToCommonTimeFrame
-                        (Map.keys model.Equations)
-                        (Map.keys model.Measures)
-                        timeSeriesData
-
-                engine.LogTo
-                <| GeneralEvent(
-                    sprintf
-                        "Time-series start at %A with resolution %A."
-                        (commonDynamicTimeFrame.StartDate)
-                        (commonDynamicTimeFrame |> TimeFrame.resolution)
-                )
-
-                // 2. Ensure that dynamic variables is an exact or subset of environmental variables
-                let! _ = Fit.exactSubsetOf commonDynamicTimeFrame commonForcingsTimeFrame
-
-                let solver outputStep =
-                    Solver.solver outputStep commonDynamicTimeFrame commonForcingsTimeFrame engine t0
-
-                return solver
-            }
-
-        let discreteSolver = Solver.Discrete.solve t0
-
-        let data = timeSeriesData |> Map.map (fun _ ts -> ts.Values |> Seq.toArray)
-
-        // Setup optimisation algorithm given the parameter constraint mode.
-        let optimise, constrainedParameters =
-            match engine.OptimiseWith with
-            | Optimiser.InDetachedSpace optim ->
-                let detatchedPool, optimConstraints =
-                    Parameter.Pool.detatchConstraints model.Parameters
-
-                optim
-                    engine.Random
-                    engine.LogTo
-                    endCondition
-                    (detatchedPool |> Parameter.Pool.toDomain optimConstraints)
-                    None,
-                detatchedPool
-            | Optimiser.InTransformedSpace optim ->
-                let optimConstraints =
-                    List.init (Parameter.Pool.count model.Parameters) (fun _ -> Parameter.Unconstrained)
-
-                optim
-                    engine.Random
-                    engine.LogTo
-                    endCondition
-                    (model.Parameters |> Parameter.Pool.toDomain optimConstraints)
-                    None,
-                model.Parameters
 
         result {
-            let! continuousSolver = continuousSolver
+
+            // 1. Check required dynamic time-series are present
+            let! tsData = requireObservedForLikelihood
+
+            // 2. Build common timeline time-frames
+            let! observedOnCommonTimeline = Fit.observationsToCommonTimeFrame requiredByLikelihood observedSeries
+
+            let! exogenousOnCommonTimeline =
+                Fit.environmentDataToCommonTimeFrame requiredByLikelihood (Map.keys model.Measures) observedSeries
+
+            do!
+                validateEnvData
+                    model.EnvironmentKeys
+                    (exogenousOnCommonTimeline
+                     |> Option.map (fun tf -> tf.Series)
+                     |> Option.defaultValue Map.empty)
+
+            // 3. Resolve time-series given requested conditioning of t0.
+            let equationKeys = dynamicVariableKeys model.Equations
+
+            let conditioned =
+                Solver.Conditioning.resolve
+                    engine.Conditioning
+                    observedOnCommonTimeline
+                    exogenousOnCommonTimeline
+                    equationKeys
+
+            conditioned.Log |> Option.iter (GeneralEvent >> engine.LogTo)
+
+            engine.LogTo
+            <| GeneralEvent(
+                sprintf "Conditioned state at t0 is %A; hidden t0 = %A" conditioned.T0 conditioned.StatesHiddenForSolver
+            )
+
+            engine.LogTo
+            <| GeneralEvent(
+                sprintf
+                    "Time-series (conditioned) start at %A with resolution %A."
+                    conditioned.StatesObservedForSolver.StartDate
+                    (conditioned.StatesObservedForSolver |> TimeFrame.resolution)
+            )
+
+            // Log out variables
+            engine.LogTo
+            <| GeneralEvent(
+                sprintf
+                    "Observed states: %A. Hidden states: %A. Used in likelihood: %A\nExogeneous time-series: %A"
+                    conditioned.StatesObservedForSolver.Keys
+                    (Map.keys conditioned.StatesHiddenForSolver)
+                    conditioned.ObservedForPairing.Keys
+                    (conditioned.ExogenousForSolver |> Option.map (fun t -> t.Keys))
+            )
+
+            observedOnCommonTimeline.Series
+            |> Map.iter (fun k v ->
+                engine.LogTo
+                <| GeneralEvent(sprintf "Common timeline (states and measures): %s (start at %A)" k.Value v.StartDate))
+
+            exogenousOnCommonTimeline
+            |> Option.iter (fun c ->
+                c.Series
+                |> Map.iter (fun k v ->
+                    engine.LogTo
+                    <| GeneralEvent(sprintf "Common timeline (environment): %s (start at %A)" k.Value v.StartDate)))
+
+            // TODO Ensure that dynamic variables are an exact or subset of environmental variables
+            let! _ = Fit.exactSubsetOf observedOnCommonTimeline exogenousOnCommonTimeline
+
+            // 4. Compile solver (auto‑selects discrete/differential)
+            let solver stepType =
+                Solver.SolverCompiler.compile
+                    engine.LogTo
+                    engine.ToModelTime
+                    model.Equations
+                    engine.TimeHandling
+                    stepType
+                    conditioned.StatesObservedForSolver
+                    conditioned.StatesHiddenForSolver
+                    conditioned.ExogenousForSolver
+                    (Fit.interpolationFor engine)
+
+            // A centralised transform for parameters between point and parameter space.
+            let optimConfig =
+                match engine.OptimiseWith with
+                | Optimisation.InDetachedSpace _ ->
+                    Parameter.Pool.DetachedConfig(Parameter.Pool.toOptimiserConfigBounded model.Parameters)
+                | Optimisation.InTransformedSpace _ ->
+                    Parameter.Pool.TransformedConfig(Parameter.Pool.toOptimiserConfigTransformed model.Parameters)
+
+            let optimise =
+                match engine.OptimiseWith, optimConfig with
+                | Optimisation.InDetachedSpace optim, Parameter.Pool.DetachedConfig cfg ->
+                    optim engine.Random engine.LogTo endCondition cfg.Domain None
+                | Optimisation.InTransformedSpace optim, Parameter.Pool.TransformedConfig cfg ->
+                    optim engine.Random engine.LogTo endCondition (unsafeEraseSpace cfg).Domain None
+                | _ -> invalidOp "Mode/config mismatch"
+
+            let obsDataForObjective =
+                Solver.Conditioning.toObservationData conditioned.ObservedForPairing
+
+            engine.LogTo
+            <| GeneralEvent(sprintf "Time-series used within objective: %A." (Map.keys obsDataForObjective))
+
+            let obsTimes = conditioned.ObservedForPairing |> TimeFrame.dates
 
             let objective =
                 Objective.create
-                    { model with
-                        Parameters = constrainedParameters }
-                    (continuousSolver Solver.StepType.External)
-                    discreteSolver
-                    data
+                    model.NegLogLikelihood
+                    model.Measures
+                    (solver (Solver.StepType.External obsTimes))
+                    optimConfig
+                    obsDataForObjective
 
             let result = objective |> optimise
             let lowestLikelihood, bestPoint = result |> List.minBy (fun (l, _) -> l)
 
             let estimatedSeries =
-                Objective.predict
-                    { model with
-                        Parameters = constrainedParameters }
-                    (continuousSolver Solver.StepType.External)
-                    discreteSolver
+                Objective.createPredictor
+                    model.Measures
+                    (solver (Solver.StepType.External obsTimes))
+                    optimConfig
                     bestPoint
 
             let estimatedHighRes =
-                Objective.predict
-                    { model with
-                        Parameters = constrainedParameters }
-                    (continuousSolver Solver.StepType.Internal)
-                    discreteSolver
-                    bestPoint
+                Objective.createPredictor model.Measures (solver Solver.StepType.Internal) optimConfig bestPoint
 
             let paired =
-                timeSeriesData
+                conditioned.ObservedForPairing.Series
                 |> Map.filter (fun key _ -> estimatedSeries |> Map.containsKey key)
                 |> Map.map (fun k observedSeries ->
-                    let expected = estimatedSeries |> Map.find k
+                    let expected = estimatedSeries |> Map.find k |> Tensors.Typed.toFloatArray
 
                     observedSeries
                     |> TimeSeries.toObservations
                     |> Seq.zip expected
-                    |> Seq.map (fun (e, (o, d)) -> ({ Obs = o; Fit = e }, d))
+                    |> Seq.map (fun (e, (o, d)) ->
+                        ({ Obs = o |> Units.removeUnitFromFloat |> (*) 1.<state>
+                           Fit = e },
+                         d))
                     |> TimeSeries.fromObservations observedSeries.DateMode)
 
+            let bestPoint =
+                match optimConfig with
+                | Parameter.Pool.DetachedConfig o -> o.Compiled.Forward bestPoint
+                | Parameter.Pool.TransformedConfig o -> o.Compiled.Forward(unbox bestPoint) // TODO Remove unbox
+
+            let bestPointPool = Parameter.Pool.fromRealVector bestPoint model.Parameters
+
+            let estimatedHighResFloat =
+                estimatedHighRes |> Map.map (fun _ v -> v |> Tensors.Typed.toFloatArray) |> Some
+
+            // engine.LogTo CompleteEvent
+
             return
-                { ResultId = Guid.NewGuid()
+                { ResultId = resultId
                   Likelihood = lowestLikelihood
-                  Parameters = bestPoint |> Parameter.Pool.fromPointInTransformedSpace constrainedParameters
+                  Parameters = bestPointPool
                   Series = paired
-                  Trace = result
-                  InternalDynamics = Some estimatedHighRes }
+                  Trace = result |> toRealSpaceSolutions optimConfig
+                  InternalDynamics = estimatedHighResFloat }
         }
 
     /// <summary>Fit a time-series model to data.</summary>
@@ -281,7 +407,7 @@ module Bristlecone =
     /// <param name="timeSeriesData">Time-series dataset that contains a series for each equation in the model system.</param>
     /// <param name="model">A model system of equations, likelihood function, estimatible parameters, and optional measures.</param>
     /// <returns>The result of the model-fitting procedure. If an error occurs, throws an exception.</returns>
-    let fit engine endCondition timeSeriesData (model: ModelSystem<float>) =
+    let fit engine endCondition timeSeriesData (model: ModelSystem<'modelTimeUnit>) =
         tryFit engine endCondition timeSeriesData model |> Result.forceOk
 
     open Test
@@ -298,10 +424,11 @@ module Bristlecone =
     /// It is wrapped in an F# Result, indicating if the procedure
     /// was successful or not.</returns>
     let tryTestModel
-        engine
-        (settings: Test.TestSettings<float, 'date, 'timeunit, 'timespan>)
-        (model: ModelSystem<float>)
+        (engine: EstimationEngine<'timespan, 'modelTimeUnit, 'state>)
+        (settings: Test.TestSettings<'state, 'date, 'timeunit, 'timespan>)
+        (model: ModelSystem<'modelTimeUnit>)
         =
+
         engine.LogTo <| GeneralEvent "Attempting to generate parameter set."
 
         engine.LogTo
@@ -313,51 +440,66 @@ module Bristlecone =
         )
 
         result {
-            let! settings = Test.isValidSettings model settings
-            let! trueData, theta = Test.Compute.tryGenerateData engine settings model settings.Attempts
 
-            let realEstimate =
-                fit
+
+            // Validate settings and generate synthetic data
+            let! settings = Test.isValidSettings model settings
+
+            // Set conditioning for solver to be the custom start values
+            let engine = engine |> withConditioning (Conditioning.Custom settings.StartValues)
+            let! trueData, trueParamPool = Test.Compute.tryGenerateData engine settings model settings.Attempts
+
+            // Merge dynamic + environmental data into one coded map
+            let mergedData = Map.merge trueData settings.EnvironmentalData (fun dyn _env -> dyn)
+
+            engine.LogTo <| GeneralEvent(sprintf "Dataset is %A" mergedData)
+
+            engine.LogTo
+            <| GeneralEvent(sprintf "Parameters to test are %A" (trueParamPool |> Parameter.Pool.toTensorWithKeysReal))
+
+            // Fit with true parameters (no optimisation)
+            let! realEstimate =
+                tryFit
                     { engine with
                         OptimiseWith = Optimisation.None.none }
                     settings.EndCondition
-                    (Map.merge trueData settings.EnvironmentalData (fun x y -> x))
+                    mergedData
                     { model with
-                        Parameters = Parameter.Pool.fromEstimated theta }
+                        Parameters = Parameter.Pool.fromEstimated trueParamPool }
 
-            let estimated =
-                fit engine settings.EndCondition (Map.merge trueData settings.EnvironmentalData (fun x y -> x)) model
+            // Fit normally (optimisation enabled)
+            let! estimated = tryFit engine settings.EndCondition mergedData model
 
             let paramDiffs: Test.ParameterTestResult list =
                 estimated.Parameters
                 |> Parameter.Pool.toList
-                |> List.map (fun (k, v) ->
-                    let est = Parameter.getEstimate v
+                |> List.map (fun (sc, _) ->
+                    match
+                        Parameter.Pool.tryGetRealValue sc.Value estimated.Parameters,
+                        Parameter.Pool.tryGetRealValue sc.Value trueParamPool
+                    with
+                    | Some e, Some r ->
+                        { Identifier = sc.Value
+                          RealValue = r
+                          EstimatedValue = e }
+                    | _ -> failwithf "Missing estimate for parameter %s" sc.Value)
 
-                    let real =
-                        theta
-                        |> Parameter.Pool.toList
-                        |> List.find (fun (k2, v) -> k2 = k)
-                        |> snd
-                        |> Parameter.getEstimate
-
-                    match est with
-                    | Ok e ->
-                        match real with
-                        | Ok r ->
-                            { Identifier = k.Value
-                              RealValue = r
-                              EstimatedValue = e }
-                        | Error _ -> failwith "Error"
-                    | Error _ -> failwith "Error")
-
+            // Per-series squared error
             let errorStructure =
+                let squared (x: float<state>) = x * x
+
                 estimated.Series
-                |> Seq.map (fun k -> k.Key.Value, k.Value.Values |> Seq.map (fun t -> (t.Fit - t.Obs) ** 2.))
+                |> Seq.map (fun kv ->
+                    let key = kv.Key.Value
+                    let errs = kv.Value.Values |> Seq.map (fun t -> t.Fit - t.Obs |> squared)
+                    key, errs)
                 |> Map.ofSeq
+
+            engine.LogTo CompleteEvent
 
             return
                 { ErrorStructure = errorStructure
+                  IterationsRun = estimated.Trace.Length * 1<iteration>
                   Parameters = paramDiffs
                   Series = estimated.Series |> Seq.map (fun k -> k.Key.Value, k.Value) |> Map.ofSeq
                   RealLikelihood = realEstimate.Likelihood
@@ -371,7 +513,11 @@ module Bristlecone =
     /// <param name="settings">Test settings that define how the test will be conducted.</param>
     /// <param name="model">The model system to test against the estimation engine.</param>
     /// <returns>A test result that indicates differences between the expected and actual fit.</returns>
-    let testModel engine settings model =
+    let testModel
+        (engine: EstimationEngine<'timespan, 'modelTimeUnit, 'state>)
+        (settings: TestSettings<'state, 'date, 'yearUnit, 'timespan>)
+        (model: ModelSystem<'modelTimeUnit>)
+        =
         tryTestModel engine settings model |> Result.forceOk
 
     /// <summary>Repeat a model fit many times, removing a single data point at random each time.</summary>
@@ -382,14 +528,18 @@ module Bristlecone =
     /// <param name="series">Time-series to fit with model</param>
     /// <returns>A list of estimation results (one for each bootstrap) for further analysis</returns>
     let bootstrap
-        (engine: EstimationEngine.EstimationEngine<float, 'date, 'timeunit, 'timespan>)
-        endCondition
+        (engine: EstimationEngine.EstimationEngine<'timespan, 'modelTimeUnit, 'state>)
+        (endCondition: EndCondition)
         bootstrapCount
-        model
+        (model: ModelSystem<'modelTimeUnit>)
         (series: Map<ShortCode.ShortCode, TimeSeries.TimeSeries<float, 'date, 'timeunit, 'timespan>>)
         =
-        let rec bootstrap s numberOfTimes solutions =
-            if (numberOfTimes > 0) then
+        let rec bootstrap
+            (s: Map<ShortCode.ShortCode, TimeSeries.TimeSeries<float, 'date, 'timeunit, 'timespan>>)
+            numberOfTimes
+            solutions
+            =
+            if numberOfTimes > 0 then
                 let resolution = series |> Seq.head |> (fun s -> s.Value |> TimeSeries.resolution)
 
                 let stepping =
@@ -421,73 +571,74 @@ module Bristlecone =
     /// <returns>A time-series for each variable containing a step-ahead prediction</returns>
     let oneStepAhead
         engine
-        hypothesis
-        (preTransform:
-            CodedMap<TimeSeries<float, 'date, 'timeunit, 'timespan>>
-                -> CodedMap<TimeSeries<float, 'date, 'timeunit, 'timespan>>)
-        (timeSeries)
-        (estimatedTheta: Parameter.Pool)
-        : CodedMap<FitSeries<'date, 'timeunit, 'timespan> * NStepStatistics> =
-        let hypothesisMle: ModelSystem<float> =
+        (hypothesis: ModelSystem<'modelTimeUnit>)
+        preTransform
+        (timeSeries: Map<ShortCode.ShortCode, TimeSeries.TimeSeries<float, 'date, 'timeunit, 'timespan>>)
+        estimatedTheta
+        =
+
+        let hypothesisMle =
             { hypothesis with
                 Parameters = Parameter.Pool.fromEstimated estimatedTheta }
 
-        let pairedDataFrames =
-            timeSeries
-            |> Map.map (fun _ fitSeries ->
-                fitSeries
-                |> TimeSeries.toObservations
-                |> Seq.pairwise
-                |> Seq.map (fun (t1, t2) ->
-                    TimeSeries.fromObservations fitSeries.DateMode [ t1; t2 ]
-                    |> TimeSeries.map (fun (x, y) -> x)))
-
         let dateMode = (timeSeries |> Seq.head).Value.DateMode
 
-        let timeParcelCount = (pairedDataFrames |> Seq.head).Value |> Seq.length
-
-        let data =
-            seq { 1..timeParcelCount }
-            |> Seq.map (fun i -> pairedDataFrames |> Map.map (fun _ v -> v |> Seq.item (i - 1)) |> preTransform)
-
-        // It is predicting with a repeated first point:
-        // The next point estimate is at t1
-        // The next point observation is at t2
-        data
-        |> Seq.collect (fun d ->
+        // Helper: fit to first point, predict second
+        let predictNext dataset =
             let est =
                 fit
                     (engine
                      |> withCustomOptimisation Optimisation.None.none
                      |> withConditioning Conditioning.RepeatFirstDataPoint)
-                    (Optimisation.EndConditions.afterIteration 0)
-                    d
+                    (Optimisation.EndConditions.atIteration 0<iteration>)
+                    dataset
                     hypothesisMle
 
-            let nextObservation =
-                d
-                |> Map.map (fun c ts -> ts |> TimeSeries.toObservations |> Seq.skip 1 |> Seq.head)
+            let nextObs =
+                dataset
+                |> Map.map (fun _ ts -> ts |> TimeSeries.toObservations |> Seq.skip 1 |> Seq.head)
 
-            let paired =
-                nextObservation
-                |> Seq.map (fun kv ->
-                    let nextEstimate = (est.Series.[kv.Key].Values |> Seq.head).Fit
+            nextObs
+            |> Seq.map (fun kv ->
+                let nextFit = est.Series.[kv.Key].Values |> Seq.head |> (fun p -> p.Fit)
 
-                    (kv.Key,
-                     { Obs = kv.Value |> fst
-                       Fit = nextEstimate },
-                     kv.Value |> snd))
+                kv.Key,
+                { Obs = kv.Value |> fst |> (*) 1.<state>
+                  Fit = nextFit },
+                kv.Value |> snd)
 
-            paired)
+        let squared (x: float<state>) = x * x
+
+        // Stream over each time step, building 2‑point datasets on the fly
+        timeSeries
+        |> Seq.collect (fun (KeyValue(_, ts)) ->
+            ts
+            |> TimeSeries.toObservations
+            |> Seq.pairwise
+            |> Seq.mapi (fun i (t1, t2) ->
+                // Build a mini‑series for all variables at this index
+                let dataset =
+                    timeSeries
+                    |> Map.map (fun _ fullTs ->
+                        fullTs
+                        |> TimeSeries.toObservations
+                        |> Seq.skip i
+                        |> Seq.truncate 2
+                        |> TimeSeries.fromObservations fullTs.DateMode)
+                    |> preTransform
+
+                dataset))
+        |> Seq.collect predictNext
         |> Seq.groupBy (fun (k, _, _) -> k)
-        |> Seq.map (fun (tsName, values) ->
-            let sos = values |> Seq.averageBy (fun (_, x, _) -> (x.Obs - x.Fit) ** 2.)
+        |> Seq.map (fun (name, triples) ->
+            let rmse =
+                triples |> Seq.averageBy (fun (_, v, _) -> squared (v.Obs - v.Fit)) |> sqrt
 
-            tsName,
-            (values
-             |> Seq.map (fun (_, v, t) -> (v, t))
+            name,
+            (triples
+             |> Seq.map (fun (_, v, t) -> v, t)
              |> TimeSeries.fromObservations dateMode,
-             { RMSE = sqrt sos }))
+             { RMSE = rmse |> Units.removeUnitFromFloat }))
         |> Map.ofSeq
 
 

@@ -2,6 +2,7 @@ module Program
 
 open Expecto
 open MathNet.Numerics
+open Bristlecone
 
 type Point = float[]
 
@@ -19,14 +20,17 @@ module Config =
     let rng = Random.MersenneTwister(randomSeed, threadSafe = true) :> System.Random
     let startPointCount = 10
     let accuracy = Accuracy.high
+    let likTol = 1.0<``-logL``>
+    let paramTol = 0.1
 
 
 module TestSuite =
 
     open TestFunctions.LocalMinima
+    open Bristlecone.Tensors
 
     let between x y =
-        Distributions.ContinuousUniform(x, y, Config.rng).Sample()
+        Statistics.Distributions.ContinuousUniform.draw Config.rng x y ()
 
     let hypercube d low high =
         [| 1..d |] |> Array.map (fun _ -> between low high)
@@ -36,11 +40,13 @@ module TestSuite =
     let twoDim f (x: float[]) = f x.[0] x.[1]
     let oneDim f (x: float[]) = f x.[0]
     let multidim f (x: float[]) = f x
+    let twoDimT f (x: TypedTensor<Vector,'a>) = f (Typed.itemAt 0 x) (Typed.itemAt 1 x)
 
     // Functions, input domain, global minimum, and global minimum point(s)
     let fixedDimension =
         [ "Ackley (2D)", ackley |> multidim, [ (-32.768, 32.768); (-32.768, 32.768) ], 0., [ [ 0.; 0. ] ]
           "Bukin Sixth", bukinSixth |> twoDim, [ (-15., -5.); (-3., 3.) ], 0., [ [ -10.; 1. ] ]
+          "Griewank", griewank |> multidim, [ -600., 600.; -600., 600. ], 0., [ [ 0.; 0. ] ]
           "Holder Table",
           holderTable |> twoDim,
           [ (-10., 10.); (-10., 10.) ],
@@ -57,17 +63,17 @@ module TestSuite =
             [ 1.3491; 1.3491 ]
             [ -1.3491; 1.3491 ]
             [ -1.3491; -1.3491 ] ]
-          //   "Dropwave",       dropWave |> twoDim,     [ (-512., 512.) ], 1., [[0.;0.]]
-          //   "Eggholder",      eggHolder |> twoDim,    [ (-512., 512.) ], -959.6406627, [[512.; 404.2319]]
-          //   "Gramarcy-Lee",   gramacyLee |> oneDim,   [ (0.5, 2.5) ], -0.869011134989500, [[0.548563444114526]]
-          //   "Langermann",     langermann |> twoDim,   [(0., 10.); (0., 10.)], -5.1621259, [[2.00299219; 1.006096]]
+          "Dropwave",       dropWave |> twoDim,     [ (-512., 512.); (-512., 512.) ], -1., [[0.;0.]]
+          "Eggholder",      eggHolder |> twoDim,    [ (-512., 512.) ], -959.6406627, [[512.; 404.2319]]
+          "Gramarcy-Lee",   gramacyLee |> oneDim,   [ (0.5, 2.5) ], -0.869011134989500, [[0.548563444114526]]
+          "Langermann",     langermann |> twoDim,   [(0., 10.); (0., 10.)], -5.1621259, [[2.00299219; 1.006096]]
           ]
 
-// let nDimensional = [
-//     fun d -> ackley <| hypercube d -32.768 32.768
-//     fun d -> griewank <| hypercube d -600. 600.
-//     fun d -> rastrigin <| hypercube d -5.12 5.12
-// ]
+    // let nDimensional = [
+    //     fun d -> ackley <| hypercube d -32.768 32.768
+    //     fun d -> griewank <| hypercube d -600. 600.
+    //     fun d -> rastrigin <| hypercube d -5.12 5.12
+    // ]
 
 // 1. Check functions resolve correctly
 [<Tests>]
@@ -95,20 +101,20 @@ let measureTime fn =
 let runReplicated nTimes work =
     [| 1..nTimes |] |> Array.Parallel.map (fun _ -> measureTime (fun () -> work ()))
 
-let logger = Bristlecone.Logging.Console.logger (10000)
-let endCondition = EndConditions.afterIteration 100000
+let logger = Logging.Console.logger 1000<iteration>
+let endCondition = EndConditions.Profiles.mcmc 100000<iteration> logger
 let accuracy = { absolute = 1e-3; relative = 1e-2 }
 
 type BenchmarkResult =
     { ModelName: string
       OptimMethod: string
       Runs: int
-      MinimumReal: float
+      MinimumReal: float<``-logL``>
       MinimumRealPoints: float list list
-      MinimumEstimatedMedian: float
-      MinimumEstimatedBest: float
-      DistanceFromMinimumBest: float
-      ParameterSpaceDistanceMedian: float
+      MinimumEstimatedMedian: float<``-logL``>
+      MinimumEstimatedBest: float<``-logL``>
+      DistanceFromMinimumBest: float<``-logL``>
+      ParameterSpaceDistanceMedian: float<``optim-space``>
       ParameterEstimates: EstimatedP list
       TimesNearMinimum: int
       MillisecondsMedian: float }
@@ -118,23 +124,25 @@ and EstimatedP =
       Median: float
       StDev: float }
 
-let median (x: float seq) = Statistics.Statistics.Median x
+let median<[<Measure>] 'u> (x: float<'u> seq) = x |> Seq.map float |> Statistics.Statistics.Median |> LanguagePrimitives.FloatWithMeasure<'u>
 
 let summariseRuns
     modelName
     (optimName: string)
     trueMinima
     minVal
-    minima
-    (results: ((Bristlecone.EstimationEngine.Solution<float> list * float array) * int) array)
+    (minima: float list list)
+    (results: ((EstimationEngine.Solution list * float[]) * int) seq)
     =
-    let eachRunMinimum = results |> Seq.map (fun ((r, _), _) -> r |> Seq.minBy fst)
+    let eachRunMinimum =
+        results |> Seq.map (fun ((r, _), _) -> r |> Seq.minBy fst)
 
     let distancesFromRealMinimum =
         eachRunMinimum |> Seq.map (fun o -> abs ((fst o) - minVal))
 
     let bestPointEstimate =
         eachRunMinimum |> Seq.minBy (fun o -> abs ((fst o) - minVal)) |> snd
+        |> Tensors.Typed.toFloatArray
 
     let elapsedAverage = results |> Seq.map (fun (_, t) -> float t) |> median
 
@@ -143,17 +151,17 @@ let summariseRuns
     let paramEstimates =
         [ 1..dims ]
         |> List.map (fun d ->
-            let values = eachRunMinimum |> Seq.map (fun (_, v) -> v.[d - 1])
+            let values = eachRunMinimum |> Seq.map (fun (_, v) -> (Tensors.Typed.toFloatArray v).[d - 1])
 
-            { Best = bestPointEstimate.[d - 1]
-              Median = median values
-              StDev = Statistics.Statistics.StandardDeviation(values) })
+            { Best = bestPointEstimate.[d - 1] |> float
+              Median = median (values |> Seq.map float)
+              StDev = Statistics.Statistics.StandardDeviation(values |> Seq.map float) |> float })
 
     let distanceToClosestParamValue =
         eachRunMinimum
         |> Seq.map (fun (_, v) ->
             minima
-            |> Seq.map (fun minimum -> Seq.zip minimum v |> Seq.map (fun (x, y) -> abs (x - y)) |> Seq.sum)
+            |> Seq.map (fun minimum -> Seq.zip minimum (Tensors.Typed.toFloatArray v) |> Seq.map (fun (x, y) -> abs (x - float y)) |> Seq.sum)
             |> Seq.min)
 
     { ModelName = modelName
@@ -164,9 +172,9 @@ let summariseRuns
       MinimumEstimatedMedian = eachRunMinimum |> Seq.map fst |> median
       MinimumEstimatedBest = eachRunMinimum |> Seq.map fst |> Seq.min
       DistanceFromMinimumBest = distancesFromRealMinimum |> Seq.min
-      ParameterSpaceDistanceMedian = distanceToClosestParamValue |> median
+      ParameterSpaceDistanceMedian = distanceToClosestParamValue |> median |> (*) 1.<``optim-space``>
       ParameterEstimates = paramEstimates
-      TimesNearMinimum = distancesFromRealMinimum |> Seq.filter (fun i -> i < 0.1) |> Seq.length
+      TimesNearMinimum = distancesFromRealMinimum |> Seq.filter (fun i -> i < 0.1<``-logL``>) |> Seq.length
       MillisecondsMedian = elapsedAverage }
 
 let runOptimTests optimFunctions =
@@ -176,23 +184,31 @@ let runOptimTests optimFunctions =
         |> List.map (fun (modelName, f, domain, minVal, minima) ->
             let domain =
                 domain
-                |> List.map (fun (min, max) -> min, max, Bristlecone.Parameter.Constraint.Unconstrained)
+                |> List.map (fun (min, max) -> min * 1.<``optim-space``>, max * 1.<``optim-space``>, Parameter.Constraint.Unconstrained)
                 |> List.toArray
 
             runReplicated Config.startPointCount (fun () ->
                 let startPoint =
-                    domain |> Array.map (fun (min, max, _) -> TestSuite.between min max)
+                    domain 
+                    |> Array.map (fun (min, max, _) -> TestSuite.between (float min) (float max))
+                    |> Array.map ((*) 1.<``optim-space``>)
+                    |> Tensors.Typed.ofVector
 
-                let result: list<Bristlecone.EstimationEngine.Solution<float>> =
-                    // There are no constraints in these benchmarks, so transform vs detatch is irrelevant.
+                let result: list<EstimationEngine.Solution> =
+                    // Using a shim to go between tensor space and float space
+                    let f' point  = f (Tensors.Typed.toFloatArray point |> Array.map float) * 1.<``-logL``> |> Tensors.Typed.ofScalar
                     match optimise with
-                    | Bristlecone.EstimationEngine.InTransformedSpace optim ->
-                        optim Config.rng logger endCondition domain (Some startPoint) f
-                    | Bristlecone.EstimationEngine.InDetachedSpace optim ->
-                        optim Config.rng logger endCondition domain (Some startPoint) f
+                    | EstimationEngine.Optimisation.InTransformedSpace optim ->
+                        optim Config.rng logger endCondition domain (Some startPoint) f'
+                    | EstimationEngine.Optimisation.InDetachedSpace optim ->
+                        optim Config.rng logger endCondition domain (Some startPoint) f'
 
-                (result, startPoint))
-            |> summariseRuns modelName optimName minima minVal minima))
+                result, startPoint |> Tensors.Typed.toFloatArray |> Array.map float
+            )
+            |> summariseRuns modelName optimName minima (minVal * 1.<``-logL``>) minima )
+        )
+
+[<Measure>] type ms
 
 type BenchmarkResultFullModel =
     { ModelName: string
@@ -200,92 +216,120 @@ type BenchmarkResultFullModel =
       Runs: int
       SuccessfulRuns: int
       DistanceFromLikelihoodMedian: float
-      MillisecondsMedian: float
-      Parameters: Bristlecone.Test.ParameterTestResult list list }
+      MillisecondsMedian: float<ms>
+      Parameters: Test.ParameterTestResult list list }
+
+
+module Metrics =
+
+    /// Relative error
+    let relError trueVal estVal =
+        if trueVal = 0.0 then abs estVal
+        else abs (estVal - trueVal) / abs trueVal
+
+    /// Metrics for an indiviual model/optim run.
+    let runMetrics (likTol: float<``-logL``>) (paramTol: float) ((run: Test.TestResult<'a, 'b, 'c, 'u>, time:int)) =
+        let likelihoodGap = run.EstimatedLikelihood - run.RealLikelihood
+        let paramErrors = run.Parameters |> List.map(fun p -> relError (float p.RealValue) (float p.EstimatedValue))
+        let paramRMSE = sqrt (List.averageBy (fun e -> e * e) paramErrors)
+        let success = likelihoodGap <= likTol && paramRMSE <= paramTol
+        {| LikelihoodGap = likelihoodGap
+           ParamErrors   = paramErrors
+           ParamN        = run.Parameters.Length
+           IterationN    = run.IterationsRun
+           ParamRMSE     = paramRMSE
+           Success       = success
+           TimeMs        = time |}
+
+    // TODO Harmonise with earlier unit-based definition.
+    let median xs =
+        let sorted = xs |> List.sort
+        let n = sorted.Length
+        if n % 2 = 1 then sorted.[n/2]
+        else (sorted.[n/2 - 1] + sorted.[n/2]) / 2.0
+
+    /// Metrics for all runs for an indiviual model/optim combination.
+    let summariseRuns likTol paramTol runs =
+        let metrics = runs |> Array.map (runMetrics likTol paramTol) |> Array.toList
+        let successPct =
+            100.0 * float (metrics |> List.filter (fun m -> m.Success) |> List.length)
+            / float runs.Length
+        let medLikGap = metrics |> List.map (fun m -> m.LikelihoodGap |> float) |> median
+        let medRMSE   = metrics |> List.map (fun m -> m.ParamRMSE) |> median
+        let medTime   = metrics |> List.map (fun m -> m.TimeMs |> float) |> median
+        let medIter   = metrics |> List.map (fun m -> m.IterationN |> float) |> median
+        {| SuccessPct = successPct
+           MedianLikelihoodGap = medLikGap
+           MedianParamRMSE     = medRMSE
+           MedianTimeMs        = int medTime
+           RunN                = runs.Length
+           MedianIterations    = int medIter
+           PerParamErrors =
+                metrics
+                |> List.collect (fun m -> m.ParamErrors)
+                |> List.chunkBySize metrics.Head.ParamN
+                |> List.map median |}
 
 
 module TimeSeriesTests =
 
     let settings =
-        Bristlecone.Test.create
-        |> Bristlecone.Language.Test.withStartValue "lynx" 1.0
-        |> Bristlecone.Language.Test.withStartValue "hare" 1.0
+        Test.annualSettings
+        |> Test.endWhen endCondition
 
-    let summarise modelName optimName (results: (Result<Bristlecone.Test.TestResult<'a, 'b, 'c>, string> * int) seq) =
-        let successes =
-            results
-            |> Seq.toList
-            |> List.where (fst >> Result.isOk)
-            |> List.map (fun r ->
-                match fst r with
-                | Ok x -> (x, snd r)
-                | Error _ -> invalidOp "")
+    /// An engine that uses annual-based data in an
+    /// annual-based model.
+    /// Inserts a time conversion from int-based years (data) to float-based years (model).
+    let engine optimise : EstimationEngine.EstimationEngine<int<Time.year>,Time.year,'u> =
+        Bristlecone.mkContinuous ()
+        |> Bristlecone.withCustomOptimisation optimise
+        |> Bristlecone.withOutput logger
+        |> Bristlecone.withTimeConversion (fun (ts:int<Time.year>) -> float ts * 1.<Time.year>)
 
-        { ModelName = modelName
-          OptimMethod = optimName
-          Parameters = successes |> List.map (fun (s, _) -> s.Parameters)
-          Runs = results |> Seq.length
-          SuccessfulRuns = successes |> Seq.length
-          DistanceFromLikelihoodMedian =
-            successes
-            |> List.map fst
-            |> List.map (fun r -> abs <| r.RealLikelihood - r.EstimatedLikelihood)
-            |> median
-          MillisecondsMedian = successes |> List.map (snd >> float) |> median }
-
-    let engine optimise =
-        Bristlecone.Bristlecone.mkContinuous
-        |> Bristlecone.Bristlecone.withCustomOptimisation optimise
-
-    let runTimeSeriesTests timeModels optimFunctions =
+    let runTimeSeriesTests (timeModels: ('a * ModelSystem.ModelSystem<Time.year> * 'b) list) optimFunctions =
         List.allPairs optimFunctions timeModels
         |> List.map (fun ((optimName: string, optimise), (modelName, modelFn, startValues)) ->
             runReplicated Config.startPointCount (fun () ->
-                Bristlecone.Bristlecone.tryTestModel (engine optimise) settings modelFn)
-            |> summarise modelName optimName)
+                let settings = settings |> Test.addStartValues startValues
+                Bristlecone.testModel (engine optimise) settings modelFn)
+            |> fun r -> modelName, optimName, Metrics.summariseRuns Config.likTol Config.paramTol r)
 
 
 // MODELS / OPTIM Fn
 // -------
 
 let annealSettings =
-    { MonteCarlo.SimulatedAnnealing.AnnealSettings<float>.Default with
+    { MonteCarlo.SimulatedAnnealing.AnnealSettings.Default with
         BoilingAcceptanceRate = 0.85
         HeatRamp = (fun t -> t + sqrt t)
         TemperatureCeiling = Some 500.
-        HeatStepLength = EndConditions.afterIteration 10000
-        AnnealStepLength =
-            (fun x -> (*MonteCarlo.SimulatedAnnealing.EndConditions.improvementCount 5000 1000 x || *)
-                EndConditions.afterIteration 10000 x) }
+        HeatStepLength = EndConditions.atIteration 10000<iteration>
+        AnnealStepLength = fun x -> EndConditions.atIteration 10000<iteration> x }
 
 let optimFunctions =
     [ "amoeba single", Amoeba.single Amoeba.Solver.Default
       "amoeba swarm", Amoeba.swarm 5 20 Amoeba.Solver.Default
-      "anneal classic", MonteCarlo.SimulatedAnnealing.classicalSimulatedAnnealing 0.01 false annealSettings
-      "anneal cauchy", MonteCarlo.SimulatedAnnealing.fastSimulatedAnnealing 0.01 false annealSettings
+      "anneal classic", MonteCarlo.SimulatedAnnealing.classicalSimulatedAnnealing 0.01<``optim-space``> false annealSettings
+      "anneal cauchy", MonteCarlo.SimulatedAnnealing.fastSimulatedAnnealing 0.01<``optim-space``> false annealSettings
       "filzbach",
       MonteCarlo.Filzbach.filzbach
           { TuneAfterChanges = 10000
             MaxScaleChange = 0.5
             MinScaleChange = 0.5
-            BurnLength = EndConditions.afterIteration 10000 }
+            BurnLength = EndConditions.atIteration 10000<iteration> }
       "automatic MCMC", MonteCarlo.``Automatic (Adaptive Diagnostics)``
       "metropolis-gibbs", MonteCarlo.``Metropolis-within Gibbs``
-      "adaptive metropolis", MonteCarlo.adaptiveMetropolis 0.250 500
+      "adaptive metropolis", MonteCarlo.adaptiveMetropolis 0.250 500<iteration>
       "random walk MCMC", MonteCarlo.randomWalk []
       "random walk w/ tuning",
-      MonteCarlo.randomWalk [ MonteCarlo.TuneMethod.CovarianceWithScale 0.25, 500, EndConditions.afterIteration 10000 ] ]
+      MonteCarlo.randomWalk [ { Method = MonteCarlo.TuneMethod.CovarianceWithScale 0.25; Frequency = 500<iteration>; EndCondition = EndConditions.Profiles.mcmcTuningStep 50000<iteration> logger } ]
+    ]
 
-let timeModels
-    : (string *
-      Bristlecone.ModelSystem.ModelSystem<float> *
-      (Bristlecone.Test.TestSettings<float, obj, obj, obj> -> Bristlecone.Test.TestSettings<float, obj, obj, obj>)) list =
-    [ "predator-prey (with gaussian noise)",
-      TestFunctions.Timeseries.``predator-prey [with noise]``,
-      Bristlecone.Test.addStartValues [ "lynx", 1.0; "hare", 1.0 ]
-      "predator-prey",
-      TestFunctions.Timeseries.``predator-prey``,
-      Bristlecone.Test.addStartValues [ "lynx", 1.0; "hare", 1.0 ] ]
+let timeModels () =
+    [ 
+        "predator-prey", TestFunctions.Timeseries.PredatorPrey.``predator-prey`` (), [ "predator", 1.0; "prey", 1.0 ]
+        "predator-prey (noisy)", TestFunctions.Timeseries.PredatorPrey.``predator-prey [with noise]`` (), [ "predator", 1.0; "prey", 1.0 ]
+    ]
 
 module Output =
 
@@ -315,7 +359,7 @@ Bristlecone Benchmarks
         |> Seq.map (fun p -> sprintf "best %.3f / median %.3f (±%.3f)" p.Best p.Median p.StDev)
         |> String.concat "<br>"
 
-    let threeDp f = sprintf "%.3f" f
+    let threeDp (f:float<'u>) = sprintf "%.3f" f
 
     let summariseParameters (p: list<list<Bristlecone.Test.ParameterTestResult>>) =
         p
@@ -326,11 +370,11 @@ Bristlecone Benchmarks
                 (v |> Seq.map (fun x -> abs (x.EstimatedValue - x.RealValue)))
 
             sprintf
-                "[%s] %.3f best / median %.3f (±%.3f)"
+                "[%s] %.3f best / %.3f median (±%.3f)"
                 g
                 (distancesFromReal |> Seq.min)
                 (distancesFromReal |> median)
-                (distancesFromReal |> Statistics.Statistics.StandardDeviation))
+                (distancesFromReal |> Seq.map float |> Statistics.Statistics.StandardDeviation))
         |> String.concat "<br>"
 
     let pointsToCell points =
@@ -376,26 +420,29 @@ let main argv =
 
         System.IO.File.WriteAllText(Output.fileName, Output.markdown optimTable "")
 
-        let timeResults = TimeSeriesTests.runTimeSeriesTests timeModels optimFunctions //runOptimTests ()
+        let timeResults = TimeSeriesTests.runTimeSeriesTests (timeModels()) optimFunctions //runOptimTests ()
 
         let timeTable =
             Output.markdownTable
-                [ "Model name"
+                [ "Model"
                   "Optimisation method"
-                  "success %"
-                  "n runs"
-                  "Distance from minimum likelihood (median)"
-                  "Distance from true parameter values"
-                  "Milliseconds taken (median)" ]
+                  "Success %"
+                  "n"
+                  "Likelihood gap (med, tol=1.0)"
+                  "Param RMSE (rel, median)"
+                  "n iterations (median)"
+                  "Time to solution (ms, median)" ]
                 (timeResults
-                 |> Seq.map (fun o ->
-                     [ o.ModelName
-                       o.OptimMethod
-                       Output.threeDp (float o.SuccessfulRuns / float o.Runs * 100.0) + "%"
-                       o.Runs.ToString()
-                       Output.threeDp o.DistanceFromLikelihoodMedian
-                       Output.summariseParameters o.Parameters
-                       o.MillisecondsMedian.ToString() ]))
+                 |> Seq.map (fun (modelName, optimName, metrics) ->
+                     [ modelName
+                       optimName
+                       Output.threeDp metrics.SuccessPct + "%"
+                       metrics.RunN.ToString()
+                       Output.threeDp metrics.MedianLikelihoodGap
+                       Output.threeDp metrics.MedianParamRMSE
+                       //Output.summariseParameters metrics.MedianParamRMSE
+                       metrics.MedianIterations.ToString()
+                       metrics.MedianTimeMs.ToString() ]))
 
         System.IO.File.WriteAllText(Output.fileName, Output.markdown optimTable timeTable)
         0

@@ -12,7 +12,7 @@ index: 1
 
 (*** condition: prepare ***)
 #nowarn "211"
-#r "../src/Bristlecone/bin/Debug/netstandard2.0/Bristlecone.dll"
+#r "../src/Bristlecone/bin/Debug/net5.0/Bristlecone.dll"
 (*** condition: fsx ***)
 #if FSX
 #r "nuget: Bristlecone,{{fsdocs-package-version}}"
@@ -34,6 +34,8 @@ namespace:
 
 open Bristlecone // Opens Bristlecone core library and estimation engine
 open Bristlecone.Language // Open the language for writing Bristlecone models
+open FSharp.Data.UnitSystems.SI.UnitSymbols // Open F#'s SI units
+open Bristlecone.Time // Open the time module to use built-in time units
 
 (**
 
@@ -42,19 +44,30 @@ Writing mathematical expressions
 
 In Bristlecone, mathematical expressions to be used within
 a model may be written using simple terms. Consider the following
-example of an ordinary differential equation of logistic growth:
+example of an ordinary differential equation of logistic growth.
+
+In the simplest form, first estimatable parameters must be declared with their reference,
+any constraints, and the initial bounds. Then, the model may be defined
+by applying these parameters. Here, ``B`` is defined in kilograms, with the
+``r`` parameter a dimensionless rate scalar.
 *)
 
-let dNdt = Parameter "r" * This * (Constant 1. - (This / Parameter "K"))
+// Parameters:
+let r = parameter "r" notNegative 0.01< / day> 0.50< / day>
+let K = parameter "K" notNegative 20.<kg> 50.<kg>
+
+let dBdt = P r * This<kg> * (Constant 1. - (This / P K))
 
 (** 
-Here, we have used the following model expressions:
+Here, the model is defined as a differential (rate) equation, which is evident
+in its type signature (``kg/day``). We have used the following model expressions:
 
   * `This` - the subject of the equation, which in this 
-    case is *N*, the population size.
+    case is *N*, the population size. The first use of this
+    was type-annotated with a unit for ease of reading.
 
-  * `Parameter` - an estimatable parameter followed by its name. Here, we have
-    defined two parameters:
+  * `P` - substitutes as estimatable parameter when followed by the pre-declared parameter.
+     Here, we have defined two parameters:
       - `Paramater "r"` - the intrinsic growth rate of the population;
       - `Parameter "K"` - the *carrying capacity* of the population.
 
@@ -64,10 +77,13 @@ You can use all standard mathematical operators `* / + - % **` to build your mod
 There are additional model expressions that may be used to build up more complex
 expressions (which are defined in the `ModelExpression` discriminated union).
 
+All ``ModelExpression``s can have units of measure attached, and arithmetic will
+follow naturally.
+
 Additional model expressions
 ---
 
-### Time-varying parameters
+### Time-varying parameters (environmental forcings)
 
 Often, a time-series model needs to take account of environmental
 variability. For example, changes in temperature and precipitation
@@ -75,31 +91,33 @@ may influence the growth rate of a plant over time. Bristlecone supports
 time-varying parameters in equations using the form:
 *)
 
-Environment "T[min]"
+let tMin = environment<K> "T[min]"
+
+// Use in models:
+Environment tMin
 
 (**
-Here, we have defined the minimum temperature (*T[min]*) as a time-varying (or environment) parameter.
-Unlike `Paramater` items, *T[min]* will not be estimated during model-fitting, but
+Here, we have defined the minimum temperature (*T[min]*) as a time-varying (or environment) parameter in Kelvin.
+Unlike `Parameter` items, *T[min]* will not be estimated during model-fitting, but
 will be read from the environmental properties for the appropriate time interval.
 
 ### Conditional
 
 You can define a conditional model fragment by using the
-`Conditional` term. A `Conditional` model expression takes a function
-with one argument - a function that represents the future
-computation of the model expression (`compute` -
-with signature `ModelExpression -> float`). Within this function,
-you can then evaluate the answer of any model expressions
-by passing them as the argument to the `compute` function.
-Please see the below example:
+`Conditional` term. A `Conditional` model expression requires
+three arguments: a boolean condition, the model expression to use
+if the boolen condition is true, and one for if it is false.
+
+When building boolean values using model expressions, the comparison
+operators require a dot (``.<``, ``.>``). In this example, the value
+of a specific parameter is guarded such that the model is only valid
+if the parameter ``a`` * 5 is not near-zero:
 *)
 
-let linear =
-    Conditional(fun compute ->
-        if compute (Parameter "a" * Constant 5.) < 1e-12 then
-            Invalid
-        else
-            Parameter "a" * This)
+let a = parameter "a" notNegative 0.2<m / kg> 0.5<m / kg>
+
+let linear: ModelExpression<m / kg> =
+    Conditional (P a * Constant 5. .< Constant 1e-12<m / kg>) Invalid (P a * This)
 
 (**
 In this example, the function is limited such that
@@ -116,27 +134,11 @@ returns `Invalid`, the model fails. During optimisation, this is useful
 to constrain the search within parameter space to values that do not
 tend to infinity, or where values may be theoretically implausable.
 
-### Arbitrary
-
-Sometimes, a complex sub-model may need to be inserted where you
-do not wish to rewrite it into the Bristlecone language. You may also
-not have access to the original source, or be calling from an external
-library. In these cases, you can use the `Arbitrary` model expression
-to wrap the function for Bristlecone. Helper functions are included
-to simplify this process within the `Arbitrary` module:
-*)
-
-/// x: population size
-/// t: current time
-/// z: some environmental value
-let someArbitraryFn x t z = x + t * 1.0 - z
-
-// TODO Insert example here
-
-(**
-
 ### Time
 
 The `Time` keyword simply retrives the current time index; as such, it
-can be used to formulate time-dependent models.
+can be used to formulate time-dependent models. The value of ``Time``
+is tied to the temporal resolution of the model. For example, if a
+differential-time model is defined in the time units ``day``, then
+``Time`` will present in daily time units.
 *)

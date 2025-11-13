@@ -4,311 +4,321 @@ open Bristlecone
 open Expecto
 open FsCheck
 open Bristlecone.EstimationEngine
-
-// Checks floats are equal, but accounting for nan <> nan
-let expectSameFloat a b message =
-    Expect.isTrue (LanguagePrimitives.GenericEqualityER a b) message
-
-let expectSameFloatList a b message =
-    Seq.zip a b |> Seq.iter (fun (a, b) -> expectSameFloat a b message)
-
-
+open Bristlecone.Time
 
 module TestModels =
-
     open Bristlecone.Language
-
-    let constant bound1 bound2 =
+    let rateConstant bound1 bound2 =
+        let X = state "X"
+        let a = parameter "a" noConstraints (min bound1 bound2) (max bound1 bound2)        
         Model.empty
-        |> Model.addEquation "x" (Parameter "a")
-        |> Model.estimateParameter "a" noConstraints (min bound1 bound2) (max bound1 bound2)
-        |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ "x" ])
+        |> Model.addRateEquation X (P a)
+        |> Model.estimateParameter a
+        |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ Require.state X ])
         |> Model.compile
 
-    let twoEquationConstant cons bound1 bound2 =
-        Model.empty
-        |> Model.addEquation "x" (Parameter "a")
-        |> Model.addEquation "y" (Parameter "a")
-        |> Model.estimateParameter "a" cons (min bound1 bound2) (max bound1 bound2)
-        |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ "x"; "y" ])
+    /// Scaffold a discrete model where there is one parameter (a)
+    /// setup to be estimated.
+    let discreteModel bound1 bound2 =
+        let X = state "X"
+        let a = parameter "a" noConstraints (min bound1 bound2) (max bound1 bound2)        
+        Model.discrete
+        |> Model.addDiscreteEquation X (P a)
+        |> Model.estimateParameter a
+        |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ Require.state X ])
         |> Model.compile
 
-let defaultEngine =
-    { TimeHandling = Continuous <| Integration.MathNet.integrate
+    let rateTwoEquationConstant cons bound1 bound2 =
+        let X = state "X"
+        let Y = state "Y"
+        let a = parameter "a" cons (min bound1 bound2) (max bound1 bound2)        
+        Model.empty
+        |> Model.addRateEquation X (P a)
+        |> Model.addRateEquation Y (P a)
+        |> Model.estimateParameter a
+        |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ Require.state X; Require.state Y ])
+        |> Model.compile
+
+    /// dX/dt = Temperature
+    let tempDrivenModel () =
+        let X = state "X"
+        let temp = environment "Temp"
+        let dummy = parameter "a" noConstraints (min 0.1 0.2) (max 0.1 0.2)        
+        Model.empty
+        |> Model.addRateEquation X (Environment temp)   // derivative of X is just the env forcing
+        |> Model.estimateParameter dummy
+        |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ Require.state X ])
+        |> Model.compile
+
+    let tempDrivenModelDiscrete () =
+        let X = state "X"
+        let temp = environment "Temp"
+        let dummy = parameter "a" noConstraints (min 0.1 0.2) (max 0.1 0.2)        
+        Model.discrete
+        |> Model.addDiscreteEquation X (Environment temp)   // derivative of X is just the env forcing
+        |> Model.estimateParameter dummy
+        |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ Require.state X ])
+        |> Model.compile
+
+    let diffSingleEnv (dynCode:ShortCode.ShortCode) (envCode:ShortCode.ShortCode) =
+        let X = state dynCode.Value
+        let temp = environment envCode.Value
+        let dummy = parameter "a" noConstraints (min 0.1 0.2) (max 0.1 0.2)        
+        Model.empty<year>
+        |> Model.addRateEquation X (Environment temp)   // derivative of X is just the env forcing
+        |> Model.estimateParameter dummy
+        |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ Require.state X ])
+        |> Model.compile
+
+
+let indexBySpan (ts:System.TimeSpan) =
+    float ts.Days * 1.<Time.day> * 12.<Time.``time index``/Time.day>
+
+let defaultEngine () =
+    { TimeHandling = Continuous <| Integration.RungeKutta.rk4
       OptimiseWith = Optimisation.None.none
       LogTo = ignore
-      Random = MathNet.Numerics.Random.MersenneTwister(1000, true)
+      ToModelTime = indexBySpan
+      Random = MathNet.Numerics.Random.MersenneTwister(1000,true)
+      InterpolationGlobal = Solver.InterpolationMode.Lower
+      InterpolationPerVariable = Map.empty
       Conditioning = Conditioning.RepeatFirstDataPoint }
 
-let defaultEndCon = Optimisation.EndConditions.afterIteration 1000
+let defaultEngineDiscrete () =
+    { TimeHandling = Discrete
+      OptimiseWith = Optimisation.None.none
+      LogTo = ignore
+      ToModelTime = indexBySpan
+      Random = MathNet.Numerics.Random.MersenneTwister(1000,true)
+      InterpolationGlobal = Solver.InterpolationMode.Lower
+      InterpolationPerVariable = Map.empty
+      Conditioning = Conditioning.RepeatFirstDataPoint }
 
-module ``Objective creation`` =
-
-    [<Tests>]
-    let initialBounds =
-        testList
-            "Objective"
-            [
-
-              // testProperty "Time-series are paired to correct years" <| fun x ->
-              //     false
-
-              // testProperty "Throws when time-series are not the same length" <| fun x ->
-              //     false
-
-              testPropertyWithConfig Config.config "Likelihood functions use 'real' parameter values"
-              <| fun shouldTransform (data: float list) (b1: NormalFloat) (b2: NormalFloat) ->
-
-                  // Returns the parameter value
-                  let fakeLikelihood: Bristlecone.ModelSystem.LikelihoodFn<float> =
-                      fun paramAccessor data -> paramAccessor.Get "a"
-
-                  if b1.Get = b2.Get || b1.Get = 0. || b2.Get = 0. then
-                      ()
-                  else
-                      let b1 = if b1.Get < 0. then b1.Get * -1. else b1.Get
-                      let b2 = if b2.Get < 0. then b2.Get * -1. else b2.Get
-
-                      let mode =
-                          if shouldTransform then
-                              Language.notNegative
-                          else
-                              Language.noConstraints
-
-                      let model =
-                          Language.Model.empty
-                          |> Language.Model.addEquation "x" (Language.Parameter "a")
-                          |> Language.Model.estimateParameter "a" mode (min b1 b2) (max b1 b2)
-                          |> Language.Model.useLikelihoodFunction fakeLikelihood
-                          |> Language.Model.compile
-
-                      let testObjective =
-                          Objective.create
-                              model
-                              (fun _ -> Map.empty)
-                              (fun _ _ _ -> [| 2.0 |])
-                              ([ (ShortCode.create "x").Value, data |> List.toArray ] |> Map.ofList)
-
-                      Expect.floatClose
-                          Accuracy.high
-                          (testObjective
-                              [| (if shouldTransform then
-                                      Parameter.transformOut mode b1
-                                  else
-                                      b1) |])
-                          b1
-                          "The likelihood function did not retrieve the 'real' parameter value"
-
-              ]
-
-type TimeModeToTest =
-    | TestCalendarDate
-    | TestRadiocarbon
+let defaultEndCon = Optimisation.EndConditions.atIteration 1000<iteration>
 
 module ``Fit`` =
 
     [<Tests>]
-    let conditioningTest =
-        testList
-            "Conditioning"
-            [
+    let fitTests =
+      testList "Integration tests for tryFit" [
 
-              testPropertyWithConfig Config.config "Repeating first data point sets t0 as t1"
-              <| fun time resolution (data: float list) ->
-                  if data.IsEmpty || data.Length = 1 then
-                      ()
-                  else
-                      let data =
-                          [ (Language.code "x").Value,
-                            Time.TimeSeries.fromSeq
-                                Time.DateMode.calendarDateMode
-                                time
-                                (Time.Resolution.FixedTemporalResolution.Years resolution)
-                                data ]
-                          |> Map.ofList
+        // --- Conditioning modes ---
+        testPropertyWithConfig Config.config "Conditioning modes produce aligned predictions"
+        <| fun (PositiveInt steps) (x0:NormalFloat) (useRepeat:bool) ->
+            let steps = max 3 steps
+            let startDate = System.DateTime(2000,1,1)
+            let obs =
+              [| for i in 0..steps-1 -> (x0.Get + float i) * 1.<ModelSystem.state>, startDate.AddDays(float i) |]
+              |> Time.TimeSeries.fromNeoObservations
+            let data = Map.ofList [ (Language.code "X").Value, obs ]
+            let engine =
+              { defaultEngine() with
+                  Conditioning = if useRepeat then Conditioning.RepeatFirstDataPoint else Conditioning.NoConditioning }
+            let result = Expect.wantOk (Bristlecone.tryFit engine defaultEndCon data (TestModels.rateConstant 0. 10.)) "Fit failed"
+            let xs = result.Series.[(Language.code "X").Value]
 
-                      let result = Bristlecone.Fit.t0 data Conditioning.RepeatFirstDataPoint ignore
+            Expect.equal xs.Length (if useRepeat then obs.Length else obs.Length - 1)
+                "Predictions were different length from observations"
 
-                      expectSameFloatList
-                          (result)
-                          (data |> Map.map (fun k v -> v.Values |> Seq.head))
-                          "t0 did not equal t1"
+            Expect.equal (snd xs.StartDate)
+                        (if useRepeat then snd obs.StartDate else (snd obs.StartDate).AddDays 1)
+                "Start dates differed between prediction and observation"
 
-              // testProperty "t0 is set as a custom point when specified" <| fun () ->
-              //     false
-              ]
+            Config.sequenceEqualTol
+                (xs.Values |> Seq.map (fun v -> v.Obs))
+                (if useRepeat then obs.Values else Seq.tail obs.Values)
+                "True observed data was not returned by tryFit"
+
+        // --- Discrete vs differential ---
+        testPropertyWithConfig Config.config "Discrete/Differential equations can be fitted"
+        <| fun isDifferential (PositiveInt steps) (x0:NormalFloat) (useRepeat:bool) ->
+            let steps = max 3 steps
+            let startDate = System.DateTime(2000,1,1)
+            let obs =
+              [| for i in 0..steps-1 -> (x0.Get + float i) * 1.<ModelSystem.state>, startDate.AddDays(float i) |]
+              |> Time.TimeSeries.fromNeoObservations
+            let data = Map.ofList [ (Language.code "X").Value, obs ]
+            let xs =
+                if isDifferential
+                then
+                    let engine =
+                        { defaultEngine() with
+                            Conditioning = if useRepeat then Conditioning.RepeatFirstDataPoint else Conditioning.NoConditioning }
+                    let result = Expect.wantOk (Bristlecone.tryFit engine defaultEndCon data (TestModels.rateConstant 0. 10.)) "Fit failed"
+                    result.Series.[(Language.code "X").Value]
+                else
+                    let engine =
+                        { defaultEngine() with
+                            TimeHandling = Discrete
+                            Conditioning = if useRepeat then Conditioning.RepeatFirstDataPoint else Conditioning.NoConditioning }
+                        // |> Bristlecone.withTimeConversion (fun _ -> 1.<1>)
+                    let result = Expect.wantOk (Bristlecone.tryFit engine defaultEndCon data (TestModels.discreteModel 0. 10.)) "Fit failed"
+                    result.Series.[(Language.code "X").Value]
+            Expect.hasLength xs.Values (if useRepeat then obs.Length else obs.Length - 1) "Predictions were different length from observations"
+            Expect.equal (snd xs.StartDate) (if useRepeat then snd obs.StartDate else (snd obs.StartDate).AddDays 1) "Start dates differed between prediction and observation"
+            Config.sequenceEqualTol (xs.Values |> Seq.map(fun v -> v.Obs)) (if useRepeat then obs.Values else Seq.tail obs.Values)  "True observed data was not returned by tryFit"
+
+
+       
+        // Test takes the lower environment value within each euler step.
+        testPropertyWithConfig Config.config "Fixed-step differential with matching env resolution"
+        <| fun dynCode envCode (PositiveInt steps) (offset:NormalFloat) (useRepeat:bool) ->
+            
+            // Annual environmental and observation data:
+            let steps = max 4 steps
+            let startDate = 1850
+            let env =
+                [ startDate - 1 .. startDate + steps ]
+                |> List.map(fun y -> float y + offset.Get, DatingMethods.Annual (y * 1<year>))
+                |> TimeSeries.fromObservations DateMode.annualDateMode
+            let obs =
+                [ startDate .. startDate + steps ]
+                |> List.map(fun y -> float y, DatingMethods.Annual (y * 1<year>))
+                |> TimeSeries.fromObservations DateMode.annualDateMode
+            let data = Map.ofList [ envCode, env; dynCode, obs ]
+
+            // Test engine / settings:
+            let engine = defaultEngine() |> Bristlecone.withTimeConversion Units.intToFloat
+            let model = TestModels.diffSingleEnv dynCode envCode
+            let result = Bristlecone.tryFit engine defaultEndCon data model |> fun r -> Expect.wantOk r "Fit failed"
+
+            let actual = result.Series.[dynCode].Values |> Seq.map (fun v -> v.Fit |> Units.removeUnitFromFloat) |> Seq.toArray
+            let expected =
+                env
+                |> TimeSeries.toObservations
+                |> Seq.toArray
+                |> Array.map fst
+                |> Array.scan (+) 0.
+                |> Array.skip 2
+
+            let slope, p = Statistics.Regression.slopeAndPValue actual expected
+
+            // Assert slope ≈ 1.0 (proportionality) and p-value not significant
+            Expect.hasLength actual (steps + 1) "Result should have length of timesteps"
+            Expect.isTrue (abs (slope - 1.0) < 1e-2) $"Slope should be ~1, got {slope}"
+            Expect.isTrue (not (System.Double.IsNaN p)) "Regression should be valid"
+
+
+        // testCase "Fixed-step dynamic with higher-res env" <| fun _ ->
+        //     // TODO: build env with sub-daily resolution, dynamic daily, assert interpolation/downsampling works
+
+        // testCase "Fixed-step dynamic with lower-res env" <| fun _ ->
+        //     // TODO: build env monthly, dynamic daily, assert interpolation works
+
+        // testCase "Variable-step dynamic with no env" <| fun _ ->
+        //     // TODO: build irregular dynamic series, run tryFit, assert no error
+
+        // testCase "Variable-step dynamic with matching env" <| fun _ ->
+        //     // TODO: irregular dynamic and env with same timestamps, assert alignment
+
+        // testCase "Variable-step dynamic with mismatched env" <| fun _ ->
+        //     // TODO: irregular dynamic and env with different timestamps, assert interpolation
+
+        // // --- Error cases ---
+        // testCase "Missing dynamic series returns error" <| fun _ ->
+        //     // TODO: call tryFit with empty map, assert Error
+
+        // testCase "Environment coverage missing at solver start fails" <| fun _ ->
+        //     // TODO: build env starting after dynamic start, assert invalidOp
+
+        // --- Optimiser trace length ---
+        // testCase "Trace length equals optimiser iterations" <| fun _ ->
+        //     // TODO: plug in dummy optimiser that runs N iterations, assert result.Trace.Length = N
+
+        // // --- Internal vs External ---
+        // testCase "Internal vs External step types differ in length" <| fun _ ->
+        //     // TODO: run solver with both step types, assert Internal length > External length
+
+        // // --- Parameter handling ---
+        // testCase "Detached vs Transformed optimisation spaces work" <| fun _ ->
+        //     // TODO: build model with positive-only parameter, run tryFit with transformed space, assert log-transform applied
+
+      ]
+
 
     [<Tests>]
-    let fitTests =
-        testList
-            "Model-fitting"
-            [
+    let interpolationTests =
+        testList "Interpolation behaviour" [
 
-              testList
-                  "Establish common timelines"
-                  [
+            // Test required:
+            // - Cannot run with 0 parameters
+            // - Cannot run without environmental coverage of conditioning period
 
-                    testPropertyWithConfig Config.config "Core fitting functions are reproducible"
-                    <| fun b1 b2 seedNumber (obs: float list) startDate months ->
-                        if
-                            System.Double.IsNaN b1
-                            || b1 = infinity
-                            || b1 = -infinity
-                            || System.Double.IsNaN b2
-                            || b2 = infinity
-                            || b2 = -infinity
-                        then
-                            ()
-                        else
-                            let data =
-                                [ (Language.code "x").Value,
-                                  Time.TimeSeries.fromSeq
-                                      Time.DateMode.calendarDateMode
-                                      startDate
-                                      (Time.Resolution.FixedTemporalResolution.Months months)
-                                      obs ]
-                                |> Map.ofList
+            // - Environment should be able to have negative index values, so that e.g. a time-point far before
+            // the conditioning period can be interpolated from.
 
-                            let result =
-                                Expect.wantOk
-                                    (Bristlecone.tryFit defaultEngine defaultEndCon data (TestModels.constant b1 b2))
-                                    "Fitting did not happen successfully."
+            testCase "Interpolation provides correct value at correct time" <| fun _ ->
+                let startDate = System.DateTime(2000,1,1)
 
-                            let result2 =
-                                Expect.wantOk
-                                    (Bristlecone.tryFit
-                                        { defaultEngine with
-                                            Random = MathNet.Numerics.Random.MersenneTwister(seedNumber, true) }
-                                        defaultEndCon
-                                        data
-                                        (TestModels.constant b1 b2))
-                                    ""
+                // Environment sampled coarsely: 0 at day 0, 10 at day 10
+                let env =
+                    [ (-3., startDate.AddDays -1); (0., startDate); (10., startDate.AddDays 10.) ]
+                    |> Time.TimeSeries.fromNeoObservations
 
-                            expectSameFloat result.Likelihood result2.Likelihood "Different likelihoods"
+                let obs =
+                    [| for i in 0. .. 10. -> i, startDate.AddDays(float i) |]
+                    |> Time.TimeSeries.fromNeoObservations
 
-                            expectSameFloat
-                                result.InternalDynamics
-                                result.InternalDynamics
-                                "Different internal dynamics"
-
-                            expectSameFloat result.Parameters result2.Parameters "Different parameters"
-
-                            expectSameFloatList
-                                (result.Series
-                                 |> Seq.collect (fun kv -> kv.Value.Values |> Seq.map (fun v -> v.Fit)))
-                                (result2.Series
-                                 |> Seq.collect (fun kv -> kv.Value.Values |> Seq.map (fun v -> v.Fit)))
-                                "Different expected series"
-
-                            expectSameFloat result.Trace result2.Trace "Different traces"
-
-                    // testProperty "Time-series relating to model equations must overlap"
-                    // <| fun t1 t2 resolution data1 data2 ->
-                    //     let ts =
-                    //         [ Time.TimeSeries.fromSeq t1 (Time.FixedTemporalResolution.Years resolution) data1
-                    //           Time.TimeSeries.fromSeq t2 (Time.FixedTemporalResolution.Years resolution) data2 ]
-
-                    //     let result =
-                    //         Bristlecone.Fit.observationsToCommonTimeFrame
-                    //             (TestModels.twoEquationConstant Language.noConstraints 0. 1.).Equations
-                    //         |> ignore
-
-                    //     result
-                    //     false
-
-                    // testProperty "Time-series relating to model equations are clipped to common (overlapping) time" <| fun () ->
-                    //     false
-
-                    // testProperty "Time-series of external forcings are clipped to common (overlapping) time" <| fun () ->
-                    //     false
-
-                    // testProperty "External forcing series must cover the whole common period of dynamical series" <| fun () ->
-                    //     false
+                let data =
+                    Map.ofList [
+                        (ShortCode.create "Temp").Value, env
+                        (ShortCode.create "X").Value, obs
                     ]
 
-              testList
-                  "Setting up parameter constraints"
-                  [
+                let engineLower =
+                    { defaultEngineDiscrete() with InterpolationGlobal = Solver.InterpolationMode.Lower }
 
-                    testPropertyWithConfig
-                        Config.config
-                        "Positive only parameter is transformed when optimising in transformed space"
-                    <| fun (data: float list) startDate months (b1: NormalFloat) (b2: NormalFloat) ->
-                        let testModel b1 b2 =
-                            TestModels.twoEquationConstant Language.notNegative b1 b2
+                let engineLinear =
+                    { defaultEngineDiscrete() with InterpolationGlobal = Solver.InterpolationMode.Linear }
 
-                        if b1.Get = b2.Get || b1.Get = 0. || b2.Get = 0. then
-                            Expect.throws
-                                (fun () -> testModel b1.Get b2.Get |> ignore)
-                                "Model compiled despite having no difference between parameter bounds"
-                        else
-                            let b1 = if b1.Get < 0. then b1.Get * -1. else b1.Get
-                            let b2 = if b2.Get < 0. then b2.Get * -1. else b2.Get
-                            let mutable inOptimMin = nan
+                let model = TestModels.tempDrivenModelDiscrete()
 
-                            let optimTest =
-                                InTransformedSpace
-                                <| fun _ _ _ domain _ f ->
-                                    let point = [| for (min, _, _) in domain -> min |]
-                                    inOptimMin <- point.[0]
-                                    [ f point, point ]
+                let resultLower = Bristlecone.tryFit engineLower defaultEndCon data model |> fun r -> Expect.wantOk r "Fit failed"
+                let resultLinear = Bristlecone.tryFit engineLinear defaultEndCon data model |> fun r -> Expect.wantOk r "Fit failed"
 
-                            let engine =
-                                { defaultEngine with
-                                    OptimiseWith = optimTest }
+                let xsLower = resultLower.Series.[(ShortCode.create "X").Value].Values |> Seq.map (fun v -> v.Fit) |> Seq.toArray
+                let xsLinear = resultLinear.Series.[(ShortCode.create "X").Value].Values |> Seq.map (fun v -> v.Fit) |> Seq.toArray
 
-                            let data =
-                                [ (ShortCode.create "x").Value; (ShortCode.create "y").Value ]
-                                |> Seq.map (fun c ->
-                                    c,
-                                    Time.TimeSeries.fromSeq
-                                        Time.DateMode.calendarDateMode
-                                        startDate
-                                        (Time.Resolution.FixedTemporalResolution.Months months)
-                                        data)
-                                |> Map.ofSeq
-
-                            let result =
-                                Expect.wantOk
-                                    (Bristlecone.tryFit engine defaultEndCon data (testModel b1 b2))
-                                    "Errored when should be OK"
-
-                            Expect.equal
-                                inOptimMin
-                                (min (log (b1)) (log (b2)))
-                                "The lower bound was not transformed inside the optimiser" ]
-
-              ]
+                let expectedLower = [|0.0; 0.0; 0.0; 0.0; 0.0; 0.0; 0.0; 0.0; 0.0; 0.0; 10.0|] |> Array.map ((*) 1.<ModelSystem.state>)
+                let expectedLinear = [| 0. .. 1. .. 10. |] |> Array.map ((*) 1.<ModelSystem.state>)
+                Expect.sequenceEqual xsLower expectedLower "Interpolation lower should return 0 until next value at t=10"
+                Expect.sequenceEqual xsLinear expectedLinear "Interpolation linear should ramp up by 1 each timestep"
 
 
-//     [<Tests>]
-//     let fitTests =
-//         testList "Time-invariant models" [
+            testCase "Interpolation mode affects state trajectory" <| fun _ ->
+                let startDate = System.DateTime(2000,1,1)
 
-//             testProperty "MLE cannot fall outside given parameter constraints" <| fun x ->
-//                 false
+                // Environment sampled coarsely: 0 at day 0, 10 at day 10
+                let env =
+                    [ (-3., startDate.AddDays -1); (0., startDate); (10., startDate.AddDays 10.) ]
+                    |> Time.TimeSeries.fromNeoObservations
 
-//             testProperty "It works" <| fun x ->
+                let obs =
+                    [| for i in 0. .. 10. -> i, startDate.AddDays(float i) |]
+                    |> Time.TimeSeries.fromNeoObservations
 
-//                 let fit =
-//                     Bristlecone.Invariant.fitWithoutTime
-//                         Optimisation.None.passThrough
-//                         NoConditioning
-//                         Detached
-//                         ignore
-//                         (Optimisation.EndConditions.afterIteration 1000)
+                let data =
+                    Map.ofList [
+                        (ShortCode.create "Temp").Value, env
+                        (ShortCode.create "X").Value, obs
+                    ]
 
-//                 let f x = 2.
+                let engineLower =
+                    { defaultEngine() with InterpolationGlobal = Solver.InterpolationMode.Lower }
 
-//                 let model = {
-//                     Equations = [ shortCode "f"; f ]
-//                 }
+                let engineLinear =
+                    { defaultEngine() with InterpolationGlobal = Solver.InterpolationMode.Linear }
 
-//                 let r = fit model
-//                 printfn "R is %A" r
-//                 ()
+                let model = TestModels.tempDrivenModel()
+
+                let resultLower = Bristlecone.tryFit engineLower defaultEndCon data model |> fun r -> Expect.wantOk r "Fit failed"
+                let resultLinear = Bristlecone.tryFit engineLinear defaultEndCon data model |> fun r -> Expect.wantOk r "Fit failed"
+
+                let xsLower = resultLower.Series.[(ShortCode.create "X").Value].Values |> Seq.map (fun v -> v.Fit) |> Seq.toArray
+                let xsLinear = resultLinear.Series.[(ShortCode.create "X").Value].Values |> Seq.map (fun v -> v.Fit) |> Seq.toArray
+
+                // At midpoint (day 5), the two interpolation schemes should give different X values
+                Expect.notEqual xsLower.[5] xsLinear.[5] "Interpolation mode should affect state trajectory"
 
 
-
-
-//         ]
+        ]

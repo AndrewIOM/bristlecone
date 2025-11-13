@@ -1,6 +1,8 @@
 namespace Bristlecone.Confidence
 
+open Bristlecone
 open Bristlecone.Logging
+open Bristlecone.ModelSystem
 
 /// <namespacedoc>
 ///   <summary>Contains functions for calculating confidence intervals on model fits.</summary>
@@ -12,7 +14,9 @@ type ConfidenceInterval =
       ``68%``: Interval
       Estimate: float }
 
-and Interval = { Lower: float; Upper: float }
+and Interval =
+    { Lower: float<parameter>
+      Upper: float<parameter> }
 
 /// <summary>Keeps a list of all optimisation events that occur for further analysis.</summary>
 type internal OptimisationEventStash() =
@@ -31,10 +35,10 @@ type internal OptimisationEventStash() =
 module Bounds =
 
     /// <summary>The difference in likelihood at 68% confidence</summary>
-    let lowerBound = 0.49447324 // qchisq(0.68,1)/2
+    let lowerBound = 0.49447324<``-logL``> // qchisq(0.68,1)/2
 
     /// <summary>The difference in likelihood at 95% confidence</summary>
-    let upperBound = 1.92072941 // qchisq(0.95,1)/2
+    let upperBound = 1.92072941<``-logL``> // qchisq(0.95,1)/2
 
 
 /// <summary>Given a maximum likelihood estimate (MLE), the profile likelihood method
@@ -48,152 +52,52 @@ module ProfileLikelihood =
     open Bristlecone.ModelSystem
     open Bristlecone.Optimisation
 
-    type EstimateFunction<'data, 'subject, 'date, 'timeunit, 'timespan> =
-        EstimationEngine<'data, 'date, 'timeunit, 'timespan>
-            -> ModelSystem<'data>
+    type EstimateFunction<[<Measure>] 'modelTimeUnit, [<Measure>] 'state, 'subject, 'date, 'timeunit, 'timespan> =
+        EstimationEngine<'timespan, 'modelTimeUnit, 'state>
+            -> ModelSystem<'modelTimeUnit>
             -> 'subject
             -> EstimationResult<'date, 'timeunit, 'timespan>
 
-    module CustomOptimisationMethod =
-
-        type TuneSettings =
-            { MinimumSampleSize: int
-              InitialScale: float
-              KMax: int
-              TuneN: int }
-
-            static member Default =
-                { MinimumSampleSize = 60000
-                  InitialScale = 0.001
-                  KMax = 60000
-                  TuneN = 50 }
-
-        // This algorithm only differs from SA because it outputs all iterations
-        // in the tunedSearch as optimisation events.
-        let tunedSearch random settings machine (jump: System.Random -> float -> unit -> float) writeOut domain f =
-
-            // 1. Initial conditions
-            let draw' = jump random
-            let theta1 = Bristlecone.Optimisation.Initialise.initialise domain random
-            let l1 = f theta1
-
-            // 2. Tune individual parameter scales (for many univariate distributions)
-            let initialScale =
-                [| 1 .. theta1.Length |] |> Array.map (fun _ -> settings.InitialScale)
-
-            let rec tune (p: (float * float[])[]) k results (l1, theta1) =
-                let chance = (float k) / (float settings.KMax)
-                let parameterToChange = random.Next(0, (p |> Array.length) - 1)
-
-                let scalesToChange =
-                    p
-                    |> Array.mapi (fun i x -> (x, random.NextDouble() < chance || i = parameterToChange))
-
-                let propose theta =
-                    Array.zip3 theta scalesToChange domain
-                    |> Array.map (fun (x, ((ti, n), shouldChange), (_, _, con)) ->
-                        if shouldChange then
-                            Bristlecone.Optimisation.MonteCarlo.constrainJump x (draw' ti ()) 1. con
-                        else
-                            x)
-
-                let result =
-                    Bristlecone.Optimisation.MonteCarlo.SimulatedAnnealing.tryMove
-                        propose
-                        (machine 1.)
-                        random
-                        f
-                        100
-                        (l1, theta1)
-
-                if result.IsNone then
-                    failwith "Could not move in parameter space."
-
-                let newScaleInfo =
-                    scalesToChange
-                    |> Array.zip (result.Value |> snd)
-                    |> Array.map (fun (v, ((ti, previous), changed)) ->
-                        let ti, previous =
-                            if changed then
-                                (ti, (previous |> Array.append [| v |])) // Append new parameter values to previous ones
-                            else
-                                (ti, previous)
-
-                        if previous |> Array.length = settings.TuneN then
-                            let changes =
-                                previous |> Array.pairwise |> Array.where (fun (a, b) -> a <> b) |> Array.length
-
-                            match (float changes) / (float settings.TuneN) with
-                            | ar when ar < 0.35 -> (ti * 0.80, Array.empty)
-                            | ar when ar > 0.50 -> (ti * 1.20, Array.empty)
-                            | _ -> (ti, Array.empty)
-                        else
-                            (ti, previous))
-
-                if k % 1000 = 0 then
-                    writeOut
-                    <| GeneralEvent(sprintf "Tuning is at %A (k=%i/%i)" (newScaleInfo |> Array.map fst) k settings.KMax)
-
-                if k < settings.KMax then
-                    writeOut
-                    <| OptimisationEvent
-                        { Iteration = k
-                          Likelihood = result.Value |> fst
-                          Theta = result.Value |> snd }
-
-                    tune newScaleInfo (k + 1) (results |> List.append [ result.Value ]) result.Value
-                else
-                    newScaleInfo |> Array.map fst
-
-            let result =
-                tune (initialScale |> Array.map (fun t -> (t, Array.empty))) 1 [] (l1, theta1)
-
-            writeOut <| GeneralEvent(sprintf "Tuned = %A" result)
-            [ (l1, theta1) ]
-
-        let classic settings : Optimiser<float> =
-            InDetachedSpace
-            <| fun random writeOut n domain _ f ->
-                let gaussian rnd scale =
-                    Bristlecone.Statistics.Distributions.Normal.draw rnd 0. scale
-
-                tunedSearch random settings MonteCarlo.SimulatedAnnealing.Machines.boltzmann gaussian writeOut domain f
-
-    let interval nParam mle limit trace =
+    let interval nParam mle limit (trace: (float<``-logL``> * float<parameter> array) list) =
         trace
         |> List.filter (fun (l, p) -> (l - mle) < limit)
         |> List.fold
             (fun best (l, p) -> best |> Array.zip p |> Array.map (fun (v, (mn, mx)) -> ((min v mn), (max v mx))))
-            (Array.init nParam (fun _ -> (System.Double.MaxValue, System.Double.MinValue)))
+            (Array.init nParam (fun _ ->
+                (System.Double.MaxValue |> LanguagePrimitives.FloatWithMeasure<parameter>,
+                 System.Double.MinValue |> LanguagePrimitives.FloatWithMeasure<parameter>)))
 
     /// The profile likelihood method samples the likelihood space
     /// around the Maximum Likelihood Estimate
-    let profile fit engine subject (hypothesis: ModelSystem<'data>) n result =
+    let profile fit engine subject (hypothesis: ModelSystem<'modelTimeUnit>) n result =
 
-        // 1. Set estimation bounds to the MLE
+        // Start at the MLE
         let hypothesisMle =
             { hypothesis with
                 Parameters = Parameter.Pool.fromEstimated result.Parameters }
 
-        // 2. Generate a trace of at least n samples that deviate in L less than 2.0
+        // Perturb and re‑fit locally around the MLE
         let results = OptimisationEventStash()
         let mle = result.Likelihood
+        let transforms = Parameter.Pool.compileTransformsBounded result.Parameters
 
         let customFit =
             fit
                 { engine with
-                    OptimiseWith = CustomOptimisationMethod.classic CustomOptimisationMethod.TuneSettings.Default
+                    OptimiseWith =
+                        MonteCarlo.SimulatedAnnealing.Tuning.perturb
+                            MonteCarlo.SimulatedAnnealing.Tuning.TuningSettings.Default
                     LogTo =
                         fun e ->
                             engine.LogTo e
                             results.SaveEvent e }
 
         let rec fit' currentTrace =
-            let a = customFit (EndConditions.afterIteration n) subject hypothesisMle
+            let a = customFit (EndConditions.atIteration n) subject hypothesisMle
 
             let validTrace =
                 a.Trace
-                |> List.filter (fun (l, _) -> (l - mle) < 2.00 && (l - mle) > 0.00)
+                |> List.filter (fun (l, _) -> (l - mle) < 2.00<``-logL``> && (l - mle) > 0.00<``-logL``>)
                 |> List.distinct
 
             engine.LogTo
@@ -204,9 +108,14 @@ module ProfileLikelihood =
         fit' [] |> ignore
 
         let trace =
-            results.GetAll() |> List.map (fun s -> (s.Likelihood, s.Theta |> Seq.toArray))
-
-        engine.LogTo <| GeneralEvent(sprintf "Actual trace was %A" trace)
+            results.GetAll()
+            |> List.map (fun s ->
+                (s.Likelihood,
+                 s.Theta
+                 |> Seq.toArray
+                 |> Tensors.Typed.ofVector
+                 |> transforms.Forward
+                 |> Tensors.Typed.toFloatArray))
 
         // 3. Calculate min and max at the specified limit for each parameter
         let lowerInterval =
@@ -217,14 +126,15 @@ module ProfileLikelihood =
             trace
             |> interval (Parameter.Pool.count hypothesisMle.Parameters) mle Bounds.upperBound
 
-        result.Parameters
-        |> Parameter.Pool.toList
+        let paramKeys = Parameter.Pool.toTensorWithKeysReal result.Parameters |> fst
+
+        paramKeys
         |> Seq.zip3 lowerInterval upperInterval
-        |> Seq.map (fun ((l1, l2), (u1, u2), (k, v)) ->
-            match v |> Parameter.getEstimate with
-            | Error e -> failwith e
-            | Ok v ->
-                k,
+        |> Seq.map (fun ((l1, l2), (u1, u2), sc) ->
+            match result.Parameters |> Parameter.Pool.tryGetRealValue sc.Value with
+            | None -> failwithf "%A" sc
+            | Some v ->
+                sc,
                 { Estimate = v
                   ``68%`` = { Lower = l1; Upper = l2 }
                   ``95%`` = { Lower = u1; Upper = u2 } })

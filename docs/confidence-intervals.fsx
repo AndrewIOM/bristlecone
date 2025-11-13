@@ -9,7 +9,7 @@ index: 5
 
 (*** condition: prepare ***)
 #nowarn "211"
-#r "../src/Bristlecone/bin/Debug/netstandard2.0/Bristlecone.dll"
+#r "../src/Bristlecone/bin/Debug/net5.0/Bristlecone.dll"
 (*** condition: fsx ***)
 #if FSX
 #r "nuget: Bristlecone,{{fsdocs-package-version}}"
@@ -44,7 +44,7 @@ fun engine dataset hypothesis result ->
     let fitFn = Bristlecone.fit
 
     // The number of jumps to perform in parameter space
-    let n = 10000
+    let n = 10000<iteration>
 
     let ci =
         Confidence.ProfileLikelihood.profile fitFn engine dataset hypothesis n result

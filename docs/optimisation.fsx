@@ -12,7 +12,7 @@ index: 1
 
 (*** condition: prepare ***)
 #nowarn "211"
-#r "../src/Bristlecone/bin/Debug/netstandard2.0/Bristlecone.dll"
+#r "../src/Bristlecone/bin/Debug/net5.0/Bristlecone.dll"
 (*** condition: fsx ***)
 #if FSX
 #r "nuget: Bristlecone,{{fsdocs-package-version}}"
@@ -39,11 +39,12 @@ procedure can be used with Bristlecone by plugging in as follows:
 
 open Bristlecone
 
-let myCustomOptimiser: EstimationEngine.Optimiser<float> =
-    EstimationEngine.InDetachedSpace
+let myCustomOptimiser: EstimationEngine.Optimisation.Optimiser =
+    EstimationEngine.Optimisation.InDetachedSpace
     <| fun writeOut n domain f -> invalidOp "Doesn't actually do anything!"
 
-Bristlecone.mkContinuous |> Bristlecone.withCustomOptimisation myCustomOptimiser
+Bristlecone.mkContinuous ()
+|> Bristlecone.withCustomOptimisation myCustomOptimiser
 
 (**
 ## Included optimisation methods
@@ -69,13 +70,13 @@ a Boltzmann machine for jumps, and fast simulated annealing (FSA) that
 uses a Cauchy distribution for jumps:
 *)
 
-let settings = MonteCarlo.SimulatedAnnealing.AnnealSettings<float>.Default
+let settings = MonteCarlo.SimulatedAnnealing.AnnealSettings.Default
 
 // Classical Simulated Annealing:
-MonteCarlo.SimulatedAnnealing.classicalSimulatedAnnealing 0.01 false settings
+MonteCarlo.SimulatedAnnealing.classicalSimulatedAnnealing 0.01<``optim-space``> false settings
 
 // Fast Simulated Annealing:
-MonteCarlo.SimulatedAnnealing.fastSimulatedAnnealing 0.01 false settings
+MonteCarlo.SimulatedAnnealing.fastSimulatedAnnealing 0.01<``optim-space``> false settings
 
 (**
 The FSA approach enables greater exploration of more distant portions of
@@ -104,7 +105,7 @@ It can be used as follows:
 let settingsNM = Amoeba.Solver.Default
 (*** include-value: settingsNM ***)
 
-let single: EstimationEngine.Optimise<float> = Amoeba.Solver.solve settingsNM
+let single: EstimationEngine.Optimisation.Optimise = Amoeba.Solver.solve settingsNM
 
 (**
 A single Nelder-Mead solver is highly subject to local minima. To reduce
@@ -140,13 +141,17 @@ which will be run before the final random walk.
 
 *)
 
+open Bristlecone.Optimisation.MonteCarlo
+
 // Random walk with no tuning steps
 MonteCarlo.randomWalk []
 
 // Random walk with 50,000 iterations of tuning, during
 // which the individual parameter jump sizes are scaled
 // every 500 iterations.
-[ MonteCarlo.TuneMethod.Scale, 500, EndConditions.afterIteration 50000 ]
+[ { Method = MonteCarlo.TuneMethod.Scale
+    Frequency = 500<iteration>
+    EndCondition = EndConditions.atIteration 50000<iteration> } ]
 |> MonteCarlo.randomWalk
 
 
@@ -159,7 +164,7 @@ parameter space.
 *)
 
 let weighting = 0.250 // Weight to give to recent history versus existing covariance structure
-let frequency = 200 // Tune the covariance structure every 200 iterations
+let frequency = 200<iteration> // Tune the covariance structure every 200 iterations
 
 MonteCarlo.adaptiveMetropolis weighting frequency
 
@@ -183,7 +188,7 @@ let settingsFB =
     { TuneAfterChanges = 20
       MaxScaleChange = 100.
       MinScaleChange = 0.01
-      BurnLength = EndConditions.afterIteration 100000 }
+      BurnLength = EndConditions.atIteration 100000<iteration> }
 
 filzbach settingsFB
 

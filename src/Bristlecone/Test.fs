@@ -41,49 +41,53 @@ module Test =
             )
 
 
-    type GenerationRule = (string * (seq<float> -> bool))
+    type GenerationRule<[<Measure>] 'state> = (string * (seq<float<'state>> -> bool))
 
     module GenerationRules =
 
         /// Ensures that all generated values are less than i
-        let alwaysLessThan i variable : GenerationRule =
+        let alwaysLessThan i variable : GenerationRule<'state> =
             variable, (fun data -> data |> Seq.max < i)
 
         /// Ensures that all generated values are greater than i
-        let alwaysMoreThan i variable : GenerationRule =
+        let alwaysMoreThan i variable : GenerationRule<'state> =
             variable, (fun data -> data |> Seq.min > i)
 
+        let alwaysFinite variable : GenerationRule<'state> =
+            variable, (fun data -> data |> Seq.exists Units.isNotFinite |> not)
+
         /// Ensures that there is always a positive change in values of a variable
-        let monotonicallyIncreasing variable : GenerationRule =
+        let monotonicallyIncreasing variable : GenerationRule<'state> =
             variable,
             fun data ->
                 data
                 |> Seq.pairwise
-                |> Seq.map (fun (x1, x2) -> (x2 - x1) > 0.)
+                |> Seq.map (fun (x1, x2) -> (x2 - x1) > LanguagePrimitives.FloatWithMeasure<'state> 0.)
                 |> Seq.contains false
 
-    type TestSettings<'T, 'date, 'timeunit, 'timespan> =
+
+    type TestSettings<[<Measure>] 'stateUnit, 'date, 'yearUnit, 'timespan> =
         { TimeSeriesLength: int
-          StartValues: CodedMap<'T>
-          EndCondition: EndCondition<'T>
-          GenerationRules: GenerationRule list
+          StartValues: CodedMap<float<'stateUnit>>
+          EndCondition: EndCondition
+          GenerationRules: GenerationRule<'stateUnit> list
           NoiseGeneration:
               Random
-                  -> Parameter.Pool
-                  -> CodedMap<TimeSeries<'T, 'date, 'timeunit, 'timespan>>
-                  -> Result<CodedMap<TimeSeries<'T, 'date, 'timeunit, 'timespan>>, string>
-          EnvironmentalData: CodedMap<TimeSeries<'T, 'date, 'timeunit, 'timespan>>
+                  -> Parameter.Pool.ParameterPool
+                  -> CodedMap<TimeSeries<float<'stateUnit>, 'date, 'yearUnit, 'timespan>>
+                  -> Result<CodedMap<TimeSeries<float<'stateUnit>, 'date, 'yearUnit, 'timespan>>, string>
+          EnvironmentalData: CodedMap<TimeSeries<float<'stateUnit>, 'date, 'yearUnit, 'timespan>>
           Resolution: Resolution.FixedTemporalResolution<'timespan>
           Random: Random
           StartDate: 'date
-          DateMode: DateMode.DateMode<'date, 'timeunit, 'timespan>
+          DateMode: DateMode.DateMode<'date, 'yearUnit, 'timespan>
           Attempts: int }
 
-        static member Default =
+        static member Default: TestSettings<1, DateTime, int<year>, TimeSpan> =
             { Resolution = Resolution.FixedTemporalResolution.Years (PositiveInt.create 1<year>).Value
               TimeSeriesLength = 30
               StartValues = Map.empty
-              EndCondition = Optimisation.EndConditions.afterIteration 1000
+              EndCondition = Optimisation.EndConditions.atIteration 1000<iteration>
               GenerationRules = []
               NoiseGeneration = fun _ -> fun _ -> id >> Ok
               EnvironmentalData = Map.empty
@@ -92,22 +96,43 @@ module Test =
               DateMode = DateMode.calendarDateMode
               Attempts = 50000 }
 
+        static member Annual: TestSettings<1, DatingMethods.Annual, int<year>, int<year>> =
+            { Resolution = Resolution.FixedTemporalResolution.Years (PositiveInt.create 1<year>).Value
+              TimeSeriesLength = 30
+              StartValues = Map.empty
+              EndCondition = Optimisation.EndConditions.atIteration 1000<iteration>
+              GenerationRules = []
+              NoiseGeneration = fun _ -> fun _ -> id >> Ok
+              EnvironmentalData = Map.empty
+              Random = MathNet.Numerics.Random.MersenneTwister()
+              StartDate = DatingMethods.Annual 1970<year>
+              DateMode = DateMode.annualDateMode
+              Attempts = 50000 }
+
+    let defaultSettings = TestSettings<_, _, _, _>.Default
+    let annualSettings = TestSettings<_, _, _, _>.Annual
+
+
     type ParameterTestResult =
         { Identifier: string
-          RealValue: float
-          EstimatedValue: float }
+          RealValue: float<parameter>
+          EstimatedValue: float<parameter> }
 
-    and TestResult<'date, 'timeunit, 'timespan> =
+    and TestResult<'date, 'timeunit, 'timespan, [<Measure>] 'u> =
         { Parameters: ParameterTestResult list
           Series: Map<string, FitSeries<'date, 'timeunit, 'timespan>>
-          ErrorStructure: Map<string, seq<float>>
-          RealLikelihood: float
-          EstimatedLikelihood: float }
+          ErrorStructure: Map<string, seq<float<'u^2>>>
+          IterationsRun: int<iteration>
+          RealLikelihood: float<``-logL``>
+          EstimatedLikelihood: float<``-logL``> }
 
     /// Ensures settings are valid for a test, by ensuring that
     /// start values have been set for each equation.
-    let isValidSettings (model: ModelSystem.ModelSystem<'data>) testSettings =
-        let equationKeys = model.Equations |> Map.toList |> List.map fst
+    let isValidSettings (model: ModelSystem.ModelSystem<'modelTimeUnit>) testSettings =
+        let equationKeys =
+            match model.Equations with
+            | DifferenceEqs eqs -> eqs |> Map.toList |> List.map fst
+            | DifferentialEqs eqs -> eqs |> Map.toList |> List.map fst
 
         if
             Set.isSubset (Set.ofList equationKeys) (Set.ofList (testSettings.StartValues |> Map.toList |> List.map fst))
@@ -117,7 +142,7 @@ module Test =
             Error
             <| sprintf "You must specify a start point for the following equations: %A" equationKeys
 
-    let create = TestSettings<_, _, _, _>.Default
+    // let create = TestSettings<_, _, _, _>.Default
 
     /// Add noise to a particular time-series when generating fake time-series.
     /// Built-in noise functions are in the `Noise` module.
@@ -158,126 +183,138 @@ module Test =
 
     module Compute =
 
-        /// Draw a random set of parameters
-        let drawParameterSet rnd pool =
-            pool
-            |> Parameter.Pool.map (fun _ v ->
-                let lower, upper =
-                    match Parameter.bounds v with
-                    | Some b -> b
-                    | None -> failwith "Parameters already estimated"
-
-                let trueValue = Statistics.Distributions.ContinuousUniform.draw rnd lower upper ()
-
-                match Parameter.setTransformedValue v trueValue with
-                | Ok p -> p
-                | Error e -> failwith e)
-
-        /// Generate a fixed-resolution time-series for testing model fits
-        let generateFixedSeries
-            writeOut
-            equations
-            timeMode
-            seriesLength
-            startPoint
-            dateMode
-            startDate
-            resolution
-            env
-            theta
+        let tryMakeDummySeries<[<Measure>] 'state, 'T, 'yearType, [<Measure>] 'timeunit, 'timespan when 'T: comparison>
+            (startDate: 'T)
+            (resolution: Resolution.FixedTemporalResolution<'timespan>)
+            (length: int)
+            (eqs: ModelForm<'timeunit>)
+            (dateMode: DateMode.DateMode<'T, 'yearType, 'timespan>)
             =
-            let applyFakeTime s =
-                TimeSeries.fromSeq dateMode startDate resolution s
 
-            let eqs = equations |> Map.map (fun _ v -> v theta)
+            let ts =
+                TimeSeries.fromSeq
+                    dateMode
+                    startDate
+                    resolution
+                    (Seq.init length (fun _ -> nan |> LanguagePrimitives.FloatWithMeasure<'state>))
 
-            match timeMode with
-            | Discrete -> invalidOp "Not supported at this time"
-            | Continuous i ->
-                i
-                    writeOut
-                    0.<``time index``>
-                    (seriesLength |> float |> (*) 1.<``time index``>)
-                    1.<``time index``>
-                    startPoint
-                    env
-                    eqs
-                |> Map.map (fun _ v -> applyFakeTime v)
+            let stateNames =
+                match eqs with
+                | DifferenceEqs e -> Map.keys e
+                | DifferentialEqs e -> Map.keys e
 
-        /// A test procedure for computing measures given time series data.
-        let generateMeasures
-            measures
-            startValues
-            (expected: CodedMap<TimeSeries<'T, 'date, 'timeunit, 'timespan>>)
-            : CodedMap<TimeSeries<'T, 'date, 'timeunit, 'timespan>> =
-            let time = (expected |> Seq.head).Value |> TimeSeries.toObservations |> Seq.map snd
-            let dateMode = (expected |> Seq.head).Value.DateMode
+            stateNames |> Seq.map (fun s -> s, ts) |> Map.ofSeq |> TimeFrame.tryCreate
 
-            measures
-            |> Map.map (fun key measure ->
-                Solver.Discrete.solve
-                    startValues
-                    key
-                    measure
-                    (expected |> Map.map (fun _ t -> t.Values |> Seq.toArray)))
-            |> Map.fold
-                (fun acc key value -> Map.add key (time |> Seq.zip value |> TimeSeries.fromObservations dateMode) acc)
-                expected
+        /// Generate time-series for a given engine and model, and
+        /// for a particular point in optim-space.
+        let tryGenerateData'
+            engine
+            (model: ModelSystem<'modelTimeUnit>)
+            (testSettings: TestSettings<'T, 'date, 'timeunit, 'timespan>)
+            thetaPool
+            =
 
-        /// Generate data
-        let tryGenerateData' engine model testSettings theta =
-            let envIndex =
+            // Build environment index
+            let envSeries =
                 testSettings.EnvironmentalData
                 |> Map.map (fun k v ->
-                    TimeIndex.TimeIndex(
-                        testSettings.StartDate,
-                        testSettings.Resolution,
-                        TimeIndex.IndexMode.Interpolate Statistics.Interpolate.bilinear,
-                        v
-                    ))
+                    v
+                    |> TimeSeries.map (fun (v, _) -> v |> Units.removeUnitFromFloat |> (*) 1.<environment>))
+                |> TimeFrame.tryCreate
 
-            theta
-            |> generateFixedSeries
-                engine.LogTo
-                model.Equations
-                engine.TimeHandling
-                testSettings.TimeSeriesLength
+            // Setup dummy timeline for solver (all values = nan)
+            let dynSeries =
+                tryMakeDummySeries
+                    testSettings.StartDate
+                    testSettings.Resolution
+                    testSettings.TimeSeriesLength
+                    model.Equations
+                    testSettings.DateMode
+                |> Option.get
+
+            let t0 =
                 testSettings.StartValues
-                testSettings.DateMode
-                testSettings.StartDate
-                testSettings.Resolution
-                envIndex
-            |> testSettings.NoiseGeneration testSettings.Random theta
-            |> Result.lift (generateMeasures model.Measures testSettings.StartValues)
+                |> Map.map (fun _ v -> v |> Units.removeUnitFromFloat |> (*) 1.<state> |> Tensors.Typed.ofScalar)
+
+            let dynamicKeys = dynSeries.Keys
+
+            let conditioned =
+                Solver.Conditioning.resolve engine.Conditioning dynSeries envSeries dynamicKeys
+
+            let obsTimes = conditioned.ObservedForPairing |> TimeFrame.dates
+
+            // Configure solver
+            let solver =
+                Solver.SolverCompiler.compile
+                    ignore
+                    engine.ToModelTime
+                    model.Equations
+                    engine.TimeHandling
+                    (Solver.StepType.External obsTimes)
+                    conditioned.StatesObservedForSolver
+                    conditioned.StatesHiddenForSolver
+                    conditioned.ExogenousForSolver
+                    (fun _ -> Solver.Exact)
+
+            // Get real-space vector from pool
+            let _, thetaReal = Parameter.Pool.toTensorWithKeysReal thetaPool
+
+            // Predict series
+            let timeline =
+                dynSeries.Series
+                |> Seq.head
+                |> fun kv -> kv.Value |> TimeSeries.toObservations |> Seq.map snd |> Seq.toArray
+
+            let predicted =
+                Objective.predict solver model.Measures thetaReal
+                |> Map.map (fun _ v ->
+                    Tensors.Typed.toFloatArray v
+                    |> Array.map (Units.removeUnitFromFloat >> LanguagePrimitives.FloatWithMeasure<'T>)
+                    |> Array.zip timeline
+                    |> Array.map (fun (a, b) -> b, a)
+                    |> TimeSeries.fromObservations testSettings.DateMode)
+
+            // Add noise if needed
+            let noisy = testSettings.NoiseGeneration testSettings.Random thetaPool predicted
+            noisy
+
 
         /// Generate data and check that it complies with the
         /// given ruleset.
         let rec tryGenerateData
-            (engine: EstimationEngine.EstimationEngine<float, 'b, 'c, 'd>)
-            settings
-            (model: ModelSystem.ModelSystem<float>)
+            (engine: EstimationEngine.EstimationEngine<'timespan, 'modelTimeUnit, 'state>)
+            (settings: TestSettings<'state, 'date, 'timeunit, 'timespan>)
+            (model: ModelSystem.ModelSystem<'modelTimeUnit>)
             attempts
             =
-            let theta = drawParameterSet engine.Random model.Parameters
+            let randomPool = Parameter.Pool.drawRandom engine.Random model.Parameters
 
-            match tryGenerateData' engine model settings theta with
+            match tryGenerateData' engine model settings randomPool with
             | Ok series ->
+
+                engine.LogTo <| Logging.GeneralEvent(sprintf "Series = %A" series)
+
+                let extraFiniteRules =
+                    series
+                    |> Map.keys
+                    |> Seq.map (fun s -> s.Value |> GenerationRules.alwaysFinite)
+                    |> Seq.toList
+
+                let rules = extraFiniteRules @ settings.GenerationRules
+
                 let rulesPassed =
-                    settings.GenerationRules
+                    rules
                     |> List.choose (fun (key, ruleFn) ->
                         series
                         |> Map.tryFindKey (fun k _ -> k.Value = key)
                         |> Option.map (fun k ->
                             Map.find k series |> TimeSeries.toObservations |> Seq.map fst |> ruleFn))
 
-                if
-                    (rulesPassed |> List.contains false)
-                    || rulesPassed.Length <> settings.GenerationRules.Length
-                then
+                if (rulesPassed |> List.contains false) || rulesPassed.Length <> rules.Length then
                     if attempts = 0 then
                         Error "Could not generate data that complies with the given ruleset"
                     else
                         tryGenerateData engine settings model (attempts - 1)
                 else
-                    Ok(series, theta)
+                    Ok(series, randomPool)
             | Error e -> Error e

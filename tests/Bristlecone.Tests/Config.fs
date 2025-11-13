@@ -7,6 +7,18 @@ open Bristlecone
 open Bristlecone.Language
 open FsCheck
 
+// Helpers
+let floatEqualTol tol actual exp message =
+    Expect.floatClose tol (Units.removeUnitFromFloat actual) (Units.removeUnitFromFloat exp) message
+
+let sequenceEqual tol (arr: float<_> seq) (expected: float<_> seq) message =
+    arr
+    |> Seq.iteri (fun i actual ->
+        let exp = expected |> Seq.item i
+        floatEqualTol Accuracy.high actual exp message)
+
+let sequenceEqualTol arr expected message = sequenceEqual Accuracy.high arr expected message
+
 let genStrings minLength maxLength =
     gen {
         let! length = Gen.choose (minLength, maxLength)
@@ -14,7 +26,14 @@ let genStrings minLength maxLength =
         return String chars
     }
 
-let genTuple<'snd> fn =
+/// Active pattern for two arrays of NormalFloat with same length > 0
+let (|SameLengthArrays|_|) (best: NormalFloat[]) (other: NormalFloat[]) =
+    if best.Length = other.Length && best.Length > 0 then
+        Some (best, other)
+    else
+        None
+
+let genTuple<'fst, 'snd> (fn: Gen<'fst>) =
     gen {
         let! length = Gen.choose (0, 100)
         let! list1 = Gen.listOfLength length fn
@@ -29,15 +48,17 @@ let genMultiList minLength maxLength =
         return list
     }
 
+[<Measure>] type testModelUnit
+
 type BristleconeTypesGen() =
     static member ShortCode() : Arbitrary<ShortCode.ShortCode> =
         let createCode code = ShortCode.create code |> Option.get
         genStrings 1 10 |> Gen.map createCode |> Arb.fromGen
 
-    static member EquationList = genStrings 1 10 |> genTuple<ModelExpression> |> Arb.fromGen
+    static member EquationList = Arb.generate<ShortCode.ShortCode> |> genTuple<ShortCode.ShortCode,ModelExpression<testModelUnit>> |> Arb.fromGen
 
     static member MeasureList =
-        genStrings 1 10 |> genTuple<ModelSystem.Measurement<float>> |> Arb.fromGen
+        Arb.generate<ShortCode.ShortCode> |> genTuple<ShortCode.ShortCode,ModelSystem.Measurement<ModelSystem.state>> |> Arb.fromGen
 
     static member Pool =
         gen {
@@ -48,7 +69,12 @@ type BristleconeTypesGen() =
 
             return
                 List.zip3 codes bounds1 bounds2
-                |> List.map (fun (c, b1, b2) -> c, Parameter.create noConstraints b1.Get b2.Get |> Option.get)
+                |> List.map (fun (c, b1, b2) ->
+                    c,
+                    match Parameter.create noConstraints b1.Get b2.Get with
+                    | Some (p: Parameter.Parameter<1>) -> Parameter.Pool.boxParam<1> c.Value p
+                    | None -> failwithf "The bounds %f - %f cannot be used to estimate a parameter. See docs." b1.Get b2.Get
+                )
                 |> Parameter.Pool.fromList
         }
         |> Arb.fromGen
@@ -61,6 +87,8 @@ type BristleconeTypesGen() =
             return Seq.zip codes data |> Map.ofSeq
         }
 
+    static member Tuple<'a,'b> () = genTuple<'a,'b> Arb.generate
+    
     static member Floats() : Arbitrary<float list> = genMultiList 2 1000 |> Arb.fromGen
 
     static member PositveInt: Arbitrary<PositiveInt.PositiveInt<1>> =
@@ -70,7 +98,7 @@ type BristleconeTypesGen() =
 
     static member ObservationalTimeSpan =
         Gen.choose (1, TimeSpan.TicksPerDay * int64 (365 * 200) |> int)
-        |> Gen.map (int64 >> TimeSpan.FromTicks >> Time.ObservationalTimeSpan.create >> Option.get)
+        |> Gen.map (int64 >> TimeSpan.FromTicks >> Bristlecone.Time.ObservationalTimeSpan.create >> Option.get)
         |> Arb.fromGen
 
     static member Observations: Arbitrary<(float * DateTime) list> =

@@ -20,9 +20,45 @@ module internal Units =
     let round<[<Measure>] 'u> (x: float<'u>) : float<'u> =
         System.Math.Round(float x) |> LanguagePrimitives.FloatWithMeasure
 
+    let floatMap<[<Measure>] 'u> fn (x: float<'u>) : float<'u> =
+        fn (float x) |> LanguagePrimitives.FloatWithMeasure
+
+    let isNan<[<Measure>] 'u> (v: float<'u>) =
+        System.Double.IsNaN(removeUnitFromFloat v)
+
+    let inInfinite<[<Measure>] 'u> (v: float<'u>) =
+        System.Double.IsInfinity(removeUnitFromFloat v)
+
+    let isFinite<[<Measure>] 'u> (v: float<'u>) = not (inInfinite v) && not (isNan v)
+
+    let isNotFinite<[<Measure>] 'u> (v: float<'u>) = inInfinite v || isNan v
+
 
 [<Measure>]
 type iteration
+
+[<Measure>]
+type ``parameter``
+
+[<Measure>]
+type ``-logL``
+
+[<Measure>]
+type ``optim-space`` // bounded, real parameter space
+
+
+
+
+
+
+[<Measure>]
+type ``optim-space-transformed`` // unconstrained transformed space
+
+
+
+
+
+
 
 [<RequireQualifiedAccess>]
 module PositiveInt =
@@ -53,7 +89,7 @@ module ShortCode =
 
     let create str =
         if System.String.IsNullOrEmpty(str) then None
-        else if str.Length > 10 then None
+        else if str.Length > 20 then None
         else str |> ShortCode |> Some
 
     type ShortCode with
@@ -64,10 +100,10 @@ type CodedMap<'T> = Map<ShortCode.ShortCode, 'T>
 
 module Conditioning =
 
-    type Conditioning<'a> =
+    type Conditioning<[<Measure>] 'u> =
         | NoConditioning
         | RepeatFirstDataPoint
-        | Custom of CodedMap<'a>
+        | Custom of CodedMap<float<'u>>
 
 [<RequireQualifiedAccess>]
 module Seq =
@@ -308,15 +344,31 @@ module Result =
         | Ok x -> x
         | Error e -> failwithf "Error occurred: %s" e
 
-[<AutoOpen>]
-module ListExtensions =
 
-    let (|Single|Empty|AllIdentical|Neither|) (lst: 'a list) =
-        if lst.Length = 1 then
-            Single
-        elif lst.Length = 0 then
-            Empty
-        elif List.forall (fun elem -> elem = lst.[0]) lst then
-            AllIdentical
-        else
-            Neither
+module Writer =
+    type Writer<'a, 'log> = AWriter of 'a * 'log list
+
+    let run (AWriter(a, log)) = a, log
+    let return' x = AWriter(x, [])
+
+    let bind f (AWriter(a, log)) =
+        let (AWriter(b, log2)) = f a
+        AWriter(b, log @ log2)
+
+    let map f w =
+        let (AWriter(a, log)) = w
+        AWriter(f a, log)
+
+    let flatMap f w = bind f w
+    let tell entry = AWriter((), [ entry ])
+
+    // Computation expression
+    type WriterBuilder() =
+        member _.Return(x) = return' x
+        member _.Bind(m, f) = bind f m
+        member _.Zero() = return' ()
+
+        member _.For(seq, body) =
+            seq |> Seq.fold (fun acc x -> bind (fun () -> body x) acc) (return' ())
+
+    let writer = WriterBuilder()

@@ -14,7 +14,7 @@ index: 1
 #nowarn "211"
 #r "nuget: MathNet.Numerics.FSharp,5.0.0"
 #r "nuget: FSharp.Data,6.3"
-#r "../../src/Bristlecone/bin/Debug/netstandard2.0/Bristlecone.dll"
+#r "../../src/Bristlecone/bin/Debug/net5.0/Bristlecone.dll"
 
 #r "nuget: Plotly.NET, 4.2.0"
 
@@ -150,7 +150,7 @@ module Graphing =
 
     open Plotly.NET
 
-    let pairedFits (series: Map<string, ModelSystem.FitSeries<_,_,_>>) =
+    let pairedFits (series: Map<string, ModelSystem.FitSeries<_, _, _>>) =
         match testResult with
         | Ok r ->
             series
@@ -177,17 +177,17 @@ module Graphing =
                 x
         | Error e -> sprintf "Cannot display data, as model fit did not run successfully (%s)" e
 
-    let pairedFitsForTestResult (testResult: Result<Bristlecone.Test.TestResult<_,_,_>, string>) =
+    let pairedFitsForTestResult (testResult: Result<Bristlecone.Test.TestResult<_, _, _>, string>) =
         match testResult with
         | Ok r -> pairedFits r.Series
         | Error e -> sprintf "Cannot display data, as model fit did not run successfully (%s)" e
 
-    let pairedFitsForResult (testResult: Result<Bristlecone.ModelSystem.EstimationResult<_,_,_>, string>) =
+    let pairedFitsForResult (testResult: Result<Bristlecone.ModelSystem.EstimationResult<_, _, _>, string>) =
         match testResult with
         | Ok r -> pairedFits (r.Series |> Seq.map (fun kv -> kv.Key.Value, kv.Value) |> Map.ofSeq)
         | Error e -> sprintf "Cannot display data, as model fit did not run successfully (%s)" e
 
-    let parameterTrace (result: Result<ModelSystem.EstimationResult<_,_,_>, 'b>) =
+    let parameterTrace (result: Result<ModelSystem.EstimationResult<_, _, _>, 'b>) =
         match result with
         | Ok r ->
             r.Trace

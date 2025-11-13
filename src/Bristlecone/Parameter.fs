@@ -5,244 +5,347 @@ open System
 [<RequireQualifiedAccess>]
 module Parameter =
 
-    /// The mode in which constraints are handled by the parameter.
-    /// In `Transform` mode, the parameter value is transformed
-    /// when requested in 'optimisation space'. Alternatively,
-    /// in `Detached` mode, the real parameter value is simply
-    /// returned when requested in 'optimisation space'.
-    type ConstraintMode =
-        | Transform
-        | Detached
-
-    /// Limits a `Parameter` to certain value ranges by
-    /// applying mathematical transformations when requested
-    /// for 'optimisation space'.
     type Constraint =
         | Unconstrained
         | PositiveOnly
 
-    type Estimation =
-        | NotEstimated of lowStartingBound: float * highStartingBound: float
-        | Estimated of estimate: float
+    type Estimation<[<Measure>] 'u> =
+        | NotEstimated of lowStartingBound: float<'u> * highStartingBound: float<'u>
+        | Estimated of estimate: float<'u>
 
-    type Parameter = private Parameter of Constraint * ConstraintMode * Estimation
+    type Parameter<[<Measure>] 'u> = private Parameter of Constraint * Estimation<'u>
 
-    /// Converts the parameter value in optimisation space
-    /// into its 'real' value for storage in the parameter.
-    let internal transformIn con value =
-        match con with
-        | Unconstrained -> value
-        | PositiveOnly -> exp value
+    let private unwrap (Parameter(c, e)) = c, e
 
-    /// Converts the 'real' parameter value into that required
-    /// in optimisation space, for when optimisation algorithms
-    /// have no knowledge of constraints.
-    let internal transformOut con value =
-        match con with
-        | Unconstrained -> value
-        | PositiveOnly -> log value
+    let internal isValid (con: Constraint) (x: float<'u>) =
+        let v = float x
 
-    let private unwrap (Parameter(c, m, e)) = c, m, e
+        not (Double.IsNaN v)
+        && not (Double.IsInfinity v)
+        && (con <> PositiveOnly || v > 0.0)
 
-    let internal isValidParamValue con num =
-        not (System.Double.IsInfinity num)
-        && not (System.Double.IsNaN num)
-        && if (con = PositiveOnly) then num > 0. else true
-
-    let internal validBounds con bound1 bound2 =
-        match con with
-        | PositiveOnly -> bound1 > 0. && bound2 > 0.
-        | Unconstrained -> true
-
-    /// Create an estimatable `Parameter` that may be constrained or
-    /// unconstrained to a certain value range. Bristlecone draws an
-    /// initial value from the given bounds. To retrieve the estimated
-    /// parameter value, use `Parameter.finalise`.
-    let create con bound1 bound2 =
-        if
-            isValidParamValue con bound1
-            && isValidParamValue con bound2
-            && validBounds con bound1 bound2
-        then
-            let min = [ bound1; bound2 ] |> Seq.min
-            let max = [ bound1; bound2 ] |> Seq.max
-            Parameter(con, Transform, (NotEstimated(min, max))) |> Some
+    let create con (bound1: float<'u>) (bound2: float<'u>) =
+        if isValid con bound1 && isValid con bound2 then
+            let lo, hi = min bound1 bound2, max bound1 bound2
+            Parameter(con, NotEstimated(lo, hi)) |> Some
         else
             None
 
-    /// Determines if the parameter has been estimated or not.
-    let isEstimated parameter =
-        let _, _, estimate = parameter |> unwrap
+    let isEstimated p =
+        match unwrap p with
+        | _, Estimated _ -> true
+        | _ -> false
 
-        match estimate with
-        | NotEstimated _ -> false
-        | Estimated v -> true
+    let tryGetEstimate p =
+        match unwrap p with
+        | _, Estimated v -> Some v
+        | _ -> None
 
-    /// Retrieve the estimated parameter value for further analysis.
-    /// Will only be `Ok` if parameter has been estimated.
-    let getEstimate parameter =
-        let _, _, estimate = parameter |> unwrap
+    let getEstimate p = tryGetEstimate p |> Option.get
 
-        match estimate with
-        | NotEstimated _ -> Error "Has not been estimated yet"
-        | Estimated v -> Ok v
+    let bounds (p: Parameter<'u>) =
+        let c, est = unwrap p
 
-    /// Bounds are always stored in a parameter in raw form.
-    let bounds (p: Parameter) : (float * float) option =
-        let c, m, estimate = p |> unwrap
-
-        match estimate with
+        match est with
         | Estimated _ -> None
-        | NotEstimated(s, e) ->
-            match m with
-            | Detached -> Some(s, e)
-            | Transform -> Some(s |> transformOut c, e |> transformOut c)
+        | NotEstimated(lo, hi) -> Some(lo, hi)
 
-    /// Gets the estimated value in transformed parameter space.
-    let internal getTransformedValue (p: Parameter) : float =
-        let c, m, estimate = p |> unwrap
+    let internal setRealValue (p: Parameter<'u>) (x: float<'u>) =
+        let c, _ = unwrap p
 
-        match estimate with
-        | NotEstimated _ -> invalidOp "Parameter has not been estimated"
-        | Estimated v ->
-            match m with
-            | Detached -> v
-            | Transform -> v |> transformOut c
+        if isValid c x then
+            Ok(Parameter(c, Estimated x))
+        else
+            Error(sprintf "Invalid parameter value %f" (float x))
 
-    /// Set the parameter's value, where `value` is in
-    /// transformed parameter space.
-    let internal setTransformedValue parameter value =
-        let con, m, _ = parameter |> unwrap
 
-        match m with
-        | Detached ->
-            match isValidParamValue con value with
-            | true -> Parameter(con, m, Estimated value) |> Ok
-            | false -> Error <| sprintf "Cannot set parameter value as %f" value
-        | Transform ->
-            match transformIn con value with
-            | v when isValidParamValue con v -> Parameter(con, m, value |> transformIn con |> Estimated) |> Ok
-            | _ -> Error <| sprintf "Cannot set parameter value as %f" value
+    [<RequireQualifiedAccess>]
+    module ParameterTransforms =
 
-    /// Detaches any constraints such that the parameter's
-    /// transformed space equals normal space.
-    let detatchConstraint (p: Parameter) : Parameter * Constraint =
-        let c, _, estimate = p |> unwrap
+        open DiffSharp
+        open Tensors
 
-        match estimate with
-        | NotEstimated(x, y) -> (Parameter(c, Detached, NotEstimated(x, y)), c)
-        | Estimated v -> (Parameter(c, Detached, Estimated v), c)
+        type OptimSpaceTransform<[<Measure>] 'space> =
+            { Forward: TypedTensor<Scalar, 'space> -> TypedTensor<Scalar, ``parameter``>
+              Inverse: TypedTensor<Scalar, ``parameter``> -> TypedTensor<Scalar, 'space> }
 
-    /// Contains the `ParameterPool` type, which represents the set of parameters
-    /// to be estimated within an analysis.
+        // Detached/bounded mode: identity mapping regardless of constraint
+        let scalarTransformOptimSpace (constraint_: Constraint) : OptimSpaceTransform<``optim-space``> =
+            { Forward =
+                fun (z: TypedTensor<Scalar, ``optim-space``>) -> z.Value |> tryAsScalar<``parameter``> |> Option.get
+              Inverse =
+                fun (x: TypedTensor<Scalar, ``parameter``>) -> x.Value |> tryAsScalar<``optim-space``> |> Option.get }
+
+        // Transformed mode: apply constraint transforms
+        let scalarTransformOptimSpaceTransformed
+            (constraint_: Constraint)
+            : OptimSpaceTransform<``optim-space-transformed``> =
+            match constraint_ with
+            | Constraint.Unconstrained ->
+                { Forward =
+                    fun (z: TypedTensor<Scalar, ``optim-space-transformed``>) ->
+                        z.Value |> tryAsScalar<``parameter``> |> Option.get
+                  Inverse =
+                    fun (x: TypedTensor<Scalar, ``parameter``>) ->
+                        x.Value |> tryAsScalar<``optim-space-transformed``> |> Option.get }
+            | Constraint.PositiveOnly ->
+                { Forward =
+                    fun (z: TypedTensor<Scalar, ``optim-space-transformed``>) ->
+                        dsharp.exp z.Value |> tryAsScalar<``parameter``> |> Option.get
+                  Inverse =
+                    fun (x: TypedTensor<Scalar, ``parameter``>) ->
+                        dsharp.log x.Value |> tryAsScalar<``optim-space-transformed``> |> Option.get }
+
+
     [<RequireQualifiedAccess>]
     module Pool =
 
-        type ParameterPool = Pool of CodedMap<Parameter>
+        open DiffSharp
+        open Tensors
 
-        let private unwrap (Pool p) = p
+        type AnyParameter =
+            private
+                { Name: string
+                  ToTensorRealIO: unit -> Tensor
+                  FromTensorRealIO: Tensor -> AnyParameter
+                  GetConstraint: unit -> Constraint
+                  TryGetReal: unit -> float option
+                  TryGetBounds: unit -> (float<parameter> * float<parameter>) option }
 
-        let toList pool = (pool |> unwrap) |> Map.toList
+        let boxParam<[<Measure>] 'u> (name: string) (p: Parameter<'u>) : AnyParameter =
+            let rec make param =
+                { Name = name
+                  ToTensorRealIO =
+                    fun () ->
+                        match tryGetEstimate param with
+                        | Some r -> dsharp.scalar (float r)
+                        | None -> invalidOp $"Parameter '{name}' has no real estimate"
+                  FromTensorRealIO =
+                    fun t ->
+                        let x = LanguagePrimitives.FloatWithMeasure<'u>(float t)
 
-        let hasParameter name pool =
-            pool |> unwrap |> Map.tryFindBy (fun k -> k.Value = name)
+                        match setRealValue param x with
+                        | Ok p' -> make p'
+                        | Error m -> invalidOp m
+                  GetConstraint = fun () -> let (Parameter(c, _)) = param in c
+                  TryGetReal = fun () -> tryGetEstimate param |> Option.map float
+                  TryGetBounds =
+                    fun () ->
+                        bounds param
+                        |> Option.map (fun (lo, hi) ->
+                            float lo |> LanguagePrimitives.FloatWithMeasure<parameter>,
+                            float hi |> LanguagePrimitives.FloatWithMeasure<parameter>) }
 
-        /// Returns Some value if a parameter with the `key`
-        /// exists in the Pool. The value returned is transformed
-        /// for an unconstrained parameter space.
-        let internal tryGetTransformedValue key (pool: ParameterPool) : float option =
+            make p
+
+        type ParameterPool = Pool of CodedMap<AnyParameter>
+
+        let toList (Pool p) = Map.toList p
+        let count (Pool p) = p.Count
+
+        let keys (Pool p) =
+            p |> Map.toList |> List.map (fun (sc, _) -> sc)
+
+        let fromList xs = xs |> Map.ofList |> Pool
+
+        /// Try to get the real value of a parameter by its ShortCode key.
+        let tryGetRealValue (name: string) (Pool p: ParameterPool) : float<'u> option =
+            p
+            |> Map.toSeq
+            |> Seq.tryPick (fun (_, ap) ->
+                if ap.Name = name then
+                    ap.TryGetReal()
+                    |> Option.map (fun f -> LanguagePrimitives.FloatWithMeasure<'u> f)
+                else
+                    None)
+
+        /// Given a real-space parameter vector and an existing pool,
+        /// return a new pool with each parameter's estimate set to the corresponding value.
+        let fromRealVector (realVec: TypedTensor<Vector, ``parameter``>) (Pool p: ParameterPool) : ParameterPool =
+            let updated =
+                p
+                |> Map.toList
+                |> List.mapi (fun i (sc, ap) ->
+                    let value =
+                        realVec.Value.[i] |> float |> LanguagePrimitives.FloatWithMeasure<parameter>
+                    // Use the AnyParameter's FromTensorRealIO to set the value
+                    let newAp = ap.FromTensorRealIO(dsharp.scalar (float value))
+                    sc, newAp)
+                |> Map.ofList
+
+            Pool updated
+
+        let toTensorWithKeysReal (Pool p) : ShortCode.ShortCode[] * TypedTensor<Vector, ``parameter``> =
+            let keys, scalars =
+                p
+                |> Map.toList
+                |> List.map (fun (sc, ap) -> sc, ap.ToTensorRealIO())
+                |> List.unzip
+
+            let vec =
+                scalars
+                |> dsharp.stack
+                |> tryAsVector<``parameter``>
+                |> Option.defaultWith (fun () -> invalidOp "Pool was not a vector tensor")
+
+            keys |> List.toArray, vec
+
+
+        type CompiledTransforms<[<Measure>] 'space> =
+            { Keys: ShortCode.ShortCode[]
+              IndexByName: Map<string, int>
+              Forward: TypedTensor<Vector, 'space> -> TypedTensor<Vector, ``parameter``>
+              Inverse: TypedTensor<Vector, ``parameter``> -> TypedTensor<Vector, 'space>
+              ScalarTransforms: ParameterTransforms.OptimSpaceTransform<'space>[]
+              IsBounded: bool }
+
+        /// Compiles forward and inverse transformations between parameter-space (real units)
+        /// and optimisation space.
+        let internal compileTransformsWith<[<Measure>] 'space>
+            (mkScalar: Constraint -> ParameterTransforms.OptimSpaceTransform<'space>)
+            isBounded
+            (Pool p)
+            : CompiledTransforms<'space> =
+
+            let entries = p |> Map.toList
+            let keys = entries |> List.map fst |> List.toArray
+            let index = keys |> Array.mapi (fun i k -> k.Value, i) |> Map.ofArray
+
+            let trans =
+                entries
+                |> List.map (fun (_, ap) -> mkScalar (ap.GetConstraint()))
+                |> List.toArray
+
+            let forwardVec (thetaOpt: TypedTensor<Vector, 'space>) =
+                trans
+                |> Array.mapi (fun i t ->
+                    let zi = asScalar<'space> thetaOpt.Value.[i]
+                    let xi = t.Forward zi
+                    xi.Value)
+                |> dsharp.stack
+                |> tryAsVector<``parameter``>
+                |> Option.defaultWith (fun () -> invalidOp "Forward produced non-vector")
+
+            let inverseVec (thetaReal: TypedTensor<Vector, ``parameter``>) =
+                trans
+                |> Array.mapi (fun i t ->
+                    let xi = asScalar<``parameter``> thetaReal.Value.[i]
+                    let zi = t.Inverse xi
+                    zi.Value)
+                |> dsharp.stack
+                |> tryAsVector<'space>
+                |> Option.defaultWith (fun () -> invalidOp "Inverse produced non-vector")
+
+            { Keys = keys
+              IndexByName = index
+              Forward = forwardVec
+              Inverse = inverseVec
+              ScalarTransforms = trans
+              IsBounded = isBounded }
+
+        let internal compileTransformsBounded (pool: ParameterPool) =
+            compileTransformsWith<``optim-space``> ParameterTransforms.scalarTransformOptimSpace true pool
+
+        let internal compileTransformsTransformed (pool: ParameterPool) =
+            compileTransformsWith<``optim-space-transformed``>
+                ParameterTransforms.scalarTransformOptimSpaceTransformed
+                false
+                pool
+
+
+        type OptimiserConfig<[<Measure>] 'space> =
+            { Domain: (float<'space> * float<'space> * Constraint)[]
+              Constraints: Constraint list
+              Compiled: CompiledTransforms<'space> }
+
+        and AnyOptimiserConfig =
+            | DetachedConfig of OptimiserConfig<``optim-space``>
+            | TransformedConfig of OptimiserConfig<``optim-space-transformed``>
+
+        /// Builds a Domain array from the starting bounds in the pool,
+        /// mapping them into optimiser space using the per-parameter scalar transforms.
+        let internal buildDomainFromBounds<[<Measure>] 'space>
+            (compiled: CompiledTransforms<'space>)
+            (pool: ParameterPool)
+            : (float<'space> * float<'space> * Constraint)[] =
+
             pool
             |> toList
-            |> List.tryFind (fun (x, _) -> x.Value = key)
-            |> Option.map snd
-            |> Option.map getTransformedValue
+            |> List.mapi (fun i (_, ap) ->
+                match ap.TryGetBounds() with
+                | Some(loReal, hiReal) ->
+                    // Convert real-space bounds to optimiser space using scalar transforms
+                    let inv = compiled.ScalarTransforms.[i].Inverse
+                    let loOpt = inv (Typed.ofScalar loReal) |> Typed.toFloatScalar
+                    let hiOpt = inv (Typed.ofScalar hiReal) |> Typed.toFloatScalar
 
-        /// Gets the 'real' / non-transformed value for use in model
-        /// calculation.
-        let internal tryGetRealValue key (pool: ParameterPool) : float option =
-            pool
-            |> unwrap
-            |> Map.tryFindBy (fun k -> k.Value = key)
-            |> Option.bind (getEstimate >> Result.toOption)
+                    let con =
+                        if compiled.IsBounded then
+                            ap.GetConstraint()
+                        else
+                            Unconstrained
 
-        /// Returns the starting bounds in transformed parameter space if
-        /// the parameter has not been estimated. If the parameter has already
-        /// been estimated, returns None.
-        let tryGetBoundsForEstimation (pool: ParameterPool) key : (float * float) option =
-            match pool |> unwrap |> Map.tryFindBy (fun k -> k.Value = key) with
-            | Some p -> p |> bounds
-            | None -> None
+                    loOpt, hiOpt, con
 
-        /// The number of parameters in the Pool.
-        let count pool = (pool |> unwrap).Count
+                | None ->
+                    failwith
+                        "Unable to generate domain from parameter pool. It may have already been used for estimation.")
+            |> List.toArray
 
-        let fromList list = list |> Map.ofList |> Pool
+        /// Make a configuration for an optimiser that handles
+        /// unit transforms to bounded optimisation space.
+        let toOptimiserConfigBounded (pool: ParameterPool) : OptimiserConfig<``optim-space``> =
+            let constraints = pool |> toList |> List.map (fun (_, ap) -> ap.GetConstraint())
+            let compiled = compileTransformsBounded pool
+            let domainArray = buildDomainFromBounds compiled pool
 
-        let map f pool = pool |> unwrap |> Map.map f |> Pool
+            { Domain = domainArray
+              Constraints = constraints
+              Compiled = compiled }
 
-        /// Retrieves the bounds for un-estimated parameters in the `Pool`
-        /// in the form required by optimisation functions. If one or more
-        /// of the parameters have been estimated, an expection will be thrown.
-        let internal toDomain (optimisationConstraints: Constraint list) pool =
-            let x, y = pool |> toList |> List.choose (snd >> bounds) |> List.unzip
+        /// Make a configuration for an optimiser that handles
+        /// unit transforms to unbounded optimisation space.
+        /// Transforms are applied where applicable.
+        let toOptimiserConfigTransformed (pool: ParameterPool) : OptimiserConfig<``optim-space-transformed``> =
+            let compiled = compileTransformsTransformed pool
+            let domainArray = buildDomainFromBounds compiled pool
 
-            if x.Length <> y.Length || y.Length <> count pool then
-                failwith "Could not convert pool to domain"
+            { Domain = domainArray
+              Constraints = []
+              Compiled = compiled }
 
-            List.zip3 x y optimisationConstraints |> List.toArray
+        /// Draw a random set of parameters in real space within their bounds.
+        /// Assumes a uniform distribution for each draw across all parameters.
+        let drawRandom (rnd: Random) (Pool p: ParameterPool) : ParameterPool =
+            p
+            |> Map.map (fun _ ap ->
+                match ap.TryGetBounds() with
+                | Some(lo, hi) ->
+                    // Draw uniformly between lo and hi (already float<parameter>)
+                    let draw = Statistics.Distributions.ContinuousUniform.draw rnd lo hi ()
+                    // Set the drawn value back into the AnyParameter
+                    ap.FromTensorRealIO(dsharp.scalar (float draw))
+                | None -> failwithf "Parameter '%s' has no bounds to draw from" ap.Name)
+            |> Pool
 
-        let private validateLength x y =
-            if count x = count y then
-                y
-            else
-                failwith "Cannot set parameters as infinite or NaN values"
 
-        /// Creates a `Pool` from a point in the transformed parameter
-        /// space, for example from optimisation.
-        let internal fromPointInTransformedSpace pool point : ParameterPool =
-            if count pool = (point |> Array.length) then
-                pool
-                |> toList
-                |> List.mapi (fun i (sc, p) -> sc, setTransformedValue p point.[i])
-                |> List.choose (fun (c, r) ->
-                    match r with
-                    | Ok x -> Some(c, x)
-                    | Error _ ->
-                        printfn "Error in (%A, %A)" c r
-                        None)
-                |> fromList
-                |> validateLength pool
-            else
-                invalidOp "The number of parameters estimated differs from those in the parameter pool"
+        /// Create a Pool where all parameters are fixed at their current estimate.
+        /// Lower and upper bounds are both set to the estimate.
+        let fromEstimated (Pool p: ParameterPool) : ParameterPool =
+            let fixd =
+                p
+                |> Map.map (fun _ ap ->
+                    match ap.TryGetReal() with
+                    | Some est ->
+                        let newParam =
+                            create
+                                (ap.GetConstraint())
+                                (LanguagePrimitives.FloatWithMeasure<parameter> est)
+                                (LanguagePrimitives.FloatWithMeasure<parameter> est)
+                            |> Option.get
+                            |> boxParam<parameter> ap.Name
 
-        /// Create a Pool where all parameters are not estimated. The upper and
-        /// lower bounds are set as the estimate from `pool`.
-        let fromEstimated pool =
-            let result =
-                pool
-                |> toList
-                |> List.choose (fun (k, v) ->
-                    match v |> getEstimate with
-                    | Ok estimate ->
-                        create (detatchConstraint v |> snd) estimate estimate
-                        |> Option.map (fun v -> k, v)
-                    | Error _ -> failwithf "Could not get estimate for %A" v)
-                |> fromList
+                        newParam
+                    | None -> failwithf "Could not get estimate for parameter '%s'" ap.Name)
 
-            if count result <> count pool then
-                failwith "Parameter pools were of different lengths"
-            else
-                result
-
-        /// Flips all parameters in the pool to work in `Detached` mode rather
-        /// than `Transformed` mode.
-        let detatchConstraints pool =
-            pool
-            |> toList
-            |> List.map (fun (k, v) ->
-                let x, y = detatchConstraint v
-                (k, x), y)
-            |> List.unzip
-            |> fun (a, b) -> a |> fromList, b
-
-    type Pool = Pool.ParameterPool
+            Pool fixd

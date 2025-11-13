@@ -12,7 +12,7 @@ index: 3
 
 (*** condition: prepare ***)
 #nowarn "211"
-#r "../src/Bristlecone/bin/Debug/netstandard2.0/Bristlecone.dll"
+#r "../src/Bristlecone/bin/Debug/net5.0/Bristlecone.dll"
 (*** condition: fsx ***)
 #if FSX
 #r "nuget: Bristlecone,{{fsdocs-package-version}}"
@@ -57,7 +57,7 @@ If you are working with `ResultSet`s, calculating and saving the weights is easi
 be completed as below:
 *)
 
-fun (hypothesisResults: ModelSelection.ResultSet.ResultSet<string, Language.Hypotheses.Hypothesis<float>, _, _, _> seq) ->
+fun (hypothesisResults: ModelSelection.ResultSet.ResultSet<string, Language.Hypotheses.Hypothesis<'u>, _, _, _> seq) ->
     hypothesisResults
     |> ModelSelection.Akaike.akaikeWeightsForSet (fun h -> h.ReferenceCode)
     |> Bristlecone.Data.ModelSelection.save "/some/dir"

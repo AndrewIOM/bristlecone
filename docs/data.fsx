@@ -12,7 +12,7 @@ index: 6
 
 (*** condition: prepare ***)
 #nowarn "211"
-#r "../src/Bristlecone/bin/Debug/netstandard2.0/Bristlecone.dll"
+#r "../src/Bristlecone/bin/Debug/net5.0/Bristlecone.dll"
 (*** condition: fsx ***)
 #if FSX
 #r "nuget: Bristlecone,{{fsdocs-package-version}}"
@@ -45,8 +45,9 @@ let resultsDirectory = "/some/data/dir"
 let thinTraceBy = Some 1000 // Only trace every n iterations to save disk space
 let subject = "Mosquito population" // The name of the 'subject' of analysis
 let modelName = "Logistic growth"
+let dateToString = fun (s: Time.DatingMethods.Annual) -> sprintf "%i" s.Value
 
-fun result -> EstimationResult.saveAll resultsDirectory subject modelName thinTraceBy result
+fun result -> EstimationResult.saveAll dateToString resultsDirectory subject modelName thinTraceBy result
 
 (**
 This save function outputs three files: one each for the maximum likelihood estimate,
@@ -86,7 +87,7 @@ fun modelResults subjectIds hypothesisIds ->
     |> Seq.map (fun (s, h, (a, b)) -> (s, h, a, b))
     |> Bristlecone.Data.ModelSelection.save "/some/dir"
 
-fun (hypothesisResults: ModelSelection.ResultSet.ResultSet<string, Hypotheses.Hypothesis<float>,_,_,_> seq) ->
+fun (hypothesisResults: ModelSelection.ResultSet.ResultSet<string, Hypotheses.Hypothesis<'u>, _, _, _> seq) ->
     hypothesisResults
     |> ModelSelection.Akaike.akaikeWeightsForSet (fun h -> h.ReferenceCode)
     |> Bristlecone.Data.ModelSelection.save "/some/dir"

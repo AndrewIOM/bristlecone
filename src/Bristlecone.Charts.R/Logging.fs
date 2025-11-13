@@ -19,11 +19,12 @@ module RealTimeTrace =
     open RProvider.grDevices
     open RHelper
 
-    let decompose state =
-        let likelihood = (state.Iteration, state.Likelihood, "-logL", state.Likelihood)
+    let decompose (state: ModelFitState) =
+        let likelihood =
+            state.Iteration, state.Likelihood, "-logL", 1.<Bristlecone.``optim-space``>
 
         state.Theta
-        |> Seq.mapi (fun i v -> (state.Iteration, state.Likelihood, sprintf "theta_%i " i, v))
+        |> Seq.mapi (fun i v -> state.Iteration, state.Likelihood, sprintf "theta_%i " i, v)
         |> Seq.append [ likelihood ]
 
     let convertToDataFrame d =
@@ -45,8 +46,9 @@ module RealTimeTrace =
         let df = data |> Map.toList |> convertToDataFrame
 
         R.ggplot (
-            namedParams["data", box df
-                        "mapping", box (R.aes__string (x = "Iteration", y = "Value"))]
+            namedParams
+                [ "data", box df
+                  "mapping", box (R.aes__string (x = "Iteration", y = "Value")) ]
         )
         >!> R.geom__line (R.aes__string (namedParams [ "color", "ChainId" ]))
         >!> R.facet__grid (namedParams [ "facets", "Parameter~."; "scales", "free" ])
@@ -59,7 +61,7 @@ module RealTimeTrace =
             | X11 -> R.x11 ()
             | PNG -> R.png ()
 
-        let appendToTrace e recentTrace =
+        let appendToTrace (e: ModelFitState) recentTrace =
             recentTrace |> Seq.append (e |> decompose) |> Seq.truncate maxTraceItems
 
         let agent =
@@ -93,7 +95,7 @@ module RealTimeTrace =
 
     let graphWithConsole refreshRate maxData =
         let consolePost = Bristlecone.Logging.Console.logger refreshRate
-        let graphLog = TraceGraph(Device.X11, refreshRate, maxData)
+        let graphLog = TraceGraph(Device.X11, refreshRate |> int, maxData)
 
         (fun event ->
             consolePost event

@@ -4,8 +4,50 @@ namespace Bristlecone
 /// Bristlecone.
 module Language =
 
+    [<NoEquality; NoComparison>]
+    type StateId<[<Measure>] 'u> =
+        private
+        | StateIdInner of ShortCode.ShortCode
+
+        member this.Code = this |> fun (StateIdInner c) -> c
+
+    [<NoEquality; NoComparison>]
+    type MeasureId<[<Measure>] 'u> =
+        private
+        | MeasureIdInner of ShortCode.ShortCode
+
+        member this.Code = this |> fun (MeasureIdInner c) -> c
+
+    [<NoEquality; NoComparison>]
+    type ParamId<[<Measure>] 'u> = private ParamIdInner of ShortCode.ShortCode
+
+    type IncludedParameter<[<Measure>] 'u> =
+        { ParamId: ParamId<'u>
+          Parameter: Parameter.Parameter<'u> }
+
     /// Define an estimatable parameter for a Bristlecone model.
-    let parameter = Parameter.create
+    let parameter<[<Measure>] 'u> code con lower upper : IncludedParameter<'u> =
+        match Parameter.create con lower upper, ShortCode.create code with
+        | Some p, Some c ->
+            { ParamId = ParamIdInner c
+              Parameter = p }
+        | _, None -> failwithf "Short-code was not valid for parameter (%s)." code
+        | None, _ -> failwithf "Could not configure parameter (%s)." code
+
+    let state<[<Measure>] 'u> name : StateId<'u> =
+        match name |> ShortCode.create with
+        | Some c -> StateIdInner c
+        | None -> failwithf "Short-code was not valid for state (%s)." name
+
+    let environment<[<Measure>] 'u> name : StateId<'u> =
+        match name |> ShortCode.create with
+        | Some c -> StateIdInner c
+        | None -> failwithf "Short-code was not valid for environment variable (%s)." name
+
+    let measure<[<Measure>] 'u> name : MeasureId<'u> =
+        match name |> ShortCode.create with
+        | Some c -> MeasureIdInner c
+        | None -> failwithf "Short-code was not valid for state (%s)." name
 
     /// A short code representation of an identifier for a parameter,
     /// model equation, or other model component.
@@ -20,349 +62,1265 @@ module Language =
     let months n = makeResolution Time.Resolution.Months n
     let days n = makeResolution Time.Resolution.Days n
 
+    let noConstraints = Parameter.Constraint.Unconstrained
+    let notNegative = Parameter.Constraint.PositiveOnly
+
+    module Require =
+        let state (s: StateId<'u>) =
+            ModelSystem.LikelihoodRequirement.State s.Code
+
+        let measure (m: MeasureId<'u>) =
+            ModelSystem.LikelihoodRequirement.Measure m.Code
+
     let lookup name (map: CodedMap<float>) =
         match map |> Map.tryFindBy (fun k -> k.Value = name) with
         | Some k -> k
         | None -> invalidOp (sprintf "Could not find %s in the map" name)
 
-    let (|NotEmptyList|_|) list =
-        if list |> List.isEmpty then None else Some list
 
-    type ArbitraryRequirement =
-        | ArbitraryParameter of string
-        | ArbitraryEnvironment of string
+    module Untyped =
 
-    /// A model or model fragment that can be interpreted to a mathematical
-    /// expression by Bristlecone.
-    type ModelExpression =
-        | This
-        | Time
-        | Environment of string
-        | Parameter of string
-        | Constant of float
-        | Add of ModelExpression list
-        | Subtract of ModelExpression * ModelExpression
-        | Multiply of ModelExpression list // List must not be an empty list?
-        | Divide of ModelExpression * ModelExpression
-        | Arbitrary of
-            (float -> float<Time.``time index``> -> Parameter.Pool -> ModelSystem.Environment<float> -> float) *
-            list<ArbitraryRequirement>
-        | Mod of ModelExpression * ModelExpression
-        | Power of ModelExpression * ModelExpression
-        | Logarithm of ModelExpression
-        | Exponential of ModelExpression
-        | Conditional of ((ModelExpression -> float) -> ModelExpression)
-        | Label of string * ModelExpression
-        | Invalid
+        /// A model or model fragment that can be interpreted to a mathematical
+        /// expression by Bristlecone.
+        type ModelExpressionUntyped =
+            | This
+            | Time
+            | Environment of string
+            | State of string
+            | StateAt of offset: int<Time.``time index``> * string
+            | Parameter of string
+            | Constant of float
+            | Add of ModelExpressionUntyped list
+            | Subtract of ModelExpressionUntyped * ModelExpressionUntyped
+            | Multiply of ModelExpressionUntyped list // List must not be an empty list?
+            | Divide of ModelExpressionUntyped * ModelExpressionUntyped
+            | Mod of ModelExpressionUntyped * ModelExpressionUntyped
+            | Power of ModelExpressionUntyped * ModelExpressionUntyped
+            | Logarithm of ModelExpressionUntyped
+            | Exponential of ModelExpressionUntyped
+            | Conditional of
+                cond: ModelExpressionUntyped *
+                ifTrue: ModelExpressionUntyped *
+                ifFalse: ModelExpressionUntyped
+            | Label of string * ModelExpressionUntyped
+            | Invalid
+            // Comparisons:
+            | GreaterThan of ModelExpressionUntyped * ModelExpressionUntyped
+            | LessThan of ModelExpressionUntyped * ModelExpressionUntyped
+            | EqualTo of ModelExpressionUntyped * ModelExpressionUntyped
+            | IsFinite of ModelExpressionUntyped
+            // Functions:
+            | Symbol of string
+            | Inverse of
+                expr: ModelExpressionUntyped *
+                symbol: string *
+                targetValue: ModelExpressionUntyped *
+                lo: ModelExpressionUntyped *
+                hi: ModelExpressionUntyped
 
-        static member (*)(e1, e2) =
-            Multiply[e1
-                     e2]
 
-        static member (/)(e1, e2) = Divide(e1, e2)
+    [<NoEquality; NoComparison>]
+    type BoolExpression = private BE of Untyped.ModelExpressionUntyped
 
-        static member (+)(e1, e2) =
-            Add[e1
-                e2]
+    [<NoEquality; NoComparison>]
+    type ModelExpression<[<Measure>] 'u> =
+        private
+        | ME of Untyped.ModelExpressionUntyped
 
-        static member (-)(e1, e2) = Subtract(e1, e2)
-        static member (%)(e1, remainder) = Mod(e1, remainder)
-        static member Pow(e1, pow) = Power(e1, pow)
-        static member Log(e) = Logarithm(e)
-        static member Exp(e) = Exponential(e)
+        static member (+)(ME a: ModelExpression<'u>, ME b: ModelExpression<'u>) : ModelExpression<'u> =
+            ME(Untyped.Add [ a; b ])
 
-        static member (~-) e =
-            Multiply[e
-                     Constant -1.]
+        static member (-)(ME a: ModelExpression<'u>, ME b: ModelExpression<'u>) : ModelExpression<'u> =
+            ME(Untyped.Subtract(a, b))
+
+        static member (*)(ME a: ModelExpression<'u1>, ME b: ModelExpression<'u2>) : ModelExpression<'u1 * 'u2> =
+            ME(Untyped.Multiply [ a; b ])
+
+        static member (/)(ME a: ModelExpression<'u1>, ME b: ModelExpression<'u2>) : ModelExpression<'u1 / 'u2> =
+            ME(Untyped.Divide(a, b))
+
+        static member (%)(ME a: ModelExpression<'u>, ME m: ModelExpression<'u>) : ModelExpression<'u> =
+            ME(Untyped.Mod(a, m))
+
+        static member (~-)(ME a: ModelExpression<'u>) : ModelExpression<'u> =
+            ME(Untyped.Multiply [ a; Untyped.Constant -1.0 ])
+
+        static member (.>)(ME a: ModelExpression<'u>, ME b: ModelExpression<'u>) : BoolExpression =
+            BE(Untyped.GreaterThan(a, b))
+
+        static member (.<)(ME a: ModelExpression<'u>, ME b: ModelExpression<'u>) : BoolExpression =
+            BE(Untyped.LessThan(a, b))
+
+        static member (=.)(ME a: ModelExpression<'u>, ME b: ModelExpression<'u>) : BoolExpression =
+            BE(Untyped.EqualTo(a, b))
+
+        static member Pow(ME a: ModelExpression<'u>, ME p: ModelExpression<1>) : ModelExpression<'u> =
+            ME(Untyped.Power(a, p))
+
+        static member Log(ME a: ModelExpression<1>) : ModelExpression<1> = ME(Untyped.Logarithm a)
+
+        static member Exp(ME a: ModelExpression<1>) : ModelExpression<1> = ME(Untyped.Exponential a)
+
+        static member StateAt(offset: int<Time.``time index``>, sid: StateId<'u>) : ModelExpression<'u> =
+            let (StateIdInner sc) = sid
+            ME(Untyped.StateAt(offset, sc.Value))
+
+        static member State(sid: StateId<'u>) : ModelExpression<'u> =
+            let (StateIdInner sc) = sid
+            ME(Untyped.State sc.Value)
+
+        static member Parameter(pid: IncludedParameter<'u>) : ModelExpression<'u> =
+            let (ParamIdInner name) = pid.ParamId
+            ME(Untyped.Parameter name.Value)
+
+        static member Environment(sid: StateId<'u>) : ModelExpression<'u> =
+            let (StateIdInner name) = sid
+            ME(Untyped.Environment name.Value)
+
+    let Constant (x: float<'u>) : ModelExpression<'u> = ME(Untyped.Constant(float x))
+    let P<[<Measure>] 'u> name : ModelExpression<'u> = ModelExpression.Parameter name
+    let This<[<Measure>] 'u> : ModelExpression<'u> = ME Untyped.This
+    let State<[<Measure>] 'u> sId : ModelExpression<'u> = ModelExpression.State sId
+    let StateAt (offset: int<Time.``time index``>, sId) : ModelExpression<'u> = ModelExpression.StateAt(offset, sId)
+    let Time<[<Measure>] 't> : ModelExpression<'t> = ME Untyped.Time
+    let Environment<[<Measure>] 'u> sid : ModelExpression<'u> = ModelExpression.Environment sid
+    let Invalid<[<Measure>] 'u> : ModelExpression<'u> = ME Untyped.Invalid
+
+    /// Operations for boolean model expressions.
+    module Bool =
+
+        let isFinite (ME a: ModelExpression<'u>) : BoolExpression = BE(Untyped.IsFinite a)
+
+
+    /// For conditional statements, all three branches must have the same unit.
+    let Conditional<[<Measure>] 'u>
+        (cond: BoolExpression)
+        (ifTrue: ModelExpression<'u>)
+        (ifFalse: ModelExpression<'u>)
+        : ModelExpression<'u> =
+        let (BE c) = cond
+        let (ME t) = ifTrue
+        let (ME f) = ifFalse
+        ME(Untyped.Conditional(c, t, f))
+
+    let Inverse<[<Measure>] 'u, [<Measure>] 'v>
+        (forwardFn: ModelExpression<'v> -> ModelExpression<'u>)
+        (target: ModelExpression<'u>)
+        (lo: ModelExpression<'v>)
+        (hi: ModelExpression<'v>)
+        : ModelExpression<'v> =
+        let symName = "invVar"
+        let arg = ME(Untyped.Symbol symName)
+        let (ME targetExpr) = target
+        let (ME fExpr) = forwardFn arg
+        let ME lo, ME hi = lo, hi
+        ME(Untyped.Inverse(fExpr, symName, targetExpr, lo, hi))
+
+    let Label<[<Measure>] 'u> (label: string) (expr: ModelExpression<'u>) : ModelExpression<'u> =
+        let (ME e) = expr
+        ME(Untyped.Label(label, e))
+
+    // TODO Units for power.
+    let Power<[<Measure>] 'u> (baseExpr: ModelExpression<'u>) (expExpr: ModelExpression<1>) : ModelExpression<'u> =
+        let (ME b) = baseExpr
+        let (ME e) = expExpr
+        ME(Untyped.Power(b, e))
+
+    // Logarithm: only makes sense for dimensionless inputs
+    let Logarithm (expr: ModelExpression<1>) : ModelExpression<1> =
+        let (ME e) = expr
+        ME(Untyped.Logarithm e)
+
+    // Exponential: exp(x) is dimensionless if x is dimensionless
+    let Exponential (expr: ModelExpression<1>) : ModelExpression<1> =
+        let (ME e) = expr
+        ME(Untyped.Exponential e)
+
+
+    module ExpressionDescribe =
+
+        open Untyped
+
+        /// Outputs a code-based representation of a model.
+        let rec exprCode (expr: ModelExpression<'u>) : string =
+            match expr with
+            | ME(Constant n) -> sprintf "C[%A]" n
+            | ME(Parameter n) -> sprintf "P[%s]" n
+            | ME(Environment n) -> sprintf "E[%s]" n
+            | ME(State nm) -> sprintf "St[%s]" nm
+            | ME(StateAt(off, nm)) -> sprintf "StOff[%A;%s]" off nm
+            | ME Time -> "T"
+            | ME This -> "X"
+            | ME(Add xs) -> "A[" + (xs |> List.map (fun x -> exprCode (ME x)) |> String.concat ";") + "]"
+            | ME(Multiply xs) -> "M[" + (xs |> List.map (fun x -> exprCode (ME x)) |> String.concat ";") + "]"
+            | ME(Subtract(l, r)) -> sprintf "S[%s;%s]" (exprCode (ME l)) (exprCode (ME r))
+            | ME(Divide(l, r)) -> sprintf "D[%s;%s]" (exprCode (ME l)) (exprCode (ME r))
+            | ME(Power(l, r)) -> sprintf "Pow[%s;%s]" (exprCode (ME l)) (exprCode (ME r))
+            | ME(Conditional(c, t, f)) -> sprintf "If[%s;%s;%s]" (exprCode (ME c)) (exprCode (ME t)) (exprCode (ME f))
+            | ME(Label(n, m)) -> sprintf "L[%s;%s]" n (exprCode (ME m))
+            | ME Invalid -> "Invalid"
+            | ME(Symbol s) -> sprintf "Sym[%s]" s
+            | ME(Inverse(fn, targetSymbol, targetVal, lo, hi)) ->
+                sprintf
+                    "Inv[%s;%s;%s;%s;%s]"
+                    targetSymbol
+                    (exprCode (ME fn))
+                    (exprCode (ME targetVal))
+                    (exprCode (ME lo))
+                    (exprCode (ME hi))
+            | ME(GreaterThan(l, r)) -> sprintf "GT[%s;%s]" (exprCode (ME l)) (exprCode (ME r))
+            | ME(LessThan(l, r)) -> sprintf "LT[%s;%s]" (exprCode (ME l)) (exprCode (ME r))
+            | ME(EqualTo(l, r)) -> sprintf "=[%s;%s]" (exprCode (ME l)) (exprCode (ME r))
+            | ME(IsFinite e) -> sprintf "IsFin[%s]" (exprCode (ME e))
+            | ME(Exponential e) -> sprintf "Exp[%s]" (exprCode (ME e))
+            | ME(Logarithm e) -> sprintf "Log[%s]" (exprCode (ME e))
+            | ME(Mod(x, y)) -> sprintf "Mod[%s^%s]" (exprCode (ME x)) (exprCode (ME y))
+
+
+    /// Compile model expressions into functions that take
+    /// changing state as Tensors.
+    module ExpressionCompiler =
+
+        open DiffSharp
+        open Microsoft.FSharp.Quotations
+        open Microsoft.FSharp.Linq.RuntimeHelpers
+        open Bristlecone.Tensors
+        open Untyped
+
+        // ---- Index Builders ----
+        let private buildIndex toKey =
+            Seq.mapi (fun i k -> toKey k, i) >> Map.ofSeq
+
+        let private paramIndex =
+            Parameter.Pool.toList
+            >> Seq.map fst
+            >> Seq.map (fun s -> s.Value)
+            >> buildIndex id
+
+        let private envIndexFromKeys (keys: ShortCode.ShortCode list) : Map<string, int> =
+            keys
+            |> Seq.map (fun sc -> sc.Value)
+            |> Seq.mapi (fun i name -> name, i)
+            |> Map.ofSeq
+
+        type Bool<'r> = Bool of 'r
+
+        // ---- Generic AST traversal ----
+        type Ops<'r> =
+            { constVal: float -> Expr<'r>
+              constValLift: Expr<'r> -> float -> Expr<'r>
+              parameter: string -> Expr<'r>
+              environment: string -> Expr<'r>
+              timeVal: Expr<'r>
+              thisVal: Expr<'r>
+              add: Expr<'r> list -> Expr<'r>
+              sub: Expr<'r> * Expr<'r> -> Expr<'r>
+              mul: Expr<'r> list -> Expr<'r>
+              div: Expr<'r> * Expr<'r> -> Expr<'r>
+              pow: Expr<'r> * Expr<'r> -> Expr<'r>
+              log: Expr<'r> -> Expr<'r>
+              exp: Expr<'r> -> Expr<'r>
+              modulo: Expr<'r> * Expr<'r> -> Expr<'r>
+              cond: Expr<Bool<'r>> * Expr<'r> * Expr<'r> -> Expr<'r>
+              label: string * Expr<'r> -> Expr<'r>
+              stateAt: int<Time.``time index``> * string -> Expr<'r>
+              invalid: unit -> Expr<'r>
+              // Boolean ops
+              greaterThan: Expr<'r> * Expr<'r> -> Expr<Bool<'r>>
+              lessThan: Expr<'r> * Expr<'r> -> Expr<Bool<'r>>
+              equalTo: Expr<'r> * Expr<'r> -> Expr<Bool<'r>>
+              isFinite: Expr<'r> -> Expr<Bool<'r>>
+              // Functions
+              inverse:
+                  Expr<'r -> 'r> *
+                  Expr<'r> * // target
+                  Expr<'r> * // lo
+                  Expr<'r> * // hi
+                  float *
+                  int // tolerance * maxiter
+                      -> Expr<'r> }
+
+        module Caching =
+
+            type QuotationCache<'r, [<Measure>] 'u> =
+                { TryGet: ModelExpression<'u> -> Expr<'r> option
+                  Store: ModelExpression<'u> -> Expr<'r> -> Expr<'r> }
+
+            module Policies =
+                let noCaching = fun _ -> false
+                let cacheEverything = fun _ -> true
+
+                let cacheHeavy =
+                    function
+                    | ME(Conditional _) -> true
+                    | ME(Inverse _) -> true
+                    | ME(Power _) -> true
+                    | ME(Multiply xs) when xs.Length > 2 -> true
+                    | _ -> false
+
+            let makeBindingCache<'r, [<Measure>] 'u>
+                ()
+                : QuotationCache<'r, 'u> * System.Collections.Generic.List<Var * Expr<'r>> =
+                let vars = System.Collections.Generic.Dictionary<string, Var>()
+                let bindings = System.Collections.Generic.List<Var * Expr<'r>>()
+
+                let cache =
+                    { TryGet =
+                        fun expr ->
+                            let key = ExpressionDescribe.exprCode expr
+
+                            match vars.TryGetValue key with
+                            | true, v -> Some(Expr.Var v |> Expr.Cast<'r>)
+                            | _ -> None
+                      Store =
+                        fun expr rhs ->
+                            let key = ExpressionDescribe.exprCode expr
+                            let v = Var(sprintf "tmp_%s" key, typeof<'r>)
+                            vars.[key] <- v
+                            bindings.Add(v, rhs)
+                            Expr.Var v |> Expr.Cast<'r> }
+
+                cache, bindings
+
+            /// Use caching if shouldCache returns true for the given expression.
+            let apply cache shouldCache (expr: ModelExpression<'u>) (rhs: unit -> Expr<'r>) =
+                if shouldCache expr then
+                    match cache.TryGet expr with
+                    | Some vref -> vref
+                    | None -> cache.Store expr (rhs ())
+                else
+                    rhs ()
+
+        let rec buildBool<'r>
+            (buildQuotation: (ModelExpression<'u> -> Expr<'r>))
+            (ops: Ops<'r>)
+            (symbols: Map<string, Var>)
+            (BE bexpr: BoolExpression)
+            : Expr<Bool<'r>> =
+            match bexpr with
+            | GreaterThan(l, r) -> ops.greaterThan (buildQuotation (ME l), buildQuotation (ME r))
+            | LessThan(l, r) -> ops.lessThan (buildQuotation (ME l), buildQuotation (ME r))
+            | EqualTo(l, r) -> ops.equalTo (buildQuotation (ME l), buildQuotation (ME r))
+            | IsFinite ex -> ops.isFinite (buildQuotation (ME ex))
+            | _ -> failwith "Unexpected boolean form"
+
+        let rec private buildQuotationCore<'r, [<Measure>] 'u>
+            (shouldCache: ModelExpression<'u> -> bool)
+            (cache: Caching.QuotationCache<'r, 'u>)
+            (ops: Ops<'r>)
+            (symbols: Map<string, Var>)
+            (expr: ModelExpression<'u>)
+            =
+            let build = buildQuotationCore shouldCache cache ops symbols
+            let withCache expr mk = Caching.apply cache shouldCache expr mk
+
+            match expr with
+            | ME(Constant n) -> ops.constVal n
+            | ME(Parameter n) -> ops.parameter n
+            | ME(Environment n) -> ops.environment n
+            | ME(State nm) -> ops.environment nm
+            | ME Time -> ops.timeVal
+            | ME This -> ops.thisVal
+            | ME Invalid -> ops.invalid ()
+
+            | ME(Add xs) -> withCache expr (fun () -> xs |> List.map (fun x -> build (ME x)) |> ops.add)
+
+            | ME(Multiply xs) -> withCache expr (fun () -> xs |> List.map (fun x -> build (ME x)) |> ops.mul)
+
+            | ME(Subtract(l, r)) -> withCache expr (fun () -> ops.sub (build (ME l), build (ME r)))
+
+            | ME(Divide(l, r)) -> withCache expr (fun () -> ops.div (build (ME l), build (ME r)))
+
+            | ME(Power(l, r)) -> withCache expr (fun () -> ops.pow (build (ME l), build (ME r)))
+
+            | ME(Logarithm e) -> withCache expr (fun () -> ops.log (build (ME e)))
+
+            | ME(Exponential e) -> withCache expr (fun () -> ops.exp (build (ME e)))
+
+            | ME(Mod(l, r)) -> withCache expr (fun () -> ops.modulo (build (ME l), build (ME r)))
+
+            | ME(Label(n, m)) -> ops.label (n, build (ME m))
+            | ME(StateAt(off, n)) -> ops.stateAt (off, n)
+
+            | ME(Symbol s) ->
+                let v =
+                    match symbols.TryFind s with
+                    | Some v -> v
+                    | None -> failwithf "Unbound symbol: %s" s
+
+                Expr.Var v |> Expr.Cast<'r>
+
+            | ME(Conditional(c, t, f)) ->
+                withCache expr (fun () ->
+                    let c' = buildBool build ops symbols (BE c)
+                    let t' = build (ME t)
+                    let f' = build (ME f)
+                    ops.cond (c', t', f'))
+
+            | ME(Inverse(fn, targetSymbol, targetVal, lo, hi)) ->
+                withCache expr (fun () ->
+                    let xVar = Var(targetSymbol, typeof<'r>)
+                    let symbolsForFn = Map.empty.Add(targetSymbol, xVar)
+
+                    // Build x and one = x/x for AD lifting
+                    let xExpr: Expr<'r> = Expr.Var xVar |> Expr.Cast<'r>
+                    let oneVar = Var("one", typeof<'r>)
+                    let oneExpr: Expr<'r> = ops.div (xExpr, xExpr)
+
+                    let opsScoped: Ops<'r> =
+                        { ops with
+                            constVal = ops.constValLift (Expr.Var oneVar |> Expr.Cast<'r>) }
+
+                    let innerCache, innerBindings = Caching.makeBindingCache ()
+                    let fBody = buildQuotationCore shouldCache innerCache opsScoped symbolsForFn (ME fn)
+
+                    let innerPairs: (Var * Expr<'r>) list = innerBindings |> Seq.toList
+
+                    let fBodyWithLets: Expr<'r> =
+                        List.foldBack
+                            (fun (v, rhs) (acc: Expr<'r>) -> Expr.Cast<'r>(Expr.Let(v, rhs, acc)))
+                            innerPairs
+                            fBody
+
+                    let fBodyWithOne: Expr<'r> =
+                        Expr.Let(oneVar, oneExpr, fBodyWithLets) |> Expr.Cast<'r>
+
+                    let fLambda = Expr.Lambda(xVar, fBodyWithOne) |> Expr.Cast<'r -> 'r>
+
+                    let targetExpr = build (ME targetVal)
+                    let loExpr = build (ME lo)
+                    let hiExpr = build (ME hi)
+
+                    let tol, maxIter = 1e-6, 50
+                    ops.inverse (fLambda, targetExpr, loExpr, hiExpr, tol, maxIter))
+
+            | ME(GreaterThan _)
+            | ME(LessThan _)
+            | ME(IsFinite _)
+            | ME(EqualTo _) -> failwith "Numeric builder received a boolean node"
+
+
+        let internal buildQuotation'<'r, [<Measure>] 'u>
+            (policy: ModelExpression<'u> -> bool)
+            (ops: Ops<'r>)
+            (symbols: Map<string, Var>)
+            (expr: ModelExpression<'u>)
+            : Expr<'r> =
+            let (bindingCache: Caching.QuotationCache<'r, 'u>), bindings =
+                Caching.makeBindingCache ()
+
+            let body: Expr<'r> = buildQuotationCore policy bindingCache ops symbols expr
+
+            let full: Expr<'r> =
+                List.foldBack
+                    (fun (v, rhs) (acc: Expr<'r>) -> Expr.Let(v, rhs, acc) |> Expr.Cast<'r>)
+                    (bindings |> Seq.toList)
+                    body
+
+            full
+
+        /// Builds a quotation from a model expression tree simply,
+        /// with no internal caching or let bindings.
+        let buildQuotation ops symbols expr =
+            buildQuotation' Caching.Policies.noCaching ops symbols expr
+
+        /// Builds a quotation from a model expression tree,
+        /// using an internal cache to avoid rebuilding 'heavy'
+        /// nodes that have already been built. 'Heavy' nodes
+        /// are introduced as let bindings to minimise repetition
+        /// of work in computation.
+        let buildQuotationCached<'r, [<Measure>] 'u>
+            (ops: Ops<'r>)
+            (symbols: Map<string, Var>)
+            (expr: ModelExpression<'u>)
+            : Expr<'r> =
+            let bindingCache, bindings = Caching.makeBindingCache ()
+
+            let body: Expr<'r> =
+                buildQuotationCore Caching.Policies.cacheHeavy bindingCache ops symbols expr
+
+            let full: Expr<'r> =
+                List.foldBack
+                    (fun (v, rhs) (acc: Expr<'r>) -> Expr.Let(v, rhs, acc) |> Expr.Cast<'r>)
+                    (bindings |> Seq.toList)
+                    body
+
+            full
+
+        let private mkTensor (v: float) = dsharp.tensor (v, dtype = Float64)
+
+        let invalidPenalty = mkTensor 1e30
+        let internal one = mkTensor 1.0
+
+        /// If a tensor is infinite or nan, replaces its value with a high
+        /// penalty value (1e30).
+        let nonFiniteToPenalty (x: Tensor) =
+            // x.clamp(low = -1e30, high = 1e30)
+            // let nanMask = dsharp.isnan x
+            // let infMask = dsharp.isinf x
+            // let nanF = dsharp.cast(nanMask, Dtype.Float64)
+            // let infF = dsharp.cast(infMask, Dtype.Float64)
+            // let badMask = nanF + infF
+            // let goodMask = 1.0 - badMask
+            // let penalty = dsharp.tensor(invalidPenalty, dtype = Dtype.Float64)
+            // x * goodMask + penalty * badMask
+            let d = x.toDouble ()
+            if System.Double.IsFinite d then x else invalidPenalty
+
+        /// Blends the true and false cases for AD-safe operation, but eagerly
+        /// evaluates both sides. If a NaN is present, it will contaminate the
+        /// whole operation despite being in the unused case.
+        let private blendConditional c t f =
+            <@
+                match %c with
+                | Bool mask ->
+                    let m = dsharp.cast (mask, Dtype.Float64)
+                    nonFiniteToPenalty %t * m + nonFiniteToPenalty %f * (one - m)
+            @>
+
+        let private tensorSum (xs: Expr<Tensor> list) : Expr<Tensor> =
+            match xs with
+            | [] -> failwith "Cannot add an empty list"
+            | [ one ] -> one
+            | _ ->
+                // splice the list into an array, then stack into a tensor
+                let arrExpr = Expr.NewArray(typeof<Tensor>, xs |> List.map (fun e -> e :> Expr))
+                <@ dsharp.sum (dsharp.stack ((%%arrExpr: Tensor[]), 0)) @>
+
+        let private tensorProduct (arr: Tensor[]) =
+            arr |> Array.reduce (fun acc t -> dsharp.mul (acc, t))
+
+        let mul (xs: Expr<Tensor> list) : Expr<Tensor> =
+            match xs with
+            | [] -> <@ mkTensor 1.0 @>
+            | [ x ] -> x
+            | _ ->
+                let arrExpr = Expr.NewArray(typeof<Tensor>, xs |> List.map (fun e -> e :> Expr))
+                <@ tensorProduct (%%arrExpr: Tensor[]) @>
+
+        let private two = allocateTensor 2.0
+        let private half = allocateTensor 0.5
+
+        let inverse fLambda targetExpr loExpr hiExpr tol maxIter =
+            let tol = allocateTensor tol
+
+            <@
+                let loVal = %loExpr
+                let hiVal = %hiExpr
+                let range = dsharp.sub (hiVal, loVal)
+                let n = dsharp.log (range / tol) / dsharp.log two
+                let maxIter = min (int (System.Math.Ceiling(n.toDouble ()))) maxIter
+                let midpoint = (loVal + hiVal) * half
+
+                Statistics.RootFinding.Tensor.newtonRaphson
+                    (%%fLambda: Tensor -> Tensor)
+                    %targetExpr
+                    midpoint
+                    %loExpr
+                    %hiExpr
+                    maxIter
+            // Statistics.RootFinding.Tensor.bisect (%%fLambda : Tensor -> Tensor)
+            //                     %targetExpr %loExpr %hiExpr tol maxIter
+            @>
+
+        // let pVar      = Var("parameters", typeof<TypedTensor<Vector,``parameter``>>)
+        // let statesVar = Var("states", typeof<CodedMap<TypedTensor<Scalar,ModelSystem.state>>[]>)
+        // let tIdxVar   = Var("timeIndex", typeof<int>)
+        // let pIndex    = paramIndex parameters
+        let private tensorOps<[<Measure>] 'timeUnit>
+            (pIndex: Map<string, int>)
+            (eIndex: Map<string, int>)
+            (pVar: Var)
+            (eVar: Var)
+            (tVar: Var)
+            (xVar: Var)
+            =
+            { constVal =
+                fun n ->
+                    let tensor = mkTensor n
+                    <@ tensor @>
+              constValLift =
+                fun one n ->
+                    let tensor = mkTensor n
+                    <@ %one * tensor @>
+              parameter = fun name -> <@ (%%Expr.Var pVar: TypedTensor<Vector, ``parameter``>).Value.[pIndex.[name]] @>
+              environment =
+                fun name ->
+                    <@
+                        (%%Expr.Var eVar: CodedMap<TypedTensor<Scalar, ModelSystem.``environment``>>)
+                        |> Map.tryFindBy (fun k -> k.Value = name)
+                        |> fun o ->
+                            match o with
+                            | Some o -> o.Value
+                            | None -> failwithf "Environmental data not available: %s" name
+                    @>
+              timeVal = <@ (%%Expr.Var tVar: TypedTensor<Scalar, 'timeUnit>).Value @>
+              thisVal = <@ (%%Expr.Var xVar: TypedTensor<Scalar, ModelSystem.state>).Value @>
+              add = tensorSum
+              sub = fun (l, r) -> <@ dsharp.sub (%l, %r) @>
+              mul = mul
+              div = fun (l, r) -> <@ dsharp.div (%l, %r) @>
+              pow = fun (l, r) -> <@ dsharp.pow (%l, %r) @>
+              log = fun e -> <@ dsharp.log %e @>
+              exp = fun e -> <@ dsharp.exp %e @>
+              modulo = fun (l, r) -> <@ %l - %r * dsharp.floor (%l / %r) @>
+              cond = fun (c, t, f) -> blendConditional c t f
+              label = fun (_, m) -> m
+              stateAt = fun _ -> failwith "State lookup not supported in equations"
+              invalid = fun () -> <@ invalidPenalty @>
+              greaterThan = fun (l, r) -> <@ dsharp.gt (%l, %r) |> Bool @>
+              lessThan = fun (l, r) -> <@ dsharp.lt (%l, %r) |> Bool @>
+              equalTo = fun (l, r) -> <@ dsharp.eq (%l, %r) |> Bool @>
+              isFinite =
+                fun ex ->
+                    <@
+                        let nanMask = dsharp.isnan %ex
+                        let infMask = dsharp.isinf %ex
+                        let badMask = Tensors.Unsafe.logicalOr nanMask infMask
+                        let finiteMask = Tensors.Unsafe.logicalNot badMask
+                        Bool finiteMask
+                    @>
+              inverse =
+                fun (fLambda, targetExpr, loExpr, hiExpr, tol, maxIter) ->
+                    inverse fLambda targetExpr loExpr hiExpr tol maxIter }
+
+        let private tensorOpsForMeasure (pIndex: Map<string, int>) (pVar: Var) (statesVar: Var) (tIdxVar: Var) =
+            { constVal =
+                fun n ->
+                    let tensor = mkTensor n
+                    <@ tensor @>
+              constValLift =
+                fun one n ->
+                    let tensor = mkTensor n
+                    <@ %one * tensor @>
+              parameter = fun name -> <@ (%%Expr.Var pVar: TypedTensor<Vector, ``parameter``>).Value.[pIndex.[name]] @>
+              environment = fun _ -> failwith "Environment not used in measures"
+              timeVal = <@ mkTensor (float (%%Expr.Var tIdxVar: int)) @>
+              thisVal = <@ mkTensor nan @> // not used in measures
+              add = tensorSum
+              sub = fun (l, r) -> <@ dsharp.sub (%l, %r) @>
+              mul = mul
+              div = fun (l, r) -> <@ dsharp.div (%l, %r) @>
+              pow = fun (l, r) -> <@ dsharp.pow (%l, %r) @>
+              log = fun e -> <@ dsharp.log %e @>
+              exp = fun e -> <@ dsharp.exp %e @>
+              modulo = fun (l, r) -> <@ %l - %r * dsharp.floor (%l / %r) @>
+              cond = fun (c, t, f) -> blendConditional c t f
+              label = fun (_, m) -> m
+              invalid = fun () -> <@ invalidPenalty @>
+              stateAt =
+                fun (offset, name) ->
+                    <@
+                        let states = %%Expr.Var statesVar: CodedMap<TypedTensor<Vector, ModelSystem.state>>
+                        let vec = states |> Map.tryFindBy (fun n -> n.Value = name) |> Option.get
+
+                        (Typed.itemAt ((%%Expr.Var tIdxVar: int) + Units.removeUnitFromInt offset) vec).Value
+                    @>
+              greaterThan = fun (l, r) -> <@ dsharp.gt (%l, %r) |> Bool @>
+              lessThan = fun (l, r) -> <@ dsharp.lt (%l, %r) |> Bool @>
+              equalTo = fun (l, r) -> <@ dsharp.eq (%l, %r) |> Bool @>
+              isFinite =
+                fun ex ->
+                    <@
+                        let nanMask = dsharp.isnan %ex
+                        let infMask = dsharp.isinf %ex
+                        let badMask = Tensors.Unsafe.logicalOr nanMask infMask
+                        let finiteMask = Tensors.Unsafe.logicalNot badMask
+                        Bool finiteMask
+                    @>
+              inverse =
+                fun (fLambda, targetExpr, loExpr, hiExpr, tol, maxIter) ->
+                    inverse fLambda targetExpr loExpr hiExpr tol maxIter }
+
+        // ---- Float ops ----
+        let private floatOps (pVar: Var) (eVar: Var) (tVar: Var) (xVar: Var) =
+            { constVal = fun n -> <@ n @>
+              constValLift = fun _ n -> <@ n @>
+              parameter =
+                fun name ->
+                    <@
+                        match
+                            (%%Expr.Var pVar: Parameter.Pool.ParameterPool)
+                            |> Parameter.Pool.tryGetRealValue name
+                        with
+                        | Some est -> float est // strip measure for numeric ops
+                        | None -> failwithf "The parameter '%s' is missing" name
+                    @>
+              environment =
+                fun name ->
+                    <@
+                        match (%%Expr.Var eVar: CodedMap<float>) |> Map.tryFindBy (fun n -> n.Value = name) with
+                        | Some v -> v
+                        | None -> failwithf "The environment value '%s' is missing" name
+                    @>
+              timeVal = <@ (%%Expr.Var tVar: float<Time.``time index``>) |> Units.removeUnitFromFloat @>
+              thisVal = <@ %%Expr.Var xVar: float @>
+              add = List.reduce (fun l r -> <@ %l + %r @>)
+              sub = fun (l, r) -> <@ %l - %r @>
+              mul = List.reduce (fun l r -> <@ %l * %r @>)
+              div = fun (l, r) -> <@ %l / %r @>
+              pow = fun (l, r) -> <@ %l ** %r @>
+              log = fun e -> <@ log %e @>
+              exp = fun e -> <@ exp %e @>
+              modulo = fun (l, r) -> <@ %l % %r @>
+              label = fun (_, m) -> m
+              stateAt = fun _ -> failwith "State lookup not supported in equations"
+              invalid = fun () -> <@ nan @>
+              cond = fun (c, t, f) -> <@ if %c = Bool 1 then %t else %f @>
+              greaterThan = fun (l, r) -> <@ if %l > %r then Bool 1. else Bool 0. @>
+              lessThan = fun (l, r) -> <@ if %l < %r then Bool 1. else Bool 0. @>
+              equalTo = fun (l, r) -> <@ if %l = %r then Bool 1. else Bool 0. @>
+              isFinite =
+                fun x ->
+                    <@
+                        let v = %x
+                        let b = not (System.Double.IsNaN v || System.Double.IsInfinity v)
+                        Bool(if b then 1.0 else 0.0)
+                    @>
+              inverse =
+                fun (fLambda, targetExpr, loExpr, hiExpr, tol, maxIter) ->
+                    <@
+                        Statistics.RootFinding.bisect
+                            1
+                            maxIter
+                            (fun x -> (%%fLambda) x - %targetExpr)
+                            %loExpr
+                            %hiExpr
+                            tol
+                    @> }
+
+        // ---- Lambda helper ----
+        let private toLambda4 v1 v2 v3 v4 body =
+            Expr.Lambda(v1, Expr.Lambda(v2, Expr.Lambda(v3, Expr.Lambda(v4, body))))
+
+        // ---- Public compile functions ----
+
+        /// Compile a rate-based (e.g. ODE) model expression into an internal
+        /// `RateEquation` for use in model-fitting.
+        let compileRate<[<Measure>] 'timeUnit, [<Measure>] 'stateUnit>
+            parameters
+            envKeys
+            (expr: ModelExpression<'stateUnit / 'timeUnit>)
+            : ModelSystem.RateEquation<'timeUnit> =
+
+            let pVar = Var("parameters", typeof<TypedTensor<Vector, ``parameter``>>)
+
+            let eVar =
+                Var("environment", typeof<CodedMap<TypedTensor<Scalar, ModelSystem.``environment``>>>)
+
+            let tVar = Var("time", typeof<TypedTensor<Scalar, 'timeUnit>>)
+            let xVar = Var("state", typeof<TypedTensor<Scalar, 'stateUnit>>)
+
+            let pIndex = paramIndex parameters
+            let eIndex = envIndexFromKeys envKeys
+
+            let core =
+                buildQuotationCached (tensorOps pIndex eIndex pVar eVar tVar xVar) Map.empty expr
+
+            // Convert from 'stateUnit/'timeUnit to internal state/'timeUnit
+            <@ tryAsScalar<ModelSystem.state / 'timeUnit> %core |> Option.get @>
+            |> toLambda4 pVar eVar tVar xVar
+            |> LeafExpressionConverter.EvaluateQuotation
+            |> unbox<ModelSystem.RateEquation<'timeUnit>>
+
+        let compileDiscrete<[<Measure>] 'timeUnit, [<Measure>] 'stateUnit>
+            parameters
+            envKeys
+            (expr: ModelExpression<'stateUnit>)
+            : ModelSystem.StateEquation<'timeUnit> =
+
+            let pVar = Var("parameters", typeof<TypedTensor<Vector, ``parameter``>>)
+
+            let eVar =
+                Var("environment", typeof<CodedMap<TypedTensor<Scalar, ModelSystem.``environment``>>>)
+
+            let tVar = Var("time", typeof<TypedTensor<Scalar, 'timeUnit>>)
+            let xVar = Var("state", typeof<TypedTensor<Scalar, 'stateUnit>>)
+
+            let pIndex = paramIndex parameters
+            let eIndex = envIndexFromKeys envKeys
+
+            let core =
+                buildQuotationCached (tensorOps pIndex eIndex pVar eVar tVar xVar) Map.empty expr
+
+            <@ tryAsScalar<ModelSystem.state> %core |> Option.get @>
+            |> toLambda4 pVar eVar tVar xVar
+            |> LeafExpressionConverter.EvaluateQuotation
+            |> unbox<ModelSystem.StateEquation<'timeUnit>>
+
+        let compileSimple<[<Measure>] 'u> (expr: ModelExpression<'u>) : float<'u> =
+            let core =
+                buildQuotationCached
+                    (tensorOps
+                        Map.empty
+                        Map.empty
+                        (Var("p", typeof<TypedTensor<Vector, ``parameter``>>))
+                        (Var("e", typeof<CodedMap<TypedTensor<Scalar, ModelSystem.``environment``>>>))
+                        (Var("t", typeof<TypedTensor<Scalar, 1>>))
+                        (Var("x", typeof<TypedTensor<Scalar, 1>>)))
+                    Map.empty
+                    expr
+
+            let q = <@ tryAsScalar<ModelSystem.state> %core |> Option.get @>
+
+            match LeafExpressionConverter.EvaluateQuotation q with
+            | :? TypedTensor<Scalar, 'u> as t -> Typed.toFloatScalar t
+            | _ -> failwith "Expected a scalar tensor result"
+
+        let compileFloat expr =
+            let fpVar = Var("parameters", typeof<Parameter.Pool.ParameterPool>)
+            let feVar = Var("environment", typeof<CodedMap<float>>)
+            let ftVar = Var("time", typeof<float<Time.``time index``>>)
+            let fxVar = Var("thisValue", typeof<float>)
+
+            buildQuotationCached (floatOps fpVar feVar ftVar fxVar) Map.empty expr
+            |> toLambda4 fpVar feVar ftVar fxVar
+            |> LeafExpressionConverter.EvaluateQuotation
+            |> unbox<Parameter.Pool.ParameterPool -> CodedMap<float> -> float<Time.``time index``> -> float -> float>
+
+        let compileMeasure<[<Measure>] 'stateUnit> parameters (expr: ModelExpression<'stateUnit>) =
+            let pVar = Var("parameters", typeof<TypedTensor<Vector, parameter>>)
+
+            let statesVar =
+                Var("states", typeof<CodedMap<TypedTensor<Vector, ModelSystem.state>>>)
+
+            let tIdxVar = Var("timeIndex", typeof<int>)
+            let pIndex = paramIndex parameters
+
+            let core =
+                buildQuotationCached (tensorOpsForMeasure pIndex pVar statesVar tIdxVar) Map.empty expr
+
+            <@ tryAsScalar<ModelSystem.state> %core |> Option.get @>
+            |> fun body -> Expr.Lambda(pVar, Expr.Lambda(statesVar, Expr.Lambda(tIdxVar, body)))
+            |> LeafExpressionConverter.EvaluateQuotation
+            |> unbox<ModelSystem.Measurement<'stateUnit>>
+
+
 
     /// Computes a `ModelExpression` given the current time, value,
     /// environment, and parameter pool.
-    let rec compute x (t: float<Time.``time index``>) (pool: Parameter.Pool) (environment: CodedMap<float>) ex : float =
-        match ex with
-        | This -> x
-        | Time -> t |> Units.removeUnitFromFloat
-        | Environment name ->
-            match environment |> Map.tryFindBy (fun n -> n.Value = name) with
-            | Some i -> i
-            | None ->
-                failwithf
-                    "The equation could not be calculated. The environmental data '%s' has not been configured."
-                    name
-        | Parameter name ->
-            match pool |> Parameter.Pool.tryGetRealValue name with
-            | Some est -> est
-            | None ->
-                failwithf
-                    "The equation could not be calculated. The parameter '%s' has not been set up (or has yet to be estimated)."
-                    name
-        | Constant n -> n
-        | Add list ->
-            match list with
-            | NotEmptyList l -> l |> List.sumBy (compute x t pool environment)
-            | _ -> failwith "List was empty"
-        | Subtract(l, r) -> compute x t pool environment l - compute x t pool environment r
-        | Multiply list ->
-            match list with
-            | NotEmptyList l -> l |> List.map (compute x t pool environment) |> List.fold (*) 1.
-            | _ -> failwith "List was empty"
-        | Divide(l, r) -> compute x t pool environment l / compute x t pool environment r
-        | Arbitrary(fn, _) -> fn x t pool environment
-        | Mod(e, m) -> (compute x t pool environment e) % (compute x t pool environment m)
-        | Power(e, m) -> (compute x t pool environment e) ** (compute x t pool environment m)
-        | Logarithm e -> log (compute x t pool environment e)
-        | Exponential e -> exp (compute x t pool environment e)
-        | Conditional m -> m (compute x t pool environment) |> compute x t pool environment
-        | Label(_, m) -> m |> compute x t pool environment
-        | Invalid -> nan
+    let compute
+        x
+        (t: float<Time.``time index``>)
+        (pool: Parameter.Pool.ParameterPool)
+        (environment: CodedMap<float>)
+        ex
+        : float =
+        ExpressionCompiler.compileFloat ex pool environment t x
 
-
-    module Writer =
-
-        type Writer<'a, 'L> = AWriter of 'a * List<'L>
-
-        let bind =
-            function
-            | (v, itemLog) -> AWriter(v, [ itemLog ])
-
-        let map fx =
-            function
-            | AWriter(a, log) -> AWriter(fx a, log)
-
-        let run =
-            function
-            | AWriter(a, log) -> (a, log)
-
-        let flatMap fx =
-            function
-            | AWriter(a, log) ->
-                let (v, newLog) = fx a |> run
-                AWriter(v, List.append log newLog)
+    let computeT x t pool (environment: CodedMap<Tensors.TypedTensor<Tensors.Scalar, ModelSystem.environment>>) ex =
+        let eIndex, eScalar =
+            environment |> Seq.toList |> List.map (fun kv -> kv.Key, kv.Value) |> List.unzip
+        // let eVector = eScalar |> List.toArray |> Tensors.Typed.stack1D
+        ExpressionCompiler.compileRate pool eIndex ex
+        |> fun f -> f (Parameter.Pool.toTensorWithKeysReal pool |> snd) environment t x
 
 
     module ExpressionParser =
 
-        open Writer
-
-        /// Characterises a Bristlecone model expression by the components used within.
-        let rec internal describe ex : Writer<unit, string> =
-            match ex with
-            | This -> bind ((), "current_state")
-            | Time -> bind ((), "time")
-            | Environment name -> bind ((), "environment: " + name)
-            | Parameter name -> bind ((), "parameter: " + name)
-            | Constant _ -> bind ((), "nothing")
-            | Add list -> bind ((), "add") // TODO
-            | Subtract(l, r) -> describe l |> flatMap (fun () -> describe r)
-            | Multiply list ->
-                match list with
-                | NotEmptyList l -> bind ((), "multiply") // TODO
-                | _ -> failwith "List was empty"
-            | Divide(l, r) -> describe l |> flatMap (fun () -> describe r)
-            | Arbitrary(fn, reqs) -> bind ((), "custom component - TODO may use additional parameters?")
-            | Logarithm(e) -> describe e
-            | Exponential(e) -> describe e
-            | Mod(e, _) -> describe e
-            | Power(e, _) -> describe e
-            | Invalid -> bind ((), "invalid model")
-            | Conditional _ -> bind ((), "conditional element") // TODO
-            | Label(_, e) -> describe e
+        open Untyped
 
         type Requirement =
             | ParameterRequirement of string
             | EnvironmentRequirement of string
 
-        /// Determines the parameter and environmental data requirements of the defined model expression.
-        let rec requirements ex reqs =
-            match ex with
-            | This -> reqs
-            | Time -> reqs
-            | Environment name -> EnvironmentRequirement name :: reqs
-            | Parameter name -> ParameterRequirement name :: reqs
-            | Constant _ -> reqs
-            | Add list
-            | Multiply list -> list |> List.collect (fun l -> requirements l reqs) |> List.append reqs
-            | Divide(l, r)
-            | Subtract(l, r) -> [ requirements l reqs; requirements r reqs; reqs ] |> List.concat
-            | Arbitrary(fn, r) ->
-                r
-                |> List.map (fun r ->
-                    match r with
-                    | ArbitraryEnvironment e -> EnvironmentRequirement e
-                    | ArbitraryParameter p -> ParameterRequirement p)
-                |> List.append reqs
-            | Mod(e, _) -> requirements e reqs
-            | Power(e, _) -> requirements e reqs
-            | Logarithm e -> requirements e reqs
-            | Exponential e -> requirements e reqs
-            | Invalid -> reqs
-            | Conditional _ -> reqs
-            | Label(_, e) -> requirements e reqs
-
-
-    /// Allows common F# functions to use Bristlecone model expressions.
-    module ComputableFragment =
-
-        open Writer
-
-        // Takes the standard arguments and computes
-        type ComputableFragment = float -> float -> CodedMap<float> -> CodedMap<float> -> ModelExpression
-
-        // Represents a compute function for model expressions
-        type Compute = float -> float -> CodedMap<float> -> CodedMap<float> -> ModelExpression -> float
-
-        /// Apply a Bristlecone model expression to a custom arbitrary function.
-        let apply (ex: ModelExpression) fn =
-            bind ((fun x t p e -> fn (compute x t p e ex)), ex)
-
-        /// Apply additional parameters as Bristlecone expressions to an arbitrary function.
-        let applyAgain ex fn =
-            let fx expr =
-                bind ((fun x t p e -> expr x t p e (compute x t p e ex)), ex)
-
-            flatMap fx fn
-
-        let asBristleconeFunction fragment = run fragment |> Arbitrary
+        let rec requirements expr =
+            Writer.writer {
+                match expr with
+                | Parameter n -> do! Writer.tell (ParameterRequirement n)
+                | Environment n -> do! Writer.tell (EnvironmentRequirement n)
+                | Add xs
+                | Multiply xs ->
+                    for x in xs do
+                        let! () = requirements x
+                        ()
+                | Subtract(l, r)
+                | Divide(l, r)
+                | Power(l, r)
+                | Mod(l, r) ->
+                    do! requirements l
+                    do! requirements r
+                | Logarithm e
+                | Exponential e
+                | Label(_, e) -> do! requirements e
+                | _ -> return ()
+            }
 
 
     /// Scaffolds a `ModelSystem` for fitting with Bristlecone.
     module ModelBuilder =
 
-        type ModelFragment<'data> =
-            | EquationFragment of ModelExpression
-            | ParameterFragment of Parameter.Parameter
-            | LikelihoodFragment of ModelSystem.LikelihoodFn<'data>
-            | MeasureFragment of ModelSystem.Measurement<'data>
+        // A compiled-at-the-end equation, but with a closure that captures its typed expression
+        type EquationThunk<[<Measure>] 'time> =
+            | Discrete of
+                ShortCode.ShortCode *
+                (Parameter.Pool.ParameterPool -> ShortCode.ShortCode list -> ModelSystem.StateEquation<'time>)
+            | Rate of
+                ShortCode.ShortCode *
+                (Parameter.Pool.ParameterPool -> ShortCode.ShortCode list -> ModelSystem.RateEquation<'time>)
 
-        type ModelBuilder<'data> = private ModelBuilder of Map<ShortCode.ShortCode, ModelFragment<'data>>
+        type MeasureThunk<[<Measure>] 'u> =
+            ShortCode.ShortCode * (Parameter.Pool.ParameterPool -> ModelSystem.Measurement<'u>)
 
-        let create: ModelBuilder<float> =
-            Map.empty<ShortCode.ShortCode, ModelFragment<float>> |> ModelBuilder
+        type LikelihoodThunk = unit -> ModelSystem.Likelihood<ModelSystem.state>
 
-        let private unwrap (ModelBuilder m) = m
+        type ModelFragment<[<Measure>] 'time> =
+            | EquationFragment of ExpressionParser.Requirement list * EquationThunk<'time>
+            | ParameterFragment of Parameter.Pool.AnyParameter
+            | LikelihoodFragment of LikelihoodThunk
+            | MeasureFragment of ExpressionParser.Requirement list * MeasureThunk<ModelSystem.state>
 
-        let add name comp builder =
-            let map = builder |> unwrap
+        type EquationFragment<[<Measure>] 'stateUnit, [<Measure>] 'timeUnit> =
+            | DiscreteEq of ModelExpression<'stateUnit>
+            | RateEq of ModelExpression<'stateUnit / 'timeUnit>
 
-            match map |> Map.tryFindBy (fun n -> n.Value = name) with
-            | Some _ -> failwithf "You specified a duplicate code [%s] in your model system." name
-            | None ->
-                match code name with
-                | Some c -> map |> Map.add c comp |> ModelBuilder
-                | None -> failwithf "The text '%s' cannot be used to make a short code identifier." name
+        type ModelBuilder<[<Measure>] 'time> = private ModelBuilder of CodedMap<ModelFragment<'time>> * bool
 
-        let compile builder : ModelSystem.ModelSystem<float> =
-            // Ensure only single likelihood function
-            // Find all parameters
+        let create<[<Measure>] 'time> isDiscrete : unit -> ModelBuilder<'time> =
+            fun () ->
+                (Map.empty<ShortCode.ShortCode, ModelFragment<'time>>, isDiscrete)
+                |> ModelBuilder
 
-            // Check each dynamic function that it has needed parameters.
-            // Check each measure has needed parameters.
-            // Check if any parameters are unused.
+        let internal unwrap (ModelBuilder(m, isDiscrete)) = m, isDiscrete
 
-            // 2. Environment required.
-            // Compile down to a [float -> float -> Pool -> Env -> float] function, with a list of requirements.
+        module Measurement =
+            let adapt<[<Measure>] 'u> (m: ModelSystem.Measurement<'u>) : ModelSystem.Measurement<ModelSystem.state> =
+                fun p s i -> (m p s i).Value |> Tensors.tryAsScalar<ModelSystem.state> |> Option.get
 
-            let map = builder |> unwrap
+        module Likelihood =
 
+            open ModelSystem
+
+            let contramap<[<Measure>] 'u> (l: ModelSystem.Likelihood<'u>) : ModelSystem.Likelihood<ModelSystem.state> =
+                { RequiredCodes = l.RequiredCodes
+                  Evaluate =
+                    fun param series ->
+                        let s =
+                            series
+                            |> Map.map (fun _ v ->
+                                { Expected = v.Expected |> Tensors.Typed.retype<ModelSystem.state, 'u, Tensors.Vector>
+                                  Observed = v.Observed |> Tensors.Typed.retype<ModelSystem.state, 'u, Tensors.Vector> })
+
+                        l.Evaluate param s }
+
+        module private Add =
+
+            let equationRate<[<Measure>] 'time, [<Measure>] 'state>
+                (name: string)
+                (expr: ModelExpression<'state / 'time>)
+                : ModelFragment<'time> =
+                let sc = ShortCode.create name |> Option.get
+                let (ME eUntyped) = expr
+                let envReqs = ExpressionParser.requirements eUntyped |> Writer.run |> snd
+                EquationFragment(envReqs, Rate(sc, (fun p e -> ExpressionCompiler.compileRate<'time, 'state> p e expr)))
+
+            let equationDiscrete<[<Measure>] 'time, [<Measure>] 'state>
+                (name: string)
+                (expr: ModelExpression<'state>)
+                : ModelFragment<'time> =
+                let sc = ShortCode.create name |> Option.get
+                let (ME eUntyped) = expr
+                let envReqs = ExpressionParser.requirements eUntyped |> Writer.run |> snd
+
+                EquationFragment(
+                    envReqs,
+                    Discrete(sc, (fun p e -> ExpressionCompiler.compileDiscrete<'time, 'state> p e expr))
+                )
+
+            let measure<[<Measure>] 'time, [<Measure>] 'u>
+                (name: string)
+                (expr: ModelExpression<'state>)
+                : ModelFragment<'time> =
+                let sc: ShortCode.ShortCode = ShortCode.create name |> Option.get
+                let (ME eUntyped) = expr
+                let envReqs = ExpressionParser.requirements eUntyped |> Writer.run |> snd
+
+                MeasureFragment(
+                    envReqs,
+                    (sc, (fun p -> ExpressionCompiler.compileMeasure<'u> p expr |> Measurement.adapt))
+                )
+
+            let likelihood<[<Measure>] 'time, [<Measure>] 'u> (l: ModelSystem.Likelihood<'u>) : ModelFragment<'time> =
+                let toInternal () = Likelihood.contramap<'u> l
+                LikelihoodFragment toInternal
+
+        let add<[<Measure>] 'time> (name: string) (frag: ModelFragment<'time>) (ModelBuilder(m, disc)) =
+            let sc =
+                ShortCode.create name
+                |> Option.defaultWith (fun () -> failwithf "Bad short code %s" name)
+
+            if m.ContainsKey sc then
+                failwithf "Duplicate code [%s]" name
+
+            ModelBuilder(m.Add(sc, frag), disc)
+
+        let addEquationRate (name: ShortCode.ShortCode) (expr: ModelExpression<'u / 'time>) (mb: ModelBuilder<'time>) =
+            add name.Value (Add.equationRate<'time, 'state> name.Value expr) mb
+
+        let addEquationDiscrete (name: ShortCode.ShortCode) (expr: ModelExpression<'u>) (mb: ModelBuilder<'time>) =
+            add name.Value (Add.equationDiscrete name.Value expr) mb
+
+        let includeMeasure<[<Measure>] 'time, [<Measure>] 'u> name (m: ModelExpression<'u>) mb =
+            add name (Add.measure<'time, 'u> name m) mb
+
+        let useLikelihood<[<Measure>] 'u, [<Measure>] 'time> (l: ModelSystem.Likelihood<'u>) mb =
+            add "likelihood" (Add.likelihood<'time, 'u> l) mb
+
+        let compile builder : ModelSystem.ModelSystem<'time> =
+            let m, isDiscrete = unwrap builder
+
+            // Partition fragments
             let likelihoods =
-                map
+                m
                 |> Map.toSeq
-                |> Seq.map (fun (c, f) ->
-                    match f with
-                    | LikelihoodFragment l -> Some l
+                |> Seq.choose (function
+                    | _, LikelihoodFragment f -> Some f
                     | _ -> None)
-                |> Seq.choose id
-
-            if likelihoods |> Seq.length <> 1 then
-                failwith
-                    "You did not specify a likelihood function. The likelihood function is used to assess model fit."
+                |> Seq.toList
 
             let parameters =
-                map
+                m
                 |> Map.toSeq
-                |> Seq.map (fun (c, f) ->
-                    match f with
-                    | ParameterFragment p -> Some(c, p)
+                |> Seq.choose (function
+                    | c, ParameterFragment p -> Some(c, p)
                     | _ -> None)
-                |> Seq.choose id
                 |> Map.ofSeq
                 |> Parameter.Pool.Pool
 
             let measures =
-                map
+                m
                 |> Map.toSeq
-                |> Seq.map (fun (c, f) ->
-                    match f with
-                    | MeasureFragment m -> Some(c, m)
+                |> Seq.choose (function
+                    | c, MeasureFragment(reqs, m) -> Some(c, m)
                     | _ -> None)
-                |> Seq.choose id
                 |> Map.ofSeq
 
             let equations =
-                map
+                m
                 |> Map.toSeq
-                |> Seq.map (fun (c, f) ->
-                    match f with
-                    | EquationFragment e -> Some(c, e)
+                |> Seq.choose (function
+                    | c, EquationFragment(reqs, e) -> Some(c, e)
                     | _ -> None)
-                |> Seq.choose id
                 |> Map.ofSeq
 
-            if Seq.hasDuplicates (Seq.concat [ Map.keys measures; Map.keys equations ]) then
-                failwith "Duplicate keys were used within equation and measures. These must be unique."
+            // Validate likelihoods
+            let like =
+                match likelihoods with
+                | [ f ] -> f ()
+                | [] -> failwith "You did not specify a likelihood function."
+                | _ -> failwith "Multiple likelihoods specified."
 
-            if equations.IsEmpty then
-                failwith "No equations specified. You must state at least one model equation."
+            let reqs =
+                m
+                |> Map.toSeq
+                |> Seq.collect (function
+                    | kv ->
+                        match snd kv with
+                        | ModelFragment.EquationFragment(r, _) -> r
+                        | ModelFragment.MeasureFragment(r, _) -> r
+                        | _ -> [])
 
-            equations
-            |> Map.map (fun _ v -> ExpressionParser.requirements v [])
-            |> Map.toList
-            |> List.map snd
-            |> List.collect id
-            |> List.distinct
-            |> List.iter (fun req ->
-                match req with
-                | ExpressionParser.ParameterRequirement p ->
-                    match parameters |> Parameter.Pool.hasParameter p with
-                    | Some p -> ()
-                    | None ->
-                        failwithf "The specified model requires the parameter '%s' but this has not been set up." p
-                | ExpressionParser.EnvironmentRequirement _ -> ())
+            let envKeys =
+                reqs
+                |> Seq.choose (fun r ->
+                    match r with
+                    | ExpressionParser.Requirement.EnvironmentRequirement e ->
+                        Some(e |> ShortCode.create |> Option.get)
+                    | _ -> None)
+                |> Seq.toList
 
-            { NegLogLikelihood = likelihoods |> Seq.head
+            // Compile equations by invoking thunks
+            let eqs =
+                if isDiscrete then
+                    equations
+                    |> Map.map (fun _ ->
+                        function
+                        | Discrete(_sc, k) -> k parameters envKeys
+                        | _ -> failwith "Expected discrete eq")
+                    |> ModelSystem.DifferenceEqs
+                else
+                    equations
+                    |> Map.map (fun _ ->
+                        function
+                        | Rate(_sc, k) -> k parameters envKeys
+                        | _ -> failwith "Expected rate eq")
+                    |> ModelSystem.DifferentialEqs
+
+            match eqs with
+            | ModelSystem.DifferenceEqs e ->
+                if e.IsEmpty then
+                    failwith "No equations added. Models require at least one difference / differential equation."
+            | ModelSystem.DifferentialEqs e ->
+                if e.IsEmpty then
+                    failwith "No equations added. Models require at least one difference / differential equation."
+
+            // Compile measures by invoking thunks
+            let measures = measures |> Map.map (fun _ (_, m) -> m parameters)
+
+            { NegLogLikelihood = like
               Parameters = parameters
-              Equations = equations |> Map.map (fun _ v -> (fun pool t x env -> compute x t pool env v))
+              EnvironmentKeys = envKeys
+              Equations = eqs
               Measures = measures }
 
 
     /// Terms for scaffolding a model system for use with Bristlecone.
     module Model =
 
-        let empty = ModelBuilder.create
+        let empty<[<Measure>] 'time> : ModelBuilder.ModelBuilder<'time> =
+            ModelBuilder.create false ()
 
-        let addEquation name eq builder =
-            ModelBuilder.add name (ModelBuilder.EquationFragment eq) builder
+        let discrete<[<Measure>] 'time> : ModelBuilder.ModelBuilder<'time> =
+            ModelBuilder.create true ()
 
-        let estimateParameter name constraintMode lower upper builder =
+        let addRateEquation<[<Measure>] 'time, [<Measure>] 'state>
+            (name: StateId<'state>)
+            (expr: ModelExpression<'state / 'time>)
+            (mb: ModelBuilder.ModelBuilder<'time>)
+            =
+            let (StateIdInner name) = name
+            ModelBuilder.addEquationRate name expr mb
+
+        let addDiscreteEquation<[<Measure>] 'time, [<Measure>] 'state>
+            (name: StateId<'state>)
+            (expr: ModelExpression<'state>)
+            (mb: ModelBuilder.ModelBuilder<'time>)
+            : ModelBuilder.ModelBuilder<'time> =
+            let (StateIdInner name) = name
+            ModelBuilder.addEquationDiscrete name expr mb
+
+        // Units preserved end-to-end: Parameter.create returns Parameter<'u>; we box to AnyParameter
+        let estimateParameterOld
+            (name: string)
+            (constraintMode: Parameter.Constraint)
+            (lower: float<'u>)
+            (upper: float<'u>)
+            (builder: ModelBuilder.ModelBuilder<'time>)
+            =
             match Parameter.create constraintMode lower upper with
-            | Some p -> ModelBuilder.add name (ModelBuilder.ParameterFragment p) builder
-            | None -> failwithf "The bounds %f - %f cannot be used to estimate a parameter. See docs." lower upper
+            | Some(p: Parameter.Parameter<'u>) ->
+                let boxed = Parameter.Pool.boxParam<'u> name p
+                ModelBuilder.add name (ModelBuilder.ParameterFragment boxed) builder
+            | None -> failwithf "The bounds %A - %A cannot be used to estimate a parameter. See docs." lower upper
 
-        let includeMeasure name measure builder =
-            ModelBuilder.add name (ModelBuilder.MeasureFragment measure) builder
+        let estimateParameter<[<Measure>] 'time, [<Measure>] 'u>
+            (p: IncludedParameter<'u>)
+            (builder: ModelBuilder.ModelBuilder<'time>)
+            =
+            let (ParamIdInner name) = p.ParamId
+            let boxed = Parameter.Pool.boxParam<'u> name.Value p.Parameter
+            ModelBuilder.add name.Value (ModelBuilder.ParameterFragment boxed) builder
+
+        let internal addParameter<[<Measure>] 'time, [<Measure>] 'u>
+            (name: string)
+            (p: Parameter.Parameter<'u>)
+            (builder: ModelBuilder.ModelBuilder<'time>)
+            =
+            let boxed = Parameter.Pool.boxParam<'u> name p
+            ModelBuilder.add name (ModelBuilder.ParameterFragment boxed) builder
+
+        let addMeasure<[<Measure>] 'time, [<Measure>] 'u>
+            (name: MeasureId<'u>)
+            (measure: ModelExpression<'u>)
+            (builder: ModelBuilder.ModelBuilder<'time>)
+            : ModelBuilder.ModelBuilder<'time> =
+            let (MeasureIdInner name) = name
+            ModelBuilder.includeMeasure name.Value measure builder
 
         let useLikelihoodFunction likelihoodFn builder =
-            ModelBuilder.add "likelihood" (ModelBuilder.LikelihoodFragment likelihoodFn) builder
+            ModelBuilder.add "likelihood" (ModelBuilder.LikelihoodFragment(fun () -> likelihoodFn)) builder
 
         let compile = ModelBuilder.compile
+
+
+    module ModelSystemDsl =
+
+        // Structural flags
+        type Missing = Missing
+        type Present = Present
+
+        /// Builder state tracks:
+        /// - 'time: unit of the time index (e.g., days)
+        /// - 'Kind: Discrete | Continuous (marker type)
+        /// - 'HasEq / 'HasLike: compile-time presence flags
+        type ModelBuilderState<[<Measure>] 'time, 'HasEq, 'HasLike> =
+            private
+                { Inner: ModelBuilder.ModelBuilder<'time> }
+
+        let emptyState<[<Measure>] 'time> isDiscrete : ModelBuilderState<'time, Missing, Missing> =
+            { Inner = ModelBuilder.create isDiscrete () }
+
+        let addRateEq
+            (sid: StateId<'u>)
+            (expr: ModelExpression<'stateUnit / 'timeUnit>)
+            (mb: ModelBuilderState<'time, 'E, 'L>)
+            =
+            let (StateIdInner sc) = sid
+
+            { mb with
+                Inner = ModelBuilder.addEquationRate sc expr mb.Inner }
+
+        let addDiscreteEq (sid: StateId<'u>) (expr: ModelExpression<'u>) (mb: ModelBuilderState<'time, 'E, 'L>) =
+            let (StateIdInner sc) = sid
+
+            { mb with
+                Inner = ModelBuilder.addEquationDiscrete sc expr mb.Inner }
+
+        type ModelSystemBuilder<[<Measure>] 'time>(isDiscrete) =
+            member _.Yield(_) = emptyState<'time> isDiscrete
+            member _.Delay(f) = f ()
+
+            [<CustomOperation("parameter")>]
+            member _.Parameter<[<Measure>] 'u, 'E, 'L>
+                (state: ModelBuilderState<'time, 'E, 'L>, configuredParameter: IncludedParameter<'u>)
+                =
+                let (ParamIdInner sc) = configuredParameter.ParamId
+                { Inner = Model.addParameter sc.Value configuredParameter.Parameter state.Inner }
+
+            [<CustomOperation("equationDiscrete")>]
+            member _.EquationDiscrete
+                (state: ModelBuilderState<'time, 'E, 'L>, sid: StateId<'u>, expr: ModelExpression<'u>)
+                : ModelBuilderState<'time, Present, 'L> =
+                let (StateIdInner sc) = sid
+                { Inner = ModelBuilder.addEquationDiscrete sc expr state.Inner }
+
+            [<CustomOperation("equationRate")>]
+            member _.EquationRate
+                (state: ModelBuilderState<'time, 'E, 'L>, sid: StateId<'u>, expr: ModelExpression<'u / 'time>)
+                : ModelBuilderState<'time, Present, 'L> =
+                let (StateIdInner sc) = sid
+                { Inner = ModelBuilder.addEquationRate sc expr state.Inner }
+
+            [<CustomOperation("measure")>]
+            member _.Measure<[<Measure>] 'u, 'E, 'L>
+                (state: ModelBuilderState<'time, 'E, 'L>, mid: MeasureId<'u>, data)
+                =
+                { Inner = Model.addMeasure mid data state.Inner }
+
+            /// Add exactly one likelihood function.
+            [<CustomOperation("likelihood")>]
+            member _.Likelihood<'E>
+                (state: ModelBuilderState<'time, 'E, Missing>, fn)
+                : ModelBuilderState<'time, 'E, Present> =
+                { Inner = Model.useLikelihoodFunction fn state.Inner }
+
+            member _.Run(state: ModelBuilderState<'time, Present, Present>) = ModelBuilder.compile state.Inner
+
+
+    let discreteModel<[<Measure>] 'time> : ModelSystemDsl.ModelSystemBuilder<'time> =
+        ModelSystemDsl.ModelSystemBuilder true
+
+    let continuousModel<[<Measure>] 'time> : ModelSystemDsl.ModelSystemBuilder<'time> =
+        ModelSystemDsl.ModelSystemBuilder false
 
 
     /// Terms for designing tests for model systems.
     module Test =
 
-        let defaultSettings = Bristlecone.Test.TestSettings<_, _, _, _>.Default
+        let defaultSettings = Bristlecone.Test.defaultSettings
 
         /// If the start value has already been set, it will be overwritten with the new value.
-        let withStartValue code value (settings: Bristlecone.Test.TestSettings<float, _, _, _>) =
+        let withStartValue code value (settings: Bristlecone.Test.TestSettings<'state, _, _, _>) =
             match ShortCode.create code with
             | Some c ->
                 { settings with
@@ -372,31 +1330,124 @@ module Language =
         let run settings = Bristlecone.testModel
 
 
-    let noConstraints = Parameter.Constraint.Unconstrained
-    let notNegative = Parameter.Constraint.PositiveOnly
+    module Components =
 
-    type PluggableComponent<'a> =
-        { Parameters: CodedMap<Parameter.Parameter>
-          Expression: 'a -> ModelExpression }
+        /// A component with its own parameters and an expression generator
+        type SubComponent<'a> =
+            { Label: string
+              Parameters: CodedMap<Parameter.Pool.AnyParameter>
+              Expr: 'a }
 
-    /// Creates a nested component that can be inserted into a base model.
-    let subComponent name expression =
-        name,
-        { Parameters = Map.empty
-          Expression = expression }
+        type ModelComponent<'a> =
+            { Label: string
+              Implementations: SubComponent<'a> list }
 
-    let modelComponent name list = name, list
+        /// Creates a nested component that can be inserted into a base model.
+        let subComponent name transform =
+            { Label = name
+              Parameters = Map.empty
+              Expr = transform }
 
-    let estimateParameter name constraintMode lower upper comp =
-        match Parameter.create constraintMode lower upper with
-        | None -> failwithf "The bounds %f - %f cannot be used to estimate a parameter. See docs." lower upper
-        | Some p ->
-            match code name with
-            | Some c ->
-                fst comp,
-                { snd comp with
-                    Parameters = (snd comp).Parameters |> Map.add c p }
-            | None -> failwithf "The code '%s' cannot be used as an identifier. See docs." name
+        let modelComponent name list =
+            { Label = name; Implementations = list }
+
+        let estimateParameter<[<Measure>] 'u, 'a> (p: IncludedParameter<'u>) (comp: SubComponent<'a>) =
+            let (ParamIdInner name) = p.ParamId
+            let boxed = Parameter.Pool.boxParam<'u> name.Value p.Parameter
+
+            { comp with
+                Parameters = comp.Parameters |> Map.add name boxed }
+
+
+
+        type SubComponentState<[<Measure>] 'u> =
+            { Label: string
+              Expr: ModelExpression<'u> option
+              Estimates: (string * Parameter.Constraint * float * float) list }
+
+        type ComponentState<[<Measure>] 'u> = { Options: SubComponentState<'u> list }
+
+
+        type SubComponentBuilder<[<Measure>] 'u>(label: string) =
+
+            member _.Yield(_) =
+                { Label = label
+                  Expr = None
+                  Estimates = [] }
+
+            member _.Zero() =
+                { Label = label
+                  Expr = None
+                  Estimates = [] }
+
+            member _.Bind(p: Parameter.Parameter<'p>, cont: Parameter.Parameter<'p> -> SubComponentState<'u>) = cont p
+
+            member _.Parameter<[<Measure>] 'p>
+                (name: string, con, lower: float<'p>, upper: float<'p>, state: SubComponentState<'u>)
+                =
+                let p = parameter name con lower upper
+
+                { state with
+                    Estimates = (name, con, float lower, float upper) :: state.Estimates },
+                p
+
+            member _.Expression(expr: ModelExpression<'u>, state: SubComponentState<'u>) =
+                { state with Expr = Some expr }
+
+            member _.Run(state: SubComponentState<'u>) =
+                match state.Expr with
+                | Some _ -> state
+                | None -> failwithf "Subcomponent '%s' has no expression" state.Label
+
+
+    // type ComponentBuilder<[<Measure>] 'u>(name: string) =
+
+    //     member _.Yield(_) =
+    //         { Options = [] }
+
+    //     member _.Yield(sc: SubComponentState<'u>) =
+    //         { Options = [sc] }
+
+    //     member _.Zero() =
+    //         { Options = [] }
+
+    //     member _.Combine(state: ComponentState<'u>, sc: SubComponentState<'u>) =
+    //         { state with Options = sc :: state.Options }
+
+    //     member _.Delay(f: unit -> ComponentState<'u>) = f()
+
+    //     member _.Run(state: ComponentState<'u>) =
+    //         let options =
+    //             state.Options
+    //             |> List.rev
+    //             |> List.map (fun sc ->
+    //                 let expr = sc.Expr.Value
+    //                 (sc.Label, expr)
+    //                 |> fun acc ->
+    //                     sc.Estimates
+    //                     |> List.fold (fun acc (pName, constr, lo, hi) ->
+    //                         estimateParameter pName
+    //                     ) acc
+    //             )
+    //         modelComponent<'u> name options
+
+
+    // let subcomponent<[<Measure>] 'u> label (block: Components.SubComponentBuilder<'u> -> Components.SubComponentState<'u>) =
+    //     block (Components.SubComponentBuilder label)
+    // let modelComponent label : Components.ComponentBuilder<'u> = Components.ComponentBuilder(label)
+
+    // let nLimitation =
+    //     modelComponent "N-limitation" {
+    //         subcomponent "Linear" {
+    //             let! a = parameter "a" notNegative 0.100 0.400
+    //             expression (
+    //                 ModelComponents.GrowthLimitation.linear
+    //                     (P a / Constant 1000.)
+    //                     (Constant 5.00)
+    //             )
+    //         }
+    //     }
+
 
     /// <summary>Types to represent a hypothesis, given that a hypothesis
     /// is a model system that contains some alternate formulations of certain
@@ -404,10 +1455,12 @@ module Language =
     [<RequireQualifiedAccess>]
     module Hypotheses =
 
-        open Writer
-
+        // Helper: truncate first N letters of each word and uppercase
         let internal nFirstLetters n (s: string) =
-            (s.Split(' ') |> Seq.map (fun s -> s |> Seq.truncate n) |> string).ToUpper()
+            s.Split(' ')
+            |> Seq.map (Seq.truncate n >> Seq.toArray >> System.String)
+            |> String.concat ""
+            |> fun s -> s.ToUpper()
 
         /// <summary>Represents the name of a swappable component in a model
         /// and the name of its implementation in a specific case.</summary>
@@ -420,105 +1473,66 @@ module Language =
             /// <returns>A string in the format XX_XXX with the first part
             /// indicating the model component and the second part the implementation.</returns>
             member this.Reference =
-                sprintf "%s_%s" (nFirstLetters 2 this.Component) (nFirstLetters 3 this.Implementation)
+                $"{nFirstLetters 2 this.Component}_{nFirstLetters 3 this.Implementation}"
 
         /// <summary>A hypothesis consists of a model system and the names of the
         /// swappable components within it, alongside the name of their current implementation.</summary>
-        type Hypothesis<'data> =
-            | Hypothesis of ModelSystem.ModelSystem<'data> * list<ComponentName>
+        type Hypothesis<[<Measure>] 'timeIndex> =
+            | Hypothesis of ModelSystem.ModelSystem<'timeIndex> * list<ComponentName>
 
-            member private this.unwrap = this |> fun (Hypothesis(h1, h2)) -> (h1, h2)
+            member private this.Unwrap = let (Hypothesis(m, comps)) = this in m, comps
 
             /// <summary>Compiles a reference code that may be used to identify (although not necessarily uniquely) this hypothesis</summary>
             /// <returns>A string in the format XX_XXX_YY_YYY... where XX_XXX is a singe component with XX the component and XXX the implementation.</returns>
+
             member this.ReferenceCode =
-                this.unwrap |> snd |> List.map (fun c -> c.Reference) |> String.concat "_"
+                this.Unwrap |> snd |> List.map (fun c -> c.Reference) |> String.concat "_"
 
-            member this.Components = this.unwrap |> snd
-            member this.Model = this.unwrap |> fst
+            member this.Components = this.Unwrap |> snd
+            member this.Model = this.Unwrap |> fst
 
-        /// <summary>Implement a component where a model system requires one. A component is a part of a model that may be varied, for example between competing hypotheses.</summary>
-        /// <param name="comp">A tuple representing a component scaffolded with the `modelComponent` and `subComponent` functions.</param>
-        /// <param name="builder">A builder started with `createFromComponent`</param>
-        /// <typeparam name="'a"></typeparam>
-        /// <typeparam name="'b"></typeparam>
-        /// <returns>A builder to add further components or compile with `Hypothesis.compile`</returns>
-        let createFromComponent comp builder =
-            if snd comp |> List.isEmpty then
-                failwithf "You must specify at least one implementation for the '%s' component" (fst comp)
+        // Start the pipeline: lift the base model into a builder
+        let createFromModel
+            (baseModel: 'a -> 'rest)
+            : Writer.Writer<'a -> 'rest, ComponentName * CodedMap<Parameter.Pool.AnyParameter>> list =
+            [ Writer.return' (baseModel) ]
 
-            let name i =
-                { Component = fst comp
-                  Implementation = i }
+        ///
+        let apply
+            (comp: Components.ModelComponent<'a>)
+            (builders: Writer.Writer<'a -> 'rest, ComponentName * CodedMap<Parameter.Pool.AnyParameter>> list)
+            : Writer.Writer<'rest, ComponentName * CodedMap<Parameter.Pool.AnyParameter>> list =
+            [ for sc in comp.Implementations do
+                  for (Writer.AWriter(f, logs)) in builders do
+                      let entry =
+                          ({ Component = comp.Label
+                             Implementation = sc.Label },
+                           sc.Parameters)
 
-            comp
-            |> snd
-            |> List.map (fun (n, c) -> bind (builder c.Expression, (name n, c.Parameters)))
+                      yield Writer.AWriter(f sc.Expr, logs @ [ entry ]) ]
 
-        /// <summary>Add a second or further component to a model system where one is still required.</summary>
-        /// <param name="comp">A tuple representing a component scaffolded with the `modelComponent` and `subComponent` functions.</param>
-        /// <param name="builder">A builder started with `createFromComponent`</param>
-        /// <typeparam name="'a"></typeparam>
-        /// <typeparam name="'b"></typeparam>
-        /// <returns>A builder to add further components or compile with `Hypothesis.compile`</returns>
-        let useAnother comp builder =
-            let name i =
-                { Component = fst comp
-                  Implementation = i }
-
-            List.allPairs (snd comp) builder
-            |> List.map (fun ((n, c), model) ->
-                model |> flatMap (fun m -> bind (m c.Expression, (name n, c.Parameters))))
-
-        /// <summary>Add a second or further component to a model system where one is still required.</summary>
-        /// <param name="comp">A tuple representing a component scaffolded with the `modelComponent` and `subComponent` functions.</param>
-        /// <param name="builder">A builder started with `createFromComponent`</param>
-        /// <typeparam name="'a"></typeparam>
-        /// <typeparam name="'b"></typeparam>
-        /// <returns>A builder to add further components or compile with `Hypothesis.compile`</returns>
-        let useAnotherWithName comp builder =
-            let name i =
-                { Component = fst comp
-                  Implementation = i }
-
-            List.allPairs (snd comp) builder
-            |> List.map (fun ((n, c), model) ->
-                model |> flatMap (fun m -> bind (m (n, c.Expression), (name n, c.Parameters))))
-
-        /// <summary>Adds parameters from model components into the base model builder.</summary>
-        let internal addParameters
-            (
-                (modelBuilder, newParams):
-                    ModelBuilder.ModelBuilder<'data> * List<ComponentName * CodedMap<Parameter.Parameter>>
-            )
-            =
-            newParams
-            |> List.collect (snd >> Map.toList)
-            |> List.fold
-                (fun mb (name, p) -> mb |> ModelBuilder.add name.Value (ModelBuilder.ParameterFragment p))
-                modelBuilder
-
-        /// <summary>Compiles a suite of competing model hypotheses based on the given components.
-        /// The compilation includes only the required parameters in each model hypothesis,
-        /// and combines all labels into a single model identifier.</summary>
-        /// <param name="builder">A builder started with `createFromComponent`</param>
-        /// <returns>A list of compiled hypotheses for this model system and specified components.</returns>
+        /// Compile: run the writer(s), add parameters into the model builder, and wrap in Hypothesis
         let compile
-            (builder: Writer<ModelBuilder.ModelBuilder<float>, ComponentName * CodedMap<Parameter.Parameter>> list)
-            =
-            if builder |> List.isEmpty then
-                failwith "No hypotheses specified"
+            (builders:
+                Writer.Writer<ModelBuilder.ModelBuilder<'u>, ComponentName * CodedMap<Parameter.Pool.AnyParameter>> list)
+            : Hypothesis<'u> list =
+            builders
+            |> List.map (fun (Writer.AWriter(mb, logs)) ->
+                let withParams =
+                    logs
+                    |> List.collect (snd >> Map.toList)
+                    |> List.fold
+                        (fun mb (name, p) -> mb |> ModelBuilder.add name.Value (ModelBuilder.ParameterFragment p))
+                        mb
 
-            builder
-            |> List.map (fun h ->
-                let names = run h
+                Hypothesis(Model.compile withParams, logs |> List.map fst))
 
-                (names |> addParameters |> Model.compile, names |> snd |> List.map fst)
-                |> Hypothesis)
 
 
 // type Hypotheses<'subject, 'hypothesis> =
 //     | Hypotheses of Hypothesis<'subject, 'hypothesis> seq
+
+// open Bristlecone.ModelSelection
 
 // let private unwrap (ResultSetMany m) = m
 

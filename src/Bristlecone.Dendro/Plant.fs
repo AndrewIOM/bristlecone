@@ -20,41 +20,33 @@ module PlantIndividual =
 
     open Units
 
-    module PlantGrowth =
-
-        /// Represents a measurement of plant growth.
-        type PlantGrowthMeasure<'date, 'timeunit, 'timespan> =
-            | RingWidth of GrowthSeries.GrowthSeries<millimetre, year, 'date, 'timeunit, 'timespan>
-            | BasalArea of GrowthSeries.GrowthSeries<millimetre^2, year, 'date, 'timeunit, 'timespan>
-            | StemVolume of GrowthSeries.GrowthSeries<millimetre^3, year, 'date, 'timeunit, 'timespan>
-
-        /// Get dates in the growth series
-        let internal dates growth =
-            match growth with
-            | RingWidth rw -> GrowthSeries.dates rw
-            | BasalArea a -> GrowthSeries.dates a
-            | StemVolume vol -> GrowthSeries.dates vol
-
-        let internal bound startDate endDate growth =
-            match growth with
-            | RingWidth rw -> rw |> GrowthSeries.bound startDate endDate |> Option.map RingWidth
-            | BasalArea a -> GrowthSeries.bound startDate endDate a |> Option.map BasalArea
-            | StemVolume vol -> GrowthSeries.bound startDate endDate vol |> Option.map StemVolume
-
-
-
     type Trait<'date, 'timeunit, 'timespan> =
         | StaticInTime of float
         | VariableInTime of TimeSeries<float, 'date, 'timeunit, 'timespan>
 
     /// <summary>A representation of a plant individual and
     /// the environmental conditions local to it.</summary>
-    type PlantIndividual<'date, 'timeunit, 'timespan> =
+    type PlantIndividual<[<Measure>] 'growth, 'date, 'timeunit, 'timespan> =
         { Identifier: ShortCode.ShortCode
-          Growth: PlantGrowth.PlantGrowthMeasure<'date, 'timeunit, 'timespan>
+          Growth: GrowthSeries.GrowthSeries<'growth, year, 'date, 'timeunit, 'timespan>
           InternalControls: CodedMap<Trait<'date, 'timeunit, 'timespan>>
           Environment: CodedMap<TimeSeries<float, 'date, 'timeunit, 'timespan>> }
 
+    let enforceMinimumSize minSize (plant: PlantIndividual<'growthUnit, 'date, 'timeunit, 'timespan>) =
+        let cumulative = plant.Growth |> GrowthSeries.cumulative
+
+        let trimmed =
+            cumulative
+            |> TimeSeries.toObservations
+            |> Seq.skipWhile (fun (x, _) -> x < minSize)
+            |> TimeSeries.fromObservations cumulative.DateMode
+            |> GrowthSeries.Cumulative
+
+        { plant with Growth = trimmed }
+
+    let tailGrowth (plant: PlantIndividual<'growthUnit, 'date, 'timeunit, 'timespan>) =
+        let bounded = plant.Growth |> GrowthSeries.tail
+        { plant with Growth = bounded }
 
     /// <summary>Attach an environmental time-series to a plant individual,
     /// for example for a local environmental condition or resource.</summary>
@@ -76,26 +68,8 @@ module PlantIndividual =
         |> Seq.keyMatch env
         |> Seq.map (fun (_, plant, e) -> zipEnvironment envName plant e)
 
-    let growthSeries plant =
-        match plant with
-        | PlantGrowth.RingWidth rw ->
-            match rw with
-            | GrowthSeries.Absolute rws ->
-                rws
-                |> TimeSeries.map (fun (x, t) -> removeUnitFromFloat x)
-                |> GrowthSeries.Absolute
-            | GrowthSeries.Cumulative m ->
-                m
-                |> TimeSeries.map (fun (x, t) -> removeUnitFromFloat x)
-                |> GrowthSeries.Cumulative
-            | GrowthSeries.Relative rws ->
-                rws
-                |> TimeSeries.map (fun (x, t) -> removeUnitFromFloat x)
-                |> GrowthSeries.Relative
-        | _ -> invalidOp "Not implemented"
-
     let bound plant =
-        let growthDates = plant.Growth |> PlantGrowth.dates
+        let growthDates = plant.Growth |> GrowthSeries.dates
         let envSeries = plant.Environment |> Map.toList |> List.map snd
 
         let startDates, endDates =
@@ -113,12 +87,12 @@ module PlantIndividual =
                 |> Map.toList
                 |> List.map (fun (x, y) -> x, y |> TimeSeries.bound startDate endDate |> Option.get)
                 |> Map.ofList
-            Growth = plant.Growth |> PlantGrowth.bound startDate endDate |> Option.get }
+            Growth = plant.Growth |> GrowthSeries.bound startDate endDate |> Option.get }
 
     /// <summary>Where a plant has associated environmental data, only keep observations
     /// where growth and environment time-series are present.</summary>
     let commonTimeline plant =
-        let growthDates = plant.Growth |> PlantGrowth.dates |> Seq.toList
+        let growthDates = plant.Growth |> GrowthSeries.dates |> Seq.toList
 
         let commonDates =
             plant.Environment
@@ -134,11 +108,7 @@ module PlantIndividual =
             let common = commonDates |> List.map (fun t -> ((y |> TimeSeries.findExact t)))
             common |> TimeSeries.fromObservations y.DateMode
 
-        let commonPlant =
-            match plant.Growth with
-            | PlantGrowth.RingWidth rw -> rw |> GrowthSeries.filter commonDates |> PlantGrowth.RingWidth
-            | PlantGrowth.BasalArea b -> b |> GrowthSeries.filter commonDates |> PlantGrowth.BasalArea
-            | PlantGrowth.StemVolume v -> v |> GrowthSeries.filter commonDates |> PlantGrowth.StemVolume
+        let commonPlant = plant.Growth |> GrowthSeries.filter commonDates
 
         { plant with
             Environment =
@@ -148,15 +118,9 @@ module PlantIndividual =
                 |> Map.ofList
             Growth = commonPlant }
 
-    /// <summary>Lower time-series data from a plant individual type into
-    /// basic time-series that may be used for model-fitting</summary>
-    /// <param name="plant">A plant individual</param>
-    /// <returns>A coded map of time-series data for model-fitting</returns>
-    let toTimeSeries plant =
-        let g =
-            match plant.Growth with
-            | PlantGrowth.RingWidth g -> GrowthSeries.stripUnits g
-            | PlantGrowth.BasalArea g -> GrowthSeries.stripUnits g
-            | PlantGrowth.StemVolume g -> GrowthSeries.stripUnits g
+    let private stripUnits ts =
+        ts |> TimeSeries.map (fun (t, v) -> Units.removeUnitFromFloat t)
 
-        plant.Environment |> Map.add (ShortCode.create "x" |> Option.get) g
+    let internal forFittingCumulative (code: ShortCode.ShortCode) plant =
+        let g = plant.Growth |> GrowthSeries.cumulative |> stripUnits
+        plant.Environment |> Map.add code g

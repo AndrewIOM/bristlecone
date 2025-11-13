@@ -1,16 +1,18 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
+    <TargetFrameworks>net10.0;net5.0</TargetFrameworks>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Types.fs" />
+    <Compile Include="Tensors.fs" />
     <Compile Include="Time.fs" />
     <Compile Include="Logging.fs" />
     <Compile Include="Statistics.fs" />
     <Compile Include="Parameter.fs" />
     <Compile Include="EstimationEngine.fs" />
     <Compile Include="Integration.fs" />
+    <Compile Include="EndConditions.fs" />
     <Compile Include="Optimisation.fs" />
     <Compile Include="Confidence.fs" />
     <Compile Include="ModelSelection.fs" />
@@ -21,14 +23,8 @@
     <Compile Include="Solver.fs" />
     <Compile Include="Test.fs" />
     <Compile Include="Library.fs" />
-    <Compile Include="Equations.fs" />
     <Compile Include="Language.fs" />
-  </ItemGroup>
-  <ItemGroup>
-    <Reference Include="Microsoft.Research.Oslo">
-      <HintPath>Microsoft.Research.Oslo.dll</HintPath>
-      <SpecificVersion>False</SpecificVersion>
-    </Reference>
+    <Compile Include="Equations.fs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="../../docs/img/logo.png" Pack="true" PackagePath="/">

@@ -12,7 +12,7 @@ index: 1
 
 (*** condition: prepare ***)
 #nowarn "211"
-#r "../src/Bristlecone/bin/Debug/netstandard2.0/Bristlecone.dll"
+#r "../src/Bristlecone/bin/Debug/net5.0/Bristlecone.dll"
 #r "nuget: MathNet.Numerics.FSharp,5.0.0"
 (*** condition: fsx ***)
 #if FSX
@@ -51,24 +51,31 @@ This example demonstrates the layout of a model when defined in Bristlecone.
 *)
 open Bristlecone // Opens Bristlecone core library and estimation engine
 open Bristlecone.Language // Open the language for writing Bristlecone models
+open FSharp.Data.UnitSystems.SI.UnitSymbols
 
 let hypothesis =
 
-    let vonBertalanffy = Parameter "η" * This ** Parameter "β" - Parameter "κ" * This
+    let mass = state "mass"
+
+    let η = parameter "η" noConstraints 0.50 1.50
+    let β = parameter "β" noConstraints 0.01 1.00 // m
+    let κ = parameter "κ" noConstraints 0.01 1.00
+
+    let vonBertalanffy = P η * This ** P β - P κ * This
 
     Model.empty
-    |> Model.addEquation "mass" vonBertalanffy
-    |> Model.estimateParameter "η" noConstraints 0.50 1.50
-    |> Model.estimateParameter "β" noConstraints 0.01 1.00
-    |> Model.estimateParameter "κ" noConstraints 0.01 1.00
-    |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ "mass" ])
+    |> Model.addRateEquation mass vonBertalanffy
+    |> Model.estimateParameter η
+    |> Model.estimateParameter β
+    |> Model.estimateParameter κ
+    |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ mass.Code ])
     |> Model.compile
 
 let engine =
-    Bristlecone.mkContinuous
+    Bristlecone.mkContinuous ()
     |> Bristlecone.withCustomOptimisation (Optimisation.Amoeba.swarm 5 20 Optimisation.Amoeba.Solver.Default)
 
-let testSettings = Bristlecone.Test.TestSettings<_,_,_,_>.Default
+let testSettings = Bristlecone.Test.defaultSettings
 let testResult = Bristlecone.testModel engine testSettings hypothesis
 
 (*** include-fsi-output ***)

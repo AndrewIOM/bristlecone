@@ -16,7 +16,7 @@ module Orchestration =
         | WorkFailed of exn
         | WorkCancelled
 
-    let print writeOut s = s |> WorkloadEvent |> writeOut
+    let print writeOut s = s |> OrchestrationEvent |> writeOut
 
     /// The `OrchestrationAgent` queues work items of the type `Async<EstimationResult>`, which
     /// are run in parallel up to a total of `maxSimultaneous` at one time.

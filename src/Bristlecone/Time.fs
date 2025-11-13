@@ -24,8 +24,18 @@ type ``cal yr BP`` // calibrated calendar years before present
 
 
 
+
+
+
+
+
 [<Measure>]
 type ``BP (radiocarbon)`` // uncalibrated years before present
+
+
+
+
+
 
 
 
@@ -42,12 +52,19 @@ type CE // common era
 
 
 
+
+
+
+
+
 [<Measure>]
 type BC
 
 [<Measure>]
 type AD
 
+/// A measure that represents dimensionless indexed time
+/// where all variables are unified on a common timeline.
 [<Measure>]
 type ``time index``
 
@@ -74,7 +91,7 @@ module TimeExtensions =
         static member Multiply (two: int) (one: TimeSpan) = one.Ticks * (int64 two) |> TimeSpan
 
     type DateTime with
-        static member Create day month year =
+        static member Create day month (year: int) =
             let d = DateTime(year, month, day)
             DateTime.SpecifyKind(d, DateTimeKind.Utc)
 
@@ -154,8 +171,8 @@ module DateTime =
     let totalMonthsElapsed (d1: DateTime) (d2: DateTime) =
         (d2.Month - d1.Month) + (d2.Year - d1.Year) * 12 |> float |> (*) 1.<month>
 
-    let fractionalDifference d1 d2 =
-        let d1, d2 = if d1 < d2 then d1, d2 else d2, d1
+    let fractionalDifference isSigned d1 d2 =
+        let d1, d2 = if d1 < d2 || isSigned then d1, d2 else d2, d1
 
         { YearFraction = totalYearsElapsed d1 d2
           MonthFraction = totalMonthsElapsed d1 d2
@@ -188,6 +205,7 @@ module ObservationalTimeSpan =
 module Resolution =
 
     /// Represents the width of equally-spaced steps in time.
+    [<NoComparison>]
     type FixedTemporalResolution<'timespan> =
         | Years of PositiveInt.PositiveInt<year>
         | Months of PositiveInt.PositiveInt<month>
@@ -205,6 +223,14 @@ module Resolution =
         | Months i -> Months i
         | Days i -> Days i
         | CustomEpoch ts -> fn ts |> CustomEpoch
+
+    let finestResolution resToSpan totalDays (r1: FixedTemporalResolution<'ts>) (r2: FixedTemporalResolution<'ts>) =
+        let span1 = resToSpan r1
+        let span2 = resToSpan r2
+        let days1 = totalDays span1
+        let days2 = totalDays span2
+        if days1 < days2 then r1 else r2
+
 
 /// Contains types representing common dating methods in
 /// long term data analysis.
@@ -248,8 +274,8 @@ module DatingMethods =
             else
                 Radiocarbon.Unwrap d1 - Radiocarbon.Unwrap d2
 
-        static member FractionalDifference d1 d2 =
-            let d1, d2 = if d1 < d2 then d1, d2 else d2, d1
+        static member FractionalDifference isSigned d1 d2 =
+            let d1, d2 = if d1 < d2 || isSigned then d1, d2 else d2, d1
 
             let yearFraction =
                 Radiocarbon.Unwrap d2 - Radiocarbon.Unwrap d1 |> float |> (*) 1.<year>
@@ -281,8 +307,8 @@ module DatingMethods =
             else
                 Annual.Unwrap d1 - Annual.Unwrap d2
 
-        static member FractionalDifference d1 d2 =
-            let d1, d2 = if d1 < d2 then d1, d2 else d2, d1
+        static member FractionalDifference isSigned d1 d2 =
+            let d1, d2 = if d1 < d2 || isSigned then d1, d2 else d2, d1
             let yearFraction = Annual.Unwrap d2 - Annual.Unwrap d1 |> float |> (*) 1.<year>
 
             { YearFraction = yearFraction
@@ -310,14 +336,16 @@ module DateMode =
 
     /// <summary>Represents the configuration for handling the specific
     /// date type `'T` in a time series.</summary>
-    type DateMode<'T, 'timeunits, 'timespan> =
+    type DateMode<'T, 'yearType, 'timespan> =
         { Resolution: MaximumResolution<'T>
-          GetYear: 'T -> 'timeunits
+          GetYear: 'T -> 'yearType
           AddYears: 'T -> int<year> -> 'T
           AddMonths: 'T -> int<month> -> 'T
           AddDays: 'T -> int<day> -> 'T
           AddTime: 'T -> 'timespan -> 'T
+          SubtractTime: 'T -> 'timespan -> 'T
           Difference: 'T -> 'T -> TimeDifference<'timespan>
+          SignedDifference: 'T -> 'T -> TimeDifference<'timespan>
           SortOldestFirst: 'T -> 'T -> int
           ZeroSpan: 'timespan
           TotalDays: 'timespan -> float<day>
@@ -339,7 +367,9 @@ module DateMode =
           AddMonths = fun d months -> months |> Units.removeUnitFromInt |> d.AddMonths
           AddDays = fun d days -> days |> Units.removeUnitFromInt |> d.AddDays
           AddTime = fun d timeSpan -> d + timeSpan
-          Difference = DateTime.fractionalDifference
+          SubtractTime = fun d timeSpan -> d - timeSpan
+          Difference = DateTime.fractionalDifference false
+          SignedDifference = DateTime.fractionalDifference true
           ZeroSpan = TimeSpan.Zero
           TotalDays = fun ts -> ts.TotalDays * 1.<day>
           SpanToResolution =
@@ -349,7 +379,24 @@ module DateMode =
                 |> PositiveInt.create
                 |> Option.get
                 |> Resolution.FixedTemporalResolution.Days
-          ResolutionToSpan = fun res -> failwith "not finished"
+          ResolutionToSpan =
+            function
+            | Resolution.FixedTemporalResolution.Days d ->
+                let days = Units.removeUnitFromInt d.Value |> float
+                TimeSpan.FromDays days
+            | Resolution.FixedTemporalResolution.Months m ->
+                let months =
+                    Units.removeUnitFromInt m.Value |> float |> LanguagePrimitives.FloatWithMeasure
+
+                let days: float<day> = months * 30.
+                TimeSpan.FromDays(Units.removeUnitFromFloat days)
+            | Resolution.FixedTemporalResolution.Years y ->
+                let years =
+                    Units.removeUnitFromInt y.Value |> float |> LanguagePrimitives.FloatWithMeasure
+
+                let days: float<day> = years * daysPerYearInOldDates
+                TimeSpan.FromDays(Units.removeUnitFromFloat days)
+            | Resolution.FixedTemporalResolution.CustomEpoch t -> t
           Minus = fun d1 d2 -> d1 - d2
           Divide = fun ts1 ts2 -> float ts1.Ticks / float ts2.Ticks
           SortOldestFirst = fun d1 d2 -> if d1 < d2 then -1 else 1 }
@@ -361,7 +408,9 @@ module DateMode =
           AddMonths = fun d _ -> d
           AddDays = fun d _ -> d
           AddTime = fun d timeSpan -> d + timeSpan
-          Difference = fun d1 d2 -> Annual.FractionalDifference d1 d2
+          SubtractTime = fun d timeSpan -> d + (timeSpan * -1)
+          Difference = fun d1 d2 -> Annual.FractionalDifference false d1 d2
+          SignedDifference = fun d1 d2 -> Annual.FractionalDifference true d1 d2
           SortOldestFirst = fun d1 d2 -> if d1 < d2 then -1 else 1
           ZeroSpan = 0<year>
           TotalDays =
@@ -369,7 +418,12 @@ module DateMode =
                 (years |> Units.removeUnitFromInt |> float |> LanguagePrimitives.FloatWithMeasure)
                 * daysPerYearInOldDates
           SpanToResolution = fun epoch -> oldYearsToResolution epoch
-          ResolutionToSpan = fun res -> failwith "not finished"
+          ResolutionToSpan =
+            function
+            | Resolution.FixedTemporalResolution.Years y -> y.Value
+            | Resolution.FixedTemporalResolution.Months _
+            | Resolution.FixedTemporalResolution.Days _ ->
+                invalidOp "Annual date mode does not support sub-annual fixed resolutions."
           Divide = fun ts1 ts2 -> ts1 / ts2 |> float
           Minus = fun d1 d2 -> d1 - d2 }
 
@@ -380,7 +434,9 @@ module DateMode =
           AddMonths = fun d months -> d
           AddDays = fun d days -> d
           AddTime = fun d timeSpan -> d + timeSpan
-          Difference = fun d1 d2 -> Radiocarbon.FractionalDifference d1 d2
+          SubtractTime = fun d timeSpan -> d + (timeSpan * -1)
+          Difference = fun d1 d2 -> Radiocarbon.FractionalDifference false d1 d2
+          SignedDifference = fun d1 d2 -> Radiocarbon.FractionalDifference true d1 d2
           SortOldestFirst = fun d1 d2 -> if d1 > d2 then -1 else 1
           ZeroSpan = 0<``BP (radiocarbon)``>
           TotalDays =
@@ -388,7 +444,13 @@ module DateMode =
                 (years |> Units.removeUnitFromInt |> float |> LanguagePrimitives.FloatWithMeasure)
                 * daysPerYearInOldDates
           SpanToResolution = fun epoch -> oldYearsToResolution epoch
-          ResolutionToSpan = fun res -> failwith "not finished"
+          ResolutionToSpan =
+            function
+            | Resolution.FixedTemporalResolution.Years y ->
+                y.Value |> Units.removeUnitFromInt |> (*) 1<``BP (radiocarbon)``>
+            | Resolution.FixedTemporalResolution.Months _
+            | Resolution.FixedTemporalResolution.Days _ ->
+                invalidOp "Radiocarbon date mode does not support sub-annual fixed resolutions."
           Divide = fun ts1 ts2 -> ts1 / ts2 |> float
           Minus = fun d1 d2 -> d1 - d2 }
 
@@ -484,6 +546,8 @@ module TimeSeries =
             |> TimeSteps
 
         FixedTimeSeries(dateType, baseline, timePoints)
+
+    let head ts = unwrap ts |> fst
 
     /// <summary>Create a time-series where time is represented by uncalibrated
     /// radiocarbon dates (BP dates).</summary>
@@ -582,6 +646,13 @@ module TimeSeries =
             |> checkMoreThanEqualTo 2
             |> Option.map (fromObservations series.DateMode)
         | None -> None
+
+    let tail series =
+        series
+        |> toObservations
+        |> Seq.toArray
+        |> Array.tail
+        |> fromObservations series.DateMode
 
     /// <summary>Remove all time points that occur after the desired end date.</summary>
     /// <param name="endDate">An end date to clip beyond</param>
@@ -782,14 +853,18 @@ module TimeSeries =
     /// <returns>An array of 'timespan containing the epochs of the common timeline,
     /// or `None` if there is no common timeline.</returns>
     let commonTimeline (series: TimeSeries<'T, 'date, 'timeunit, 'timespan> seq) =
-        let timeSteps =
-            series |> Seq.map (toObservations >> Seq.map snd >> Seq.toList) |> Seq.toList
+        let timePointSets =
+            series |> Seq.map (toObservations >> Seq.map snd >> Set.ofSeq) |> Seq.toList
 
-        match timeSteps with
-        | Single
-        | AllIdentical -> Some(series |> Seq.head |> epochs)
-        | Empty
-        | Neither -> None
+        match timePointSets with
+        | [] -> None
+        | first :: rest ->
+            let common = List.fold Set.intersect first rest
+
+            if Set.isEmpty common then
+                None
+            else
+                Some(common |> Set.toArray)
 
     /// Contains functions for bootstrapping one or many time series.
     module Bootstrap =
@@ -840,9 +915,9 @@ module TimeSeries =
     // Extensions to add convenience methods to time-series
     type TimeSeries<'T, 'date, 'timeunit, 'timespan> with
 
-        member this.Length = this |> innerSeries |> Array.length
+        member this.Length = this |> toObservations |> Seq.length
 
-        member this.Head = this |> innerSeries |> Array.head
+        member this.Head = this |> toObservations |> Seq.head
 
         member this.TimeSteps = this |> innerSeries |> Array.map snd
 
@@ -889,28 +964,29 @@ module TimeIndex =
             | Resolution.FixedTemporalResolution.Years y ->
                 obs
                 |> Seq.map (fun (v, tn) ->
-                    (((series.DateMode.Difference t0 tn).YearFraction / Units.intToFloat y.Value)
+                    (((series.DateMode.SignedDifference t0 tn).YearFraction / Units.intToFloat y.Value)
                      |> float
                      |> (*) 1.0<``time index``>,
                      v))
             | Resolution.FixedTemporalResolution.Months m ->
                 obs
                 |> Seq.map (fun (v, tn) ->
-                    (((series.DateMode.Difference t0 tn).MonthFraction / Units.intToFloat m.Value
+                    (((series.DateMode.SignedDifference t0 tn).MonthFraction
+                      / Units.intToFloat m.Value
                       |> float
                       |> (*) 1.0<``time index``>),
                      v))
             | Resolution.FixedTemporalResolution.Days d ->
                 obs
                 |> Seq.map (fun (v, tn) ->
-                    (((series.DateMode.Difference t0 tn).DayFraction / Units.intToFloat d.Value)
+                    (((series.DateMode.SignedDifference t0 tn).DayFraction / Units.intToFloat d.Value)
                      |> float
                      |> (*) 1.<``time index``>,
                      v))
             | Resolution.FixedTemporalResolution.CustomEpoch(t: 'timespan) ->
                 obs
                 |> Seq.map (fun (v, tn) ->
-                    (series.DateMode.Divide (series.DateMode.Difference tn t0).RealDifference t)
+                    (series.DateMode.Divide (series.DateMode.SignedDifference t0 tn).RealDifference t)
                     |> Units.removeUnitFromFloat
                     |> (*) 1.0<``time index``>,
                     v)
@@ -920,7 +996,7 @@ module TimeIndex =
             | Resolution.FixedTemporalResolution.Years y ->
                 obs
                 |> Seq.map (fun (value, tn) ->
-                    (((series.DateMode.Difference tn t0).YearFraction / Units.intToFloat y.Value)
+                    (((series.DateMode.SignedDifference t0 tn).YearFraction / Units.intToFloat y.Value)
                      * 1.0<``time index``>,
                      value))
             | Resolution.FixedTemporalResolution.CustomEpoch t ->
@@ -960,6 +1036,8 @@ module TimeIndex =
                         with
                         | Some((k1, v1), (k2, v2)) -> interpolateFn (k1, v1) (k2, v2) t
                         | None ->
+                            printfn "TEST DEBUG - time keys %A" (Map.keys table)
+
                             invalidOp
                             <| sprintf
                                 "Could not interpolate to time %f because it falls outside the range of the temporal index"
@@ -1006,9 +1084,48 @@ module TimeFrame =
     let resolution frame =
         (frame |> inner |> Seq.head).Value |> TimeSeries.resolution
 
+    /// Append a single time point to a time frame.
+    let prepend time timeData (TimeFrame frame: TimeFrame<'T, 'date, 'timeunit, 'timespan>) =
+        frame
+        |> Map.map (fun code ts ->
+            TimeSeries.toObservations ts
+            |> Seq.append [ timeData |> Map.find code, time ]
+            |> TimeSeries.fromObservations ts.DateMode)
+        |> TimeFrame
+
+    let filter keys (TimeFrame frame) =
+        frame |> Map.filter (fun k _ -> keys |> Seq.contains k) |> TimeFrame
+
+    /// Get the initial value of each time-series as a coded map.
+    let t0 (TimeFrame frame: TimeFrame<'T, 'date, 'timeunit, 'timespan>) =
+        frame |> Map.map (fun code ts -> ts.Head |> fst)
+
+    /// Get all dates across all series in the timeframe for which
+    /// values are registered.
+    let dates (TimeFrame frame: TimeFrame<'T, 'date, 'timeunit, 'timespan>) =
+        frame
+        |> Seq.collect (fun kv -> kv.Value |> TimeSeries.dates)
+        |> Seq.distinct
+        |> Seq.toList
+
+    let dropFirstObservation (TimeFrame frame: TimeFrame<'T, 'date, 'timeunit, 'timespan>) =
+        frame
+        |> Map.map (fun _ ts -> TimeSeries.tail ts) // drop first point
+        |> TimeFrame
+
+    let dropFirstObservationIfPresent
+        (predicate: TimeSeries.TimeSeries<'T, 'date, 'timeunit, 'timespan> -> bool)
+        frame
+        =
+        frame
+        |> Map.map (fun _ ts -> if predicate ts then TimeSeries.tail ts else ts)
+        |> TimeFrame
+
+
     type TimeFrame<'T, 'date, 'timeunit, 'timespan> with
         member this.StartDate = (this |> inner |> Seq.head).Value.StartDate |> snd
         member this.Series = this |> inner
+        member this.Keys = this |> inner |> Map.keys |> Seq.toList
 
 
 /// <summary>A specific type of time series that represents
@@ -1053,11 +1170,30 @@ module GrowthSeries =
         match growth with
         | Absolute g ->
             let time = g |> TimeSeries.toObservations |> Seq.map snd
-            let agr = g |> TimeSeries.toObservations |> Seq.map fst
-            let biomass = agr |> Seq.scan (+) 0.<_> |> Seq.tail |> Seq.toList
+            let agr = g |> TimeSeries.toObservations |> Seq.toList
+
+            let increments =
+                agr
+                |> Seq.map (fun (rate, t) -> rate * LanguagePrimitives.FloatWithMeasure<'time> 1.)
+
+            let biomass: float<'u> list =
+                increments
+                |> Seq.scan (+) (LanguagePrimitives.FloatWithMeasure<'u> 0.)
+                |> Seq.tail
+                |> Seq.toList
+
             TimeSeries.fromObservations g.DateMode (Seq.zip biomass time)
         | Relative _ -> failwith "Not implemented"
         | Cumulative g -> g
+
+    let absolute
+        (growth: GrowthSeries<'u, 'time, 'date, 'timeunit, 'timespan>)
+        : TimeSeries<float<'u / 'time>, 'date, 'timeunit, 'timespan> =
+        match growth with
+        | Absolute g -> g
+        | Cumulative _
+        | Relative _ -> failwith "Not implemented"
+
 
     /// <summary>Converts the given growth series into its
     /// relative representation (i.e. current growth rate divided
@@ -1080,8 +1216,12 @@ module GrowthSeries =
     let asCumulative plant = plant |> cumulative |> Cumulative
     let asRelative plant = plant |> relative |> Relative
 
-    let internal stripUnits growth =
+    let tail growth =
         match growth with
-        | Absolute ts -> ts |> TimeSeries.map (fun (t, v) -> Units.removeUnitFromFloat t)
-        | Cumulative ts -> ts |> TimeSeries.map (fun (t, v) -> Units.removeUnitFromFloat t)
-        | Relative ts -> ts |> TimeSeries.map (fun (t, v) -> Units.removeUnitFromFloat t)
+        | Cumulative g ->
+            g
+            |> TimeSeries.toObservations
+            |> Seq.tail
+            |> TimeSeries.fromObservations g.DateMode
+            |> Cumulative
+        | _ -> invalidOp "Not implemented"
