@@ -2,4 +2,4 @@ FSharp.Core
 FSharp.Data
 MathNet.Numerics
 MathNet.Numerics.FSharp
-DiffSharp-cpu
+DiffSharp.Backends.Reference
