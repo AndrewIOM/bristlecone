@@ -35,7 +35,7 @@ module LocalMinima =
           ** 0.1
 
     let dropWave (WithinBounds -5.12 5.12 x1) (WithinBounds -5.12 5.12 x2) =
-        - (1. + cos (12. * sqrt (x1 ** 2. + x2 ** 2.)))
+        -(1. + cos (12. * sqrt (x1 ** 2. + x2 ** 2.)))
         / (0.5 * (x1 ** 2. + x2 ** 2.) + 2.)
 
     let eggHolder (WithinBounds -512.0 512.0 x1) (WithinBounds -512.0 512.0 x2) =
@@ -52,7 +52,7 @@ module LocalMinima =
         1. + (x |> Array.sumBy f) - (x |> Array.mapi g |> Array.fold (*) 1.)
 
     let holderTable (WithinBounds -10.0 10.0 x1) (WithinBounds -10.0 10.0 x2) =
-        - abs(sin x1 * cos x2 * exp (abs (1. - (sqrt (x1 ** 2. + x2 ** 2.) / pi))))
+        -abs(sin x1 * cos x2 * exp (abs (1. - (sqrt (x1 ** 2. + x2 ** 2.) / pi))))
 
     let langermann' m (a: float[,]) (c: float[]) x =
         let x = x |> Array.map ((|WithinBounds|) 0. 10.)
@@ -87,25 +87,40 @@ module Timeseries =
 
         open Bristlecone.Time
 
-        [<Measure>] type prey
-        [<Measure>] type predator
-        [<Measure>] type km
-        [<Measure>] type area = km^2
+        [<Measure>]
+        type prey
+
+        [<Measure>]
+        type predator
+
+        [<Measure>]
+        type km
+
+        [<Measure>]
+        type area = km^2
 
         // States
-        let H = state<prey/area>        "prey"
-        let L = state<predator/area>    "predator"
+        let H = state<prey / area> "prey"
+        let L = state<predator / area> "predator"
 
         let predatorPreyBase =
 
             // Parameters
-            let α = parameter "α" notNegative 0.5</year> 1.5</year>   // Maximum prey per capita growth rate
-            let β = parameter "β" notNegative 0.01<1/(predator/area * year)> 0.05<1/(predator/area * year)> // Predation rate
-            let δ = parameter "δ" notNegative 0.5</year> 1.0</year>   // Natural death rate of lynx in the absence of food
-            let γ = parameter "γ" notNegative 0.01<1/(prey/area * year)> 0.1<1/(prey/area * year)> // Predator growth efficiency
+            let α = parameter "α" notNegative 0.5< / year> 1.5< / year> // Maximum prey per capita growth rate
 
-            let ``dH/dt``: ModelExpression<(prey/area)/year> = P α * This<prey/area> - P β * This<prey/area> * State L
-            let ``dL/dt``: ModelExpression<(predator/area)/year> = P γ * State H * This<predator/area> - P δ * This<predator/area>
+            let β =
+                parameter "β" notNegative 0.01<1 / (predator / area * year)> 0.05<1 / (predator / area * year)> // Predation rate
+
+            let δ = parameter "δ" notNegative 0.5< / year> 1.0< / year> // Natural death rate of lynx in the absence of food
+
+            let γ =
+                parameter "γ" notNegative 0.01<1 / (prey / area * year)> 0.1<1 / (prey / area * year)> // Predator growth efficiency
+
+            let ``dH/dt``: ModelExpression<(prey / area) / year> =
+                P α * This<prey / area> - P β * This<prey / area> * State L
+
+            let ``dL/dt``: ModelExpression<(predator / area) / year> =
+                P γ * State H * This<predator / area> - P δ * This<predator / area>
 
             Model.empty
             |> Model.addRateEquation H ``dH/dt``
@@ -118,7 +133,9 @@ module Timeseries =
 
         let ``predator-prey`` () =
             predatorPreyBase
-            |> Model.useLikelihoodFunction (Bristlecone.ModelLibrary.Likelihood.sumOfSquares [ Require.state H; Require.state L ])
+            |> Model.useLikelihoodFunction (
+                Bristlecone.ModelLibrary.Likelihood.sumOfSquares [ Require.state H; Require.state L ]
+            )
             |> Model.compile
 
         let ``predator-prey [with noise]`` () =
@@ -126,20 +143,27 @@ module Timeseries =
             |> Model.estimateParameterOld "ρ" noConstraints -0.500 0.500
             |> Model.estimateParameterOld "σ[x]" notNegative 0.001 0.100
             |> Model.estimateParameterOld "σ[y]" notNegative 0.001 0.100
-            |> Model.useLikelihoodFunction (Bristlecone.ModelLibrary.Likelihood.bivariateGaussian ( Require.state H) (Require.state L))
+            |> Model.useLikelihoodFunction (
+                Bristlecone.ModelLibrary.Likelihood.bivariateGaussian (Require.state H) (Require.state L)
+            )
             |> Model.compile
 
     module SoilCarbon =
 
         open Bristlecone.Time
 
-        [<Measure>] type carbon   // e.g. g C
-        [<Measure>] type area     // e.g. m^2
-        [<Measure>] type temp     // °C
+        [<Measure>]
+        type carbon // e.g. g C
+
+        [<Measure>]
+        type area // e.g. m^2
+
+        [<Measure>]
+        type temp // °C
 
         // States
-        let Cf = state "Cf"   // fast pool
-        let Cs = state "Cs"   // slow pool
+        let Cf = state "Cf" // fast pool
+        let Cs = state "Cs" // slow pool
 
         // Environmental input: soil temperature
         let Ts = environment "T"
@@ -150,27 +174,24 @@ module Timeseries =
         let soilCarbonBase =
 
             // Parameters
-            let kf = parameter "kf" notNegative 0.001</day> 0.1</day>   // base decay rate fast pool
-            let ks = parameter "ks" notNegative 0.0001</day> 0.01</day> // base decay rate slow pool
-            let Q10 = parameter "Q10" notNegative 1.5 3.0               // temperature sensitivity
-            let alpha = parameter "alpha" notNegative 0.1 0.9           // fraction of fast decay to slow pool
+            let kf = parameter "kf" notNegative 0.001< / day> 0.1< / day> // base decay rate fast pool
+            let ks = parameter "ks" notNegative 0.0001< / day> 0.01< / day> // base decay rate slow pool
+            let Q10 = parameter "Q10" notNegative 1.5 3.0 // temperature sensitivity
+            let alpha = parameter "alpha" notNegative 0.1 0.9 // fraction of fast decay to slow pool
 
             // Temperature modifier (Q10 function relative to 10 °C)
             let tempEffect =
                 (P Q10) ** ((Environment Ts - Constant 10.0<temp>) / Constant 10.0<temp>)
 
             // Rate equations
-            let ``dCf/dt`` : ModelExpression<(carbon/area)/day> =
-                - (P kf * tempEffect) * This
+            let ``dCf/dt``: ModelExpression<(carbon / area) / day> = -(P kf * tempEffect) * This
 
-            let ``dCs/dt`` : ModelExpression<(carbon/area)/day> =
-                (P alpha) * (P kf * tempEffect) * Environment Cf
-                - (P ks * tempEffect) * This
+            let ``dCs/dt``: ModelExpression<(carbon / area) / day> =
+                (P alpha) * (P kf * tempEffect) * Environment Cf - (P ks * tempEffect) * This
 
-            // Derived measurement: soil respiration flux            
-            let respiration : ModelExpression<(carbon/area)/day> =
-                (P kf * tempEffect) * State Cf
-                + (P ks * tempEffect) * State Cs
+            // Derived measurement: soil respiration flux
+            let respiration: ModelExpression<(carbon / area) / day> =
+                (P kf * tempEffect) * State Cf + (P ks * tempEffect) * State Cs
 
             Model.empty
             |> Model.addRateEquation Cf ``dCf/dt``
@@ -198,8 +219,11 @@ module Timeseries =
 
         open Bristlecone.Time
 
-        [<Measure>] type individuals
-        [<Measure>] type degC
+        [<Measure>]
+        type individuals
+
+        [<Measure>]
+        type degC
 
         // State: population size
         let N = state<individuals> "N"
@@ -213,16 +237,14 @@ module Timeseries =
         let rickerBase: ModelBuilder.ModelBuilder<1> =
 
             // Parameters
-            let r     = parameter "r" noConstraints 0.1 2.0        // intrinsic growth rate
-            let K     = parameter "K" notNegative 50.<individuals> 500.<individuals> // carrying capacity
-            let beta  = parameter "beta" noConstraints -1.0 1.0    // temperature effect
+            let r = parameter "r" noConstraints 0.1 2.0 // intrinsic growth rate
+            let K = parameter "K" notNegative 50.<individuals> 500.<individuals> // carrying capacity
+            let beta = parameter "beta" noConstraints -1.0 1.0 // temperature effect
 
             // Discrete‑time update:
             // N_{t+1} = N_t * exp(r * (1 - N_t/K) + beta * T_t)
-            let update : ModelExpression<individuals> =
-                This *
-                exp ( P r * (Constant 1.0 - This / P K)
-                    + P beta * Environment T )
+            let update: ModelExpression<individuals> =
+                This * exp (P r * (Constant 1.0 - This / P K) + P beta * Environment T)
 
             let eqLogNM = State N // |> Logarithm
 
@@ -251,26 +273,32 @@ module Timeseries =
 
         open Bristlecone.Time
 
-        [<Measure>] type biomass // e.g. tonnes of fish
-        [<Measure>] type km
-        [<Measure>] type area = km^2
+        [<Measure>]
+        type biomass // e.g. tonnes of fish
+
+        [<Measure>]
+        type km
+
+        [<Measure>]
+        type area = km^2
 
         let B = state "B"
 
         let logisticHarvestBase =
 
             // Parameters
-            let r = parameter "r" noConstraints 0.1</year> 1.0</year> // intrinsic per‑capita growth rate
-            let K = parameter "K" notNegative 50.<biomass/area> 500.<biomass/area> // carrying capacity
-            let h = parameter "h" notNegative 0.01<biomass/area/year> 50.<biomass/area/year> // constant harvest rate
+            let r = parameter "r" noConstraints 0.1< / year> 1.0< / year> // intrinsic per‑capita growth rate
+            let K = parameter "K" notNegative 50.<biomass / area> 500.<biomass / area> // carrying capacity
+
+            let h =
+                parameter "h" notNegative 0.01<biomass / area / year> 50.<biomass / area / year> // constant harvest rate
 
             // Logistic growth with harvest: dB/dt = r * B * (1 - B/K) - h
-            let ``dB/dt`` : ModelExpression<(biomass/area)/year> =
-                P r * This<biomass/area> * (Constant 1.0 - This<biomass/area> / P K)
-                - P h
+            let ``dB/dt``: ModelExpression<(biomass / area) / year> =
+                P r * This<biomass / area> * (Constant 1.0 - This<biomass / area> / P K) - P h
 
             Model.empty<year>
-            |> Model.addRateEquation B``dB/dt``
+            |> Model.addRateEquation B ``dB/dt``
             |> Model.estimateParameter r
             |> Model.estimateParameter K
             |> Model.estimateParameter h
@@ -294,43 +322,54 @@ module Timeseries =
         open Bristlecone.Time
 
         // Units
-        [<Measure>] type biomass          // e.g., t of plant material
-        [<Measure>] type nutrient         // e.g., kg N
-        [<Measure>] type km
-        [<Measure>] type area = km^2
+        [<Measure>]
+        type biomass // e.g., t of plant material
+
+        [<Measure>]
+        type nutrient // e.g., kg N
+
+        [<Measure>]
+        type km
+
+        [<Measure>]
+        type area = km^2
 
         // States
-        let B = state<biomass/area>  "biomass"   // plant biomass density
-        let S = state<nutrient/area> "soilN"     // soil nutrient availability
+        let B = state<biomass / area> "biomass" // plant biomass density
+        let S = state<nutrient / area> "soilN" // soil nutrient availability
 
         // Base model: plant biomass limited by soil nutrient via Monod uptake
         let plantSoilBase =
 
             // Parameters
-            let q   = parameter "q"   notNegative 0.01<nutrient/(biomass*year)>  2.0<nutrient/(biomass*year)> // uptake capacity (nutrient per biomass per time)
-            let e   = parameter "e"   notNegative 0.10<biomass/nutrient>          2.0<biomass/nutrient> // conversion efficiency of nutrient to biomass
-            let m   = parameter "m"   notNegative 0.01</year>                     1.0</year> // plant mortality/turnover
-            let I   = parameter "I"   notNegative 0.001<nutrient/area/year>        100.0<nutrient/area/year> // external nutrient input (deposition, fertiliser)
-            let l   = parameter "l"   notNegative 0.01</year>                     2.0</year> // nutrient loss (leaching/mineralisation balance)
-            let Ks  = parameter "Ks"  notNegative 1.0<nutrient/area>            100.0<nutrient/area> // half-saturation constant for uptake
+            let q =
+                parameter "q" notNegative 0.01<nutrient / (biomass * year)> 2.0<nutrient / (biomass * year)> // uptake capacity (nutrient per biomass per time)
+
+            let e = parameter "e" notNegative 0.10<biomass / nutrient> 2.0<biomass / nutrient> // conversion efficiency of nutrient to biomass
+            let m = parameter "m" notNegative 0.01< / year> 1.0< / year> // plant mortality/turnover
+
+            let I =
+                parameter "I" notNegative 0.001<nutrient / area / year> 100.0<nutrient / area / year> // external nutrient input (deposition, fertiliser)
+
+            let l = parameter "l" notNegative 0.01< / year> 2.0< / year> // nutrient loss (leaching/mineralisation balance)
+            let Ks = parameter "Ks" notNegative 1.0<nutrient / area> 100.0<nutrient / area> // half-saturation constant for uptake
 
             // Monod (Holling type II) limitation: f(S) = S / (Ks + S)  (dimensionless)
-            let fS : ModelExpression<1> =
-                Environment S / (P Ks + Environment S)
+            let fS: ModelExpression<1> = Environment S / (P Ks + Environment S)
 
             // Plant biomass dynamics:
             // dB/dt = e * q * f(S) * B  -  m * B
-            let ``dB/dt`` : ModelExpression<(biomass/area)/year> =
-                P e * P q * fS * This<biomass/area> - P m * This<biomass/area>
+            let ``dB/dt``: ModelExpression<(biomass / area) / year> =
+                P e * P q * fS * This<biomass / area> - P m * This<biomass / area>
 
             // Soil nutrient dynamics:
             // dS/dt = I  -  q * f(S) * B  -  l * S
-            let ``dS/dt`` : ModelExpression<(nutrient/area)/year> =
-                P I - P q * fS * This<biomass/area> - P l * This<nutrient/area>
+            let ``dS/dt``: ModelExpression<(nutrient / area) / year> =
+                P I - P q * fS * This<biomass / area> - P l * This<nutrient / area>
 
             Model.empty<year>
             |> Model.addRateEquation B ``dB/dt``
-            |> Model.addRateEquation S   ``dS/dt``
+            |> Model.addRateEquation S ``dS/dt``
             |> Model.estimateParameter q
             |> Model.estimateParameter e
             |> Model.estimateParameter m
@@ -341,7 +380,9 @@ module Timeseries =
         // Deterministic fit
         let ``plant-soil monod`` () =
             plantSoilBase
-            |> Model.useLikelihoodFunction (Bristlecone.ModelLibrary.Likelihood.sumOfSquares [ Require.state B; Require.state S ])
+            |> Model.useLikelihoodFunction (
+                Bristlecone.ModelLibrary.Likelihood.sumOfSquares [ Require.state B; Require.state S ]
+            )
             |> Model.compile
 
         // With Gaussian observation noise
@@ -350,7 +391,9 @@ module Timeseries =
             |> Model.estimateParameterOld "ρ" noConstraints -0.500 0.500
             |> Model.estimateParameterOld "σ[x]" notNegative 0.001 0.100
             |> Model.estimateParameterOld "σ[y]" notNegative 0.001 0.100
-            |> Model.useLikelihoodFunction (Bristlecone.ModelLibrary.Likelihood.bivariateGaussian ( Require.state B) ( Require.state S))
+            |> Model.useLikelihoodFunction (
+                Bristlecone.ModelLibrary.Likelihood.bivariateGaussian (Require.state B) (Require.state S)
+            )
             |> Model.compile
 
 
@@ -359,21 +402,30 @@ module Timeseries =
         open Bristlecone.Time
 
         // Units
-        [<Measure>] type person
-        [<Measure>] type dwelling
-        [<Measure>] type household
+        [<Measure>]
+        type person
+
+        [<Measure>]
+        type dwelling
+
+        [<Measure>]
+        type household
 
         // Parameters
-        let theta = parameter "theta" noConstraints 0.1<dwelling/person> 0.2<dwelling/person>
-        let h65_slope = parameter "h65_slope" noConstraints 0.1<(household/person)/year> 0.2<(household/person)/year>
-        let r_sec = parameter "r_sec" noConstraints 0.1</year> 0.2</year>
-        let r_str = parameter "r_str" noConstraints 0.1</year> 0.2</year>
+        let theta =
+            parameter "theta" noConstraints 0.1<dwelling / person> 0.2<dwelling / person>
+
+        let h65_slope =
+            parameter "h65_slope" noConstraints 0.1<(household / person) / year> 0.2<(household / person) / year>
+
+        let r_sec = parameter "r_sec" noConstraints 0.1< / year> 0.2< / year>
+        let r_str = parameter "r_str" noConstraints 0.1< / year> 0.2< / year>
         let str_sat = parameter "str_sat" noConstraints 0.1 0.2
-        let k_reno = parameter "k_reno" noConstraints 0.1</year> 0.2</year>
+        let k_reno = parameter "k_reno" noConstraints 0.1< / year> 0.2< / year>
         let reno_target = parameter "reno_target" noConstraints 0.1 0.2
 
         // States
-        let H = state<household/person> "headship"
+        let H = state<household / person> "headship"
         let SH = state<1> "second home share"
         let STR = state<1> "STR?"
         let R = state<1> "renovation"
@@ -382,15 +434,13 @@ module Timeseries =
 
         // External forcings
         let age65plus: StateId<person> = environment "Age65Plus"
-        
 
-        // // State equations (ODEs)
-        // let ``dH/dt`` = P h65_slope * Environment age65plus
-        // let ``dSH/dt``: ModelExpression</year> = P r_sec + State SH * (Constant 1. - State SH)
-        // let ``dSTR/dt``: ModelExpression</year> = P r_str + State STR * (P str_sat - State STR)
-        // let ``dR/dt`` = - P k_reno * (State R - P reno_target)
-        // let ``dO/dt``: ModelExpression<dwelling/year> =
-        //     P theta * State H * (Constant 1. - State SH)
-        //         * (Constant 1. - State STR) * (Constant 1. - State R)
 
-        
+// // State equations (ODEs)
+// let ``dH/dt`` = P h65_slope * Environment age65plus
+// let ``dSH/dt``: ModelExpression</year> = P r_sec + State SH * (Constant 1. - State SH)
+// let ``dSTR/dt``: ModelExpression</year> = P r_str + State STR * (P str_sat - State STR)
+// let ``dR/dt`` = - P k_reno * (State R - P reno_target)
+// let ``dO/dt``: ModelExpression<dwelling/year> =
+//     P theta * State H * (Constant 1. - State SH)
+//         * (Constant 1. - State STR) * (Constant 1. - State R)
