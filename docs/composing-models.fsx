@@ -53,14 +53,14 @@ apply a simple model of non-linear plant growth. To do this, we
 first define a base model as a `ModelSystem` that takes a number of interchangable components:
 *)
 
-let r = parameter "r" noConstraints 0.01</Time.month> 1.00</Time.month>
+let r = parameter "r" noConstraints 0.01< / Time.month> 1.00< / Time.month>
 let m = state<kilogram> "m"
 
 let baseModel growthLimit lossRate =
     Model.empty<Time.month>
     |> Model.addRateEquation m (P r * growthLimit This<kilogram> - lossRate This<kilogram>)
     |> Model.estimateParameter r
-    |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ m.Code ])
+    |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ Require.state m ])
 
 (** 
 You can see from the type signatures that growthLimit returns a kilogram value, whereas
@@ -87,7 +87,7 @@ let growthLimit =
           subComponent "Monomolecular" (fun (m: ModelExpression<kilogram>) -> P K - m)
           |> estimateParameter K
 
-          subComponent "Gompertz" (fun (m: ModelExpression<kilogram>) -> m * Logarithm (P K / m))
+          subComponent "Gompertz" (fun (m: ModelExpression<kilogram>) -> m * Logarithm(P K / m))
           |> estimateParameter K
 
           subComponent "Logistic (three parameter)" (fun (m: ModelExpression<kilogram>) -> m * (Constant 1. - m / P K))
@@ -100,14 +100,14 @@ the `estimateParameter` function as above.
 We can similarly define the other required component for the base model - the loss rate:
 *)
 
-let alpha = parameter "alpha" notNegative 0.001</Time.month> 0.10</Time.month>
+let alpha = parameter "alpha" notNegative 0.001< / Time.month> 0.10< / Time.month>
 
 let lossRate =
     modelComponent
         "Biomass loss rate"
         [
 
-          subComponent "None" (fun _ -> Constant 0.<kilogram/Time.month>)
+          subComponent "None" (fun _ -> Constant 0.<kilogram / Time.month>)
 
           subComponent "Density-dependent" (fun m -> m * P alpha)
           |> estimateParameter alpha ]
@@ -122,7 +122,7 @@ let hypotheses =
     baseModel
     |> Hypotheses.createFromModel
     |> Hypotheses.apply growthLimit
-    // |> Hypotheses.apply lossRate
+    |> Hypotheses.apply lossRate
     |> Hypotheses.compile
 
 (**

@@ -53,7 +53,7 @@ by applying these parameters. Here, ``B`` is defined in kilograms, with the
 *)
 
 // Parameters:
-let r = parameter "r" notNegative 0.01</day> 0.50</day>
+let r = parameter "r" notNegative 0.01< / day> 0.50< / day>
 let K = parameter "K" notNegative 20.<kg> 50.<kg>
 
 let dBdt = P r * This<kg> * (Constant 1. - (This / P K))
@@ -114,11 +114,10 @@ of a specific parameter is guarded such that the model is only valid
 if the parameter ``a`` * 5 is not near-zero:
 *)
 
-let a = parameter "a" notNegative 0.2<m/kg> 0.5<m/kg>
-let linear: ModelExpression<m/kg> =
-    Conditional
-      (P a * Constant 5. .< Constant 1e-12<m/kg>)
-      Invalid (P a * This)
+let a = parameter "a" notNegative 0.2<m / kg> 0.5<m / kg>
+
+let linear: ModelExpression<m / kg> =
+    Conditional (P a * Constant 5. .< Constant 1e-12<m / kg>) Invalid (P a * This)
 
 (**
 In this example, the function is limited such that

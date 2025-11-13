@@ -51,9 +51,10 @@ we will define a simple model of population growth:
 Bristlecone expressions.*
 *)
 
-[<Measure>] type individuals
+[<Measure>]
+type individuals
 
-let r = parameter "r" notNegative 0.01</Time.day> 0.50</Time.day>
+let r = parameter "r" notNegative 0.01< / Time.day> 0.50< / Time.day>
 let K = parameter "K" notNegative 20.<individuals> 50.<individuals>
 let N = state<individuals> "N"
 
@@ -72,7 +73,8 @@ The starting value is drawn from a continuous uniform distribution,
 using a `Random` that you define in the `EstimationEngine` (see [estimating](estimation-engine.html)).
 *)
 
-let ``dN/dt``: ModelExpression<individuals/Time.day> = P r * This * (Constant 1. - (This / P K))
+let ``dN/dt``: ModelExpression<individuals / Time.day> =
+    P r * This * (Constant 1. - (This / P K))
 
 (**
 From the above code, our model is compiled into the following internal representation:
@@ -103,7 +105,7 @@ let hypothesis =
     |> Model.addRateEquation N ``dN/dt``
     |> Model.estimateParameter r
     |> Model.estimateParameter K
-    |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ N.Code ])
+    |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ Require.state N ])
     |> Model.compile
 
 (**

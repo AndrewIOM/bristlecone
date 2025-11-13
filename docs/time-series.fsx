@@ -52,11 +52,10 @@ Time-series may be created from date-time observations using built-in .NET
 types and the `TimeSeries.fromNeoObservations` function:
 *)
 
-let someObservations = [
-    2.1, DateTime(2020, 03, 21)
-    5.4, DateTime(2020, 03, 22)
-    -54.2, DateTime(2020, 03, 23)
-]
+let someObservations =
+    [ 2.1, DateTime(2020, 03, 21)
+      5.4, DateTime(2020, 03, 22)
+      -54.2, DateTime(2020, 03, 23) ]
 
 let ts = TimeSeries.fromNeoObservations someObservations
 (*** include-value: ts ***)
@@ -68,11 +67,11 @@ As an example of an alternative date format, uncalibrated radiocarbon dates
 may be used as follows:
 *)
 
-let someDatedValues = [
-    1654, DatingMethods.Radiocarbon 345<``BP (radiocarbon)``>
-    982, DatingMethods.Radiocarbon -2<``BP (radiocarbon)``>
-    5433, DatingMethods.Radiocarbon 1023<``BP (radiocarbon)``>
-]
+let someDatedValues =
+    [ 1654, DatingMethods.Radiocarbon 345<``BP (radiocarbon)``>
+      982, DatingMethods.Radiocarbon -2<``BP (radiocarbon)``>
+      5433, DatingMethods.Radiocarbon 1023<``BP (radiocarbon)``> ]
 
-let tsRadiocarbon = TimeSeries.fromObservations DateMode.radiocarbonDateMode someDatedValues
+let tsRadiocarbon =
+    TimeSeries.fromObservations DateMode.radiocarbonDateMode someDatedValues
 (*** include-value: tsRadiocarbon ***)

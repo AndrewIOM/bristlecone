@@ -43,7 +43,8 @@ let myCustomOptimiser: EstimationEngine.Optimisation.Optimiser =
     EstimationEngine.Optimisation.InDetachedSpace
     <| fun writeOut n domain f -> invalidOp "Doesn't actually do anything!"
 
-Bristlecone.mkContinuous () |> Bristlecone.withCustomOptimisation myCustomOptimiser
+Bristlecone.mkContinuous ()
+|> Bristlecone.withCustomOptimisation myCustomOptimiser
 
 (**
 ## Included optimisation methods
@@ -148,7 +149,9 @@ MonteCarlo.randomWalk []
 // Random walk with 50,000 iterations of tuning, during
 // which the individual parameter jump sizes are scaled
 // every 500 iterations.
-[ { Method = MonteCarlo.TuneMethod.Scale; Frequency = 500<iteration>; EndCondition = EndConditions.atIteration 50000<iteration> } ]
+[ { Method = MonteCarlo.TuneMethod.Scale
+    Frequency = 500<iteration>
+    EndCondition = EndConditions.atIteration 50000<iteration> } ]
 |> MonteCarlo.randomWalk
 
 

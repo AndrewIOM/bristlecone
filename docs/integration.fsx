@@ -49,12 +49,10 @@ function to match the `EstimationEngine.Integration.IntegrationRoutine` type sig
 open Bristlecone
 
 let myCustomIntegrator: EstimationEngine.Integration.IntegrationRoutine =
-    fun tInitial tEnd tStep initialConditions rhs ->
-        invalidOp "Doesn't actually do anything!"
+    fun tInitial tEnd tStep initialConditions rhs -> invalidOp "Doesn't actually do anything!"
 
 let engine () =
-    Bristlecone.mkContinuous ()
-    |> Bristlecone.withContinuousTime myCustomIntegrator
+    Bristlecone.mkContinuous () |> Bristlecone.withContinuousTime myCustomIntegrator
 
 (**
 
