@@ -1,21 +1,22 @@
 <img style="width:27em" src="docs/img/logo-wide.png" alt="Bristlecone logo" />
 
-An F# library for model-fitting model-selection (MFMS) of ecological models to observational data. The library was developed for tree ring analysis, but can be used for other time-series modelling problems.
-
 ---
 
-## Builds
+![NuGet Downloads](https://img.shields.io/nuget/dt/Bristlecone?labelColor=%23E8E8E8&color=%238D6F64)
+[![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/AndrewIOM/Bristlecone/push.yml?logo=github&label=FAKE%20build%20and%20test)](https://github.com/AndrewIOM/bristlecone/actions/workflows/push.yml)
 
-GitHub Actions |
-:---: |
-[![Github Actions](https://github.com/AndrewIOM/bristlecone/actions/workflows/push.yml/badge.svg?branch=master)](https://github.com/AndrewIOM/bristlecone/actions/workflows/push.yml) |
+An F# library for model-fitting model-selection (MFMS) of time-series models to observational data. Included is expressive modelling system for authoring models, which includes full F# units of measure support.
+
+Bristlecone contains specialist functionality for fitting (long-term) ecological models. The library was developed for use in dendroecology and palaeoecology, but can be used for other time-series modelling problems.
+
+---
 
 ## NuGet 
 
 Package | Stable | Prerelease
 --- | --- | ---
-Bristlecone | [![NuGet Badge](https://buildstats.info/nuget/bristlecone)](https://www.nuget.org/packages/bristlecone/) | [![NuGet Badge](https://buildstats.info/nuget/bristlecone?includePreReleases=true)](https://www.nuget.org/packages/bristlecone/)
-Bristlecone.Dendro | [![NuGet Badge](https://buildstats.info/nuget/bristlecone.dendro)](https://www.nuget.org/packages/bristlecone.dendro/) | [![NuGet Badge](https://buildstats.info/nuget/bristlecone.dendro?includePreReleases=true)](https://www.nuget.org/packages/bristlecone.dendro/)
+Bristlecone | [![NuGet Version](https://img.shields.io/nuget/v/Bristlecone)](https://www.nuget.org/packages/bristlecone/) | [![NuGet Version](https://img.shields.io/nuget/vpre/Bristlecone)](https://www.nuget.org/packages/bristlecone/)
+Bristlecone.Dendro | [![NuGet Version](https://img.shields.io/nuget/v/Bristlecone.Dendro)](https://www.nuget.org/packages/bristlecone.dendro/) | [![NuGet Version](https://img.shields.io/nuget/vpre/Bristlecone.Dendro)](https://www.nuget.org/packages/bristlecone.dendro/absoluteLatest)
 
 ---
 
@@ -26,7 +27,7 @@ Getting Started
 
 To get started with Bristlecone, see [the documentation website with tutorials, examples and API specification](https://andrewiom.github.io/bristlecone).
 
-In addition, in the `samples` folder there are example scripts for simple to more complex models.
+Some examples are provided on the docs page, with optional downloadable worked notebooks.
 
 #### Benchmarks
 
@@ -36,12 +37,18 @@ A suite of benchmarks - covering optimisation methods and ecological time-series
 Developers: Build Instructions
 ----------------
 
-Bristlecone uses [FAKE](https://fake.build) for building, testing, documentation, and publishing. After cloning the repo, run ``dotnet tool restore`` then either ``dotnet fake build -t Build`` to compile only, or ``dotnet fake build -t All`` to build, test, and compile documentation.
+Bristlecone requires the .NET 10 SDK, and uses [FAKE](https://fake.build) for building, testing, documentation, and publishing. 
+
+Simple building and testing can be done using ``dotnet build`` or ``dotnet run test/Bristlecone.Tests/Bristlecone.Tests.fsproj`` respectively in the root directory. Docs can be tested by first calling ``dotnet tool restore`` then
+``dotnet fsdocs watch --eval``, which serves them on a Suave server.
+
+The full build process can be run using either ``dotnet fsi build.fsx``, which uses FAKE to run all build steps,
+tests, and compile docs.
 
 Contribute
 ----------------
 
-Contributions, issues, and pull-requests are most welcome.
+Contributions, issues, and pull-requests are welcome.
 
 
 *Logo based on [Free Vector Art by www.vecteezy.com](https://vecteezy.com)*
