@@ -12,9 +12,10 @@ index: 1
 
 (*** condition: prepare ***)
 #nowarn "211"
+#r "nuget: DiffSharp-cpu, v=1.0.7"
 #r "nuget: MathNet.Numerics.FSharp,5.0.0"
-#r "nuget: FSharp.Data,6.3"
-#r "../../src/Bristlecone/bin/Debug/net5.0/Bristlecone.dll"
+#r "nuget: FSharp.Data,6.6"
+#r "../../src/Bristlecone/bin/Debug/net10.0/Bristlecone.dll"
 
 #r "nuget: Plotly.NET, 4.2.0"
 
@@ -33,6 +34,7 @@ an F# script file (.fsx):
 
 open Bristlecone // Opens Bristlecone core library and estimation engine
 open Bristlecone.Language // Open the language for writing Bristlecone models
+open Bristlecone.Time
 
 (**### Defining the ecological model
 
@@ -52,26 +54,42 @@ three parameters that are to be estimated alongside the deterministic model: the
 in lynx data, the variability in hare data, and their covariance.
 *)
 
+[<Measure>] type prey
+[<Measure>] type predator
+[<Measure>] type km
+[<Measure>] type area = km^2
+
 let ``predator-prey`` =
 
-    let ``dh/dt`` = Parameter "α" * This - Parameter "β" * This * Environment "lynx"
-    let ``dl/dt`` = -Parameter "δ" * This + Parameter "γ" * Environment "hare" * This
+    // States
+    let H = state<prey / area> "hare"
+    let L = state<predator / area> "lynx"
+
+    // Parameters
+    let α = parameter "α" notNegative 0.5< / year> 1.5< / year> // Maximum prey per capita growth rate
+    let β = parameter "β" notNegative 0.01<1 / (predator / area * year)> 0.05<1 / (predator / area * year)> // Predation rate
+    let δ = parameter "δ" notNegative 0.5< / year> 1.0< / year> // Natural death rate of lynx in the absence of food
+    let γ = parameter "γ" notNegative 0.01<1 / (prey / area * year)> 0.1<1 / (prey / area * year)> // Predator growth efficiency
+
+    let ``dH/dt``: ModelExpression<(prey / area) / year> =
+        P α * This<prey / area> - P β * This<prey / area> * State L
+
+    let ``dL/dt``: ModelExpression<(predator / area) / year> =
+        P γ * State H * This<predator / area> - P δ * This<predator / area>
 
     Model.empty
-    |> Model.addEquation "hare" ``dh/dt``
-    |> Model.addEquation "lynx" ``dl/dt``
-
-    |> Model.estimateParameter "α" noConstraints 0.75 1.25 // Natural growth rate of hares in absence of predation
-    |> Model.estimateParameter "β" noConstraints 0.01 0.20 // Death rate per encounter of hares due to predation
-    |> Model.estimateParameter "δ" noConstraints 0.75 1.25 // Natural death rate of lynx in the absence of food
-    |> Model.estimateParameter "γ" noConstraints 0.01 0.20 // Efficiency of turning predated hares into lynx
-
-    |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.bivariateGaussian "hare" "lynx")
-    |> Model.estimateParameter "ρ" noConstraints -0.500 0.500
-    |> Model.estimateParameter "σ[x]" notNegative 0.001 0.100
-    |> Model.estimateParameter "σ[y]" notNegative 0.001 0.100
-
+    |> Model.addRateEquation H ``dH/dt``
+    |> Model.addRateEquation L ``dL/dt``
+    |> Model.estimateParameter α
+    |> Model.estimateParameter β
+    |> Model.estimateParameter δ
+    |> Model.estimateParameter γ
+    |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.bivariateGaussian (Require.state H) (Require.state L))
+    |> Model.estimateParameterOld "ρ" noConstraints -0.500 0.500
+    |> Model.estimateParameterOld "σ[x]" notNegative 0.001 0.100
+    |> Model.estimateParameterOld "σ[y]" notNegative 0.001 0.100
     |> Model.compile
+
 
 (**
 ### Setting up the *Bristlecone Engine*
@@ -82,17 +100,13 @@ This engine uses a gradident descent method (Nelder Mead simplex), and a basic
 Runge-Kutta 4 integration method provided by MathNet Numerics.
 *)
 
-let engine =
-    Bristlecone.mkContinuous
-    // |> Bristlecone.withCustomOptimisation (Optimisation.Amoeba.swarm 5 20 Optimisation.Amoeba.Solver.Default)
-    |> Bristlecone.withCustomOptimisation (
-        Optimisation.MonteCarlo.Filzbach.filzbach
-            { Optimisation.MonteCarlo.Filzbach.FilzbachSettings<float>.Default with
-                BurnLength = Optimisation.EndConditions.afterIteration 10000 }
-    )
-    |> Bristlecone.withContinuousTime Integration.MathNet.integrate
-    |> Bristlecone.withConditioning Conditioning.RepeatFirstDataPoint
-    |> Bristlecone.withSeed 1000 // We are setting a seed for this example - see below
+let engine: EstimationEngine.EstimationEngine<int<year>,year,1> =
+    Bristlecone.mkContinuous ()
+    |> Bristlecone.withCustomOptimisation ( Optimisation.MonteCarlo.Filzbach.filzbach
+           { Optimisation.MonteCarlo.Filzbach.FilzbachSettings.Default with BurnLength = Optimisation.EndConditions.atIteration 5000<iteration> })
+    |> Bristlecone.withConditioning Conditioning.NoConditioning
+    |> Bristlecone.withSeed 1500 // We are setting a seed for this example - see below
+    |> Bristlecone.withTimeConversion (fun (ts: int<Time.year>) -> float ts * 1.<Time.year>)
 
 (**
 *Note. We have set a seed for random number generation for this worked example. This ensures that the results are the same each time this documentation is generated.*
@@ -117,7 +131,7 @@ but here we will configure some additional settings:
 *)
 
 let testSettings =
-    Test.create
+    Test.annualSettings
     |> Test.addStartValues [ "hare", 50.; "lynx", 75. ]
     |> Test.addNoise (Test.Noise.tryAddNormal "σ[y]" "lynx")
     |> Test.addNoise (Test.Noise.tryAddNormal "σ[x]" "hare")
@@ -127,7 +141,7 @@ let testSettings =
           Test.GenerationRules.alwaysLessThan 100000. "hare"
           Test.GenerationRules.alwaysMoreThan 10. "hare" ]
     |> Test.withTimeSeriesLength 30
-    |> Test.endWhen (Optimisation.EndConditions.afterIteration 100)
+    |> Test.endWhen (Optimisation.EndConditions.Profiles.mcmc 5000<iteration> ignore)
 
 (**
 In our `TestSettings`, we have specified the initial time point (t = 0)
@@ -142,7 +156,17 @@ let testResult = ``predator-prey`` |> Bristlecone.tryTestModel engine testSettin
 (*** include-output ***)
 
 (**
-We can plot the test results to check the fit.
+
+In the example using this seed, the ecological parameter set under test is:
+> 1.4845 (α), 0.0377 (β), 0.0190 (γ), 0.9856 (δ) [ noise = 0.2135 (ρ), 0.0297 (σ_x), 0.0152 (σ_y) ]
+Here, the sigma values represent the *standard deviation* of the noise around hare and lynx respectively.
+
+From the test results, the key questions is whether the ecological dynamics were recovered
+with the correct parameters. To find this:
+
+* Do the trajectories match? Compare difference between predicted and observed series.
+* Were parameters recovered?
+     
 *)
 
 (*** hide ***)
@@ -150,7 +174,7 @@ module Graphing =
 
     open Plotly.NET
 
-    let pairedFits (series: Map<string, ModelSystem.FitSeries<_, _, _>>) =
+    let pairedFits (series: Map<string, ModelSystem.FitSeries<DatingMethods.Annual,int<year>,int<year>>>) =
         match testResult with
         | Ok r ->
             series
@@ -160,7 +184,7 @@ module Graphing =
                     |> Bristlecone.Time.TimeSeries.toObservations
                     |> Seq.collect (fun (d, v) -> [ v, "Modelled", d.Fit; v, "Observed", d.Obs ])
                     |> Seq.groupBy (fun (_, x, _) -> x)
-                    |> Seq.map (fun (_, s) -> s |> Seq.map (fun (x, _, y) -> x, y))
+                    |> Seq.map (fun (_, s) -> s |> Seq.map (fun (x, _, y) -> x.Value, y))
                     |> Seq.toList
                 // Each chart has the modelled and observed series
                 Chart.combine
@@ -177,7 +201,7 @@ module Graphing =
                 x
         | Error e -> sprintf "Cannot display data, as model fit did not run successfully (%s)" e
 
-    let pairedFitsForTestResult (testResult: Result<Bristlecone.Test.TestResult<_, _, _>, string>) =
+    let pairedFitsForTestResult (testResult: Result<Bristlecone.Test.TestResult<DatingMethods.Annual,int<year>,int<year>,'u>, string>) =
         match testResult with
         | Ok r -> pairedFits r.Series
         | Error e -> sprintf "Cannot display data, as model fit did not run successfully (%s)" e
@@ -223,8 +247,8 @@ type PopulationData = FSharp.Data.CsvProvider<"data/lynx-hare.csv", ResolutionFo
 let data =
     let csv = PopulationData.Load(__SOURCE_DIRECTORY__ + "/data/lynx-hare.csv")
 
-    [ (code "hare").Value, Time.TimeSeries.fromNeoObservations (csv.Rows |> Seq.map (fun r -> float r.Hare, r.Year))
-      (code "lynx").Value, Time.TimeSeries.fromNeoObservations (csv.Rows |> Seq.map (fun r -> float r.Lynx, r.Year)) ]
+    [ (code "hare").Value, TimeSeries.fromObservations DateMode.annualDateMode (csv.Rows |> Seq.map (fun r -> float r.Hare, r.Year * 1<year> |> DatingMethods.Annual))
+      (code "lynx").Value, TimeSeries.fromObservations DateMode.annualDateMode (csv.Rows |> Seq.map (fun r -> float r.Lynx, r.Year * 1<year> |> DatingMethods.Annual)) ]
     |> Map.ofList
 
 (*** include-value: data ***)
@@ -234,7 +258,7 @@ Once the data are in Bristlecone `TimeSeries` we can run `Bristlecone.fit`, whic
 the main fitting function of the Bristlecone library.
 *)
 
-let endCondition = Optimisation.EndConditions.afterIteration 10000
+let endCondition = Optimisation.EndConditions.Profiles.mcmc 5000<iteration> engine.LogTo
 
 let result = ``predator-prey`` |> Bristlecone.tryFit engine endCondition data
 
@@ -261,11 +285,22 @@ Graphing.pairedFitsForResult result
 
 (**
 
-*NB: this documentation is auto-generated so we cannot comment directly on the randomly generated scenario.*
-
 Next, we can examine the traces to see how parameter values evolved over the course of
 the optimisation routine:
 *)
 
 Graphing.parameterTrace result
 (*** include-it-raw ***)
+
+(**
+
+For the pelt dataset, we know from other sources that the estimated
+parameters should be around this range:
+* Prey growth rate (α): around 0.9–1.1 per year.
+* Predation rate (β): around 0.02–0.03 per predator per hare per year.
+* Predator efficiency (γ): ~0.01–0.02, reflecting conversion of prey into predator growth.
+* Predator death rate (δ): ~0.8–0.9 per year.
+
+
+
+*)

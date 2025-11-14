@@ -12,7 +12,7 @@ index: 1
 
 (*** condition: prepare ***)
 #nowarn "211"
-#r "../src/Bristlecone/bin/Debug/net5.0/Bristlecone.dll"
+#r "../src/Bristlecone/bin/Debug/net10.0/Bristlecone.dll"
 #r "nuget: MathNet.Numerics.FSharp,5.0.0"
 (*** condition: fsx ***)
 #if FSX
@@ -68,7 +68,7 @@ let hypothesis =
     |> Model.estimateParameter η
     |> Model.estimateParameter β
     |> Model.estimateParameter κ
-    |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ mass.Code ])
+    |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ Require.state mass ])
     |> Model.compile
 
 let engine =

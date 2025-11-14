@@ -1,4 +1,4 @@
-#### 3.0.0 - UNRELEASED
+#### 3.0.0-beta1 - 2025-11-13
 * FEATURE: Whole library and language is Tensor-based using DiffSharp.
 * FEATURE: Units of measure in language (model definitions).
 * FEATURE: Inverse functions in language using Newton–Raphson or bisection.
