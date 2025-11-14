@@ -130,6 +130,7 @@ module Timeseries =
             |> Model.estimateParameter δ // Natural death rate of lynx in the absence of food
             |> Model.estimateParameter γ // Efficiency of turning predated hares into lynx
 
+        let ecologicalParameters = [ "α", "β", "δ", "γ" ]
 
         let ``predator-prey`` () =
             predatorPreyBase

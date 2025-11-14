@@ -63,8 +63,8 @@ module TestSuite =
             [ 1.3491; 1.3491 ]
             [ -1.3491; 1.3491 ]
             [ -1.3491; -1.3491 ] ]
-          "Dropwave", dropWave |> twoDim, [ (-512., 512.); (-512., 512.) ], -1., [ [ 0.; 0. ] ]
-          "Eggholder", eggHolder |> twoDim, [ (-512., 512.) ], -959.6406627, [ [ 512.; 404.2319 ] ]
+          "Dropwave", dropWave |> twoDim, [ (-5.12, 5.12); (-5.12, 5.12) ], -1., [ [ 0.; 0. ] ]
+          "Eggholder", eggHolder |> twoDim, [ (-512., 512.); (-512., 512.) ], -959.6406627, [ [ 512.; 404.2319 ] ]
           "Gramarcy-Lee", gramacyLee |> oneDim, [ (0.5, 2.5) ], -0.869011134989500, [ [ 0.548563444114526 ] ]
           "Langermann", langermann |> twoDim, [ (0., 10.); (0., 10.) ], -5.1621259, [ [ 2.00299219; 1.006096 ] ] ]
 
@@ -101,7 +101,7 @@ let runReplicated nTimes work =
     [| 1..nTimes |] |> Array.Parallel.map (fun _ -> measureTime (fun () -> work ()))
 
 let logger = Logging.ConsoleTable.logger 1000<iteration>
-let endCondition = EndConditions.Profiles.mcmc 100000<iteration> logger
+let endCondition = EndConditions.atIteration 10000<iteration> // EndConditions.Profiles.mcmc 10000<iteration> logger
 let accuracy = { absolute = 1e-3; relative = 1e-2 }
 
 type BenchmarkResult =
@@ -301,7 +301,16 @@ module Metrics =
 
 module TimeSeriesTests =
 
-    let settings = Test.annualSettings |> Test.endWhen endCondition
+    let settings =
+        Test.annualSettings
+        |> Test.addNoise (Test.Noise.tryAddNormal "σ[y]" "predator")
+        |> Test.addNoise (Test.Noise.tryAddNormal "σ[x]" "prey")
+        |> Test.addGenerationRules
+            [ Test.GenerationRules.alwaysLessThan 100000. "predator"
+              Test.GenerationRules.alwaysMoreThan 10. "predator"
+              Test.GenerationRules.alwaysLessThan 100000. "prey"
+              Test.GenerationRules.alwaysMoreThan 10. "prey" ]
+        |> Test.withTimeSeriesLength 30
 
     /// An engine that uses annual-based data in an
     /// annual-based model.
@@ -333,7 +342,7 @@ let annealSettings =
         AnnealStepLength = fun x -> EndConditions.atIteration 10000<iteration> x }
 
 let optimFunctions =
-    [ "amoeba single", Amoeba.single Amoeba.Solver.Default
+    [ //"amoeba single", Amoeba.single Amoeba.Solver.Default
     //   "amoeba swarm", Amoeba.swarm 5 20 Amoeba.Solver.Default
       //   "anneal classic", MonteCarlo.SimulatedAnnealing.classicalSimulatedAnnealing 0.01<``optim-space``> false annealSettings
     //   "anneal cauchy", MonteCarlo.SimulatedAnnealing.fastSimulatedAnnealing 0.01<``optim-space``> false annealSettings
@@ -342,7 +351,7 @@ let optimFunctions =
           { TuneAfterChanges = 10000
             MaxScaleChange = 0.5
             MinScaleChange = 0.5
-            BurnLength = EndConditions.atIteration 10000<iteration> }
+            BurnLength = EndConditions.atIteration 100000<iteration> }
     //   "automatic MCMC", MonteCarlo.``Automatic (Adaptive Diagnostics)``
       //   "metropolis-gibbs", MonteCarlo.``Metropolis-within Gibbs``
     //   "adaptive metropolis", MonteCarlo.adaptiveMetropolis 0.250 500<iteration>
@@ -355,10 +364,10 @@ let optimFunctions =
     ]
 
 let timeModels () =
-    [ "predator-prey", TestFunctions.Timeseries.PredatorPrey.``predator-prey`` (), [ "predator", 1.0; "prey", 1.0 ]
+    [ //"predator-prey", TestFunctions.Timeseries.PredatorPrey.``predator-prey`` (), [ "predator", 1.0; "prey", 1.0 ]
       "predator-prey (noisy)",
       TestFunctions.Timeseries.PredatorPrey.``predator-prey [with noise]`` (),
-      [ "predator", 1.0; "prey", 1.0 ] ]
+      [ "predator", 75.; "prey", 50. ] ]
 
 module Output =
 

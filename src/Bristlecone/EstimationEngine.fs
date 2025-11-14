@@ -120,7 +120,6 @@ module EstimationEngine =
     /// The likelihood at a particular place in
     /// optimisation space.
     type Solution = float<``-logL``> * Point
-    // type Solution = float<``-logL``> * float[]
 
     /// An objective function that can be optimised
     /// within an optimisation routine.

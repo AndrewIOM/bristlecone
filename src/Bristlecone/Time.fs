@@ -940,7 +940,7 @@ module TimeIndex =
         | Interpolate of ((float<``time index``> * 'T) -> (float<``time index``> * 'T) -> float<``time index``> -> 'T)
         | Exact
 
-    /// <summary>Index a single time series in accordance with the baseline 0<``time index``> set as
+    /// <summary>Index a single time series in accordance with the baseline 0 (time index) set as
     /// the specified t0 date.</summary>
     /// <remarks>The temporal index 'time index' values will correspond to the specified
     /// target resolution. For example, if a resolution of two-yearly is specified, an
