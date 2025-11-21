@@ -11,6 +11,8 @@ module internal Units =
     let removeUnitFromInt (v: int<_>) = int v
     let removeUnitFromFloat (v: float<_>) = float v
 
+    let retype (v: float<'u1>) : float<'u2> = v |> removeUnitFromFloat |> LanguagePrimitives.FloatWithMeasure<'u2>
+
     let floatToInt (x: float<'u>) : int<'u> =
         x |> int |> LanguagePrimitives.Int32WithMeasure
 

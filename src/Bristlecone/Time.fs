@@ -242,49 +242,61 @@ module DatingMethods =
 
     /// Converts 'old years' (i.e. with 365 days per year) into
     /// a temporal resolution.
-    let internal oldYearsToResolution fixedEpoch =
+    let internal oldYearsToResolution (fixedEpoch: int<'u>) =
         Resolution.FixedTemporalResolution.Years(
             PositiveInt.create ((fixedEpoch |> Units.removeUnitFromInt) * 1<year>)
             |> Option.get
         )
 
+    let internal oldYearsToResolutionFloat (fixedEpoch: float<'u>) =
+        if Units.round fixedEpoch = fixedEpoch
+        then
+            Resolution.FixedTemporalResolution.Years(
+                PositiveInt.create (fixedEpoch |> Units.retype |> Units.floatToInt)
+                |> Option.get )
+        else failwith "Not implemented"
+
+
     /// <summary>Represents a date made by radiocarbon measurement</summary>
-    type Radiocarbon =
-        | Radiocarbon of int<``BP (radiocarbon)``>
+    type Radiocarbon<[<Measure>] 'u> =
+        | Radiocarbon of float<'u>
 
         static member Unwrap(Radiocarbon bp) = bp
 
-        member this.Value = Radiocarbon.Unwrap this
+        member this.Value = Radiocarbon.Unwrap<_> this
 
         static member (-)(e1, e2) =
-            (e1 |> Radiocarbon.Unwrap) - (e2 |> Radiocarbon.Unwrap)
+            (e1 |> Radiocarbon.Unwrap<_>) - (e2 |> Radiocarbon.Unwrap<_>)
 
         static member (+)(e1, e2) =
-            (e1 |> Radiocarbon.Unwrap) + e2 |> Radiocarbon
+            (e1 |> Radiocarbon.Unwrap<_>) + e2 |> Radiocarbon
 
         static member AddYears date (years: int<year>) =
             date
-            |> Radiocarbon.Unwrap
-            |> fun date -> date - (years |> Units.removeUnitFromInt |> (*) 1<``BP (radiocarbon)``>)
+            |> Radiocarbon.Unwrap<_>
+            |> fun date -> date - (years |> Units.removeUnitFromInt |> float |> LanguagePrimitives.FloatWithMeasure<'u>)
             |> Radiocarbon
 
         static member TotalYearsElapsed d1 d2 =
             if d2 > d1 then
-                Radiocarbon.Unwrap d2 - Radiocarbon.Unwrap d1
+                Radiocarbon.Unwrap<_> d2 - Radiocarbon.Unwrap<_> d1
             else
-                Radiocarbon.Unwrap d1 - Radiocarbon.Unwrap d2
+                Radiocarbon.Unwrap<_> d1 - Radiocarbon.Unwrap<_> d2
 
         static member FractionalDifference isSigned d1 d2 =
             let d1, d2 = if d1 < d2 || isSigned then d1, d2 else d2, d1
 
             let yearFraction =
-                Radiocarbon.Unwrap d2 - Radiocarbon.Unwrap d1 |> float |> (*) 1.<year>
+                Radiocarbon.Unwrap<_> d2 - Radiocarbon.Unwrap<_> d1 |> float |> (*) 1.<year>
 
             { YearFraction = yearFraction
               MonthFraction = convertYearsToMonths yearFraction
               DayFraction = yearFraction * daysPerYearInOldDates
               RealDifference = d2 - d1
               Ticks = 0.<ticks> }
+
+    type RadiocarbonUncal = Radiocarbon<``BP (radiocarbon)``>
+    type RadiocarbonCal = Radiocarbon<``cal yr BP``>
 
     type Annual =
         | Annual of int<year>
@@ -427,30 +439,61 @@ module DateMode =
           Divide = fun ts1 ts2 -> ts1 / ts2 |> float
           Minus = fun d1 d2 -> d1 - d2 }
 
-    let radiocarbonDateMode: DateMode<Radiocarbon, int<``BP (radiocarbon)``>, int<``BP (radiocarbon)``>> =
+    let radiocarbonDateMode: DateMode<RadiocarbonUncal, float<``BP (radiocarbon)``>, float<``BP (radiocarbon)``>> =
         { Resolution = Year
-          GetYear = fun d -> d |> Radiocarbon.Unwrap
+          GetYear = fun d -> d |> Radiocarbon.Unwrap<_>
           AddYears = Radiocarbon.AddYears
           AddMonths = fun d months -> d
           AddDays = fun d days -> d
-          AddTime = fun d timeSpan -> d + timeSpan
-          SubtractTime = fun d timeSpan -> d + (timeSpan * -1)
-          Difference = fun d1 d2 -> Radiocarbon.FractionalDifference false d1 d2
-          SignedDifference = fun d1 d2 -> Radiocarbon.FractionalDifference true d1 d2
+          AddTime = fun d timeSpan -> d + (timeSpan * -1.)
+          SubtractTime = fun d timeSpan -> d + timeSpan
+          Difference = fun d1 d2 -> Radiocarbon.FractionalDifference<_> false d1 d2
+          SignedDifference = fun d1 d2 -> Radiocarbon.FractionalDifference<_> true d1 d2
           SortOldestFirst = fun d1 d2 -> if d1 > d2 then -1 else 1
-          ZeroSpan = 0<``BP (radiocarbon)``>
+          ZeroSpan = 0.<``BP (radiocarbon)``>
           TotalDays =
             fun years ->
-                (years |> Units.removeUnitFromInt |> float |> LanguagePrimitives.FloatWithMeasure)
+                (years |> Units.removeUnitFromFloat |> float |> LanguagePrimitives.FloatWithMeasure)
                 * daysPerYearInOldDates
-          SpanToResolution = fun epoch -> oldYearsToResolution epoch
+          SpanToResolution = fun epoch -> oldYearsToResolutionFloat epoch
           ResolutionToSpan =
             function
             | Resolution.FixedTemporalResolution.Years y ->
-                y.Value |> Units.removeUnitFromInt |> (*) 1<``BP (radiocarbon)``>
+                y.Value |> float |> (*) 1.<``BP (radiocarbon)``>
             | Resolution.FixedTemporalResolution.Months _
             | Resolution.FixedTemporalResolution.Days _ ->
                 invalidOp "Radiocarbon date mode does not support sub-annual fixed resolutions."
+          Divide = fun ts1 ts2 -> ts1 / ts2 |> float
+          Minus = fun d1 d2 -> d1 - d2 }
+
+    let radiocarbonCalDateMode: DateMode<RadiocarbonCal, float<``cal yr BP``>, float<``cal yr BP``>> =
+        { Resolution = Year
+          GetYear = fun d -> d |> Radiocarbon.Unwrap<_>
+          AddYears = Radiocarbon.AddYears
+          AddMonths = fun d months -> d
+          AddDays = fun d days -> d
+          AddTime = fun d timeSpan -> d + (timeSpan * -1.)
+          SubtractTime = fun d timeSpan -> d + timeSpan
+          Difference = fun d1 d2 -> Radiocarbon.FractionalDifference<_> false d1 d2
+          SignedDifference = fun d1 d2 -> Radiocarbon.FractionalDifference<_> true d1 d2
+          SortOldestFirst = fun d1 d2 -> if d1 > d2 then -1 else 1
+          ZeroSpan = 0.<``cal yr BP``>
+          TotalDays =
+            fun years ->
+                (years |> Units.removeUnitFromFloat |> LanguagePrimitives.FloatWithMeasure)
+                * daysPerYearInOldDates
+          SpanToResolution = fun epoch -> oldYearsToResolutionFloat epoch
+          ResolutionToSpan =
+            function
+            | Resolution.FixedTemporalResolution.Years y ->
+                y.Value |> float |> (*) 1.<``cal yr BP``>
+            | Resolution.FixedTemporalResolution.Months m ->
+                let yearFrac = Units.intToFloat m.Value / (12.<month>/1.<year>)
+                yearFrac |> float |> (*) 1.<``cal yr BP``>
+            | Resolution.FixedTemporalResolution.Days d ->
+                let yearFrac = Units.intToFloat d.Value / daysPerYearInOldDates
+                yearFrac |> float |> (*) 1.<``cal yr BP``>
+            | Resolution.FixedTemporalResolution.CustomEpoch e -> e
           Divide = fun ts1 ts2 -> ts1 / ts2 |> float
           Minus = fun d1 d2 -> d1 - d2 }
 
@@ -556,6 +599,9 @@ module TimeSeries =
     /// <returns>A time-series of BP date observations ordered oldest to newest.</returns>
     let fromRadiocarbonObservations dataset =
         fromObservations DateMode.radiocarbonDateMode dataset
+
+    let fromCalibratedRadiocarbonObservations dataset =
+        fromObservations DateMode.radiocarbonCalDateMode dataset
 
     /// <summary>Create a time-series where time is represented by standard
     /// (modern) calendars and dates and times through the built-in .NET
@@ -1095,6 +1141,9 @@ module TimeFrame =
 
     let filter keys (TimeFrame frame) =
         frame |> Map.filter (fun k _ -> keys |> Seq.contains k) |> TimeFrame
+
+    let filterBy fn (TimeFrame frame) =
+        frame |> Map.filter fn |> TimeFrame
 
     /// Get the initial value of each time-series as a coded map.
     let t0 (TimeFrame frame: TimeFrame<'T, 'date, 'timeunit, 'timespan>) =

@@ -189,6 +189,17 @@ module Bristlecone =
                 expectedKeys
                 (Map.keys actualMap)
 
+    let internal validateConditionedStartData (conditioned:Solver.Conditioning.Resolved<_,_,_>) (initialisers:CodedMap<Initialiser<state>>) equationKeys =
+        let conditionedStates =
+            Seq.concat [ Map.keys conditioned.StatesHiddenForSolver; conditioned.StatesObservedForSolver.Keys; initialisers.Keys ]
+        let missing = Set.difference (Set.ofSeq equationKeys) (Set.ofSeq conditionedStates)
+        if missing.IsEmpty then Ok ()
+        else
+            Error
+            <| sprintf
+                "Some states were not conditioned at t0: %A. If these are hidden states, a custom start may be required."
+                missing
+
     /// <summary>
     /// Fit a time-series model to data.
     ///
@@ -265,13 +276,12 @@ module Bristlecone =
                     observedOnCommonTimeline
                     exogenousOnCommonTimeline
                     equationKeys
+                    (Map.keys model.Measures)
 
             conditioned.Log |> Option.iter (GeneralEvent >> engine.LogTo)
 
-            engine.LogTo
-            <| GeneralEvent(
-                sprintf "Conditioned state at t0 is %A; hidden t0 = %A" conditioned.T0 conditioned.StatesHiddenForSolver
-            )
+            // Check that conditioned contains t0 all required states
+            do! validateConditionedStartData conditioned model.Initialisers equationKeys
 
             engine.LogTo
             <| GeneralEvent(
@@ -316,7 +326,9 @@ module Bristlecone =
                     engine.TimeHandling
                     stepType
                     conditioned.StatesObservedForSolver
+                    conditioned.MeasuresForSolver
                     conditioned.StatesHiddenForSolver
+                    model.Initialisers
                     conditioned.ExogenousForSolver
                     (Fit.interpolationFor engine)
 

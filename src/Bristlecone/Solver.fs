@@ -155,7 +155,7 @@ module Solver =
                 (eqs: CodedMap<StateEquation<``time index``>>)
                 (timeline: float<``time index``>[])
                 (envIndex: CodedMap<TimeIndex.TimeIndex<float<environment>, _, _, _>>)
-                baselineValue
+                (baselineValueFn: TypedTensor<Vector, ``parameter``> -> CodedMap<TypedTensor<Scalar, state>>)
                 point
                 =
                 let envStream =
@@ -166,13 +166,13 @@ module Solver =
                             let v = idxTI.Item ti
                             Typed.ofScalar v))
 
-                iterateDifference eqs timeline envStream baselineValue point |> Paired
+                iterateDifference eqs timeline envStream (baselineValueFn point) point |> Paired
 
             let variableRunner
                 (eqs: CodedMap<StateEquation<``time index``>>)
                 (timeline: float<``time index``>[]) // irregular observation times
                 (envIndex: CodedMap<TimeIndex.TimeIndex<float<environment>, _, _, _>>)
-                t0
+                (t0: TypedTensor<Vector, ``parameter``> -> CodedMap<TypedTensor<Scalar, state>>)
                 point
                 =
 
@@ -186,7 +186,7 @@ module Solver =
                             Typed.ofScalar v))
 
                 // Run the difference equations interval‑by‑interval
-                let outputs = iterateDifference eqs timeline envStream t0 point
+                let outputs = iterateDifference eqs timeline envStream (t0 point) point
 
                 // Return as Unpaired (times + values)
                 Unpaired(
@@ -206,27 +206,22 @@ module Solver =
                 (integrator: Integration.IntegrationRoutine)
                 (times: float<``time index``> array)
                 (forcings: CodedMap<TimeIndex.TimeIndex<float<environment>, _, _, _>>)
-                (initialState: CodedMap<TypedTensor<Scalar, state>>)
+                (initialStateFn: TypedTensor<Vector, ``parameter``> -> CodedMap<TypedTensor<Scalar, state>>)
                 =
-                // TODO Resolve environment vs state conflict in integration maker, to remove below line
-                let t0' =
-                    initialState
-                    |> Map.map (fun _ v -> v.Value |> Tensors.tryAsScalar<environment> |> Option.get)
 
                 let tStart, tEnd = times.[0], times.[times.Length - 1]
 
                 let compiledRhs =
-                    Integration.Base.makeCompiledFunctionForIntegration tStart tEnd 1.<``time index``> t0' forcings eqs
+                    Integration.Base.makeCompiledFunctionForIntegration tStart tEnd 1.<``time index``> forcings initialStateFn eqs
 
                 let integrate =
                     integrator
                         (Typed.ofScalar tStart)
                         (Typed.ofScalar tEnd)
                         (Typed.ofScalar 1.<``time index``>)
-                        initialState
 
                 fun parameters ->
-                    let states = integrate (compiledRhs parameters)
+                    let states = integrate (initialStateFn parameters) (compiledRhs parameters)
                     let statesTailed = states |> Map.map (fun _ v -> v |> Typed.tail)
                     Unpaired(times.[1..] |> Array.toList, statesTailed)
 
@@ -237,31 +232,29 @@ module Solver =
                 (integrator: Integration.IntegrationRoutine)
                 (times: float<``time index``> array)
                 (forcings: CodedMap<TimeIndex.TimeIndex<float<environment>, _, _, _>>)
-                (initialState: CodedMap<TypedTensor<Scalar, state>>)
+                (initialStateFn: TypedTensor<Vector, ``parameter``> -> CodedMap<TypedTensor<Scalar, state>>)
                 =
-                // TODO Currently can't pre-compile RHS as relies on state vector.
-                // In the compileRHS, it takes all of the 'state' and 'environment forcings' current values and combines them into a single vector, which fudges to state. When this is fixed, we can fix this code.
-                // Splitting forcings from state would help for this and fixe above unit mismatch.
                 fun parameters ->
-                    let rec loop acc state i =
+
+                    let initialState = initialStateFn parameters
+
+                    let rec loop acc currentState i =
                         if i >= times.Length then
                             List.rev acc
                         else
                             let tStart, tEnd = times.[i - 1], times.[i]
                             let step = tEnd - tStart
-                            // TODO Resolve environment vs state conflict in integration maker, to remove below line.
-                            let state' = state |> Map.map (fun _ v -> v |> Typed.retype)
 
                             let compiledRhs =
-                                Integration.Base.makeCompiledFunctionForIntegration tStart tEnd step state' forcings eqs
+                                Integration.Base.makeCompiledFunctionForIntegration tStart tEnd step forcings (fun _ -> currentState) eqs
 
                             let integrate =
-                                integrator (Typed.ofScalar tStart) (Typed.ofScalar tEnd) (Typed.ofScalar step) state
+                                integrator (Typed.ofScalar tStart) (Typed.ofScalar tEnd) (Typed.ofScalar step)
 
-                            let newState = integrate (compiledRhs parameters)
+                            let newTrajectory = integrate currentState (compiledRhs parameters)
 
                             let finalState =
-                                newState |> Map.map (fun _ v -> v |> Tensors.Typed.itemAt (Typed.length v - 1))
+                                newTrajectory |> Map.map (fun _ v -> v |> Tensors.Typed.itemAt (Typed.length v - 1))
 
                             loop (finalState :: acc) finalState (i + 1)
 
@@ -348,6 +341,11 @@ module Solver =
 
             timeline |> Array.map (fun idx -> Set.contains idx observedIndices)
 
+        let private stateVariableKeys (models: ModelSystem.ModelForm<'modelTimeUnit>) =
+            match models with
+            | ModelForm.DifferenceEqs eqs -> eqs |> Map.keys
+            | ModelForm.DifferentialEqs eqs -> eqs |> Map.keys
+
         /// Compile a configured solver, automatically selecting the correct runner.
         /// t0 (conditioned or otherwise) is obtained automatically from the dynamic series.
         let compile
@@ -357,7 +355,9 @@ module Solver =
             engineTimeMode
             (stepType: StepType<'date>)
             (observedStates: TimeFrame.TimeFrame<float<state>, 'date, 'timeunit, 'timespan>)
+            (observedMeasuresT0: CodedMap<TypedTensor<Scalar,state>>)
             (hiddenStatesT0: CodedMap<Tensors.TypedTensor<Tensors.Scalar, state>>)
+            (hiddenStatesT0Initialisers: CodedMap<ModelSystem.Initialiser<state>>)
             (environment: TimeFrame.TimeFrame<float<environment>, 'date, 'timeunit, 'timespan> option)
             (interpolationModeFor: ShortCode.ShortCode -> Solver.InterpolationMode)
             : Solver.ConfiguredSolver =
@@ -367,14 +367,37 @@ module Solver =
             let dateMode = headSeries.DateMode
             let startDate = observedStates.StartDate
 
-            let t0 =
+            let observedStatesT0 =
                 observedStates
                 |> TimeFrame.t0
                 |> Map.map (fun k v -> Typed.ofScalar v)
                 |> Map.fold (fun acc k v -> Map.add k v acc) hiddenStatesT0
 
+            let baselineObservables =
+                observedMeasuresT0
+                |> Map.fold (fun acc k v -> Map.add k v acc) hiddenStatesT0
+                |> Map.fold (fun acc k v -> Map.add k v acc) observedStatesT0
+
+            let states = stateVariableKeys modelEquations
+            let t0 parameters =
+                states
+                |> Seq.fold (fun acc k ->
+                    let initVal =
+                        match Map.tryFind k hiddenStatesT0Initialisers with
+                        | Some f -> f parameters Map.empty baselineObservables
+                        | None ->
+                            match Map.tryFind k observedStatesT0 with
+                            | Some v -> v
+                            | None   -> hiddenStatesT0.[k]
+                    Map.add k initVal acc) Map.empty
+
+            if not hiddenStatesT0.IsEmpty || not hiddenStatesT0Initialisers.IsEmpty
+            then
+                logTo <| Logging.GeneralEvent(sprintf "Solver: hidden states are present. Static t0 values are %A; initialisers are %A" baselineObservables.Keys hiddenStatesT0Initialisers.Keys)
+
             // 2. Decide resolutions
             let integrationRes = decideIntegrationResolution observedStates environment
+            logTo <| Logging.GeneralEvent(sprintf "Solver: integration resolution is %A" integrationRes)
 
             // 3. Compute factor and wrap equations
             let factor = computeFactor dataTimeToModelTime dateMode integrationRes
@@ -432,6 +455,8 @@ module Solver =
                             dataTimeToModelTime diff.RealDifference / factor)
                         |> Seq.toArray
 
+                    logTo <| Logging.GeneralEvent(sprintf "Variable timeline is %A" obsTimes)
+
                     match modelInTI, engineTimeMode with
                     | DifferentialEqs eqs, Continuous i ->
                         SolverRunners.DifferentialTime.variableRunner eqs i obsTimes envIndex t0
@@ -441,7 +466,7 @@ module Solver =
                     | _ -> invalidOp "Mismatch between time-mode and differential/difference equation form."
 
             // 6. Return configured solver
-            fun point -> point |> runner |> maskOutput, t0
+            fun point -> point |> runner |> maskOutput, t0 point
 
 
     /// Solver conditioning enables adding synthetic initial time-points
@@ -449,9 +474,9 @@ module Solver =
     module Conditioning =
 
         type Resolved<'date, 'timeunit, 'timespan> =
-            { T0: CodedMap<TypedTensor<Scalar, state>>
-              StatesHiddenForSolver: CodedMap<TypedTensor<Scalar, state>>
+            { StatesHiddenForSolver: CodedMap<TypedTensor<Scalar, state>>
               StatesObservedForSolver: TimeFrame.TimeFrame<float<state>, 'date, 'timeunit, 'timespan>
+              MeasuresForSolver: CodedMap<TypedTensor<Scalar,state>>
               ExogenousForSolver: option<TimeFrame.TimeFrame<float<environment>, 'date, 'timeunit, 'timespan>>
               ObservedForPairing: TimeFrame.TimeFrame<float<state>, 'date, 'timeunit, 'timespan>
               Log: string option }
@@ -489,6 +514,7 @@ module Solver =
             (observedTF: TimeFrame.TimeFrame<float<state>, 'date, 'timeunit, 'timespan>)
             (envTF: option<TimeFrame.TimeFrame<float<environment>, 'date, 'timeunit, 'timespan>>)
             equationKeys
+            measureKeys
             logMessage
             =
 
@@ -516,12 +542,14 @@ module Solver =
 
             let trimmedEnv = envTF |> Option.map (ensureEnvCoverage solverStartDate)
 
+            let measuresT0, nonMeasures =
+                t0 |> Map.partition (fun k _ -> measureKeys |> Seq.contains k)
             let hiddenT0 =
-                t0 |> Map.filter (fun k _ -> observedTF.Series |> Map.containsKey k |> not)
+                nonMeasures |> Map.filter (fun k _ -> not (equationKeys |> Seq.contains k))
 
-            { T0 = t0
-              StatesObservedForSolver = toEquationStatesOnly equationKeys dynamicForSolver
+            { StatesObservedForSolver = toEquationStatesOnly equationKeys dynamicForSolver
               StatesHiddenForSolver = hiddenT0
+              MeasuresForSolver = measuresT0
               ObservedForPairing = observedTF
               ExogenousForSolver = trimmedEnv
               Log = Some logMessage }
@@ -531,6 +559,7 @@ module Solver =
             (observedTF: TimeFrame.TimeFrame<float<state>, 'date, 'timeunit, 'timespan>)
             (exogenousTF: option<TimeFrame.TimeFrame<float<environment>, 'date, 'timeunit, 'timespan>>)
             equationKeys
+            measureKeys
             : Resolved<'date, 'timeunit, 'timespan> =
 
             match conditioning with
@@ -541,9 +570,9 @@ module Solver =
                 let t0 = t0FromFirstObs observedTF
                 let trimmedDyn = TimeFrame.dropFirstObservation observedTF
 
-                { T0 = t0
-                  StatesObservedForSolver = toEquationStatesOnly equationKeys observedTF
-                  StatesHiddenForSolver = Map.empty
+                { StatesObservedForSolver = toEquationStatesOnly equationKeys observedTF
+                  StatesHiddenForSolver = Map.empty // No conditioning for hidden states. They must be set using initialisers if present.
+                  MeasuresForSolver = t0 |> Map.filter(fun k _ -> measureKeys |> Seq.contains k)
                   ObservedForPairing = trimmedDyn
                   ExogenousForSolver = env
                   Log = Some "No conditioning: predictions start at t1; baseline = first observation." }
@@ -558,6 +587,7 @@ module Solver =
                     observedTF
                     exogenousTF
                     equationKeys
+                    measureKeys
                     "Custom conditioning: synthetic t0 one step before first observation; pairs include obs[0]."
 
             | Conditioning.RepeatFirstDataPoint ->
@@ -568,4 +598,5 @@ module Solver =
                     observedTF
                     exogenousTF
                     equationKeys
+                    measureKeys
                     "Repeat-first conditioning: duplicated first obs one step earlier; pairs include obs[0]."

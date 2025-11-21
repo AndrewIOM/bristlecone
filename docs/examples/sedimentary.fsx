@@ -47,29 +47,29 @@ and are not provided in the Time module of Bristlecone.
 [<Measure>] type area
 [<Measure>] type indiv // pollen accumulation proxy units -> individuals per area
 [<Measure>] type conc  // nitrogen concentration proxy units (e.g., δ15N or %TN, scaled)
-[<Measure>] type alpha // proxy conversion scale (dimensionless mapping to true scale)
+[<Measure>] type d15N // proxy measure of nitrogen
 
 (**
 We can then use these units of measure when defining the model system.
 *)
 
-let γX = parameter "γ[X]" notNegative 0.01<1/year> 1.<1/year> // mortality
+// States
+let N = state<conc> "available_N"         // Reconstructed available N proxy (δ15N or %TN scaled)
+let X = state<indiv / area> "population"  // Pollen accumulation proxy for population density
+let obsN = measure "observed_N" // After conversion with an alpha conversion factor
+
+// Parameters
+let λ = parameter "λ" notNegative 0.01<conc/year> 1.0<conc/year> // External N input
+let γN = parameter "γ[N]" notNegative 0.001<1/year> 0.1<1/year> // N loss rate
+let r   = parameter "r" notNegative 0.001<(indiv/area)/conc> 0.5<(indiv/area)/conc> // Intrinsic growth rate
+let γX = parameter "γ[X]" notNegative 0.01<1/year> 0.2<1/year> // mortality
+let αconv = parameter "α_conv" notNegative 0.8<d15N/conc> 1.2<d15N/conc> // Proxy conversion for structured Gaussian: α maps proxy to modeled scale
+
 
 let baseModel
     (uptake  : ModelExpression<conc> -> ModelExpression<indiv/area> -> ModelExpression<conc/year> * ModelExpression<1>)
     (feedback: ModelExpression<indiv/area> -> ModelExpression<conc/year>)
     (density : ModelExpression<indiv/area> -> ModelExpression<1>) =
-
-    // States
-    let N = state<conc> "available_N"         // Reconstructed available N proxy (δ15N or %TN scaled)
-    let X = state<indiv / area> "population"  // Pollen accumulation proxy for population density
-    let obsN = measure "observed_N" // After conversion with an alpha conversion factor
-
-    // Parameters
-    let λ = parameter "λ" notNegative 0.01<conc/year> 10.<conc/year> // External N input
-    let γN = parameter "γ[N]" notNegative 0.001<1/year> 1.<1/year> // N loss rate
-    let r   = parameter "r" notNegative 0.001<(indiv/area)/conc>    2.<(indiv/area)/conc> // Intrinsic growth rate
-    let αconv = parameter "α_conv" notNegative 0.1<alpha>      10.<alpha> // Proxy conversion for structured Gaussian: α maps proxy to modeled scale
 
     // ODEs
     let ``dN/dt``: ModelExpression<conc/year> =
@@ -84,13 +84,14 @@ let baseModel
         P r * uptake * density This - P γX * This
 
     // Measure: convert modeled N to proxy comparison scale
-    let nConversion =
-        StateAt (0<``time index``>, N) * P αconv
+    let nToProxy = StateAt (0<``time index``>, N) * P αconv
+    let nFromProxy = Measure obsN / P αconv
 
     Model.empty
     |> Model.addRateEquation X ``dX/dt``
     |> Model.addRateEquation N ``dN/dt``
-    |> Model.addMeasure obsN nConversion
+    |> Model.addMeasure obsN nToProxy
+    |> Model.initialiseHiddenStateWith N nFromProxy
     |> Model.estimateParameter λ
     |> Model.estimateParameter γN
     |> Model.estimateParameter r
@@ -137,8 +138,8 @@ Uptake component (linear vs MM); parameters local to uptake.
 let uptakeMode =
 
     // Parameters:
-    let a = parameter "a" notNegative 0.001<area/(indiv year)> 1.<area/(indiv year)> // Uptake rate constant
-    let b = parameter "b" notNegative 0.01</conc> 10.</conc> // Half-saturation (MM)
+    let a = parameter "a" notNegative 1e-6<area/(indiv year)> 1e-3<area/(indiv year)> // Uptake rate constant
+    let b = parameter "b" notNegative 0.5</conc> 2.0</conc> // Half-saturation (MM)
 
     // If independent, need to substitute 1 into the growth equation instead of 0.
     let independent _ _ =
@@ -235,28 +236,50 @@ for h in hypotheses do
 We can fit the models as such:
 *)
 
-let engine: EstimationEngine.EstimationEngine<int<year>,year,1> =
+let engine: EstimationEngine.EstimationEngine<float<Time.``cal yr BP``>,year,1> =
     Bristlecone.mkContinuous ()
     |> Bristlecone.withCustomOptimisation ( Optimisation.MonteCarlo.Filzbach.filzbach
-           { Optimisation.MonteCarlo.Filzbach.FilzbachSettings.Default with BurnLength = Optimisation.EndConditions.atIteration 5000<iteration> })
+           { Optimisation.MonteCarlo.Filzbach.FilzbachSettings.Default with BurnLength = Optimisation.EndConditions.atIteration 200000<iteration> })
     |> Bristlecone.withConditioning Conditioning.NoConditioning
     |> Bristlecone.withSeed 1500 // We are setting a seed for this example - see below
-    |> Bristlecone.withTimeConversion (fun (ts: int<Time.year>) -> float ts * 1.<Time.year>)
+    |> Bristlecone.withTimeConversion (fun (ts: float<Time.``cal yr BP``>) -> float ts * 1.<Time.year>)
 
 
 let testSettings =
     Test.annualSettings
-    |> Test.addStartValues [ "available_N", 2.0; "population", 1000. ]
-    |> Test.addNoise (Test.Noise.tryAddNormal "σ[y]" "observed_N")
-    |> Test.addNoise (Test.Noise.tryAddNormal "σ[x]" "population")
+    |> Test.addStartValues [ N.Code.Value, 2.0; X.Code.Value, 1000. ]
+    |> Test.addNoise (Test.Noise.tryAddNormal "σ[y]" obsN.Code.Value)
+    |> Test.addNoise (Test.Noise.tryAddNormal "σ[x]" X.Code.Value)
     |> Test.addGenerationRules
-        [ Test.GenerationRules.alwaysLessThan 5. "observed_N"
-          Test.GenerationRules.alwaysMoreThan -2. "observed_N"
-          Test.GenerationRules.alwaysLessThan 50000. "population"
-          Test.GenerationRules.alwaysMoreThan 0. "population" ]
+        [ Test.GenerationRules.alwaysLessThan 5. obsN.Code.Value
+          Test.GenerationRules.alwaysMoreThan -2. obsN.Code.Value
+          Test.GenerationRules.alwaysLessThan 50000. X.Code.Value
+          Test.GenerationRules.alwaysMoreThan 0. X.Code.Value ]
     |> Test.withTimeSeriesLength 30
     |> Test.endWhen (Optimisation.EndConditions.Profiles.mcmc 5000<iteration> ignore)
 
 
-let testResult = hypotheses.Head.Model |> Bristlecone.tryTestModel engine testSettings
+// let testResult = hypotheses.Head.Model |> Bristlecone.tryTestModel engine testSettings
+
+
+(**
+Load in real data
+*)
+
+open FSharp.Data
+
+type PalaeoData = CsvProvider<"data/loch-dubhan/ld.tsv">
+
+let data = PalaeoData.Load "data/loch-dubhan/ld.tsv"
+
+let ts =
+    [
+        X.Code, data.Rows |> Seq.map(fun r -> float r.Par_betula, DatingMethods.Radiocarbon (float r.``Scaled_age_cumulative (cal yr bp)`` * 1.<Time.``cal yr BP``>)) |> TimeSeries.fromCalibratedRadiocarbonObservations
+        obsN.Code, data.Rows |> Seq.map(fun r -> float r.D15N, DatingMethods.Radiocarbon (float r.``Scaled_age_cumulative (cal yr bp)`` * 1.<Time.``cal yr BP``>)) |> TimeSeries.fromCalibratedRadiocarbonObservations
+    ] |> Map.ofList
+
+let endCond = Optimisation.EndConditions.atIteration 10000<iteration>
+
+let result =
+    Bristlecone.tryFit engine endCond ts hypotheses.Head.Model
 

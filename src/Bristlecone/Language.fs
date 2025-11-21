@@ -169,6 +169,10 @@ module Language =
             let (StateIdInner sc) = sid
             ME(Untyped.State sc.Value)
 
+        static member Measure(sid: MeasureId<'u>) : ModelExpression<'u> =
+            let (MeasureIdInner sc) = sid
+            ME(Untyped.State sc.Value)
+
         static member Parameter(pid: IncludedParameter<'u>) : ModelExpression<'u> =
             let (ParamIdInner name) = pid.ParamId
             ME(Untyped.Parameter name.Value)
@@ -185,6 +189,7 @@ module Language =
     let Time<[<Measure>] 't> : ModelExpression<'t> = ME Untyped.Time
     let Environment<[<Measure>] 'u> sid : ModelExpression<'u> = ModelExpression.Environment sid
     let Invalid<[<Measure>] 'u> : ModelExpression<'u> = ME Untyped.Invalid
+    let Measure<[<Measure>] 'u> sId : ModelExpression<'u> = ModelExpression.Measure sId
 
     /// Operations for boolean model expressions.
     module Bool =
@@ -311,6 +316,7 @@ module Language =
               constValLift: Expr<'r> -> float -> Expr<'r>
               parameter: string -> Expr<'r>
               environment: string -> Expr<'r>
+              state: string -> Expr<'r>
               timeVal: Expr<'r>
               thisVal: Expr<'r>
               add: Expr<'r> list -> Expr<'r>
@@ -418,7 +424,7 @@ module Language =
             | ME(Constant n) -> ops.constVal n
             | ME(Parameter n) -> ops.parameter n
             | ME(Environment n) -> ops.environment n
-            | ME(State nm) -> ops.environment nm
+            | ME(State nm) -> ops.state nm
             | ME Time -> ops.timeVal
             | ME This -> ops.thisVal
             | ME Invalid -> ops.invalid ()
@@ -623,6 +629,17 @@ module Language =
             //                     %targetExpr %loExpr %hiExpr tol maxIter
             @>
 
+        let getEnvironment eVar name =
+            <@
+                (%%Expr.Var eVar: CodedMap<TypedTensor<Scalar, ModelSystem.``environment``>>)
+                |> Map.tryFindBy (fun k -> k.Value = name)
+                |> fun o ->
+                    match o with
+                    | Some o -> o.Value
+                    | None -> failwithf "Environmental data not available: %s" name
+            @>
+
+
         // let pVar      = Var("parameters", typeof<TypedTensor<Vector,``parameter``>>)
         // let statesVar = Var("states", typeof<CodedMap<TypedTensor<Scalar,ModelSystem.state>>[]>)
         // let tIdxVar   = Var("timeIndex", typeof<int>)
@@ -644,16 +661,8 @@ module Language =
                     let tensor = mkTensor n
                     <@ %one * tensor @>
               parameter = fun name -> <@ (%%Expr.Var pVar: TypedTensor<Vector, ``parameter``>).Value.[pIndex.[name]] @>
-              environment =
-                fun name ->
-                    <@
-                        (%%Expr.Var eVar: CodedMap<TypedTensor<Scalar, ModelSystem.``environment``>>)
-                        |> Map.tryFindBy (fun k -> k.Value = name)
-                        |> fun o ->
-                            match o with
-                            | Some o -> o.Value
-                            | None -> failwithf "Environmental data not available: %s" name
-                    @>
+              environment = fun name -> getEnvironment eVar name
+              state = fun name ->  getEnvironment eVar name // Currently, state and environment are intermingled
               timeVal = <@ (%%Expr.Var tVar: TypedTensor<Scalar, 'timeUnit>).Value @>
               thisVal = <@ (%%Expr.Var xVar: TypedTensor<Scalar, ModelSystem.state>).Value @>
               add = tensorSum
@@ -684,6 +693,26 @@ module Language =
                 fun (fLambda, targetExpr, loExpr, hiExpr, tol, maxIter) ->
                     inverse fLambda targetExpr loExpr hiExpr tol maxIter }
 
+        // Initialisers are time-invariant (t = initial), but can access the current exogeneous
+        // environment and observed states at the initial time.
+        let private tensorOpsForInitialiser (pIndex: Map<string, int>) (pVar: Var) (eVar: Var) (bVar: Var) =
+            let tFake = Var("time", typeof<TypedTensor<Scalar, 1>>)
+            let xFake = Var("state", typeof<TypedTensor<Scalar, 1>>)
+            { tensorOps pIndex Map.empty pVar eVar tFake xFake with
+                timeVal = <@ mkTensor nan @> // not used in initialisers
+                stateAt = fun _ -> failwith "'State at' not supported in initialisers. Use 'State' for baseline."
+                state =
+                    fun name ->
+                        <@
+                            (%%Expr.Var bVar: CodedMap<TypedTensor<Scalar, ModelSystem.``state``>>)
+                            |> Map.tryFindBy (fun k -> k.Value = name)
+                            |> fun o ->
+                                match o with
+                                | Some o -> o.Value
+                                | None -> failwithf "Baseline state not available for: %s" name
+                        @>
+            }
+
         let private tensorOpsForMeasure (pIndex: Map<string, int>) (pVar: Var) (statesVar: Var) (tIdxVar: Var) =
             { constVal =
                 fun n ->
@@ -694,7 +723,7 @@ module Language =
                     let tensor = mkTensor n
                     <@ %one * tensor @>
               parameter = fun name -> <@ (%%Expr.Var pVar: TypedTensor<Vector, ``parameter``>).Value.[pIndex.[name]] @>
-              environment = fun _ -> failwith "Environment not used in measures"
+              environment = fun _ -> failwith "Environment not supported in measures"
               timeVal = <@ mkTensor (float (%%Expr.Var tIdxVar: int)) @>
               thisVal = <@ mkTensor nan @> // not used in measures
               add = tensorSum
@@ -708,6 +737,14 @@ module Language =
               cond = fun (c, t, f) -> blendConditional c t f
               label = fun (_, m) -> m
               invalid = fun () -> <@ invalidPenalty @>
+              state =
+                fun name ->
+                    <@
+                        let states = %%Expr.Var statesVar: CodedMap<TypedTensor<Vector, ModelSystem.state>>
+                        let vec = states |> Map.tryFindBy (fun n -> n.Value = name) |> Option.get
+                        
+                        (Typed.itemAt ((%%Expr.Var tIdxVar: int) + Units.removeUnitFromInt 0) vec).Value
+                    @>
               stateAt =
                 fun (offset, name) ->
                     <@
@@ -747,6 +784,13 @@ module Language =
                         | None -> failwithf "The parameter '%s' is missing" name
                     @>
               environment =
+                fun name ->
+                    <@
+                        match (%%Expr.Var eVar: CodedMap<float>) |> Map.tryFindBy (fun n -> n.Value = name) with
+                        | Some v -> v
+                        | None -> failwithf "The environment value '%s' is missing" name
+                    @>
+              state = // Currently, state and environment are in the same map.
                 fun name ->
                     <@
                         match (%%Expr.Var eVar: CodedMap<float>) |> Map.tryFindBy (fun n -> n.Value = name) with
@@ -895,6 +939,16 @@ module Language =
             |> LeafExpressionConverter.EvaluateQuotation
             |> unbox<ModelSystem.Measurement<'stateUnit>>
 
+        let compileInitialiser<[<Measure>] 'stateUnit> parameters (expr: ModelExpression<'stateUnit>) =
+            let pVar = Var("parameters", typeof<TypedTensor<Vector, ``parameter``>>)
+            let eVar = Var("environment", typeof<CodedMap<TypedTensor<Scalar, ModelSystem.``environment``>>>)
+            let bVar = Var("baselines", typeof<CodedMap<TypedTensor<Scalar, ModelSystem.state>>>)
+            let pIndex = paramIndex parameters
+            let core = buildQuotationCached (tensorOpsForInitialiser pIndex pVar eVar bVar) Map.empty expr
+            <@ tryAsScalar<ModelSystem.state> %core |> Option.get @>
+            |> fun body -> Expr.Lambda(pVar, Expr.Lambda(eVar, Expr.Lambda(bVar, body)))
+            |> LeafExpressionConverter.EvaluateQuotation
+            |> unbox<ModelSystem.Initialiser<'stateUnit>>
 
 
     /// Computes a `ModelExpression` given the current time, value,
@@ -962,6 +1016,9 @@ module Language =
         type MeasureThunk<[<Measure>] 'u> =
             ShortCode.ShortCode * (Parameter.Pool.ParameterPool -> ModelSystem.Measurement<'u>)
 
+        type InitialiserThunk<[<Measure>] 'u> =
+            ShortCode.ShortCode * (Parameter.Pool.ParameterPool -> ModelSystem.Initialiser<'u>)
+
         type LikelihoodThunk = unit -> ModelSystem.Likelihood<ModelSystem.state>
 
         type ModelFragment<[<Measure>] 'time> =
@@ -969,16 +1026,17 @@ module Language =
             | ParameterFragment of Parameter.Pool.AnyParameter
             | LikelihoodFragment of LikelihoodThunk
             | MeasureFragment of ExpressionParser.Requirement list * MeasureThunk<ModelSystem.state>
+            | InitialiserFragment of ExpressionParser.Requirement list * InitialiserThunk<ModelSystem.state>
 
         type EquationFragment<[<Measure>] 'stateUnit, [<Measure>] 'timeUnit> =
             | DiscreteEq of ModelExpression<'stateUnit>
             | RateEq of ModelExpression<'stateUnit / 'timeUnit>
 
-        type ModelBuilder<[<Measure>] 'time> = private ModelBuilder of CodedMap<ModelFragment<'time>> * bool
+        type ModelBuilder<[<Measure>] 'time> = private ModelBuilder of Map<ShortCode.ShortCode * bool, ModelFragment<'time>> * bool
 
         let create<[<Measure>] 'time> isDiscrete : unit -> ModelBuilder<'time> =
             fun () ->
-                (Map.empty<ShortCode.ShortCode, ModelFragment<'time>>, isDiscrete)
+                (Map.empty<ShortCode.ShortCode * bool, ModelFragment<'time>>, isDiscrete)
                 |> ModelBuilder
 
         let internal unwrap (ModelBuilder(m, isDiscrete)) = m, isDiscrete
@@ -1040,6 +1098,21 @@ module Language =
                     (sc, (fun p -> ExpressionCompiler.compileMeasure<'u> p expr |> Measurement.adapt))
                 )
 
+            let initialiser<[<Measure>] 'time, [<Measure>] 'u>
+                (name: string)
+                (expr: ModelExpression<'state>)
+                : ModelFragment<'time> =
+                let sc: ShortCode.ShortCode = ShortCode.create name |> Option.get
+                let (ME eUntyped) = expr
+                let envReqs = ExpressionParser.requirements eUntyped |> Writer.run |> snd
+
+                InitialiserFragment(
+                    envReqs,
+                    (sc, (fun p ->
+                        let ini = ExpressionCompiler.compileInitialiser<'u> p expr
+                        fun p e s -> (ini p e s).Value |> Tensors.tryAsScalar<ModelSystem.state> |> Option.get))
+                )
+
             let likelihood<[<Measure>] 'time, [<Measure>] 'u> (l: ModelSystem.Likelihood<'u>) : ModelFragment<'time> =
                 let toInternal () = Likelihood.contramap<'u> l
                 LikelihoodFragment toInternal
@@ -1048,11 +1121,9 @@ module Language =
             let sc =
                 ShortCode.create name
                 |> Option.defaultWith (fun () -> failwithf "Bad short code %s" name)
-
-            if m.ContainsKey sc then
+            if m.ContainsKey (sc, frag.IsInitialiserFragment) then
                 failwithf "Duplicate code [%s]" name
-
-            ModelBuilder(m.Add(sc, frag), disc)
+            ModelBuilder(m.Add((sc,frag.IsInitialiserFragment), frag), disc)
 
         let addEquationRate (name: ShortCode.ShortCode) (expr: ModelExpression<'u / 'time>) (mb: ModelBuilder<'time>) =
             add name.Value (Add.equationRate<'time, 'state> name.Value expr) mb
@@ -1062,6 +1133,9 @@ module Language =
 
         let includeMeasure<[<Measure>] 'time, [<Measure>] 'u> name (m: ModelExpression<'u>) mb =
             add name (Add.measure<'time, 'u> name m) mb
+
+        let initialiseStateWith<[<Measure>] 'time, [<Measure>] 'u> name (m: ModelExpression<'u>) mb =
+            add name (Add.initialiser<'time, 'u> name m) mb
 
         let useLikelihood<[<Measure>] 'u, [<Measure>] 'time> (l: ModelSystem.Likelihood<'u>) mb =
             add "likelihood" (Add.likelihood<'time, 'u> l) mb
@@ -1082,7 +1156,7 @@ module Language =
                 m
                 |> Map.toSeq
                 |> Seq.choose (function
-                    | c, ParameterFragment p -> Some(c, p)
+                    | c, ParameterFragment p -> Some(fst c, p)
                     | _ -> None)
                 |> Map.ofSeq
                 |> Parameter.Pool.Pool
@@ -1091,7 +1165,15 @@ module Language =
                 m
                 |> Map.toSeq
                 |> Seq.choose (function
-                    | c, MeasureFragment(reqs, m) -> Some(c, m)
+                    | c, MeasureFragment(reqs, m) -> Some(fst c, m)
+                    | _ -> None)
+                |> Map.ofSeq
+
+            let initialisers =
+                m
+                |> Map.toSeq
+                |> Seq.choose (function
+                    | c, InitialiserFragment(reqs, m) -> Some(fst c, m)
                     | _ -> None)
                 |> Map.ofSeq
 
@@ -1099,7 +1181,7 @@ module Language =
                 m
                 |> Map.toSeq
                 |> Seq.choose (function
-                    | c, EquationFragment(reqs, e) -> Some(c, e)
+                    | c, EquationFragment(reqs, e) -> Some(fst c, e)
                     | _ -> None)
                 |> Map.ofSeq
 
@@ -1118,6 +1200,7 @@ module Language =
                         match snd kv with
                         | ModelFragment.EquationFragment(r, _) -> r
                         | ModelFragment.MeasureFragment(r, _) -> r
+                        | ModelFragment.InitialiserFragment(r, _) -> r
                         | _ -> [])
 
             let envKeys =
@@ -1154,12 +1237,14 @@ module Language =
                 if e.IsEmpty then
                     failwith "No equations added. Models require at least one difference / differential equation."
 
-            // Compile measures by invoking thunks
+            // Compile measures and initialisers by invoking thunks
             let measures = measures |> Map.map (fun _ (_, m) -> m parameters)
+            let initialisers = initialisers |> Map.map (fun _ (_, m) -> m parameters)
 
             { NegLogLikelihood = like
               Parameters = parameters
               EnvironmentKeys = envKeys
+              Initialisers = initialisers
               Equations = eqs
               Measures = measures }
 
@@ -1226,6 +1311,14 @@ module Language =
             : ModelBuilder.ModelBuilder<'time> =
             let (MeasureIdInner name) = name
             ModelBuilder.includeMeasure name.Value measure builder
+
+        let initialiseHiddenStateWith<[<Measure>] 'time, [<Measure>] 'u>
+            (name: StateId<'u>)
+            (initialiser: ModelExpression<'u>)
+            (builder: ModelBuilder.ModelBuilder<'time>)
+            : ModelBuilder.ModelBuilder<'time> =
+            let (StateIdInner name) = name
+            ModelBuilder.initialiseStateWith name.Value initialiser builder
 
         let useLikelihoodFunction likelihoodFn builder =
             ModelBuilder.add "likelihood" (ModelBuilder.LikelihoodFragment(fun () -> likelihoodFn)) builder
