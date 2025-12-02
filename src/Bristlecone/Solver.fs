@@ -212,13 +212,16 @@ module Solver =
                 let tStart, tEnd = times.[0], times.[times.Length - 1]
 
                 let compiledRhs =
-                    Integration.Base.makeCompiledFunctionForIntegration tStart tEnd 1.<``time index``> forcings initialStateFn eqs
+                    Integration.Base.makeCompiledFunctionForIntegration
+                        tStart
+                        tEnd
+                        1.<``time index``>
+                        forcings
+                        initialStateFn
+                        eqs
 
                 let integrate =
-                    integrator
-                        (Typed.ofScalar tStart)
-                        (Typed.ofScalar tEnd)
-                        (Typed.ofScalar 1.<``time index``>)
+                    integrator (Typed.ofScalar tStart) (Typed.ofScalar tEnd) (Typed.ofScalar 1.<``time index``>)
 
                 fun parameters ->
                     let states = integrate (initialStateFn parameters) (compiledRhs parameters)
@@ -246,7 +249,13 @@ module Solver =
                             let step = tEnd - tStart
 
                             let compiledRhs =
-                                Integration.Base.makeCompiledFunctionForIntegration tStart tEnd step forcings (fun _ -> currentState) eqs
+                                Integration.Base.makeCompiledFunctionForIntegration
+                                    tStart
+                                    tEnd
+                                    step
+                                    forcings
+                                    (fun _ -> currentState)
+                                    eqs
 
                             let integrate =
                                 integrator (Typed.ofScalar tStart) (Typed.ofScalar tEnd) (Typed.ofScalar step)
@@ -254,7 +263,8 @@ module Solver =
                             let newTrajectory = integrate currentState (compiledRhs parameters)
 
                             let finalState =
-                                newTrajectory |> Map.map (fun _ v -> v |> Tensors.Typed.itemAt (Typed.length v - 1))
+                                newTrajectory
+                                |> Map.map (fun _ v -> v |> Tensors.Typed.itemAt (Typed.length v - 1))
 
                             loop (finalState :: acc) finalState (i + 1)
 
@@ -355,7 +365,7 @@ module Solver =
             engineTimeMode
             (stepType: StepType<'date>)
             (observedStates: TimeFrame.TimeFrame<float<state>, 'date, 'timeunit, 'timespan>)
-            (observedMeasuresT0: CodedMap<TypedTensor<Scalar,state>>)
+            (observedMeasuresT0: CodedMap<TypedTensor<Scalar, state>>)
             (hiddenStatesT0: CodedMap<Tensors.TypedTensor<Tensors.Scalar, state>>)
             (hiddenStatesT0Initialisers: CodedMap<ModelSystem.Initialiser<state>>)
             (environment: TimeFrame.TimeFrame<float<environment>, 'date, 'timeunit, 'timespan> option)
@@ -379,25 +389,36 @@ module Solver =
                 |> Map.fold (fun acc k v -> Map.add k v acc) observedStatesT0
 
             let states = stateVariableKeys modelEquations
+
             let t0 parameters =
                 states
-                |> Seq.fold (fun acc k ->
-                    let initVal =
-                        match Map.tryFind k hiddenStatesT0Initialisers with
-                        | Some f -> f parameters Map.empty baselineObservables
-                        | None ->
-                            match Map.tryFind k observedStatesT0 with
-                            | Some v -> v
-                            | None   -> hiddenStatesT0.[k]
-                    Map.add k initVal acc) Map.empty
+                |> Seq.fold
+                    (fun acc k ->
+                        let initVal =
+                            match Map.tryFind k hiddenStatesT0Initialisers with
+                            | Some f -> f parameters Map.empty baselineObservables
+                            | None ->
+                                match Map.tryFind k observedStatesT0 with
+                                | Some v -> v
+                                | None -> hiddenStatesT0.[k]
 
-            if not hiddenStatesT0.IsEmpty || not hiddenStatesT0Initialisers.IsEmpty
-            then
-                logTo <| Logging.GeneralEvent(sprintf "Solver: hidden states are present. Static t0 values are %A; initialisers are %A" baselineObservables.Keys hiddenStatesT0Initialisers.Keys)
+                        Map.add k initVal acc)
+                    Map.empty
+
+            if not hiddenStatesT0.IsEmpty || not hiddenStatesT0Initialisers.IsEmpty then
+                logTo
+                <| Logging.GeneralEvent(
+                    sprintf
+                        "Solver: hidden states are present. Static t0 values are %A; initialisers are %A"
+                        baselineObservables.Keys
+                        hiddenStatesT0Initialisers.Keys
+                )
 
             // 2. Decide resolutions
             let integrationRes = decideIntegrationResolution observedStates environment
-            logTo <| Logging.GeneralEvent(sprintf "Solver: integration resolution is %A" integrationRes)
+
+            logTo
+            <| Logging.GeneralEvent(sprintf "Solver: integration resolution is %A" integrationRes)
 
             // 3. Compute factor and wrap equations
             let factor = computeFactor dataTimeToModelTime dateMode integrationRes
@@ -476,7 +497,7 @@ module Solver =
         type Resolved<'date, 'timeunit, 'timespan> =
             { StatesHiddenForSolver: CodedMap<TypedTensor<Scalar, state>>
               StatesObservedForSolver: TimeFrame.TimeFrame<float<state>, 'date, 'timeunit, 'timespan>
-              MeasuresForSolver: CodedMap<TypedTensor<Scalar,state>>
+              MeasuresForSolver: CodedMap<TypedTensor<Scalar, state>>
               ExogenousForSolver: option<TimeFrame.TimeFrame<float<environment>, 'date, 'timeunit, 'timespan>>
               ObservedForPairing: TimeFrame.TimeFrame<float<state>, 'date, 'timeunit, 'timespan>
               Log: string option }
@@ -544,6 +565,7 @@ module Solver =
 
             let measuresT0, nonMeasures =
                 t0 |> Map.partition (fun k _ -> measureKeys |> Seq.contains k)
+
             let hiddenT0 =
                 nonMeasures |> Map.filter (fun k _ -> not (equationKeys |> Seq.contains k))
 
@@ -572,7 +594,7 @@ module Solver =
 
                 { StatesObservedForSolver = toEquationStatesOnly equationKeys observedTF
                   StatesHiddenForSolver = Map.empty // No conditioning for hidden states. They must be set using initialisers if present.
-                  MeasuresForSolver = t0 |> Map.filter(fun k _ -> measureKeys |> Seq.contains k)
+                  MeasuresForSolver = t0 |> Map.filter (fun k _ -> measureKeys |> Seq.contains k)
                   ObservedForPairing = trimmedDyn
                   ExogenousForSolver = env
                   Log = Some "No conditioning: predictions start at t1; baseline = first observation." }

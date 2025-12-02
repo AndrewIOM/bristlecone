@@ -189,11 +189,21 @@ module Bristlecone =
                 expectedKeys
                 (Map.keys actualMap)
 
-    let internal validateConditionedStartData (conditioned:Solver.Conditioning.Resolved<_,_,_>) (initialisers:CodedMap<Initialiser<state>>) equationKeys =
+    let internal validateConditionedStartData
+        (conditioned: Solver.Conditioning.Resolved<_, _, _>)
+        (initialisers: CodedMap<Initialiser<state>>)
+        equationKeys
+        =
         let conditionedStates =
-            Seq.concat [ Map.keys conditioned.StatesHiddenForSolver; conditioned.StatesObservedForSolver.Keys; initialisers.Keys ]
+            Seq.concat
+                [ Map.keys conditioned.StatesHiddenForSolver
+                  conditioned.StatesObservedForSolver.Keys
+                  initialisers.Keys ]
+
         let missing = Set.difference (Set.ofSeq equationKeys) (Set.ofSeq conditionedStates)
-        if missing.IsEmpty then Ok ()
+
+        if missing.IsEmpty then
+            Ok()
         else
             Error
             <| sprintf

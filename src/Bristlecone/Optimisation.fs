@@ -537,18 +537,14 @@ module MonteCarlo =
                 let n = Units.removeUnitFromInt stepsPerParam
                 Array.map (fun a -> if n = 0 then 0.0 else float a / float n) accepts
 
+            /// Adaptive tuning step.
             /// Tune variance of a parameter based on its acceptance rate.
             /// The magnitude of tuning reduces as more batches have been run.
-            let tune (ls: LogSigma) (acceptanceRate: float) (batchNumber: int<batch>) : LogSigma =
-                let delta = 1.0 / float batchNumber
-                if acceptanceRate < 0.44 then ls - delta else ls + delta
-
-            /// Adaptive tuning step
             let adaptiveStep (sigmas: LogSigma[]) acceptanceRates batchNumber : LogSigma[] =
-                acceptanceRates
-                |> Array.zip sigmas
-                |> Array.map (fun (ls, ar) -> tune ls ar batchNumber)
-
+                let aStar = 0.44
+                let eta0 = 0.5
+                let eta = eta0 / float batchNumber
+                Array.map2 (fun ls ar -> ls + eta * (ar - aStar)) sigmas acceptanceRates
 
             type TrendResult =
                 | Stationary of pValue: float
@@ -582,7 +578,7 @@ module MonteCarlo =
                         let mean = Array.average y
                         let var = y |> Array.sumBy (fun v -> let dv = v - mean in dv * dv)
 
-                        if var = 0.0<``optim-space``^2> then
+                        if var < 1e-12<``optim-space``^2> then
                             k, Degenerate
                         else
                             let x = [| 0. .. float (n - 1) |]
@@ -591,7 +587,7 @@ module MonteCarlo =
                                 Regression.slopeAndPValue x (y |> Array.map Units.removeUnitFromFloat)
 
                             if System.Double.IsNaN p then k, Degenerate
-                            else if p >= 0.1 then k, Trending p
+                            else if p < 0.1 then k, Trending p
                             else k, Stationary p)
 
             let internal hasTrend pValues =
@@ -654,7 +650,9 @@ module MonteCarlo =
                 let tunedSigmas = Core.adaptiveStep sigmas rates batchNumber
 
                 writeOut
-                <| GeneralEvent(sprintf "[Tuning] Sigmas: %A | Acceptance rates: %A" tunedSigmas rates)
+                <| GeneralEvent(
+                    sprintf "[Tuning] Sigmas: %A | Acceptance rates: %A | theta %A" tunedSigmas rates theta'
+                )
 
                 let allInBand = rates |> Array.forall (fun ar -> ar >= 0.28 && ar <= 0.60)
 
@@ -907,7 +905,7 @@ module MonteCarlo =
                                 x)
                         |> Typed.ofVector
 
-                    match tryMove propose (machine 1.) random f 100 (l1, theta1) with
+                    match tryMove propose (machine 1.) random f 50000 (l1, theta1) with
                     | None -> failwith "Could not move in parameter space."
                     | Some(lNew, thetaNew) ->
                         let newScaleInfo =

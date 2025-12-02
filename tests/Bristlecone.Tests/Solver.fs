@@ -61,7 +61,7 @@ module Runners =
                 let timeline = [| for i in 0 .. 10 -> float i * 1.<``time index``> |]
                 let fakeTimeSeries =
                     times |> Array.map(fun t -> envVal.Get * 1.<environment>, t) |> TimeSeries.fromNeoObservations
-                let dataT0 = [ c, Typed.ofScalar 0.0<state> ] |> Map.ofList
+                let dataT0 _ = [ c, Typed.ofScalar 0.0<state> ] |> Map.ofList
                 let point = Typed.ofVector [| 0.0 * 1.<parameter> |]
                 let index = TimeIndex.TimeIndex(startDate, Resolution.Years (PositiveInt.create 1<year> |> Option.get), TimeIndex.IndexMode.Exact, fakeTimeSeries)
                 let indexMap = Map.ofList [ envKey, index ]
@@ -90,7 +90,7 @@ module Runners =
                 // timeline includes baseline at 0.0
                 let timeline = [| for i in 0 .. steps -> float i * 1.<``time index``> |]
                 let envIndex = Map.empty
-                let t0 = Map.ofList [ shortCode, Typed.ofScalar x0' ]
+                let t0 _ = Map.ofList [ shortCode, Typed.ofScalar x0' ]
                 let result = DiscreteTime.fixedRunner eqs timeline envIndex t0 dummyParameters
                 let predTimes, predData =
                     match result with
@@ -123,7 +123,7 @@ module Runners =
             <| fun shortCode (c: NormalFloat) (PositiveInt steps) ->
                     let c = if c.Get < 0. then c.Get * -1.<state> else c.Get * 1.<state>
                     let c' = c / 1.<``time index``>
-                    let t0 = Map.ofList [ shortCode, Typed.ofScalar 0.0<state> ]
+                    let t0 _ = Map.ofList [ shortCode, Typed.ofScalar 0.0<state> ]
                     let eqs = Map.ofList [ shortCode, fun _ _ _ _ -> Typed.ofScalar c' ]
                     let timeline = [| for i in 0 .. steps -> float i * 1.<``time index``> |]
                     let series = DifferentialTime.fixedRunner eqs integrationMethod timeline Map.empty t0 dummyParameters
@@ -160,7 +160,7 @@ module MakeSolver =
                 let envOpt = None
 
                 // Initial state
-                let t0 = Map.ofList [ shortCode, Typed.ofScalar (x0.Get * 1.<state>) ]
+                let t0 _ = Map.ofList [ shortCode, Typed.ofScalar (x0.Get * 1.<state>) ]
 
                 let eqs =
                     Map.ofList [ shortCode,
@@ -174,7 +174,7 @@ module MakeSolver =
 
                 // Compile configured solver
                 let toModelUnits (ts: TimeSpan) = ts.TotalDays * 1.<``time index``>
-                let solver = Solver.SolverCompiler.compile ignore toModelUnits modelForm engineTimeMode stepType dynTF Map.empty envOpt (fun _ -> Solver.Exact)
+                let solver = Solver.SolverCompiler.compile ignore toModelUnits modelForm engineTimeMode stepType dynTF Map.empty Map.empty Map.empty envOpt (fun _ -> Solver.Exact)
 
                 // Manual discrete run along the internal timeline
                 let timeline =
@@ -208,7 +208,7 @@ module MakeSolver =
                 let dynTF = TimeFrame.tryCreate (Map.ofList [ shortCode, obs ])
 
                 let envOpt = None
-                let t0 = Map.ofList [ shortCode, Typed.ofScalar 0.0<state> ]
+                let t0 _ = Map.ofList [ shortCode, Typed.ofScalar 0.0<state> ]
 
                 let eqs = Map.ofList [ shortCode, fun _ _ _ _ -> Typed.ofScalar c' ]
                 let modelForm = ModelForm.DifferentialEqs eqs
@@ -219,7 +219,7 @@ module MakeSolver =
                 let stepType = Solver.StepType.Internal
 
                 let toModelUnits (ts: TimeSpan) = ts.TotalDays * 1.<``time index``>
-                let solver = Solver.SolverCompiler.compile ignore toModelUnits modelForm engineTimeMode stepType dynTF.Value Map.empty envOpt (fun _ -> Solver.Exact)
+                let solver = Solver.SolverCompiler.compile ignore toModelUnits modelForm engineTimeMode stepType dynTF.Value Map.empty Map.empty Map.empty envOpt (fun _ -> Solver.Exact)
 
                 // Manual differential run along timeline
                 let timeline =
@@ -270,7 +270,7 @@ module MakeSolver =
                 let a' = 0.0 * 1.<state/state> |> Typed.ofScalar
                 let b' = 0.0<state> |> Typed.ofScalar
                 let eqs = Map.ofList [ k, fun _ _ _ s -> a' * s + b' ]
-                let t0 = Map.ofList [ k, Typed.ofScalar 1.0<state> ]
+                let t0 _ = Map.ofList [ k, Typed.ofScalar 1.0<state> ]
                 let timeline = [| 0.<``time index``>; 1.<``time index``> |]
                 let series = Solver.SolverRunners.DiscreteTime.fixedRunner eqs timeline Map.empty t0 Runners.dummyParameters
                 let predTimes, predData =
@@ -287,7 +287,7 @@ module MakeSolver =
             testPropertyWithConfig Config.config "Differential runner returns stocks (initial not duplicated)" <| fun k ->
                 let c' = 1.0<state/``time index``>
                 let eqs = Map.ofList [ k, fun _ _ _ _ -> Typed.ofScalar c' ]
-                let baselineValue = Map.ofList [ k, Typed.ofScalar 0.0<state> ]
+                let baselineValue _ = Map.ofList [ k, Typed.ofScalar 0.0<state> ]
                 let timeline = [| 0.<``time index``>; 1.<``time index``>; 2.<``time index``> |]
                 let series = Solver.SolverRunners.DifferentialTime.fixedRunner eqs Integration.RungeKutta.rk4 timeline Map.empty baselineValue Runners.dummyParameters
                 let predTimes, predData =
@@ -320,7 +320,7 @@ module Conditioning =
                         |> TimeSeries.fromNeoObservations
                     let dynTF = TimeFrame.tryCreate (Map.ofList [ shortCode, obs ]) |> Option.get
 
-                    let resolved = Solver.Conditioning.resolve Conditioning.NoConditioning dynTF None [ shortCode ]
+                    let resolved = Solver.Conditioning.resolve Conditioning.NoConditioning dynTF None [ shortCode ] []
 
                     let eqs = Map.ofList [ shortCode, fun _ _ _ s -> s + Typed.ofScalar 1.0<state> ]
                     let modelForm = ModelForm.DifferenceEqs eqs
@@ -328,7 +328,7 @@ module Conditioning =
                     // Compile with trimmed dynamic frame (drop first obs)
                     let solver = Solver.SolverCompiler.compile ignore (fun (ts:TimeSpan) -> ts.TotalDays * 1.<``time index``>)
                                     modelForm Discrete (Solver.StepType.External (resolved.ObservedForPairing |> TimeFrame.dates))
-                                    resolved.StatesObservedForSolver Map.empty resolved.ExogenousForSolver (fun _ -> Solver.Exact)
+                                    resolved.StatesObservedForSolver Map.empty Map.empty Map.empty resolved.ExogenousForSolver (fun _ -> Solver.Exact)
 
                     let predicted = solver Runners.dummyParameters |> fst
                     let xs = predicted.[shortCode] |> Tensors.Typed.toFloatArray
@@ -349,7 +349,7 @@ module Conditioning =
 
                     let customT0 = Map.ofList [ shortCode, (x0.Get - 5.0) * 1.<state> ]
                     let expected = [| for i in 1 .. steps -> (x0.Get - 5.0 + float i) * 1.<state> |]
-                    let resolved = Solver.Conditioning.resolve (Conditioning.Custom customT0) dynTF None [ shortCode ]
+                    let resolved = Solver.Conditioning.resolve (Conditioning.Custom customT0) dynTF None [ shortCode ] []
                     let eqs = Map.ofList [ shortCode, fun _ _ _ s -> s + Typed.ofScalar 1.0<state> ]
                     let modelForm = ModelForm.DifferenceEqs eqs
 
@@ -359,7 +359,7 @@ module Conditioning =
                     // Synthetic t0 different from first obs
                     let solver = Solver.SolverCompiler.compile ignore (fun (ts: TimeSpan) -> ts.TotalDays * 1.<``time index``>)
                                     modelForm EstimationEngine.Discrete Solver.StepType.Internal //(Solver.StepType.External (resolved.DynamicForPairing |> TimeFrame.dates))
-                                    resolved.StatesObservedForSolver Map.empty resolved.ExogenousForSolver (fun _ -> Solver.Exact)
+                                    resolved.StatesObservedForSolver resolved.MeasuresForSolver Map.empty Map.empty resolved.ExogenousForSolver (fun _ -> Solver.Exact)
 
                     let predicted = solver Runners.dummyParameters |> fst
                     let xs = predicted.[shortCode] |> Tensors.Typed.toFloatArray
@@ -378,13 +378,13 @@ module Conditioning =
                         |> TimeSeries.fromNeoObservations
                     let dynTF = TimeFrame.tryCreate (Map.ofList [ shortCode, obs ]) |> Option.get
 
-                    let resolved = Solver.Conditioning.resolve Conditioning.RepeatFirstDataPoint dynTF None [ shortCode ]
+                    let resolved = Solver.Conditioning.resolve Conditioning.RepeatFirstDataPoint dynTF None [ shortCode ] []
                     let eqs = Map.ofList [ shortCode, fun _ _ _ s -> s + Typed.ofScalar 1.0<state> ]
                     let modelForm = ModelForm.DifferenceEqs eqs
 
                     let solver = Solver.SolverCompiler.compile ignore (fun (ts: TimeSpan) -> ts.TotalDays * 1.<``time index``>)
                                     modelForm EstimationEngine.Discrete (Solver.StepType.External (resolved.ObservedForPairing |> TimeFrame.dates))
-                                    resolved.StatesObservedForSolver Map.empty resolved.ExogenousForSolver (fun _ -> Solver.Exact)
+                                    resolved.StatesObservedForSolver resolved.MeasuresForSolver Map.empty Map.empty resolved.ExogenousForSolver (fun _ -> Solver.Exact)
 
                     let predicted = solver Runners.dummyParameters |> fst
                     let xs = predicted.[shortCode] |> Tensors.Typed.toFloatArray
@@ -392,7 +392,6 @@ module Conditioning =
                     // Expected: The model is adding 1 each time-index, so it is obs[0] + 1 as first value.
                     let expected = [| for i in 1 .. steps -> fst obs.Head + float i * 1.<state> |]
 
-                    // printfn "Obs %A / pred %A / timeline %A" obs.Values predicted (resolved.DynamicForPairing |> TimeFrame.dates)
                     Expect.hasLength xs steps  "Predictions should be equal in length to original observations"
                     Config.sequenceEqualTol  xs expected "Predicted values should match closed form without duplicate at t0"
 

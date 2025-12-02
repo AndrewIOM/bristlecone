@@ -15,7 +15,7 @@ let sequenceEqual tol (arr: float<_> seq) (expected: float<_> seq) message =
     arr
     |> Seq.iteri (fun i actual ->
         let exp = expected |> Seq.item i
-        floatEqualTol Accuracy.high actual exp message)
+        floatEqualTol Accuracy.high actual exp (sprintf "%s, position %i" message i))
 
 let sequenceEqualTol arr expected message = sequenceEqual Accuracy.high arr expected message
 
@@ -79,6 +79,9 @@ type BristleconeTypesGen() =
         }
         |> Arb.fromGen
 
+    static member Radiocarbon =
+        Arb.generate<NormalFloat> |> Gen.map(fun b -> min 200000. (max 0.05 b.Get) * 1.<Bristlecone.Time.``BP (radiocarbon)``> |> Bristlecone.Time.DatingMethods.Radiocarbon) |> Arb.fromGen
+        
     static member CodedMap<'snd>() =
         gen {
             let! n = Gen.choose (1, 100)
@@ -110,10 +113,10 @@ type BristleconeTypesGen() =
         }
         |> Arb.fromGen
 
-    static member ObservationsBP: Arbitrary<(float * int<Time.``BP (radiocarbon)``>) list> =
+    static member ObservationsBP: Arbitrary<(float * float<Time.``BP (radiocarbon)``>) list> =
         gen {
             let! length = Gen.choose (2, 100)
-            let! list1 = Gen.listOfLength length Arb.generate<int<Time.``BP (radiocarbon)``>>
+            let! list1 = Gen.listOfLength length Arb.generate<NormalFloat> |> Gen.map(fun f -> f |> List.map(fun g -> g.Get * 1.<Time.``BP (radiocarbon)``>))
             let! list2 = Gen.listOfLength length (Arb.generate<NormalFloat> |> Gen.map (fun f -> f.Get))
             return List.zip list2 list1
         }

@@ -11,7 +11,8 @@ module internal Units =
     let removeUnitFromInt (v: int<_>) = int v
     let removeUnitFromFloat (v: float<_>) = float v
 
-    let retype (v: float<'u1>) : float<'u2> = v |> removeUnitFromFloat |> LanguagePrimitives.FloatWithMeasure<'u2>
+    let retype (v: float<'u1>) : float<'u2> =
+        v |> removeUnitFromFloat |> LanguagePrimitives.FloatWithMeasure<'u2>
 
     let floatToInt (x: float<'u>) : int<'u> =
         x |> int |> LanguagePrimitives.Int32WithMeasure
@@ -34,6 +35,8 @@ module internal Units =
     let isFinite<[<Measure>] 'u> (v: float<'u>) = not (inInfinite v) && not (isNan v)
 
     let isNotFinite<[<Measure>] 'u> (v: float<'u>) = inInfinite v || isNan v
+
+    let isEqualWithin tol (x: float<'u>) (y: float<'u>) = abs (x - y) < tol
 
 
 [<Measure>]
@@ -128,6 +131,11 @@ module Seq =
         |> Seq.mapi (fun i el -> el, i) // Add index to element
         |> Seq.filter (fun (el, i) -> i % n = n - 1) // Take every nth element
         |> Seq.map fst // Drop index from the result
+
+    let distinctWithin (eq: 'T -> 'T -> bool) (xs: seq<'T>) =
+        xs
+        |> Seq.fold (fun acc x -> if acc |> List.exists (eq x) then acc else x :: acc) []
+        |> List.rev
 
 
     ///**Description**

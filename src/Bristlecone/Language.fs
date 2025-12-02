@@ -662,7 +662,7 @@ module Language =
                     <@ %one * tensor @>
               parameter = fun name -> <@ (%%Expr.Var pVar: TypedTensor<Vector, ``parameter``>).Value.[pIndex.[name]] @>
               environment = fun name -> getEnvironment eVar name
-              state = fun name ->  getEnvironment eVar name // Currently, state and environment are intermingled
+              state = fun name -> getEnvironment eVar name // Currently, state and environment are intermingled
               timeVal = <@ (%%Expr.Var tVar: TypedTensor<Scalar, 'timeUnit>).Value @>
               thisVal = <@ (%%Expr.Var xVar: TypedTensor<Scalar, ModelSystem.state>).Value @>
               add = tensorSum
@@ -698,6 +698,7 @@ module Language =
         let private tensorOpsForInitialiser (pIndex: Map<string, int>) (pVar: Var) (eVar: Var) (bVar: Var) =
             let tFake = Var("time", typeof<TypedTensor<Scalar, 1>>)
             let xFake = Var("state", typeof<TypedTensor<Scalar, 1>>)
+
             { tensorOps pIndex Map.empty pVar eVar tFake xFake with
                 timeVal = <@ mkTensor nan @> // not used in initialisers
                 stateAt = fun _ -> failwith "'State at' not supported in initialisers. Use 'State' for baseline."
@@ -710,8 +711,7 @@ module Language =
                                 match o with
                                 | Some o -> o.Value
                                 | None -> failwithf "Baseline state not available for: %s" name
-                        @>
-            }
+                        @> }
 
         let private tensorOpsForMeasure (pIndex: Map<string, int>) (pVar: Var) (statesVar: Var) (tIdxVar: Var) =
             { constVal =
@@ -742,7 +742,7 @@ module Language =
                     <@
                         let states = %%Expr.Var statesVar: CodedMap<TypedTensor<Vector, ModelSystem.state>>
                         let vec = states |> Map.tryFindBy (fun n -> n.Value = name) |> Option.get
-                        
+
                         (Typed.itemAt ((%%Expr.Var tIdxVar: int) + Units.removeUnitFromInt 0) vec).Value
                     @>
               stateAt =
@@ -941,10 +941,18 @@ module Language =
 
         let compileInitialiser<[<Measure>] 'stateUnit> parameters (expr: ModelExpression<'stateUnit>) =
             let pVar = Var("parameters", typeof<TypedTensor<Vector, ``parameter``>>)
-            let eVar = Var("environment", typeof<CodedMap<TypedTensor<Scalar, ModelSystem.``environment``>>>)
-            let bVar = Var("baselines", typeof<CodedMap<TypedTensor<Scalar, ModelSystem.state>>>)
+
+            let eVar =
+                Var("environment", typeof<CodedMap<TypedTensor<Scalar, ModelSystem.``environment``>>>)
+
+            let bVar =
+                Var("baselines", typeof<CodedMap<TypedTensor<Scalar, ModelSystem.state>>>)
+
             let pIndex = paramIndex parameters
-            let core = buildQuotationCached (tensorOpsForInitialiser pIndex pVar eVar bVar) Map.empty expr
+
+            let core =
+                buildQuotationCached (tensorOpsForInitialiser pIndex pVar eVar bVar) Map.empty expr
+
             <@ tryAsScalar<ModelSystem.state> %core |> Option.get @>
             |> fun body -> Expr.Lambda(pVar, Expr.Lambda(eVar, Expr.Lambda(bVar, body)))
             |> LeafExpressionConverter.EvaluateQuotation
@@ -1032,7 +1040,8 @@ module Language =
             | DiscreteEq of ModelExpression<'stateUnit>
             | RateEq of ModelExpression<'stateUnit / 'timeUnit>
 
-        type ModelBuilder<[<Measure>] 'time> = private ModelBuilder of Map<ShortCode.ShortCode * bool, ModelFragment<'time>> * bool
+        type ModelBuilder<[<Measure>] 'time> =
+            private | ModelBuilder of Map<ShortCode.ShortCode * bool, ModelFragment<'time>> * bool
 
         let create<[<Measure>] 'time> isDiscrete : unit -> ModelBuilder<'time> =
             fun () ->
@@ -1108,9 +1117,10 @@ module Language =
 
                 InitialiserFragment(
                     envReqs,
-                    (sc, (fun p ->
-                        let ini = ExpressionCompiler.compileInitialiser<'u> p expr
-                        fun p e s -> (ini p e s).Value |> Tensors.tryAsScalar<ModelSystem.state> |> Option.get))
+                    (sc,
+                     (fun p ->
+                         let ini = ExpressionCompiler.compileInitialiser<'u> p expr
+                         fun p e s -> (ini p e s).Value |> Tensors.tryAsScalar<ModelSystem.state> |> Option.get))
                 )
 
             let likelihood<[<Measure>] 'time, [<Measure>] 'u> (l: ModelSystem.Likelihood<'u>) : ModelFragment<'time> =
@@ -1121,9 +1131,11 @@ module Language =
             let sc =
                 ShortCode.create name
                 |> Option.defaultWith (fun () -> failwithf "Bad short code %s" name)
-            if m.ContainsKey (sc, frag.IsInitialiserFragment) then
+
+            if m.ContainsKey(sc, frag.IsInitialiserFragment) then
                 failwithf "Duplicate code [%s]" name
-            ModelBuilder(m.Add((sc,frag.IsInitialiserFragment), frag), disc)
+
+            ModelBuilder(m.Add((sc, frag.IsInitialiserFragment), frag), disc)
 
         let addEquationRate (name: ShortCode.ShortCode) (expr: ModelExpression<'u / 'time>) (mb: ModelBuilder<'time>) =
             add name.Value (Add.equationRate<'time, 'state> name.Value expr) mb
