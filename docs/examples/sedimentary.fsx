@@ -20,7 +20,7 @@ index: 1
 #r "nuget: Plotly.NET, 4.2.0"
 
 (**
-The long-term ecological detective
+The long-term ecological detective: Holocene ecosystem functioning
 ---
 
 Analysis of microfossils and inorganic compounds from lake sediment
@@ -37,7 +37,6 @@ an F# script file (.fsx):
 open Bristlecone
 open Bristlecone.Language
 open Bristlecone.Time
-open FSharp.Data.UnitSystems.SI.UnitSymbols
 
 (**
 Then, we may define units of measure that are not SI units (which are included with F#)
@@ -51,6 +50,8 @@ and are not provided in the Time module of Bristlecone.
 
 (**
 We can then use these units of measure when defining the model system.
+Before we can write model equations, we need to define the states, parameters,
+and measures that we need to apply within them.
 *)
 
 // States
@@ -58,13 +59,28 @@ let N = state<conc> "available_N"         // Reconstructed available N proxy (δ
 let X = state<indiv / area> "population"  // Pollen accumulation proxy for population density
 let obsN = measure "observed_N" // After conversion with an alpha conversion factor
 
-// Parameters
+// Core ecological parameters
 let λ = parameter "λ" notNegative 0.01<conc/year> 1.0<conc/year> // External N input
 let γN = parameter "γ[N]" notNegative 0.001<1/year> 0.1<1/year> // N loss rate
-let r   = parameter "r" notNegative 0.001<(indiv/area)/conc> 0.5<(indiv/area)/conc> // Intrinsic growth rate
+let r   = parameter "r" notNegative 0.001<(indiv/area)/conc> 20.<(indiv/area)/conc> // Intrinsic growth rate
 let γX = parameter "γ[X]" notNegative 0.01<1/year> 0.2<1/year> // mortality
-let αconv = parameter "α_conv" notNegative 0.8<d15N/conc> 1.2<d15N/conc> // Proxy conversion for structured Gaussian: α maps proxy to modeled scale
 
+// Measurement model parameters
+let αδ15N = parameter<d15N> "αδ15N" noConstraints -2.0<d15N> 2.0<d15N>   // intercept for δ15N proxy
+let βδ15N = parameter<d15N/conc> "βδ15N" noConstraints 0.1<d15N/conc> 2.0<d15N/conc>    // slope linking latent N to δ15N
+
+// Likelihood function parameters
+let ρ = parameter "ρ" noConstraints -0.500 0.500
+let σx = parameter "σ[x]" notNegative 10. 50.
+let σy = parameter "σ[y]" notNegative 0.001 0.100
+
+(**
+In this scenario, we will assess eight hypotheses that relate to the form of
+dependency between an individual plant taxon and nitrogen availability. To
+scaffold the hypotheses, we first define a base model that contains the two
+ordinary differential equations for the two state variables; it takes three
+pluggable model components as arguments using a standard F# function definition.
+*)
 
 let baseModel
     (uptake  : ModelExpression<conc> -> ModelExpression<indiv/area> -> ModelExpression<conc/year> * ModelExpression<1>)
@@ -84,27 +100,43 @@ let baseModel
         P r * uptake * density This - P γX * This
 
     // Measure: convert modeled N to proxy comparison scale
-    let nToProxy = StateAt (0<``time index``>, N) * P αconv
-    let nFromProxy = Measure obsN / P αconv
+    let nToProxy : ModelExpression<d15N> = P αδ15N + P βδ15N * State N
+    let nFromProxy : ModelExpression<conc> = (Measure obsN - P αδ15N) / P βδ15N
 
     Model.empty
+    // Add the core ecological ODEs:
     |> Model.addRateEquation X ``dX/dt``
     |> Model.addRateEquation N ``dN/dt``
-    |> Model.addMeasure obsN nToProxy
-    |> Model.initialiseHiddenStateWith N nFromProxy
     |> Model.estimateParameter λ
     |> Model.estimateParameter γN
     |> Model.estimateParameter r
     |> Model.estimateParameter γX
-    |> Model.estimateParameter αconv
+    // Add the conversion from d15N to N availability:
+    |> Model.addMeasure obsN nToProxy
+    |> Model.initialiseHiddenStateWith N nFromProxy
+    |> Model.estimateParameter αδ15N
+    |> Model.estimateParameter βδ15N
+    // Add the likelihood function:
     |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.bivariateGaussian (Require.state X) (Require.measure obsN))
-    |> Model.estimateParameterOld "ρ" noConstraints -0.500 0.500
-    |> Model.estimateParameterOld "σ[x]" notNegative 0.001 0.100
-    |> Model.estimateParameterOld "σ[y]" notNegative 0.001 0.100
+    |> Model.estimateParameter ρ
+    |> Model.estimateParameter σx
+    |> Model.estimateParameter σy
     
 
 (**
-Feedback component.
+In this model, we naively assume that the pollen accumulation rate approximates the individuals of the
+plant taxon per unit area. However, for nitrogen the use of a measurement model is desirable, at a minimum
+because raw d15N (permil) does not 
+
+Next, we define the three interchangable components that we will plug in. The models as stated in
+Jeffers (2011) are not truly nested, as some combinations are not ecologically plausable. In this
+instance, we define two sets of model components; one for N-dependent systems, and one for
+N-independent systems. The two sets are encoded in a record for each of the three modes below.
+
+#### Feedback component.
+
+A plant-soil feedback may be enabled or disabled, and is only defined in one
+mathematical form.
 *)
 
 let feedbackMode =
@@ -131,10 +163,16 @@ let feedbackMode =
 
 
 (**
-Uptake component (linear vs MM); parameters local to uptake.
+#### N-dependency
+
+We define the N-dependency ("uptake") as a tuple, where the first element
+is the form of uptake, and the second is a multiplier used to turn on or
+off the uptake term within the ``dN/dt`` equation. This is required because
+when growth is N-independent, the growth term in ``dX/dt`` must be multipled
+by 1, whereas uptake must be turned off. Three forms of N-dependency are
+specified: N-independent, linear N-dependency, and saturating N-dependency.
 *)
 
-/// Uptake * uptake toggle.
 let uptakeMode =
 
     // Parameters:
@@ -164,6 +202,12 @@ let uptakeMode =
                 Components.subComponent "Independent" independent
             ]
     |}
+
+(**
+#### Density-dependency
+
+...
+*)
 
 let densityMode =
 
@@ -233,7 +277,11 @@ for h in hypotheses do
     printfn "%s" h.ReferenceCode
 
 (**
-We can fit the models as such:
+
+### Fitting the models
+
+We can fit the ecological models to data by defining an estimation engine
+that contains the method that will be applied for model fitting:
 *)
 
 let engine: EstimationEngine.EstimationEngine<float<Time.``cal yr BP``>,year,1> =
@@ -244,26 +292,12 @@ let engine: EstimationEngine.EstimationEngine<float<Time.``cal yr BP``>,year,1> 
     |> Bristlecone.withSeed 1500 // We are setting a seed for this example - see below
     |> Bristlecone.withTimeConversion (fun (ts: float<Time.``cal yr BP``>) -> float ts * 1.<Time.year>)
 
-
-let testSettings =
-    Test.annualSettings
-    |> Test.addStartValues [ N.Code.Value, 2.0; X.Code.Value, 1000. ]
-    |> Test.addNoise (Test.Noise.tryAddNormal "σ[y]" obsN.Code.Value)
-    |> Test.addNoise (Test.Noise.tryAddNormal "σ[x]" X.Code.Value)
-    |> Test.addGenerationRules
-        [ Test.GenerationRules.alwaysLessThan 5. obsN.Code.Value
-          Test.GenerationRules.alwaysMoreThan -2. obsN.Code.Value
-          Test.GenerationRules.alwaysLessThan 50000. X.Code.Value
-          Test.GenerationRules.alwaysMoreThan 0. X.Code.Value ]
-    |> Test.withTimeSeriesLength 30
-    |> Test.endWhen (Optimisation.EndConditions.Profiles.mcmc 5000<iteration> ignore)
-
-
-// let testResult = hypotheses.Head.Model |> Bristlecone.tryTestModel engine testSettings
+let endCond = Optimisation.EndConditions.atIteration 100000<iteration>
 
 
 (**
-Load in real data
+Next, we must load in some real data. We leverage FSharp.Data here to read in
+a csv file containing the raw data.
 *)
 
 open FSharp.Data
@@ -278,8 +312,10 @@ let ts =
         obsN.Code, data.Rows |> Seq.map(fun r -> float r.D15N, DatingMethods.Radiocarbon (float r.``Scaled_age_cumulative (cal yr bp)`` * 1.<Time.``cal yr BP``>)) |> TimeSeries.fromCalibratedRadiocarbonObservations
     ] |> Map.ofList
 
-let endCond = Optimisation.EndConditions.atIteration 10000<iteration>
+
+(**
+We can run an individual model fit like so:
+*)
 
 let result =
-    Bristlecone.tryFit engine endCond ts hypotheses.Head.Model
-
+    Bristlecone.tryFit engine endCond ts hypotheses.[5].Model
