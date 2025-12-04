@@ -567,7 +567,9 @@ module Solver =
                 t0 |> Map.partition (fun k _ -> measureKeys |> Seq.contains k)
 
             let hiddenT0 =
-                nonMeasures |> Map.filter (fun k _ -> not (equationKeys |> Seq.contains k))
+                nonMeasures |> Map.filter (fun k _ ->
+                    equationKeys |> Seq.contains k &&
+                    not (observedTF.Keys |> Seq.contains k))
 
             { StatesObservedForSolver = toEquationStatesOnly equationKeys dynamicForSolver
               StatesHiddenForSolver = hiddenT0
