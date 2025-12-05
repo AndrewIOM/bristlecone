@@ -40,13 +40,13 @@ In the model-fitting and model-selection workflow, model fitting uses maximum li
 
 ### Research Context.
 
-The ecological detective framework has been applied to palaeoecological and dendroecological time‑series [@Jeffers_Bonsall_Watson_Willis_2011; @Martin2022]. Some prior research relied on custom C code [@Jeffers_Bonsall_Watson_Willis_2011], though general-purpose frameworks such as Stan [@Stan-Development-Team_2025] can also be applied. Stan is widely used, but domain-agnostic: users must manually manage dimensional correctness, time conversions, and hypothesis scaffolding.
+The ecological detective framework has been applied to palaeoecological and dendroecological time‑series [@Jeffers_Bonsall_Watson_Willis_2011; @Martin_MaciasFauria_Bonsall_Forbes_Zetterberg_Jeffers_2021]. Some prior research relied on custom C code [@Jeffers_Bonsall_Watson_Willis_2011], though general-purpose frameworks such as Stan [@Stan-Development-Team_2025] can also be applied. Stan is widely used, but domain-agnostic: users must manually manage dimensional correctness, time conversions, and hypothesis scaffolding.
 
-Bristlecone’s ecological specificity - strongly‑typed models, native time handling, and modular hypothesis comparison - reduces errors and lowers barriers, supporting adoption of the ecological detective approach, as demonstrated in published applications [@Martin2022].
+Bristlecone’s ecological specificity - strongly‑typed models, native time handling, and modular hypothesis comparison - reduces errors and lowers barriers, supporting adoption of the ecological detective approach, as demonstrated in published applications [@Martin_MaciasFauria_Bonsall_Forbes_Zetterberg_Jeffers_2021].
 
 ### Ongoing research.
 
-Bristlecone has already been applied to dendroecological and isotope time‑series [@Martin_Macias‐Fauria_Bonsall_Forbes_Zetterberg_Jeffers_2021].
+Bristlecone has already been applied to dendroecological and isotope time‑series [@Martin_MaciasFauria_Bonsall_Forbes_Zetterberg_Jeffers_2021].
 
 Tensor compilation and tensor-based internal types lay the foundation for future gradient‑based optimisation. A feature in development but not yet available is an F# type provider for direct, strongly‑typed access to the NOAA Palaeoecology Database and International Tree Ring Database.
 
@@ -57,5 +57,3 @@ Ongoing research is applying Bristlecone to a large‑scale synthesis of pan‑A
 I acknowledge contributions from Elizabeth Jeffers and Marc Macias-Fauria in their support for this project.
 
 # References
-
-# Citations
