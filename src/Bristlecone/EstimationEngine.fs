@@ -80,11 +80,20 @@ module ModelSystem =
             -> int // current time index
             -> TypedTensor<Scalar, 'u>
 
+    /// Computes the hidden state’s initial value at t0
+    /// from fitted parameters and baseline known values.
+    type Initialiser<[<Measure>] 'u> =
+        TypedTensor<Vector, ``parameter``> // current parameters
+            -> CodedMap<TypedTensor<Scalar, ``environment``>> // baseline environment values at t0
+            -> CodedMap<TypedTensor<Scalar, ``state``>> // baseline observed state values at t0
+            -> TypedTensor<Scalar, 'u> // initial hidden state value
+
     type ModelSystem<[<Measure>] 'modelTimeUnit> =
         { Parameters: Parameter.Pool.ParameterPool
           EnvironmentKeys: ShortCode.ShortCode list
           Equations: ModelForm<'modelTimeUnit>
           Measures: CodedMap<Measurement<state>>
+          Initialisers: CodedMap<Initialiser<state>>
           NegLogLikelihood: Likelihood<state> }
 
     type FitValue =
@@ -223,7 +232,7 @@ module EstimationEngine =
         /// Represents a low-level numerical method used
         /// to integrate functions. Takes the intial time,
         /// final time, and time step,
-        /// the initial state, and returns a function that
+        /// and returns a function that
         /// is compiled to only require the current time
         /// and current state.
         /// Must return the baseline state plus evolutions.

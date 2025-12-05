@@ -29,8 +29,8 @@ module Base =
         (tInitial: float<``time index``>)
         (tEnd: float<``time index``>)
         (tStep: float<``time index``>)
-        (initialEnv: CodedMap<TypedTensor<Scalar, ``environment``>>)
         (externalEnv: CodedMap<TimeIndex.TimeIndex<float<``environment``>, 'date, 'timeunit, 'timespan>>)
+        (initialStateFn: TypedTensor<Vector, ``parameter``> -> CodedMap<TypedTensor<Scalar, state>>)
         (modelMap: CodedMap<TensorODE>)
         : EstimationEngine.UnparameterisedRHS =
 
@@ -83,25 +83,25 @@ module Base =
         let tInitial = tInitial |> Typed.ofScalar
         let tStep = tStep |> Typed.ofScalar
 
-        // Read in environment values from external env if not specified
-        // within initial env.
+        // Read in environment values from external environment series.
         let baselineEnv =
-            [ Map.keys externalEnvTensors; Map.keys initialEnv ]
-            |> Seq.concat
+            Map.keys externalEnvTensors
             |> Seq.map (fun k ->
-                match Map.tryFind k initialEnv with
-                | Some initial -> k, initial
-                | None ->
-                    match Map.tryFind k externalEnvTensors with
-                    | Some vec ->
-                        match tryAsScalar<``environment``> vec.Value.[0] with
-                        | Some s -> k, s
-                        | None -> invalidOp "Expected scalar from external environment vector"
-                    | None -> failwithf "Could not assign initial value to state / environment %s" k.Value)
+                match Map.tryFind k externalEnvTensors with
+                | Some vec ->
+                    match tryAsScalar<``environment``> vec.Value.[0] with
+                    | Some s -> k, s
+                    | None -> invalidOp "Expected scalar from external environment vector"
+                | None -> failwithf "Could not assign initial value to state / environment %s" k.Value)
             |> Map.ofSeq
 
         // STAGE 2. Make a parameter-specific concrete RHS.
         fun (parameters: TypedTensor<Vector, ``parameter``>) ->
+
+            // Initial state may be parameter-dependent
+            let initialState =
+                initialStateFn parameters
+                |> Map.map (fun _ v -> v.Value |> Tensors.tryAsScalar<environment> |> Option.get)
 
             // The bound RHS now closes over `parameters` but reuses all static prep
             fun (t: TypedTensor<Scalar, ``time index``>) (x: TypedTensor<Vector, ModelSystem.state>) ->
@@ -111,6 +111,7 @@ module Base =
                 let env =
                     baselineEnv
                     |> overlayExogenousAtTime idx externalEnvTensors
+                    |> Map.fold (fun acc k v -> Map.add k v acc) initialState
                     |> injectStatesIntoContext x modelKeys
 
                 // Compute derivatives for all variables

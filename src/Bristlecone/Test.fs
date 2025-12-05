@@ -239,7 +239,7 @@ module Test =
             let dynamicKeys = dynSeries.Keys
 
             let conditioned =
-                Solver.Conditioning.resolve engine.Conditioning dynSeries envSeries dynamicKeys
+                Solver.Conditioning.resolve engine.Conditioning dynSeries envSeries dynamicKeys model.Measures.Keys
 
             let obsTimes = conditioned.ObservedForPairing |> TimeFrame.dates
 
@@ -252,7 +252,9 @@ module Test =
                     engine.TimeHandling
                     (Solver.StepType.External obsTimes)
                     conditioned.StatesObservedForSolver
+                    conditioned.MeasuresForSolver
                     conditioned.StatesHiddenForSolver
+                    model.Initialisers
                     conditioned.ExogenousForSolver
                     (fun _ -> Solver.Exact)
 
