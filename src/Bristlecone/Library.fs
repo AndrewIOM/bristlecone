@@ -17,21 +17,13 @@ module Bristlecone =
     open Bristlecone.EstimationEngine
     open Bristlecone.Statistics
 
-    // TODO Current default conversions, but may not be most appropriate defaults.
-    let private indexByMonth (ts: int<year>) =
-        (float ts) * 1.<year> * 12.<Time.``time index`` / year>
-
-    let private indexBySpan (ts: TimeSpan) =
-        float ts.Days * 1.<day> * 12.<Time.``time index`` / day>
-
-
     /// <summary>A basic estimation engine for discrete-time equations, using a Nelder-Mead optimiser.</summary>
     let mkDiscrete () =
         { TimeHandling = Discrete
           OptimiseWith = Optimisation.Amoeba.single Optimisation.Amoeba.Solver.Default
           LogTo = Console.logger 1000<iteration>
           Random = MathNet.Numerics.Random.MersenneTwister true
-          ToModelTime = indexBySpan
+          ToModelTime = DateMode.Conversion.toYears
           InterpolationGlobal = Solver.InterpolationMode.Lower
           InterpolationPerVariable = Map.empty
           Conditioning = Conditioning.NoConditioning }
@@ -40,9 +32,9 @@ module Bristlecone =
     let mkContinuous () =
         { TimeHandling = Continuous <| Integration.RungeKutta.rk4
           OptimiseWith = Optimisation.Amoeba.single Optimisation.Amoeba.Solver.Default
-          LogTo = Bristlecone.Logging.Console.logger 1000<iteration>
+          LogTo = Console.logger 1000<iteration>
           Random = MathNet.Numerics.Random.MersenneTwister true
-          ToModelTime = indexBySpan
+          ToModelTime = DateMode.Conversion.toYears
           InterpolationGlobal = Solver.InterpolationMode.Lower
           InterpolationPerVariable = Map.empty
           Conditioning = Conditioning.RepeatFirstDataPoint }
@@ -56,10 +48,10 @@ module Bristlecone =
     /// <returns></returns>
     let withOutput out engine = { engine with LogTo = out }
 
-    let withTimeConversion<'timespan, [<Measure>] 'modelTimeUnit, 'o1, [<Measure>] 'o2, [<Measure>] 'u>
-        (fn: 'timespan -> float<'modelTimeUnit>)
-        (engine: EstimationEngine<'o1, 'o2, 'u>)
-        : EstimationEngine<'timespan, 'modelTimeUnit, 'u> =
+    let withTimeConversion<'d, 'timespan, [<Measure>] 'modelTimeUnit, 'o1, [<Measure>] 'o2, [<Measure>] 'u>
+        (fn: DateMode.Conversion.ResolutionToModelUnits<'d,'timespan,'modelTimeUnit>)
+        (engine: EstimationEngine<'d,'o1, 'o2, 'u>)
+        : EstimationEngine<'d,'timespan, 'modelTimeUnit, 'u> =
         { TimeHandling = engine.TimeHandling
           OptimiseWith = engine.OptimiseWith
           LogTo = engine.LogTo
@@ -68,6 +60,9 @@ module Bristlecone =
           InterpolationGlobal = engine.InterpolationGlobal
           InterpolationPerVariable = engine.InterpolationPerVariable
           Conditioning = engine.Conditioning }
+
+    let forDailyModel engine = withTimeConversion DateMode.Conversion.toDays engine
+    let forMonthlyModel engine = withTimeConversion DateMode.Conversion.toMonths engine
 
     /// Use a mersenne twister random number generator
     /// with a specific seed.
@@ -227,7 +222,7 @@ module Bristlecone =
     /// <param name="model"></param>
     /// <returns></returns>
     let tryFit
-        (engine: EstimationEngine<'timespan, 'modelTimeUnit, 'stateUnit>)
+        (engine: EstimationEngine<'date, 'timespan, 'modelTimeUnit, 'stateUnit>)
         endCondition
         (observedSeries: CodedMap<TimeSeries<float<'stateUnit>, 'date, 'yearType, 'timespan>>)
         (model: ModelSystem<'modelTimeUnit>)
@@ -446,7 +441,7 @@ module Bristlecone =
     /// It is wrapped in an F# Result, indicating if the procedure
     /// was successful or not.</returns>
     let tryTestModel
-        (engine: EstimationEngine<'timespan, 'modelTimeUnit, 'state>)
+        (engine: EstimationEngine<'date, 'timespan, 'modelTimeUnit, 'state>)
         (settings: Test.TestSettings<'state, 'date, 'timeunit, 'timespan>)
         (model: ModelSystem<'modelTimeUnit>)
         =
@@ -536,7 +531,7 @@ module Bristlecone =
     /// <param name="model">The model system to test against the estimation engine.</param>
     /// <returns>A test result that indicates differences between the expected and actual fit.</returns>
     let testModel
-        (engine: EstimationEngine<'timespan, 'modelTimeUnit, 'state>)
+        (engine: EstimationEngine<'date, 'timespan, 'modelTimeUnit, 'state>)
         (settings: TestSettings<'state, 'date, 'yearUnit, 'timespan>)
         (model: ModelSystem<'modelTimeUnit>)
         =
@@ -550,7 +545,7 @@ module Bristlecone =
     /// <param name="series">Time-series to fit with model</param>
     /// <returns>A list of estimation results (one for each bootstrap) for further analysis</returns>
     let bootstrap
-        (engine: EstimationEngine.EstimationEngine<'timespan, 'modelTimeUnit, 'state>)
+        (engine: EstimationEngine.EstimationEngine<'date, 'timespan, 'modelTimeUnit, 1>)
         (endCondition: EndCondition)
         bootstrapCount
         (model: ModelSystem<'modelTimeUnit>)
@@ -567,7 +562,7 @@ module Bristlecone =
                 let stepping =
                     match resolution with
                     | Resolution.Variable -> failwith "Cannot boostrap variable resolution data"
-                    | Resolution.Fixed f -> (series |> Seq.head).Value.DateMode.ResolutionToSpan f
+                    | Resolution.Fixed f -> f
 
                 let subset = TimeSeries.Bootstrap.removeSingle engine.Random stepping s
                 let result = fit engine endCondition subset model

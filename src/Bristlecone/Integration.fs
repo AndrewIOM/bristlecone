@@ -26,10 +26,10 @@ module Base =
     /// the function should only be run at times as specified in tInitial, tEnd,
     /// and tStep.
     let makeCompiledFunctionForIntegration
-        (tInitial: float<``time index``>)
-        (tEnd: float<``time index``>)
-        (tStep: float<``time index``>)
-        (externalEnv: CodedMap<TimeIndex.TimeIndex<float<``environment``>, 'date, 'timeunit, 'timespan>>)
+        (tInitial: float<'modelTime ``time index``>)
+        (tEnd: float<'modelTime ``time index``>)
+        (tStep: float<'modelTime ``time index``>)
+        (externalEnv: CodedMap<TimeIndex.TimeIndex<float<``environment``>, 'date, 'timeunit, 'timespan, 'modelTime>>)
         (initialStateFn: TypedTensor<Vector, ``parameter``> -> CodedMap<TypedTensor<Scalar, state>>)
         (modelMap: CodedMap<TensorODE>)
         : EstimationEngine.UnparameterisedRHS =

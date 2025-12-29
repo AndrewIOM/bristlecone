@@ -210,7 +210,7 @@ module EstimationEngine =
                 -> float<``time index``> // tEnd
                 -> float<``time index``> // tStep
                 -> CodedMap<TypedTensor<Scalar, environment>> // initial environment
-                -> CodedMap<TimeIndex.TimeIndex<TypedTensor<Scalar, environment>, 'date, 'timeunit, 'timespan>> // external env
+                -> CodedMap<TimeIndex.TimeIndex<TypedTensor<Scalar, environment>, 'date, 'timeunit, 'timespan, 1>> // external env
                 -> ModelEquations
                 -> UnparameterisedRHS
 
@@ -268,12 +268,12 @@ module EstimationEngine =
         | Discrete
         | Continuous of Integration.IntegrationRoutine
 
-    type EstimationEngine<'timespan, [<Measure>] 'modelTimeUnit, [<Measure>] 'state> =
+    type EstimationEngine<'date, 'timespan, [<Measure>] 'modelTimeUnit, [<Measure>] 'state> =
         { TimeHandling: TimeMode
           OptimiseWith: Optimisation.Optimiser
           Conditioning: Conditioning<'state>
           LogTo: WriteOut
-          ToModelTime: 'timespan -> float<'modelTimeUnit>
+          ToModelTime: DateMode.Conversion.ResolutionToModelUnits<'date, 'timespan, 'modelTimeUnit>
           InterpolationGlobal: Solver.InterpolationMode
           InterpolationPerVariable: CodedMap<Solver.InterpolationMode>
           Random: Random }

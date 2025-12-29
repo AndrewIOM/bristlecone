@@ -53,7 +53,7 @@ module ProfileLikelihood =
     open Bristlecone.Optimisation
 
     type EstimateFunction<[<Measure>] 'modelTimeUnit, [<Measure>] 'state, 'subject, 'date, 'timeunit, 'timespan> =
-        EstimationEngine<'timespan, 'modelTimeUnit, 'state>
+        EstimationEngine<'date, 'timespan, 'modelTimeUnit, 'state>
             -> ModelSystem<'modelTimeUnit>
             -> 'subject
             -> EstimationResult<'date, 'timeunit, 'timespan>

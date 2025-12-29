@@ -56,6 +56,7 @@ module Objective =
     /// Pairs observed time series to predicted series for dynamic variables only.
     /// Environmental forcings and hidden variables are removed.
     let pairObservationsToExpected observed expected : CodedMap<SeriesPair<state>> =
+        printfn "OBserved = %A /// EXPECTED = %A" observed expected
         observed
         |> Map.filter (fun key _ -> expected |> Map.containsKey key)
         |> Map.map (fun key value ->

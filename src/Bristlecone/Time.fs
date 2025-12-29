@@ -224,11 +224,21 @@ module Resolution =
         | Days i -> Days i
         | CustomEpoch ts -> fn ts |> CustomEpoch
 
-    let finestResolution resToSpan totalDays (r1: FixedTemporalResolution<'ts>) (r2: FixedTemporalResolution<'ts>) =
-        let span1 = resToSpan r1
-        let span2 = resToSpan r2
-        let days1 = totalDays span1
-        let days2 = totalDays span2
+    module internal Canonical =
+        let daysPerYear = 365.<day / year>
+        let monthsPerYear = 12.<month / year>
+        let daysPerMonth = daysPerYear / monthsPerYear
+
+    let dayEquivalent totalDays = function
+        | Years y -> Units.intToFloat y.Value * Canonical.daysPerYear
+        | Months m -> Units.intToFloat m.Value * Canonical.daysPerMonth
+        | Days d -> Units.intToFloat d.Value
+        | CustomEpoch c -> totalDays c
+
+    let finestResolution spanToDays
+        (r1: FixedTemporalResolution<'ts>) (r2: FixedTemporalResolution<'ts>) =
+        let days1 = dayEquivalent spanToDays r1
+        let days2 = dayEquivalent spanToDays r2
         if days1 < days2 then r1 else r2
 
 
@@ -240,7 +250,8 @@ module DatingMethods =
     /// 365 days per year.
     module AnnualCalendars =
         let daysPerYear= 365.<day / year>
-        let daysPerMonth = daysPerYear / 12.<month / year>
+        let monthsPerYear = 12.<month / year>
+        let daysPerMonth = daysPerYear / monthsPerYear
         let oldMonthToYear (months: float<month>) = months * (daysPerMonth / daysPerYear)
         let oldDayToYear (days: float<day>) = days / daysPerYear
 
@@ -250,17 +261,26 @@ module DatingMethods =
         let internal radiocarbonToDays rc = resRadiocarbonToYears rc * daysPerYear
         let internal radiocarbonToMonths rc = resRadiocarbonToYears rc * (daysPerYear / daysPerMonth)
 
-        let internal resToSpan toUnit (r: Resolution.FixedTemporalResolution<'u>) : 'u =
-            match r with
-            | Resolution.FixedTemporalResolution.Years y -> y.Value |> Units.intToFloat |> toUnit
-            | Resolution.FixedTemporalResolution.Months m ->
-                let yearFrac = Units.intToFloat m.Value / (12.<month> / 1.<year>)
-                yearFrac |> toUnit
-            | Resolution.FixedTemporalResolution.Days d ->
-                let yearFrac = Units.intToFloat d.Value / daysPerYear
-                yearFrac |> toUnit
-            | Resolution.FixedTemporalResolution.CustomEpoch e -> e
+        // let internal spanToTimeDifference (toUnit: float<year> -> 'span) years =
+        //     {
+        //         YearFraction = years
+        //         MonthFraction = years * monthsPerYear
+        //         DayFraction = years * daysPerYear
+        //         RealDifference = years |> toUnit
+        //         Ticks = 0.<ticks>
+        //     }
 
+        // let internal resToSpan<'modelSpan> (toUnit: float<year> -> 'modelSpan) (r: Resolution.FixedTemporalResolution<float<year>>) : TimeDifference<'modelSpan> =
+        //     match r with
+        //     | Resolution.FixedTemporalResolution.Years y -> y.Value |> Units.intToFloat
+        //     | Resolution.FixedTemporalResolution.Months m ->
+        //         let yearFrac = Units.intToFloat m.Value / (12.<month> / 1.<year>)
+        //         yearFrac
+        //     | Resolution.FixedTemporalResolution.Days d ->
+        //         let yearFrac = Units.intToFloat d.Value / daysPerYear
+        //         yearFrac
+        //     | Resolution.FixedTemporalResolution.CustomEpoch e -> e
+        //     |> spanToTimeDifference toUnit
 
 
     /// Converts 'old years' (i.e. with 365 days per year) into
@@ -415,7 +435,6 @@ module DateMode =
           ZeroSpan: 'timespan
           TotalDays: 'timespan -> float<day>
           SpanToResolution: 'timespan -> Resolution.FixedTemporalResolution<'timespan>
-          ResolutionToSpan: Resolution.FixedTemporalResolution<'timespan> -> 'timespan
           Divide: 'timespan -> 'timespan -> float
           Minus: 'T -> 'T -> 'timespan
           EqualWithin: 'timespan -> 'timespan -> bool }
@@ -445,24 +464,29 @@ module DateMode =
                 |> PositiveInt.create
                 |> Option.get
                 |> Resolution.FixedTemporalResolution.Days
-          ResolutionToSpan =
-            function
-            | Resolution.FixedTemporalResolution.Days d ->
-                let days = Units.removeUnitFromInt d.Value |> float
-                TimeSpan.FromDays days
-            | Resolution.FixedTemporalResolution.Months m ->
-                let months =
-                    Units.removeUnitFromInt m.Value |> float |> LanguagePrimitives.FloatWithMeasure
-
-                let days: float<day> = months * 30.
-                TimeSpan.FromDays(Units.removeUnitFromFloat days)
-            | Resolution.FixedTemporalResolution.Years y ->
-                let years =
-                    Units.removeUnitFromInt y.Value |> float |> LanguagePrimitives.FloatWithMeasure
-
-                let days: float<day> = years * AnnualCalendars.daysPerYear
-                TimeSpan.FromDays(Units.removeUnitFromFloat days)
-            | Resolution.FixedTemporalResolution.CustomEpoch t -> t
+        //   ResolutionToSpan =
+        //     function
+        //     | Resolution.FixedTemporalResolution.Days d ->
+        //         { DayFraction = Units.intToFloat d.Value
+        //           MonthFraction = Units.intToFloat d.Value / AnnualCalendars.daysPerMonth
+        //           YearFraction = Units.intToFloat d.Value / AnnualCalendars.daysPerYear
+        //           RealDifference = TimeSpan.FromDays (float d.Value)
+        //           Ticks = (TimeSpan.FromDays (float d.Value)).Ticks |> float |> (*) 1.<ticks> }
+        //     | Resolution.FixedTemporalResolution.Months m ->
+        //         let days: float<day> = Units.intToFloat m.Value * AnnualCalendars.daysPerMonth
+        //         { DayFraction = AnnualCalendars.daysPerMonth * Units.intToFloat m.Value
+        //           MonthFraction = Units.intToFloat m.Value
+        //           YearFraction = days / AnnualCalendars.daysPerYear
+        //           RealDifference = TimeSpan.FromDays (float days)
+        //           Ticks = (TimeSpan.FromDays (float days)).Ticks |> float |> (*) 1.<ticks> }
+        //     | Resolution.FixedTemporalResolution.Years y ->
+        //         let days = AnnualCalendars.daysPerYear * Units.intToFloat y.Value
+        //         { DayFraction = days
+        //           MonthFraction = AnnualCalendars.monthsPerYear * Units.intToFloat y.Value
+        //           YearFraction = days / AnnualCalendars.daysPerYear
+        //           RealDifference = TimeSpan.FromDays (float days)
+        //           Ticks = (TimeSpan.FromDays (float days)).Ticks |> float |> (*) 1.<ticks> }
+        //     | Resolution.FixedTemporalResolution.CustomEpoch t -> failwith "not implemented"
           Minus = fun d1 d2 -> d1 - d2
           Divide = fun ts1 ts2 -> float ts1.Ticks / float ts2.Ticks
           SortOldestFirst = fun d1 d2 -> if d1 < d2 then -1 else 1
@@ -485,7 +509,6 @@ module DateMode =
                 (years |> Units.removeUnitFromInt |> float |> LanguagePrimitives.FloatWithMeasure)
                 * AnnualCalendars.daysPerYear
           SpanToResolution = fun epoch -> oldYearsToResolution epoch
-          ResolutionToSpan = AnnualCalendars.resToSpan (fun ts -> Units.floatToInt ts)
           Divide = fun ts1 ts2 -> ts1 / ts2 |> float
           Minus = fun d1 d2 -> d1 - d2
           EqualWithin = fun ts1 ts2 -> ts1 = ts2 }
@@ -510,7 +533,6 @@ module DateMode =
                  |> LanguagePrimitives.FloatWithMeasure)
                 * AnnualCalendars.daysPerYear
           SpanToResolution = fun epoch -> oldYearsToResolutionFloat epoch
-          ResolutionToSpan = AnnualCalendars.resToSpan (fun ts -> ts |> float |> (*) 1.<``BP (radiocarbon)``>)
           Divide = fun ts1 ts2 -> ts1 / ts2 |> float
           Minus = fun d1 d2 -> d1 - d2
           EqualWithin = fun x y -> abs (float (x - y)) < 1e-9 }
@@ -532,10 +554,56 @@ module DateMode =
                 (years |> Units.removeUnitFromFloat |> LanguagePrimitives.FloatWithMeasure)
                 * AnnualCalendars.daysPerYear
           SpanToResolution = fun epoch -> oldYearsToResolutionFloat epoch
-          ResolutionToSpan = AnnualCalendars.resToSpan (fun ts -> ts |> float |> (*) 1.<``cal yr BP``>)
           Divide = fun ts1 ts2 -> ts1 / ts2 |> float
           Minus = fun d1 d2 -> d1 - d2
           EqualWithin = fun x y -> abs (float (x - y)) < 1e-9 }
+
+    /// Conversion functions that translate from one time unit into another.
+    /// These functions are intended primarily for use in estimation engines
+    /// when translating from data time to model time.
+    module Conversion =
+
+        type ConvertFrom<'date, 'timespan> =
+            | FromResolution of Resolution.FixedTemporalResolution<'timespan> // canonical?
+            | FromDifference of TimeDifference<'timespan>
+
+        /// Represents a conversion from a grounded timespan into a model-time unit.
+        /// First, converts from the timespan into a fixed resolution. Then,
+        type ResolutionToModelUnits<'date,'timespan,[<Measure>] 'modelTimeUnit> =
+            ConvertFrom<'date,'timespan> -> float<'modelTimeUnit>
+
+        let toDays : ResolutionToModelUnits<DateTime, TimeSpan, day> =
+            fun from ->
+                match from with
+                | FromDifference diff -> diff.DayFraction
+                | FromResolution res ->
+                    match res with
+                    | Resolution.Days d -> d.Value |> Units.intToFloat
+                    | Resolution.Months m -> Units.intToFloat m.Value * AnnualCalendars.daysPerMonth
+                    | Resolution.Years y -> Units.intToFloat y.Value * AnnualCalendars.daysPerYear
+                    | Resolution.CustomEpoch c -> float c.Days * 1.<day>
+
+        let toMonths : ResolutionToModelUnits<DateTime, TimeSpan, month> =
+            fun from ->
+                match from with
+                | FromDifference diff -> diff.MonthFraction
+                | FromResolution res ->
+                    match res with
+                    | Resolution.Days d -> Units.intToFloat d.Value / AnnualCalendars.daysPerMonth
+                    | Resolution.Months m -> m.Value |> Units.intToFloat
+                    | Resolution.Years y -> Units.intToFloat y.Value * AnnualCalendars.monthsPerYear
+                    | Resolution.CustomEpoch c -> float c.Days * 1.<day> / AnnualCalendars.daysPerMonth
+
+        let toYears : ResolutionToModelUnits<DateTime, TimeSpan, year> =
+            fun from ->
+                match from with
+                | FromDifference diff -> diff.YearFraction
+                | FromResolution res ->
+                    match res with
+                    | Resolution.Days d -> Units.intToFloat d.Value / AnnualCalendars.daysPerYear
+                    | Resolution.Months m -> Units.intToFloat m.Value / AnnualCalendars.monthsPerYear
+                    | Resolution.Years y -> y.Value |> Units.intToFloat
+                    | Resolution.CustomEpoch c -> float c.Days * 1.<day> / AnnualCalendars.daysPerYear
 
 
 module TimePoint =
@@ -672,6 +740,15 @@ module TimeSeries =
         |> Seq.tail // The first time point is used as initial state for the scan
         |> Seq.scan (fun (_, t) v -> (v, t |> TimePoint.increment resolution timeUnitMode)) (data |> Seq.head, t1)
         |> fromObservations timeUnitMode
+
+    /// Make a timeline based on a resolution and start and end dates.
+    let initTimeline (timeUnitMode: DateMode.DateMode<'date, 'timeunit, 'timespan>) t1 tEnd resolution =
+        Seq.unfold (fun current ->
+            if timeUnitMode.SortOldestFirst current tEnd > 0 then None
+            else
+                let next = TimePoint.increment resolution timeUnitMode current
+                Some(current, next)
+        ) t1
 
     /// <summary>Turn a time series into a sequence of observations</summary>
     /// <param name="series">A time-series</param>
@@ -904,37 +981,44 @@ module TimeSeries =
     /// <typeparam name="'timeunit">A unit of time as used by the dating method</typeparam>
     /// <typeparam name="'timespan">The timespan representation for the dating method</typeparam>
     /// <returns></returns>
-    let interpolateFloats (series: TimeSeries<float option, 'date, 'timeunit, 'timespan>) =
-        let observations = series |> toObservations |> Seq.toArray
+    let interpolateFloats resolution (series: TimeSeries<float<'u> option, 'date, 'timeunit, 'timespan>) =
+        
+        let observations = series |> toObservations |> Array.ofSeq
 
-        observations
-        |> Seq.mapi (fun i obs ->
-            match fst obs with
-            | Some _ -> Some(obs, i, i, i)
-            | None ->
-                let lastIndex =
-                    observations |> Seq.take i |> Seq.tryFindIndexBack (fun (o, _) -> o.IsSome)
+        let startDate = observations |> Seq.map snd |> Seq.head
+        let endDate = observations |> Seq.map snd |> Seq.last
+        let dm = series.DateMode
+        let timeline = initTimeline series.DateMode startDate endDate resolution |> Array.ofSeq
 
-                let nextIndex =
-                    observations |> Seq.skip i |> Seq.tryFindIndex (fun (o, _) -> o.IsSome)
+        // Collect indices and values of known points
+        let obsMap =
+            observations
+            |> Seq.choose (fun (vOpt,d) -> vOpt |> Option.map (fun v -> d,v))
+            |> Map.ofSeq
 
-                if lastIndex.IsSome && nextIndex.IsSome then
-                    Some(obs, i, lastIndex.Value, nextIndex.Value + i)
-                else
-                    None)
-        |> Seq.choose id
-        |> Seq.map (fun (obs, i, last, next) ->
-            if (next - last) = 0 then
-                (observations.[i] |> fst).Value, observations.[i] |> snd
-            else
-                let lastValue = (observations.[last] |> fst).Value
-                let nextValue = (observations.[next] |> fst).Value
+        if Map.isEmpty obsMap then
+            invalidOp "Interpolation failed: series contains no known values."
 
-                (lastValue
-                 + ((nextValue - lastValue) / (float next - float last)) * (float i - float last)),
-                (obs |> snd))
-        |> fromObservations series.DateMode
+        let filled =
+            timeline
+            |> Array.map (fun d ->
+                match Map.tryFind d obsMap with
+                | Some v -> v, d
+                | None ->
+                    let prev = obsMap |> Map.toSeq |> Seq.filter (fun (dp,_) -> dm.SortOldestFirst dp d < 0) |> Seq.tryLast
+                    let next = obsMap |> Map.toSeq |> Seq.filter (fun (dn,_) -> dm.SortOldestFirst dn d > 0) |> Seq.tryHead
+                    match prev,next with
+                    | Some(dPrev,vPrev), Some(dNext,vNext) ->
+                        let spanTotal = dm.TotalDays (dm.Minus dNext dPrev)
+                        let spanPart  = dm.TotalDays (dm.Minus d dPrev)
+                        vPrev + (vNext - vPrev) * (spanPart/spanTotal), d
+                    | Some(_,vPrev), None -> vPrev, d
+                    | None, Some(_,vNext) -> vNext, d
+                    | _ -> invalidOp $"Interpolation failed at {d}: no neighbours found."
+            )
 
+        fromObservations series.DateMode filled
+        
     /// <summary>Determines if multiple time series have the same temporal extent and time steps.</summary>
     /// <param name="series">A sequence of time-series to assess for commonality</param>
     /// <typeparam name="'T">The data type of the observations</typeparam>
@@ -968,21 +1052,16 @@ module TimeSeries =
         /// <param name="series"></param>
         /// <returns>A time series that has the observation at position i removed</returns>
         let bootstrapFixedStep stepping i (series: TimeSeries<'T, 'date, 'timeunit, 'timespan>) =
-            let start, _ = series |> unwrap
 
             let newData =
                 series
-                |> innerSeries
-                |> Array.map fst
-                |> Array.toList
+                |> toObservations
+                |> Seq.map fst
+                |> Seq.toList
                 |> List.remove i
                 |> List.toArray
 
-            (List.init (Seq.length newData) (fun _ -> stepping))
-            |> Seq.zip newData
-            |> Seq.toArray
-            |> TimeSteps
-            |> createFixedSeries series.DateMode start
+            fromSeq series.DateMode (snd series.StartDate) stepping newData
 
         /// <summary>Randomly remove a single time point from a time-series.</summary>
         /// <param name="random">A random instance to use</param>
@@ -1027,8 +1106,8 @@ module TimeIndex =
     /// of the time-series but not falling on an observed time, a lookup
     /// value may be interpolated using an interpolation function. Here,
     /// `'T` is the data value type.
-    type IndexMode<'T> =
-        | Interpolate of ((float<``time index``> * 'T) -> (float<``time index``> * 'T) -> float<``time index``> -> 'T)
+    type IndexMode<'T, [<Measure>] 'modelTimeUnit> =
+        | Interpolate of ((float<'modelTimeUnit ``time index``> * 'T) -> (float<'modelTimeUnit ``time index``> * 'T) -> float<'modelTimeUnit ``time index``> -> 'T)
         | Exact
 
     /// <summary>Index a single time series in accordance with the baseline 0 (time index) set as
@@ -1042,73 +1121,32 @@ module TimeIndex =
     /// <param name="series">A time-series to index.</param>
     /// <typeparam name="'T">The underlying data type of the time-series</typeparam>
     /// <returns>A temporal index </returns>
-    let create
+    let create 
         (t0: 'date)
-        targetResolution
+        (toTargetResolution: DateMode.Conversion.ConvertFrom<'date,'timespan> -> float<'modelTimeUnit>) 
         (series: TimeSeries.TimeSeries<'T, 'date, 'timeunit, 'timespan>)
-        : seq<float<``time index``> * 'T> =
-        let obs = series |> TimeSeries.toObservations
-
-        match series.DateMode.Resolution with
-        | DateMode.MaximumResolution.Ticks _ ->
-            match targetResolution with
-            | Resolution.FixedTemporalResolution.Years y ->
-                obs
-                |> Seq.map (fun (v, tn) ->
-                    (((series.DateMode.SignedDifference t0 tn).YearFraction / Units.intToFloat y.Value)
-                     |> float
-                     |> (*) 1.0<``time index``>,
-                     v))
-            | Resolution.FixedTemporalResolution.Months m ->
-                obs
-                |> Seq.map (fun (v, tn) ->
-                    (((series.DateMode.SignedDifference t0 tn).MonthFraction
-                      / Units.intToFloat m.Value
-                      |> float
-                      |> (*) 1.0<``time index``>),
-                     v))
-            | Resolution.FixedTemporalResolution.Days d ->
-                obs
-                |> Seq.map (fun (v, tn) ->
-                    (((series.DateMode.SignedDifference t0 tn).DayFraction / Units.intToFloat d.Value)
-                     |> float
-                     |> (*) 1.<``time index``>,
-                     v))
-            | Resolution.FixedTemporalResolution.CustomEpoch(t: 'timespan) ->
-                obs
-                |> Seq.map (fun (v, tn) ->
-                    (series.DateMode.Divide (series.DateMode.SignedDifference t0 tn).RealDifference t)
-                    |> Units.removeUnitFromFloat
-                    |> (*) 1.0<``time index``>,
-                    v)
-
-        | DateMode.MaximumResolution.Year ->
-            match targetResolution with
-            | Resolution.FixedTemporalResolution.Years y ->
-                obs
-                |> Seq.map (fun (value, tn) ->
-                    (((series.DateMode.SignedDifference t0 tn).YearFraction / Units.intToFloat y.Value)
-                     * 1.0<``time index``>,
-                     value))
-            | Resolution.FixedTemporalResolution.CustomEpoch t ->
-                failwith "Cannot use a custom epoch when the date unit has a maximum resolution of annual"
-            | Resolution.FixedTemporalResolution.Months _
-            | Resolution.FixedTemporalResolution.Days _ ->
-                failwith "Cannot index timeseries that has a maximum resolution of annual by month / day."
+        : seq<float<'modelTimeUnit ``time index``> * 'T> =
+        series
+        |> TimeSeries.toObservations
+        |> Seq.map (fun (v, tn) ->
+            let diff = series.DateMode.SignedDifference t0 tn
+            toTargetResolution (DateMode.Conversion.FromDifference diff) * 1.<``time index``>, v)
 
     /// <summary>A representation of temporal data as fractions of a common fixed temporal resolution,
     /// from a given baseline. The baseline must be greater than or equal to the baseline
     /// of the time series.</summary>
-    type TimeIndex<'T, 'date, 'timeunit, 'timespan>
+    type TimeIndex<'T, 'date, 'timeunit, 'timespan, [<Measure>] 'modelTimeUnit>
         (
             baseDate: 'date,
-            resolution,
-            mode: IndexMode<'T>,
+            toTargetResolution: DateMode.Conversion.ConvertFrom<'date,'timespan> -> float<'modelTimeUnit>,
+            mode: IndexMode<'T, 'modelTimeUnit>,
             series: TimeSeries.TimeSeries<'T, 'date, 'timeunit, 'timespan>
         ) =
 
-        let table = series |> create baseDate resolution |> Map.ofSeq
+        let table = series |> create baseDate toTargetResolution |> Map.ofSeq
         let tablePairwise = table |> Map.toArray |> Array.pairwise // Ordered in time
+
+        let zero = LanguagePrimitives.FloatWithMeasure<'modelTimeUnit ``time index``> 0.
 
         member __.Item
 
@@ -1123,7 +1161,7 @@ module TimeIndex =
                         match
                             tablePairwise
                             |> Array.tryFind (fun ((k1, _), (k2, _)) ->
-                                (t - k1) > 0.<``time index``> && (t - k2) < 0.<``time index``>)
+                                (t - k1) >  zero && (t - k2) < zero)
                         with
                         | Some((k1, v1), (k2, v2)) -> interpolateFn (k1, v1) (k2, v2) t
                         | None ->

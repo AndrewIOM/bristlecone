@@ -561,7 +561,7 @@ module Language =
         /// If a tensor is infinite or nan, replaces its value with a high
         /// penalty value (1e30).
         let nonFiniteToPenalty (x: Tensor) =
-            // x.clamp(low = -1e30, high = 1e30)
+            // // x.clamp(low = -1e30, high = 1e30)
             // let nanMask = dsharp.isnan x
             // let infMask = dsharp.isinf x
             // let nanF = dsharp.cast(nanMask, Dtype.Float64)
@@ -573,6 +573,9 @@ module Language =
             let d = x.toDouble ()
             if System.Double.IsFinite d then x else invalidPenalty
 
+        let convertMask mask =
+            dsharp.cast (mask, Dtype.Float64)
+
         /// Blends the true and false cases for AD-safe operation, but eagerly
         /// evaluates both sides. If a NaN is present, it will contaminate the
         /// whole operation despite being in the unused case.
@@ -580,7 +583,7 @@ module Language =
             <@
                 match %c with
                 | Bool mask ->
-                    let m = dsharp.cast (mask, Dtype.Float64)
+                    let m = convertMask mask
                     nonFiniteToPenalty %t * m + nonFiniteToPenalty %f * (one - m)
             @>
 
@@ -625,8 +628,6 @@ module Language =
                     %loExpr
                     %hiExpr
                     maxIter
-            // Statistics.RootFinding.Tensor.bisect (%%fLambda : Tensor -> Tensor)
-            //                     %targetExpr %loExpr %hiExpr tol maxIter
             @>
 
         let getEnvironment eVar name =

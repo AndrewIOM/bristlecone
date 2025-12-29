@@ -284,7 +284,7 @@ module Test =
         /// Generate data and check that it complies with the
         /// given ruleset.
         let rec tryGenerateData
-            (engine: EstimationEngine.EstimationEngine<'timespan, 'modelTimeUnit, 'state>)
+            (engine: EstimationEngine.EstimationEngine<'date, 'timespan, 'modelTimeUnit, 'state>)
             (settings: TestSettings<'state, 'date, 'timeunit, 'timespan>)
             (model: ModelSystem.ModelSystem<'modelTimeUnit>)
             attempts

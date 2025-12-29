@@ -12,6 +12,10 @@ module Units =
 
     let mmPerMetre: float<millimetre / metre> = 1000.0<millimetre / metre>
 
+    [<Measure>] type celsius
+
+    let celsiusToKelvin (c:float<celsius>) : float<kelvin> = Units.retype c + 273.15<kelvin>
+
 
 // Environmental space contains
 
@@ -48,16 +52,48 @@ module PlantIndividual =
         let bounded = plant.Growth |> GrowthSeries.tail
         { plant with Growth = bounded }
 
+    /// Adapt an annual dendro-series to work with sub-annual
+    /// resolution environmental data.
+    /// Assumes that growth rings are discrete and that annual wood production
+    /// has ended by 31st December (i.e. northern hemisphere).
+    let toSubannual<[<Measure>] 'growthUnit>
+        (plant: PlantIndividual<'growthUnit, DatingMethods.Annual, int<year>, int<year>>) :
+            PlantIndividual<'growthUnit,System.DateTime, int<year>, System.TimeSpan> =
+
+        let toDate (year:DatingMethods.Annual) =
+            System.DateTime(year.Value |> Units.removeUnitFromInt, 12, 31)
+
+        let toDateMode ts =
+            ts |> TimeSeries.toObservations |> Seq.map(fun (v,s) -> v, toDate s) |> TimeSeries.fromObservations DateMode.calendarDateMode
+
+        let dateBasedGrowth =
+            match plant.Growth with
+            | GrowthSeries.Absolute ts -> ts |> TimeSeries.toObservations |> Seq.map(fun (v,s) -> v, toDate s) |> TimeSeries.fromObservations DateMode.calendarDateMode |> GrowthSeries.Absolute
+            | GrowthSeries.Cumulative ts -> ts |> TimeSeries.toObservations |> Seq.map(fun (v,s) -> v, toDate s) |> TimeSeries.fromObservations DateMode.calendarDateMode |> GrowthSeries.Cumulative
+            | GrowthSeries.Relative ts -> ts |> TimeSeries.toObservations |> Seq.map(fun (v,s) -> v, toDate s) |> TimeSeries.fromObservations DateMode.calendarDateMode |> GrowthSeries.Relative
+
+        let traits =
+            plant.InternalControls |> Map.map(fun _ v ->
+                match v with
+                | VariableInTime v -> toDateMode v |> VariableInTime
+                | StaticInTime v -> StaticInTime v)
+
+        {
+            Identifier = plant.Identifier
+            Growth = dateBasedGrowth
+            InternalControls = traits
+            Environment = plant.Environment |> Map.map(fun _ v -> toDateMode v)
+        }
+
+
     /// <summary>Attach an environmental time-series to a plant individual,
     /// for example for a local environmental condition or resource.</summary>
-    let zipEnvironment envName envData plant =
-        let code = ShortCode.create envName
-
-        match code with
-        | None -> failwith "%s is not a valid environment code."
-        | Some c ->
-            { plant with
-                Environment = plant.Environment.Add(c, envData) }
+    let zipEnvironment<[<Measure>] 'u, [<Measure>] 'growthUnit, 'date,'timeunit, 'timespan> (envName:Language.StateId<'u>)
+        (envData:TimeSeries<float<'u>,'date,'timeunit, 'timespan>)
+        (plant: PlantIndividual<'growthUnit, 'date, 'timeunit, 'timespan>) =
+        let ts = envData |> TimeSeries.map(fun (f,_) -> f |> Units.removeUnitFromFloat)
+        { plant with
+            Environment = plant.Environment.Add(envName.Code, ts) }
 
     /// <summary>Assigns local environmental conditions to each plant in a sequence,
     /// given a sequence of environmental time-series where each time-series

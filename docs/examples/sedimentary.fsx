@@ -1,6 +1,6 @@
 (**
 ---
-title: Predator-Prey Dynamics
+title: The long-term ecological detective: Holocene ecosystem functioning
 category: Examples
 categoryindex: 3
 index: 1
@@ -47,6 +47,8 @@ and are not provided in the Time module of Bristlecone.
 [<Measure>] type indiv // pollen accumulation proxy units -> individuals per area
 [<Measure>] type conc  // nitrogen concentration proxy units (e.g., δ15N or %TN, scaled)
 [<Measure>] type d15N // proxy measure of nitrogen
+[<Measure>] type grain
+[<Measure>] type cm
 
 (**
 We can then use these units of measure when defining the model system.
@@ -58,6 +60,7 @@ and measures that we need to apply within them.
 let N = state<conc> "available_N"         // Reconstructed available N proxy (δ15N or %TN scaled)
 let X = state<indiv / area> "population"  // Pollen accumulation proxy for population density
 let obsN = measure "observed_N" // After conversion with an alpha conversion factor
+let obsPAR = measure<(grain / cm^2) / year> "observed_PAR"
 
 // Core ecological parameters
 let λ = parameter "λ" notNegative 0.01<conc/year> 1.0<conc/year> // External N input
