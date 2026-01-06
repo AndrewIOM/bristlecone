@@ -23,7 +23,7 @@ module Bristlecone =
           OptimiseWith = Optimisation.Amoeba.single Optimisation.Amoeba.Solver.Default
           LogTo = Console.logger 1000<iteration>
           Random = MathNet.Numerics.Random.MersenneTwister true
-          ToModelTime = DateMode.Conversion.toYears
+          ToModelTime = DateMode.Conversion.CalendarDates.toYears
           InterpolationGlobal = Solver.InterpolationMode.Lower
           InterpolationPerVariable = Map.empty
           Conditioning = Conditioning.NoConditioning }
@@ -34,7 +34,7 @@ module Bristlecone =
           OptimiseWith = Optimisation.Amoeba.single Optimisation.Amoeba.Solver.Default
           LogTo = Console.logger 1000<iteration>
           Random = MathNet.Numerics.Random.MersenneTwister true
-          ToModelTime = DateMode.Conversion.toYears
+          ToModelTime = DateMode.Conversion.CalendarDates.toYears
           InterpolationGlobal = Solver.InterpolationMode.Lower
           InterpolationPerVariable = Map.empty
           Conditioning = Conditioning.RepeatFirstDataPoint }
@@ -48,10 +48,10 @@ module Bristlecone =
     /// <returns></returns>
     let withOutput out engine = { engine with LogTo = out }
 
-    let withTimeConversion<'d, 'timespan, [<Measure>] 'modelTimeUnit, 'o1, [<Measure>] 'o2, [<Measure>] 'u>
-        (fn: DateMode.Conversion.ResolutionToModelUnits<'d,'timespan,'modelTimeUnit>)
+    let withTimeConversion<'d, 'd2, 'timespan, 'timespan2, [<Measure>] 'modelTimeUnit, 'o1, [<Measure>] 'o2, [<Measure>] 'u>
+        (fn: DateMode.Conversion.ResolutionToModelUnits<'d2,'timespan2,'modelTimeUnit>)
         (engine: EstimationEngine<'d,'o1, 'o2, 'u>)
-        : EstimationEngine<'d,'timespan, 'modelTimeUnit, 'u> =
+        : EstimationEngine<'d2,'timespan2, 'modelTimeUnit, 'u> =
         { TimeHandling = engine.TimeHandling
           OptimiseWith = engine.OptimiseWith
           LogTo = engine.LogTo
@@ -61,8 +61,8 @@ module Bristlecone =
           InterpolationPerVariable = engine.InterpolationPerVariable
           Conditioning = engine.Conditioning }
 
-    let forDailyModel engine = withTimeConversion DateMode.Conversion.toDays engine
-    let forMonthlyModel engine = withTimeConversion DateMode.Conversion.toMonths engine
+    let forDailyModel engine = withTimeConversion DateMode.Conversion.CalendarDates.toDays engine
+    let forMonthlyModel engine = withTimeConversion DateMode.Conversion.CalendarDates.toMonths engine
 
     /// Use a mersenne twister random number generator
     /// with a specific seed.

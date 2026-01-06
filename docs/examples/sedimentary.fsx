@@ -278,6 +278,7 @@ vary uptake mechanism (UP), feedback (FE), and density-dependence (DE), they are
 
 for h in hypotheses do
     printfn "%s" h.ReferenceCode
+(*** include-output ***)
 
 (**
 
@@ -287,13 +288,13 @@ We can fit the ecological models to data by defining an estimation engine
 that contains the method that will be applied for model fitting:
 *)
 
-let engine: EstimationEngine.EstimationEngine<float<Time.``cal yr BP``>,year,1> =
+let engine =
     Bristlecone.mkContinuous ()
     |> Bristlecone.withCustomOptimisation ( Optimisation.MonteCarlo.Filzbach.filzbach
            { Optimisation.MonteCarlo.Filzbach.FilzbachSettings.Default with BurnLength = Optimisation.EndConditions.atIteration 200000<iteration> })
     |> Bristlecone.withConditioning Conditioning.NoConditioning
     |> Bristlecone.withSeed 1500 // We are setting a seed for this example - see below
-    |> Bristlecone.withTimeConversion (fun (ts: float<Time.``cal yr BP``>) -> float ts * 1.<Time.year>)
+    |> Bristlecone.withTimeConversion DateMode.Conversion.RadiocarbonDates.toYears
 
 let endCond = Optimisation.EndConditions.atIteration 100000<iteration>
 

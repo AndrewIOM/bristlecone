@@ -1,10 +1,13 @@
 (**
 ---
-title: Investigating plant-environment interactions using wood rings
+title: Wood rings: investigating plant-environment interactions
 category: Examples
 categoryindex: 3
 index: 2
 ---
+
+[![Script]({{root}}/img/badge-script.svg)]({{root}}/{{fsdocs-source-basename}}.fsx)&emsp;
+[![Notebook]({{root}}/img/badge-notebook.svg)]({{root}}/{{fsdocs-source-basename}}.ipynb)
 *)
 
 (*** condition: prepare ***)
@@ -32,7 +35,7 @@ open Bristlecone.Time
 open FSharp.Data.UnitSystems.SI.UnitSymbols
 
 (**
-### Step 1. Defining the ecological model
+### Step 1. Defining the ecological model (hypothesis)
 
 *)
 
@@ -45,16 +48,14 @@ module Settings =
     let latitude, longitude = 68.39<Dendro.latitude>, 58.22<Dendro.longitude>
     let timeZone = "Asia/Yekaterinburg"
     let endWhen = Optimisation.EndConditions.atIteration 1000<iteration>
+    let logger = Logging.Console.logger 10<iteration>
 
-
-// 1. Define a model hypothesis
-// ----------------------------
 
 [<Measure>] type mm
 
 // States and forcings:
-let SR      = measure<mm> "stem-radius"
-let GR      = state<mm> "stem-growth"
+let SR      = state<mm> "stem-radius"
+let SP      = state<mm> "stem-production"
 let Tmean   = environment<K> "temperature"
 let L       = environment<1> "day-fraction"
 
@@ -63,9 +64,12 @@ let hypothesis =
     /// The universal gas constant in J mol−1 K−1
     let gasConstant = Constant 8.314<(J/mol)/K>
 
-    let Ea = parameter "Ea" noConstraints 40.0<J/mol> 50.0<J/mol>
-    let γB = parameter "γB" noConstraints 1e-5</day> 1e-2</day>
-    let r  = parameter "r" notNegative 1e-5</day> 1e-2</day>
+    let Ea    = parameter "Ea" noConstraints 30.0<J/mol> 80.0<J/mol>
+    let γB    = parameter "γB" noConstraints 1e-5</day> 1e-1</day>
+    let r     = parameter "r" notNegative 1e-5</day> 1e-1</day>
+    let Rstar = parameter "r*" notNegative 2.<mm> 10.<mm>
+    let q     = parameter "q"  noConstraints 0.3<1> 0.9<1>
+    let σx    = parameter "σ[x]" notNegative 0.05 0.3
 
     /// An Arrhenius function to represent temperature limitation on growth.
     let temperatureLimitation =
@@ -73,7 +77,8 @@ let hypothesis =
         ** ((Constant 1000. * P Ea * (Environment Tmean - Constant 298.<K>))
             / (Constant 298.<K> * gasConstant * Environment Tmean))
 
-    let lightLimitation = Environment L
+    let shadingEffect = P q + (Constant 1.<1> - P q) * (State SR / (State SR + P Rstar))
+    let lightLimitation = Environment L * shadingEffect
 
     /// Plant growth is a function of net photosynthesis minus environmental losses.
     /// Photosynthesis is limited by light and temperature.
@@ -81,35 +86,55 @@ let hypothesis =
 
     /// Wood output is laid down and cannot decrease. A cold year will
     /// simply make a missing ring. No allometric relations are used here.
-    let woodOutput : ModelExpression<mm> =
-        let oldCumulativeMass = StateAt (-1<``time index``>, GR)
-        let newCumulativeMass = StateAt (0<``time index``>, GR)
-        let diff = newCumulativeMass - oldCumulativeMass
-        Conditional (diff .> Constant 0.<mm>) diff This
+    let ``dW/dt`` = Conditional (``db/dt`` .> Constant 0.<mm/day>) (``db/dt``) (Constant 0.<mm/day>)
 
     Model.empty
-    |> Model.addRateEquation GR ``db/dt``
-    |> Model.addMeasure SR woodOutput
+    |> Model.addRateEquation SP ``db/dt``
+    |> Model.addRateEquation SR ``dW/dt``
     |> Model.estimateParameter Ea
     |> Model.estimateParameter γB
     |> Model.estimateParameter r
-    |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ Require.measure SR ])
+    |> Model.estimateParameter Rstar
+    |> Model.estimateParameter q
+    |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.gaussian (Require.state SR) )
+    |> Model.estimateParameter σx
     |> Model.compile
 
-    
-// 2. Setup Bristlecone Engine
-// ----------------------------
-// A bristlecone engine provides a fixed setup for estimating parameters from data.
-// Use the same engine for all model fits within a single study.
+(**
+### Setup Bristlecone Engine
 
-let engine: EstimationEngine.EstimationEngine<System.DateTime,System.TimeSpan,day,1> =
+A bristlecone engine provides a fixed setup for estimating parameters from data.
+Use the same engine for all model fits within a single study.
+
+You may start with the `Bristlecone.mkContinuous` or `Bristlecone.mkDiscrete` functions
+depending on the model you want to apply (continuous or discrete time). Here, we are using
+differential equation models, so we setup a continuous-time engine.
+
+Within this engine below, we configure that the first observation is repeated as a data conditioning
+step. We also choose to use a custom optimisation method - Filzbach - which is included in the core
+Bristlecone library, with a burn-in length of 1000 iterations. In Filzbach, the burn-in period is that
+where tuning of the parameter scales occurs. We then configure the engine to write out to a simple console
+logger, which is setup in the Settings at the start of this script.
+
+Finally, we must apply a time conversion so that the engine understands how to convert from the
+timespan representation used for the datasets to the temporal resolution the model is defined in.
+Here, the data is defined using a contemporary Gregorian calendar (using .NET DateTime / TimeSpan types),
+and the model is defined on a daily timescale (i.e. the model's parameters that are rates are per day).
+Some built in time conversions (of the type `ResolutionToModelUnits`) are included in the
+`DateMode.Conversion` module within the `Bristlecone.Time` module.
+*)
+
+let engine =
     Bristlecone.mkContinuous ()
     |> Bristlecone.withConditioning Conditioning.RepeatFirstDataPoint
     |> Bristlecone.withCustomOptimisation ( Optimisation.MonteCarlo.Filzbach.filzbach
-           { Optimisation.MonteCarlo.Filzbach.FilzbachSettings.Default with BurnLength = Optimisation.EndConditions.atIteration 10000<iteration> })
-    |> Bristlecone.withTimeConversion DateMode.Conversion.toDays
+           { Optimisation.MonteCarlo.Filzbach.FilzbachSettings.Default with TuneAfterChanges = 10; BurnLength = Optimisation.EndConditions.atIteration 1000<iteration> })
+    |> Bristlecone.withOutput Settings.logger
+    |> Bristlecone.withTimeConversion DateMode.Conversion.CalendarDates.toDays
 
 (**
+### Load in datasets
+
 As we have daily temperature data and can compute daily light availability, we
 have a choice as to whether to run the models at daily or monthly resolution.
 The obvious drawback for daily resolution is a far greater computational load.
@@ -128,6 +153,9 @@ In the GHCN weather station data, the variables are defined
 in [this document](https://www.ncei.noaa.gov/pub/data/ghcn/daily/readme.txt).
 Temperatures are in tenths of degrees C, precipitation in tenths of mm, and
 snow depth in mm.
+
+The temperature data has some gaps, spanning usually one to ten days at a time.
+Here, we use the built-in `TimeSeries.interpolateFloats` to fill in the gaps.
 *)
 
 open FSharp.Data
@@ -141,43 +169,47 @@ let tMean =
     |> Seq.filter(fun r -> r.Variable = "TAVG")
     |> Seq.map(fun r -> r.ValueCleaned |> Option.map(fun v -> float v / 10. * 1.<Dendro.Units.celsius> |> Dendro.Units.celsiusToKelvin), r.Date)
     |> TimeSeries.fromNeoObservations
-    // Fills in gaps with simple linear interpolation:
+    // Fills in gaps with simple linear interpolation between known values:
     |> TimeSeries.interpolateFloats (Resolution.FixedTemporalResolution.Days <| PositiveInt.create(1<day>).Value)
 
-tMean |> TimeSeries.resolution
-
-(*** hide ***)
 open Plotly.NET
 
-(*** hide ***)
 Chart.Line(tMean |> TimeSeries.toObservations |> Seq.map(fun (x,y) -> y,x))
 |> Chart.withTemplate ChartTemplates.light
 |> GenericChart.toChartHTML
 (*** include-it-raw ***)
 
 (**
-The temperature data has some gaps. Specifically,
-the maximum temperature data is missing during 1942-45.
+#### Seasonal light availability
+
+In the above model, we naively applied a light limiting effect within the model
+that a simple 0 - 1 multiplier to growth.
+
+To obtain daily light availability values as an exogeneous environmental input to
+the model, the `Bristlecone.Dendro` package contains sunlight calculations we can use.
+
+A `DayLengthCache` provides a wrapper for accessing day length values at a particular
+latitude and longitude; a time-zone is also required, which must be a time-zone within
+your computer's built in time-zone list, which differs between macos/linux/windows.
 *)
 
-/// Light limitation effect (linear between 0 and 1).
-/// Light is cached in an object to avoid unnecessary computation.
 let lightFn = Dendro.Sunrise.DayLengthCache(Settings.latitude, Settings.longitude, Settings.timeZone)
 
 let lightFraction =
     tMean 
     |> TimeSeries.toObservations
-    |> Seq.map snd
+    |> Seq.map snd // collect the list of daily dates to match the temperature data
     |> Seq.map(fun dt -> dt |> lightFn.GetLight |> Dendro.Sunrise.dayFraction, dt )
     |> TimeSeries.fromNeoObservations
 
-(*** hide ***)
 Chart.Line(lightFraction |> TimeSeries.toObservations |> Seq.map(fun (x,y) -> y,x))
 |> Chart.withTemplate ChartTemplates.light
 |> GenericChart.toChartHTML
 (*** include-it-raw ***)
 
 (**
+#### Ring width data
+
 Here, we are investigating willow shrub ring widths from Varandei, Nenets Autonomous Okrug, Russia.
 A [chronology was previously built](https://www.ncei.noaa.gov/pub/data/paleo/treering/measurements/correlation-stats/russ208.txt)
 using COFECHA; the published chronology for 1921 - 2005 was standardised using a 32-year moving spline.
@@ -186,79 +218,63 @@ We cannot use the existing chronology directly, as it has been subject to
 detrending. Here, we simply begin by appling the model to some representive
 individuals. For example, S8N0125A, S8N0113A, and S8N0110A had the greatest
 correlation with all segments of the chronology, so we will start with those.
+
+To setup the data for Bristlecone, we use functions within `Bristlecone.Dendro` to:
+
+* load all of the ring width data from a CSV file;
+* find the specifc shrub for this example (S8N0125A);
+* change the date of each ring from a year (e.g. 1980) to a date that - when using a daily-resolution model and environment data - will compare the observation and prediction at the **end of the growing season** (e.g. 1980-12-31);
+* attach the temperature and light environment data for analysis.
+
+Bristlecone dendro represents a plant and its environment as a `PlantIndividual` type
+as a convenience wrapper.
 *)
 
-
-// 4. Load Real Data
-// ----------------------------
-// Here, we are using the FSharp.Data type provider to read in .csv datasets.
-// We prepare the monthly temperature dataset for the analysis by:
-// a) Loading the daily dataset using the FSharp.Data library;
-// b) Replacing NaN values with the F# 'None' option type;
-// c) Converting the dataset into a Bristlecone time series type;
-// d) Interpolate the 'None' values by linear interpolation to fill in missing measurements;
-// e) Generalise the time series from daily to monthly by applying an average function.
-
-let ringWidths = Data.PlantIndividual.Csv.loadRingWidths (__SOURCE_DIRECTORY__ + "/data/dendro/varandei-rw.csv")
 let exampleShrub =
-    ringWidths
+    Data.PlantIndividual.Csv.loadRingWidths (__SOURCE_DIRECTORY__ + "/data/dendro/varandei-rw.csv")
     |> Seq.find(fun rw -> rw.Identifier.Value = "S8N0125A")
     |> Dendro.PlantIndividual.toSubannual
     |> Dendro.PlantIndividual.zipEnvironment Tmean tMean
     |> Dendro.PlantIndividual.zipEnvironment L lightFraction
 
+(**
+### Fit the model to the real data
 
+We use `Bristlecone.fitDendro` as a convenience function to work with `PlantIndividual` types.
 
-// let startValues =
-//     [ ShortCode.create "lynx", 30.09; ShortCode.create "hare", 19.58 ] |> Map.ofList
+One complexity is that the conditioning requires specifying the value for the internal stem
+production dynamic equation, which is effectively a hidden state
+(TODO Replace with the hidden states initialiser functions on the model system itself).
+*)
 
-// // TODO Test settings new format
-
-// hypothesis
-// |> Bristlecone.testModel engine Options.testSeriesLength startValues Options.iterations []
-
-// // 4. Fit Model to Real Data
-// // -----------------------------------
+(*** do-not-eval ***)
 let result =
-    let e = engine |> Bristlecone.withConditioning(Conditioning.Custom (Map.ofList [ GR.Code, 0.36; SR.Code, 0.36 ]))
+    let e = engine |> Bristlecone.withConditioning(Conditioning.Custom (Map.ofList [ SP.Code, 0.36; SR.Code, 0.36 ]))
     Bristlecone.fitDendro e Settings.endWhen hypothesis Bristlecone.FittingMethod.CumulativeGrowth SR.Code exampleShrub
 
+let outputDir = __SOURCE_DIRECTORY__ + "/cached/"
 
-// -------------------------------------------
-// -------------------------------------------
-// -------------------------------------------
+(*** do-not-eval ***)
+Bristlecone.Data.Series.save (fun (d:System.DateTime) -> d.ToShortDateString()) outputDir exampleShrub.Identifier.Value "test-model" result
 
-// 3. Test Engine and Model
-// ----------------------------
-// Running a full test is strongly recommended. The test will demonstrate if the current
-// configuration can find known parameters for a model. If this step fails, there is an
-// issue with either your model, or the Bristlecone configuration.
+// Note: Here, we are loading a result calculated earlier.
+let cachedResultSeries =
+    Bristlecone.Data.Series.load id outputDir exampleShrub.Identifier.Value "test-model"
+    |> Seq.toList
+    |> Seq.head
+    |> snd
 
+(**
+The fit versus observed series appear as follows:
+*)
 
-
-// module Test =
-
-//     open Bristlecone.Test
-
-//     let settings = TestSettings.Default
-
-//     let testSettings =
-//         { Resolution = Years 1
-//           TimeSeriesLength = 30
-//           StartValues = [ code "b", 5.; code "t", 255. ] |> Map.ofList
-//           EndCondition = Settings.endWhen
-//           GenerationRules =
-//             [ "b" |> GenerationRules.alwaysLessThan 1000000.
-//               "b" |> GenerationRules.alwaysMoreThan 0.
-//               code "b", (fun data -> (data |> Seq.max) - (data |> Seq.min) > 100.) ]
-//           NoiseGeneration = fun p data -> data
-//           EnvironmentalData = [ code "t", TemperatureData.monthly ] |> Map.ofList
-//           Random = MathNet.Numerics.Random.MersenneTwister()
-//           StartDate = System.DateTime(1970, 01, 01)
-//           Attempts = 50000 }
-
-//     let run () =
-//         hypothesis |> Bristlecone.testModel Settings.engine testSettings
-
-
-// let testResult = Test.run ()
+cachedResultSeries |> Seq.map(fun v ->
+    let fit = v.Value |> Seq.map(fun (x,y) -> System.DateTime.Parse y, x.Fit)
+    let obs = v.Value |> Seq.map(fun (x,y) -> System.DateTime.Parse y, x.Obs)
+    [ Chart.Line fit; Chart.Line obs ]
+    |> Chart.combine
+)
+|> Chart.Grid(1,2)
+|> Chart.withTemplate ChartTemplates.light
+|> GenericChart.toChartHTML
+(*** include-it-raw ***)

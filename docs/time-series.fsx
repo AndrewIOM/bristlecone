@@ -151,6 +151,5 @@ let baseline = DatingMethods.Radiocarbon 5000.<``cal yr BP``>
 let resolution () = Resolution.FixedTemporalResolution.Years (PositiveInt.create 1<year> |> Option.get)
 let mode = TimeIndex.IndexMode.Interpolate Statistics.Interpolate.bilinear
 
-
-let idx = TimeIndex.TimeIndex(baseline, resolution (), mode, tsRadiocarbon2)
-(*** include-value: idx ***)
+// let idx = TimeIndex.TimeIndex(baseline, (fun i -> i), mode, tsRadiocarbon2)
+// (*** include-value: idx ***)

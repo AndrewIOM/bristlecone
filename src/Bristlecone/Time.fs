@@ -572,29 +572,7 @@ module DateMode =
         type ResolutionToModelUnits<'date,'timespan,[<Measure>] 'modelTimeUnit> =
             ConvertFrom<'date,'timespan> -> float<'modelTimeUnit>
 
-        let toDays : ResolutionToModelUnits<DateTime, TimeSpan, day> =
-            fun from ->
-                match from with
-                | FromDifference diff -> diff.DayFraction
-                | FromResolution res ->
-                    match res with
-                    | Resolution.Days d -> d.Value |> Units.intToFloat
-                    | Resolution.Months m -> Units.intToFloat m.Value * AnnualCalendars.daysPerMonth
-                    | Resolution.Years y -> Units.intToFloat y.Value * AnnualCalendars.daysPerYear
-                    | Resolution.CustomEpoch c -> float c.Days * 1.<day>
-
-        let toMonths : ResolutionToModelUnits<DateTime, TimeSpan, month> =
-            fun from ->
-                match from with
-                | FromDifference diff -> diff.MonthFraction
-                | FromResolution res ->
-                    match res with
-                    | Resolution.Days d -> Units.intToFloat d.Value / AnnualCalendars.daysPerMonth
-                    | Resolution.Months m -> m.Value |> Units.intToFloat
-                    | Resolution.Years y -> Units.intToFloat y.Value * AnnualCalendars.monthsPerYear
-                    | Resolution.CustomEpoch c -> float c.Days * 1.<day> / AnnualCalendars.daysPerMonth
-
-        let toYears : ResolutionToModelUnits<DateTime, TimeSpan, year> =
+        let private toYearCore customEpoch =
             fun from ->
                 match from with
                 | FromDifference diff -> diff.YearFraction
@@ -603,7 +581,44 @@ module DateMode =
                     | Resolution.Days d -> Units.intToFloat d.Value / AnnualCalendars.daysPerYear
                     | Resolution.Months m -> Units.intToFloat m.Value / AnnualCalendars.monthsPerYear
                     | Resolution.Years y -> y.Value |> Units.intToFloat
-                    | Resolution.CustomEpoch c -> float c.Days * 1.<day> / AnnualCalendars.daysPerYear
+                    | Resolution.CustomEpoch c -> customEpoch c
+
+        module CalendarDates =
+
+            let toDays : ResolutionToModelUnits<DateTime, TimeSpan, day> =
+                fun from ->
+                    match from with
+                    | FromDifference diff -> diff.DayFraction
+                    | FromResolution res ->
+                        match res with
+                        | Resolution.Days d -> d.Value |> Units.intToFloat
+                        | Resolution.Months m -> Units.intToFloat m.Value * AnnualCalendars.daysPerMonth
+                        | Resolution.Years y -> Units.intToFloat y.Value * AnnualCalendars.daysPerYear
+                        | Resolution.CustomEpoch c -> float c.Days * 1.<day>
+
+            let toMonths : ResolutionToModelUnits<DateTime, TimeSpan, month> =
+                fun from ->
+                    match from with
+                    | FromDifference diff -> diff.MonthFraction
+                    | FromResolution res ->
+                        match res with
+                        | Resolution.Days d -> Units.intToFloat d.Value / AnnualCalendars.daysPerMonth
+                        | Resolution.Months m -> m.Value |> Units.intToFloat
+                        | Resolution.Years y -> Units.intToFloat y.Value * AnnualCalendars.monthsPerYear
+                        | Resolution.CustomEpoch c -> float c.Days * 1.<day> / AnnualCalendars.daysPerMonth
+
+            let toYears : ResolutionToModelUnits<DateTime, TimeSpan, year> =
+                fun from -> toYearCore (fun (c:TimeSpan) -> float c.Days * 1.<day> / AnnualCalendars.daysPerYear) from
+
+        module RadiocarbonDates =
+
+            let toYears : ResolutionToModelUnits<Radiocarbon<'u>, float<'u>, year> =
+                fun from -> toYearCore (fun c -> float c * 1.<year>) from
+
+        module Annual =
+
+            let toYears : ResolutionToModelUnits<Annual, int<year>, year> =
+                fun from -> toYearCore (fun c -> float c * 1.<year>) from
 
 
 module TimePoint =
