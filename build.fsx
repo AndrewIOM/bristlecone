@@ -100,8 +100,8 @@ Target.create "CheckFormat" (fun _ ->
 // Build library & test project
 
 Target.create "Build" (fun _ ->
-    Trace.log " --- Building the app --- "
-    Fake.DotNet.DotNet.build id ("bristlecone.sln"))
+    Trace.log " --- Building the library --- "
+    Fake.DotNet.DotNet.build id "bristlecone.sln")
 
 // --------------------------------------------------------------------------------------
 // Run the unit tests using test runner & kill test runner when complete
@@ -190,7 +190,10 @@ Target.create "DocsMeta" (fun _ ->
 
 Target.create "GenerateDocs" (fun _ ->
     Fake.IO.Shell.cleanDir ".fsdocs"
-    DotNet.exec id "fsdocs" "build --clean --eval --strict" |> ignore)
+    let result = DotNet.exec id "fsdocs" "build --clean --eval --strict"
+    if result.ExitCode <> 0 then
+        failwith "Document build failed" )
+
 
 // --------------------------------------------------------------------------------------
 // Run all targets by default. Invoke 'build <Target>' to override
