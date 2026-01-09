@@ -146,14 +146,14 @@ module Interpolate =
     open Bristlecone.Time
 
     /// Interpolates between two data points, for a given time `t`.
-    let bilinear ((t1: float<``time index``>, v1)) ((t2: float<``time index``>, v2)) t =
+    let bilinear ((t1: float<'u ``time index``>, v1)) ((t2: float<'u ``time index``>, v2)) t =
         v1 + (t - t1) * ((v2 - v1) / (t2 - t1))
 
     /// Use the previous point
-    let lower ((t1: float<``time index``>, v1)) ((t2: float<``time index``>, v2)) t = v1
+    let lower ((t1: float<'u ``time index``>, v1)) ((t2: float<'u ``time index``>, v2)) t = v1
 
     /// Use the next point
-    let upper ((t1: float<``time index``>, v1)) ((t2: float<``time index``>, v2)) t = v2
+    let upper ((t1: float<'u ``time index``>, v1)) ((t2: float<'u ``time index``>, v2)) t = v2
 
 
 module Regression =
@@ -197,7 +197,7 @@ module TrendAnalysis =
     open Bristlecone.Time
 
     /// TODO Finish implementation
-    let theilSen (timeDiff: System.TimeSpan -> 'a) (ts: TimeSeries<'a, 'date, 'timeunit, 'timespan>) =
+    let theilSen (timeDiff: System.TimeSpan -> 'a) (ts: TimeSeries<'a, System.DateTime, 'timeunit, 'timespan>) =
         let allPoints = ts |> TimeSeries.toObservations
 
         let allSlopes =

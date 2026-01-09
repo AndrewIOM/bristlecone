@@ -100,13 +100,13 @@ This engine uses a gradident descent method (Nelder Mead simplex), and a basic
 Runge-Kutta 4 integration method provided by MathNet Numerics.
 *)
 
-let engine: EstimationEngine.EstimationEngine<int<year>,year,1> =
+let engine =
     Bristlecone.mkContinuous ()
     |> Bristlecone.withCustomOptimisation ( Optimisation.MonteCarlo.Filzbach.filzbach
            { Optimisation.MonteCarlo.Filzbach.FilzbachSettings.Default with BurnLength = Optimisation.EndConditions.atIteration 5000<iteration> })
     |> Bristlecone.withConditioning Conditioning.NoConditioning
     |> Bristlecone.withSeed 1500 // We are setting a seed for this example - see below
-    |> Bristlecone.withTimeConversion (fun (ts: int<Time.year>) -> float ts * 1.<Time.year>)
+    |> Bristlecone.withTimeConversion DateMode.Conversion.Annual.toYears
 
 (**
 *Note. We have set a seed for random number generation for this worked example. This ensures that the results are the same each time this documentation is generated.*

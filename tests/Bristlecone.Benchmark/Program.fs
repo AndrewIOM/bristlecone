@@ -315,11 +315,11 @@ module TimeSeriesTests =
     /// An engine that uses annual-based data in an
     /// annual-based model.
     /// Inserts a time conversion from int-based years (data) to float-based years (model).
-    let engine optimise : EstimationEngine.EstimationEngine<int<Time.year>, Time.year, 'u> =
+    let engine optimise =
         Bristlecone.mkContinuous ()
         |> Bristlecone.withCustomOptimisation optimise
         |> Bristlecone.withOutput logger
-        |> Bristlecone.withTimeConversion (fun (ts: int<Time.year>) -> float ts * 1.<Time.year>)
+        |> Bristlecone.withTimeConversion Time.DateMode.Conversion.Annual.toYears
 
     let runTimeSeriesTests (timeModels: ('a * ModelSystem.ModelSystem<Time.year> * 'b) list) optimFunctions =
         List.allPairs optimFunctions timeModels

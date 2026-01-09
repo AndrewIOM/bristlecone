@@ -71,14 +71,11 @@ module TestModels =
         |> Model.compile
 
 
-let indexBySpan (ts:System.TimeSpan) =
-    float ts.Days * 1.<Time.day> * 12.<Time.``time index``/Time.day>
-
 let defaultEngine () =
     { TimeHandling = Continuous <| Integration.RungeKutta.rk4
       OptimiseWith = Optimisation.None.none
       LogTo = ignore
-      ToModelTime = indexBySpan
+      ToModelTime = DateMode.Conversion.CalendarDates.toDays
       Random = MathNet.Numerics.Random.MersenneTwister(1000,true)
       InterpolationGlobal = Solver.InterpolationMode.Lower
       InterpolationPerVariable = Map.empty
@@ -88,7 +85,7 @@ let defaultEngineDiscrete () =
     { TimeHandling = Discrete
       OptimiseWith = Optimisation.None.none
       LogTo = ignore
-      ToModelTime = indexBySpan
+      ToModelTime = DateMode.Conversion.CalendarDates.toDays
       Random = MathNet.Numerics.Random.MersenneTwister(1000,true)
       InterpolationGlobal = Solver.InterpolationMode.Lower
       InterpolationPerVariable = Map.empty
@@ -162,41 +159,41 @@ module ``Fit`` =
        
         // Test takes the lower environment value within each euler step.
         testPropertyWithConfig Config.config "Fixed-step differential with matching env resolution"
-        <| fun dynCode envCode (PositiveInt steps) (offset:NormalFloat) (useRepeat:bool) ->
-            
-            // Annual environmental and observation data:
-            let steps = max 4 steps
-            let startDate = 1850
-            let env =
-                [ startDate - 1 .. startDate + steps ]
-                |> List.map(fun y -> float y + offset.Get, DatingMethods.Annual (y * 1<year>))
-                |> TimeSeries.fromObservations DateMode.annualDateMode
-            let obs =
-                [ startDate .. startDate + steps ]
-                |> List.map(fun y -> float y, DatingMethods.Annual (y * 1<year>))
-                |> TimeSeries.fromObservations DateMode.annualDateMode
-            let data = Map.ofList [ envCode, env; dynCode, obs ]
+        <| fun dynCode envCode (PositiveInt steps) (offset:NormalFloat) ->
+            if dynCode = envCode then ()
+            else
+                // Annual environmental and observation data:
+                let steps = max 4 steps
+                let startDate = 1850
+                let env =
+                    [ startDate - 1 .. startDate + steps ]
+                    |> List.map(fun y -> float y + offset.Get, DatingMethods.Annual (y * 1<year>))
+                    |> TimeSeries.fromObservations DateMode.annualDateMode
+                let obs =
+                    [ startDate .. startDate + steps ]
+                    |> List.map(fun y -> float y, DatingMethods.Annual (y * 1<year>))
+                    |> TimeSeries.fromObservations DateMode.annualDateMode
+                let data = Map.ofList [ envCode, env; dynCode, obs ]
+                // Test engine / settings:
+                let engine = defaultEngine() |> Bristlecone.withTimeConversion DateMode.Conversion.Annual.toYears
+                let model = TestModels.diffSingleEnv dynCode envCode
+                let result = Bristlecone.tryFit engine defaultEndCon data model |> fun r -> Expect.wantOk r "Fit failed"
 
-            // Test engine / settings:
-            let engine = defaultEngine() |> Bristlecone.withTimeConversion Units.intToFloat
-            let model = TestModels.diffSingleEnv dynCode envCode
-            let result = Bristlecone.tryFit engine defaultEndCon data model |> fun r -> Expect.wantOk r "Fit failed"
+                let actual = result.Series.[dynCode].Values |> Seq.map (fun v -> v.Fit |> Units.removeUnitFromFloat) |> Seq.toArray
+                let expected =
+                    env
+                    |> TimeSeries.toObservations
+                    |> Seq.toArray
+                    |> Array.map fst
+                    |> Array.scan (+) 0.
+                    |> Array.skip 2
 
-            let actual = result.Series.[dynCode].Values |> Seq.map (fun v -> v.Fit |> Units.removeUnitFromFloat) |> Seq.toArray
-            let expected =
-                env
-                |> TimeSeries.toObservations
-                |> Seq.toArray
-                |> Array.map fst
-                |> Array.scan (+) 0.
-                |> Array.skip 2
+                let slope, p = Statistics.Regression.slopeAndPValue actual expected
 
-            let slope, p = Statistics.Regression.slopeAndPValue actual expected
-
-            // Assert slope ≈ 1.0 (proportionality) and p-value not significant
-            Expect.hasLength actual (steps + 1) "Result should have length of timesteps"
-            Expect.isTrue (abs (slope - 1.0) < 1e-2) $"Slope should be ~1, got {slope}"
-            Expect.isTrue (not (System.Double.IsNaN p)) "Regression should be valid"
+                // Assert slope ≈ 1.0 (proportionality) and p-value not significant
+                Expect.hasLength actual (steps + 1) "Result should have length of timesteps"
+                Expect.isTrue (abs (slope - 1.0) < 1e-2) $"Slope should be ~1, got {slope}"
+                Expect.isTrue (not (System.Double.IsNaN p)) "Regression should be valid"
 
 
         // testCase "Fixed-step dynamic with higher-res env" <| fun _ ->

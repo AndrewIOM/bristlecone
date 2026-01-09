@@ -118,7 +118,7 @@ module Parameter =
                   ToTensorRealIO =
                     fun () ->
                         match tryGetEstimate param with
-                        | Some r -> dsharp.scalar (float r)
+                        | Some r -> Tensors.allocateTensor (float r)
                         | None -> invalidOp $"Parameter '{name}' has no real estimate"
                   FromTensorRealIO =
                     fun t ->
@@ -168,8 +168,8 @@ module Parameter =
                 |> List.mapi (fun i (sc, ap) ->
                     let value =
                         realVec.Value.[i] |> float |> LanguagePrimitives.FloatWithMeasure<parameter>
-                    // Use the AnyParameter's FromTensorRealIO to set the value
-                    let newAp = ap.FromTensorRealIO(dsharp.scalar (float value))
+
+                    let newAp = ap.FromTensorRealIO(Tensors.allocateTensor (float value))
                     sc, newAp)
                 |> Map.ofList
 

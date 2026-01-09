@@ -239,7 +239,7 @@ module Test =
             let dynamicKeys = dynSeries.Keys
 
             let conditioned =
-                Solver.Conditioning.resolve engine.Conditioning dynSeries envSeries dynamicKeys
+                Solver.Conditioning.resolve engine.Conditioning dynSeries envSeries dynamicKeys model.Measures.Keys
 
             let obsTimes = conditioned.ObservedForPairing |> TimeFrame.dates
 
@@ -252,7 +252,9 @@ module Test =
                     engine.TimeHandling
                     (Solver.StepType.External obsTimes)
                     conditioned.StatesObservedForSolver
+                    conditioned.MeasuresForSolver
                     conditioned.StatesHiddenForSolver
+                    model.Initialisers
                     conditioned.ExogenousForSolver
                     (fun _ -> Solver.Exact)
 
@@ -282,7 +284,7 @@ module Test =
         /// Generate data and check that it complies with the
         /// given ruleset.
         let rec tryGenerateData
-            (engine: EstimationEngine.EstimationEngine<'timespan, 'modelTimeUnit, 'state>)
+            (engine: EstimationEngine.EstimationEngine<'date, 'timespan, 'modelTimeUnit, 'state>)
             (settings: TestSettings<'state, 'date, 'timeunit, 'timespan>)
             (model: ModelSystem.ModelSystem<'modelTimeUnit>)
             attempts
