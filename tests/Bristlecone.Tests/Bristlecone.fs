@@ -71,14 +71,11 @@ module TestModels =
         |> Model.compile
 
 
-let indexBySpan (ts:System.TimeSpan) =
-    float ts.Days * 1.<Time.day> * 12.<Time.``time index``/Time.day>
-
 let defaultEngine () =
     { TimeHandling = Continuous <| Integration.RungeKutta.rk4
       OptimiseWith = Optimisation.None.none
       LogTo = ignore
-      ToModelTime = indexBySpan
+      ToModelTime = DateMode.Conversion.CalendarDates.toDays
       Random = MathNet.Numerics.Random.MersenneTwister(1000,true)
       InterpolationGlobal = Solver.InterpolationMode.Lower
       InterpolationPerVariable = Map.empty
@@ -88,7 +85,7 @@ let defaultEngineDiscrete () =
     { TimeHandling = Discrete
       OptimiseWith = Optimisation.None.none
       LogTo = ignore
-      ToModelTime = indexBySpan
+      ToModelTime = DateMode.Conversion.CalendarDates.toDays
       Random = MathNet.Numerics.Random.MersenneTwister(1000,true)
       InterpolationGlobal = Solver.InterpolationMode.Lower
       InterpolationPerVariable = Map.empty
@@ -162,7 +159,7 @@ module ``Fit`` =
        
         // Test takes the lower environment value within each euler step.
         testPropertyWithConfig Config.config "Fixed-step differential with matching env resolution"
-        <| fun dynCode envCode (PositiveInt steps) (offset:NormalFloat) (useRepeat:bool) ->
+        <| fun dynCode envCode (PositiveInt steps) (offset:NormalFloat) ->
             if dynCode = envCode then ()
             else
                 // Annual environmental and observation data:
@@ -177,9 +174,8 @@ module ``Fit`` =
                     |> List.map(fun y -> float y, DatingMethods.Annual (y * 1<year>))
                     |> TimeSeries.fromObservations DateMode.annualDateMode
                 let data = Map.ofList [ envCode, env; dynCode, obs ]
-
                 // Test engine / settings:
-                let engine = defaultEngine() |> Bristlecone.withTimeConversion Units.intToFloat
+                let engine = defaultEngine() |> Bristlecone.withTimeConversion DateMode.Conversion.Annual.toYears
                 let model = TestModels.diffSingleEnv dynCode envCode
                 let result = Bristlecone.tryFit engine defaultEndCon data model |> fun r -> Expect.wantOk r "Fit failed"
 

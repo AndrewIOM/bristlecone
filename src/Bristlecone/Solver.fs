@@ -62,8 +62,6 @@ module Solver =
                     | Unpaired(times, vars) ->
                         let keepMask =
                             times |> List.map (fun ti -> Set.contains ti obsTimes) |> List.toArray
-                        printfn "[keep mask debug] keep mask = %A" (keepMask |> Array.mapi(fun i v -> if v then Some i else None) |> Array.choose id)
-                        printfn "[keep mask debug] vars = %A" vars
 
                         vars |> Map.map (fun _ v -> Typed.filterByMask keepMask v)
 
@@ -571,8 +569,6 @@ module Solver =
                     | Resolution.Days d -> dm.AddDays observedTF.StartDate -d.Value
                     | Resolution.CustomEpoch c -> dm.SubtractTime observedTF.StartDate c
                 | Resolution.Variable -> invalidOp "Conditioning requires fixed dynamic resolution."
-
-            // let solverStartDate = dm.SubtractTime observedTF.StartDate stepSpan
 
             let dynamicForSolver =
                 observedTF

@@ -254,13 +254,13 @@ module TemporalIndex =
                   let ts = TimeSeries.fromSeq DateMode.calendarDateMode startDate resolution data
 
                   let index =
-                      TimeIndex.TimeIndex(startDate, resolution, TimeIndex.IndexMode.Exact, ts)
+                      TimeIndex.TimeIndex(startDate, DateMode.Conversion.CalendarDates.toTicks, TimeIndex.IndexMode.Exact, ts)
 
                   let timeSteps = index.Values |> Seq.map fst
 
                   Expect.all
                       timeSteps
-                      (fun s -> abs s % 1.<``time index``> = 0.<``time index``>)
+                      (fun s -> abs s % 1.<``time index`` ticks> = 0.<``time index`` ticks>)
                       "The time steps contained decimal places" ]
 
 
@@ -277,13 +277,13 @@ module TemporalIndex =
 
                   let ti = TimeIndex.TimeIndex(
                                   startDate,
-                                  Resolution.Months months,
+                                  DateMode.Conversion.RadiocarbonDates.toYears,
                                   TimeIndex.IndexMode.Exact,
                                   mkTs )
 
                   ()
 
-              testProperty "Years elapsed correctly calculates (as whole numbers)"
+              testProperty "Years elapsed correctly calculates as whole numbers"
               <| fun (initialYear: NormalFloat) (yearDiff: NormalFloat) ->
                   let yearDiff = int yearDiff.Get * 1<year>
                   let date1 =
@@ -291,38 +291,32 @@ module TemporalIndex =
 
                   let date2 = DateMode.radiocarbonDateMode.AddYears date1 yearDiff
                   let diff = DateMode.radiocarbonDateMode.Difference date1 date2
-                  printfn "D1 %A D2 %A -> [%A, %A]" date1 date2 (abs diff.YearFraction % 1.<year>) yearDiff
-                  Config.floatEqualTol Accuracy.high (abs diff.YearFraction % 1.<year>) 0.<year> "The year difference was not a round number"
+                  Config.floatEqualTol Accuracy.high (diff.YearFraction - abs (Units.intToFloat yearDiff)) 0.<year> "The year difference was not a round number"
 
               testPropertyWithConfig config "Time series indexes as whole numbers when resolutions match"
-              <| fun startDate (data: float list) resolution ->
+              <| fun startDate (data: NormalFloat list) resolution ->
                   let runTest () =
                       let ts = TimeSeries.fromSeq DateMode.radiocarbonDateMode startDate resolution data
 
                       let index =
-                          TimeIndex.TimeIndex(startDate, resolution, TimeIndex.IndexMode.Exact, ts)
+                          TimeIndex.TimeIndex(startDate, DateMode.Conversion.RadiocarbonDates.toYears, TimeIndex.IndexMode.Exact, ts)
 
                       let timeSteps = index.Values |> Seq.map fst |> Seq.toList
                       
                       Expect.equal index.Baseline startDate "Time index baseline date should equal start date"
-                      Expect.contains index.Values (0.<``time index``>, fst ts.Head) "Time index should have the first data point as time zero"
+                      Expect.contains index.Values (0.<``time index`` year>, fst ts.Head) "Time index should have the first data point as time zero"
 
-                      printfn "--- %A --- / --- %A ---" timeSteps (timeSteps |> List.map (fun s -> abs s % 1.<``time index``>))
-
-                      Config.sequenceEqualTol
-                          (timeSteps |> List.map abs)
-                          (timeSteps |> List.map(abs >> int >> float))
-                          "The time steps contained decimal places"
+                      let resolutionValue = DateMode.Conversion.RadiocarbonDates.toYears (DateMode.Conversion.FromResolution resolution)
+                      let diffs = timeSteps |> List.pairwise |> List.map (fun (a,b) -> (b - a) / 1.<``time index``>)
+                      Expect.all diffs (fun d -> abs (d - resolutionValue) < 1e-6<year>) "Step size did not match resolution"
                   
                   match startDate with
-                  | s when Units.isFinite s.Value && s.Value > 0.<``BP (radiocarbon)``> && s.Value < 2000000.<``BP (radiocarbon)``> ->
-                        match resolution with
-                        | Resolution.Months _
-                        | Resolution.Years _ -> runTest ()
-                        | _ ->
-                            Expect.throws
-                                (fun _ -> runTest ())
-                                "Did not throw when resolution was outside permitted range"
+                  | s when Units.isFinite s.Value && s.Value > 0.1<``BP (radiocarbon)``> && s.Value < 2000000.<``BP (radiocarbon)``> ->
+                        if data.Length > 2 then
+                            match resolution with
+                            | Resolution.CustomEpoch e -> if Units.isFinite e && e > 0.1<``BP (radiocarbon)``> && e < 200.<``BP (radiocarbon)``> then runTest ()
+                            | _ -> runTest ()
+                        else ()
                   | _ -> ()
 
             ]

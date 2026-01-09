@@ -188,26 +188,6 @@ module Tensors =
 
             ofVector arr
 
-    // // Exact log-factorial for integer counts
-    // let logFactorialVector (v: TypedTensor<Vector,'count>) : TypedTensor<Vector,1> =
-    //     let ints = v |> toIntArray
-    //     let logs =
-    //         ints
-    //         |> Array.map (fun n ->
-    //             if n <= 1 then 0.0<1>
-    //             else [| 2 .. n |]
-    //                 |> Array.sumBy (fun k -> log (float k))
-    //         )
-    //     ofVector logs
-
-    // // Stirling's approximation for log-gamma, differentiable
-    // let logGammaApproxVector (v: TypedTensor<Vector,'u>) : TypedTensor<Vector,1> =
-    //     let half  = ofScalar 0.5
-    //     let twoPi = ofScalar (2.0 * System.Math.PI)
-    //     let n = length v
-    //     (v - half) * logVector v - v + broadcastScalarToVector (half * logScalar twoPi) n
-
-
     // ---------------------
     // Shape-category active patterns
     // ---------------------

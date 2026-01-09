@@ -261,27 +261,6 @@ module DatingMethods =
         let internal radiocarbonToDays rc = resRadiocarbonToYears rc * daysPerYear
         let internal radiocarbonToMonths rc = resRadiocarbonToYears rc * (daysPerYear / daysPerMonth)
 
-        // let internal spanToTimeDifference (toUnit: float<year> -> 'span) years =
-        //     {
-        //         YearFraction = years
-        //         MonthFraction = years * monthsPerYear
-        //         DayFraction = years * daysPerYear
-        //         RealDifference = years |> toUnit
-        //         Ticks = 0.<ticks>
-        //     }
-
-        // let internal resToSpan<'modelSpan> (toUnit: float<year> -> 'modelSpan) (r: Resolution.FixedTemporalResolution<float<year>>) : TimeDifference<'modelSpan> =
-        //     match r with
-        //     | Resolution.FixedTemporalResolution.Years y -> y.Value |> Units.intToFloat
-        //     | Resolution.FixedTemporalResolution.Months m ->
-        //         let yearFrac = Units.intToFloat m.Value / (12.<month> / 1.<year>)
-        //         yearFrac
-        //     | Resolution.FixedTemporalResolution.Days d ->
-        //         let yearFrac = Units.intToFloat d.Value / daysPerYear
-        //         yearFrac
-        //     | Resolution.FixedTemporalResolution.CustomEpoch e -> e
-        //     |> spanToTimeDifference toUnit
-
 
     /// Converts 'old years' (i.e. with 365 days per year) into
     /// a temporal resolution.
@@ -384,7 +363,7 @@ module DatingMethods =
         static member (+)(e1, e2) = (e1 |> Annual.Unwrap) + e2 |> Annual
 
         static member AddYears date (years: int<year>) =
-            date |> Annual.Unwrap |> (fun date -> date - years) |> Annual
+            date |> Annual.Unwrap |> (fun date -> date + years) |> Annual
 
         static member TotalYearsElapsed d1 d2 =
             if d2 > d1 then
@@ -464,29 +443,6 @@ module DateMode =
                 |> PositiveInt.create
                 |> Option.get
                 |> Resolution.FixedTemporalResolution.Days
-        //   ResolutionToSpan =
-        //     function
-        //     | Resolution.FixedTemporalResolution.Days d ->
-        //         { DayFraction = Units.intToFloat d.Value
-        //           MonthFraction = Units.intToFloat d.Value / AnnualCalendars.daysPerMonth
-        //           YearFraction = Units.intToFloat d.Value / AnnualCalendars.daysPerYear
-        //           RealDifference = TimeSpan.FromDays (float d.Value)
-        //           Ticks = (TimeSpan.FromDays (float d.Value)).Ticks |> float |> (*) 1.<ticks> }
-        //     | Resolution.FixedTemporalResolution.Months m ->
-        //         let days: float<day> = Units.intToFloat m.Value * AnnualCalendars.daysPerMonth
-        //         { DayFraction = AnnualCalendars.daysPerMonth * Units.intToFloat m.Value
-        //           MonthFraction = Units.intToFloat m.Value
-        //           YearFraction = days / AnnualCalendars.daysPerYear
-        //           RealDifference = TimeSpan.FromDays (float days)
-        //           Ticks = (TimeSpan.FromDays (float days)).Ticks |> float |> (*) 1.<ticks> }
-        //     | Resolution.FixedTemporalResolution.Years y ->
-        //         let days = AnnualCalendars.daysPerYear * Units.intToFloat y.Value
-        //         { DayFraction = days
-        //           MonthFraction = AnnualCalendars.monthsPerYear * Units.intToFloat y.Value
-        //           YearFraction = days / AnnualCalendars.daysPerYear
-        //           RealDifference = TimeSpan.FromDays (float days)
-        //           Ticks = (TimeSpan.FromDays (float days)).Ticks |> float |> (*) 1.<ticks> }
-        //     | Resolution.FixedTemporalResolution.CustomEpoch t -> failwith "not implemented"
           Minus = fun d1 d2 -> d1 - d2
           Divide = fun ts1 ts2 -> float ts1.Ticks / float ts2.Ticks
           SortOldestFirst = fun d1 d2 -> if d1 < d2 then -1 else 1
@@ -609,6 +565,19 @@ module DateMode =
 
             let toYears : ResolutionToModelUnits<DateTime, TimeSpan, year> =
                 fun from -> toYearCore (fun (c:TimeSpan) -> float c.Days * 1.<day> / AnnualCalendars.daysPerYear) from
+
+            let toTicks : ResolutionToModelUnits<DateTime, TimeSpan, ticks> =
+                fun from ->
+                    match from with
+                    | FromDifference diff -> diff.Ticks
+                    | FromResolution res ->
+                        match res with
+                        | Resolution.Days d -> d.Value |> Units.removeUnitFromInt |> TimeSpan.FromDays
+                        | Resolution.Months m -> Units.intToFloat m.Value * AnnualCalendars.daysPerMonth |> Units.removeUnitFromFloat |> TimeSpan.FromDays
+                        | Resolution.Years y -> Units.intToFloat y.Value * AnnualCalendars.daysPerYear |> Units.removeUnitFromFloat |> TimeSpan.FromDays
+                        | Resolution.CustomEpoch c -> c
+                        |> fun ts -> ts.Ticks |> float |> (*) 1.<ticks>
+
 
         module RadiocarbonDates =
 

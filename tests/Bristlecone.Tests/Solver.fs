@@ -63,7 +63,7 @@ module Runners =
                     times |> Array.map(fun t -> envVal.Get * 1.<environment>, t) |> TimeSeries.fromNeoObservations
                 let dataT0 _ = [ c, Typed.ofScalar 0.0<state> ] |> Map.ofList
                 let point = Typed.ofVector [| 0.0 * 1.<parameter> |]
-                let index = TimeIndex.TimeIndex(startDate, Resolution.Years (PositiveInt.create 1<year> |> Option.get), TimeIndex.IndexMode.Exact, fakeTimeSeries)
+                let index = TimeIndex.TimeIndex(startDate, (fun c -> DateMode.Conversion.CalendarDates.toYears c |> Units.retype), TimeIndex.IndexMode.Exact, fakeTimeSeries)
                 let indexMap = Map.ofList [ envKey, index ]
                 let result = DiscreteTime.fixedRunner eqs timeline indexMap dataT0 point
                 let outputTimes, outputData =
@@ -162,28 +162,28 @@ module MakeSolver =
                 // Initial state
                 let t0 _ = Map.ofList [ shortCode, Typed.ofScalar (x0.Get * 1.<state>) ]
 
-                let eqs =
+                let eqs t =
                     Map.ofList [ shortCode,
-                        fun _ _ _ (state: TypedTensor<Scalar,state>) ->
+                        fun _ t _ (state: TypedTensor<Scalar,state>) ->
                             Typed.ofScalar (a' * Typed.toFloatScalar state + b') ]
-                let modelForm = ModelForm.DifferenceEqs eqs
+                let modelForm = ModelForm.DifferenceEqs (eqs ignore)
 
                 // Engine configuration
                 let engineTimeMode = EstimationEngine.Discrete
                 let stepType = Solver.StepType.Internal
+                let toModelUnits = DateMode.Conversion.CalendarDates.toDays
 
                 // Compile configured solver
-                let toModelUnits (ts: TimeSpan) = ts.TotalDays * 1.<``time index``>
                 let solver = Solver.SolverCompiler.compile ignore toModelUnits modelForm engineTimeMode stepType dynTF Map.empty Map.empty Map.empty envOpt (fun _ -> Solver.Exact)
 
                 // Manual discrete run along the internal timeline
                 let timeline =
                     dynTF.Series
                     |> Seq.head |> fun kv -> kv.Value
-                    |> TimeIndex.create startDate (Resolution.Days (PositiveInt.create 1<day> |> Option.get))
-                    |> Seq.map fst |> Seq.toArray
+                    |> TimeIndex.create startDate toModelUnits
+                    |> Seq.map fst |> Seq.toArray |> Array.map Units.retype
                 let envIndex = Map.empty
-                let manual = Solver.SolverRunners.DiscreteTime.fixedRunner eqs timeline envIndex t0 Runners.dummyParameters
+                let manual = Solver.SolverRunners.DiscreteTime.fixedRunner (eqs ignore) timeline envIndex t0 Runners.dummyParameters
                 let manTimes, man =
                     match manual with
                     | Solver.RunnerOutput.Paired ts ->
@@ -218,15 +218,14 @@ module MakeSolver =
                 let engineTimeMode = EstimationEngine.Continuous i
                 let stepType = Solver.StepType.Internal
 
-                let toModelUnits (ts: TimeSpan) = ts.TotalDays * 1.<``time index``>
-                let solver = Solver.SolverCompiler.compile ignore toModelUnits modelForm engineTimeMode stepType dynTF.Value Map.empty Map.empty Map.empty envOpt (fun _ -> Solver.Exact)
+                let solver = Solver.SolverCompiler.compile ignore (fun c -> DateMode.Conversion.CalendarDates.toDays c |> Units.retype) modelForm engineTimeMode stepType dynTF.Value Map.empty Map.empty Map.empty envOpt (fun _ -> Solver.Exact)
 
                 // Manual differential run along timeline
                 let timeline =
                     dynTF.Value.Series
                     |> Seq.head |> fun kv -> kv.Value
-                    |> TimeIndex.create startDate (Resolution.Days (PositiveInt.create 1<day> |> Option.get))
-                    |> Seq.map fst |> Seq.toArray
+                    |> TimeIndex.create startDate DateMode.Conversion.CalendarDates.toDays
+                    |> Seq.map fst |> Seq.map Units.retype |> Seq.toArray 
                 let envIndex = Map.empty
                 let manual = Solver.SolverRunners.DifferentialTime.fixedRunner eqs i timeline envIndex t0 Runners.dummyParameters
                 let manTimes, man =
@@ -257,13 +256,12 @@ module MakeSolver =
                     |> List.map (fun y -> float y, DatingMethods.Annual y)
                     |> TimeSeries.fromObservations DateMode.annualDateMode
 
-                let res = Resolution.FixedTemporalResolution.Years (PositiveInt.create 1<year> |> Option.get)
-                let idx = TimeIndex.TimeIndex(DatingMethods.Annual t0Date, res, TimeIndex.IndexMode.Exact, env)
+                let idx = TimeIndex.TimeIndex(DatingMethods.Annual t0Date, DateMode.Conversion.Annual.toYears, TimeIndex.IndexMode.Exact, env)
 
-                Expect.equal (idx.Index |> Seq.min) -23.0<``time index``> "1936 should be -23"
-                Expect.isTrue (idx.Index |> Seq.contains 0.0<``time index``>) "1959 should be index 0"
-                Expect.equal idx.[0.0<``time index``>] 1959.0 "Value at t0 should be 1959.0"
-                Expect.equal idx.[1.0<``time index``>] 1960.0 "Value at +1 step should be 1960.0"
+                Expect.equal (idx.Index |> Seq.min) -23.0<``time index`` year> "1936 should be -23"
+                Expect.isTrue (idx.Index |> Seq.contains 0.0<``time index`` year>) "1959 should be index 0"
+                Expect.equal idx.[0.0<``time index`` year>] 1959.0 "Value at t0 should be 1959.0"
+                Expect.equal idx.[1.0<``time index`` year>] 1960.0 "Value at +1 step should be 1960.0"
 
 
             testPropertyWithConfig Config.config "Discrete runner starts at x1 (t0 not included)" <| fun k ->
@@ -326,7 +324,7 @@ module Conditioning =
                     let modelForm = ModelForm.DifferenceEqs eqs
 
                     // Compile with trimmed dynamic frame (drop first obs)
-                    let solver = Solver.SolverCompiler.compile ignore (fun (ts:TimeSpan) -> ts.TotalDays * 1.<``time index``>)
+                    let solver = Solver.SolverCompiler.compile ignore DateMode.Conversion.CalendarDates.toDays
                                     modelForm Discrete (Solver.StepType.External (resolved.ObservedForPairing |> TimeFrame.dates))
                                     resolved.StatesObservedForSolver Map.empty Map.empty Map.empty resolved.ExogenousForSolver (fun _ -> Solver.Exact)
 
@@ -357,7 +355,7 @@ module Conditioning =
                     Expect.equal (TimeFrame.t0 resolved.StatesObservedForSolver) customT0 "T0 was not set correctly in conditioning stage."
 
                     // Synthetic t0 different from first obs
-                    let solver = Solver.SolverCompiler.compile ignore (fun (ts: TimeSpan) -> ts.TotalDays * 1.<``time index``>)
+                    let solver = Solver.SolverCompiler.compile ignore DateMode.Conversion.CalendarDates.toDays
                                     modelForm EstimationEngine.Discrete Solver.StepType.Internal //(Solver.StepType.External (resolved.DynamicForPairing |> TimeFrame.dates))
                                     resolved.StatesObservedForSolver resolved.MeasuresForSolver Map.empty Map.empty resolved.ExogenousForSolver (fun _ -> Solver.Exact)
 
@@ -382,7 +380,7 @@ module Conditioning =
                     let eqs = Map.ofList [ shortCode, fun _ _ _ s -> s + Typed.ofScalar 1.0<state> ]
                     let modelForm = ModelForm.DifferenceEqs eqs
 
-                    let solver = Solver.SolverCompiler.compile ignore (fun (ts: TimeSpan) -> ts.TotalDays * 1.<``time index``>)
+                    let solver = Solver.SolverCompiler.compile ignore DateMode.Conversion.CalendarDates.toDays
                                     modelForm EstimationEngine.Discrete (Solver.StepType.External (resolved.ObservedForPairing |> TimeFrame.dates))
                                     resolved.StatesObservedForSolver resolved.MeasuresForSolver Map.empty Map.empty resolved.ExogenousForSolver (fun _ -> Solver.Exact)
 
