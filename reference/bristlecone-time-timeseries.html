@@ -1,0 +1,2645 @@
+<!DOCTYPE html>
+<html lang="en" data-root="https://acm.im/bristlecone/">
+<head>
+    <meta charset="UTF-8">
+    <meta content="IE=edge" http-equiv="X-UA-Compatible">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+    <meta content="Andrew Martin" name="author">
+    <!-- Opengraph properties (https://ogp.me/) -->
+    <meta property="og:site_name" content="bristlecone">
+    <meta property="og:title" content="TimeSeries (bristlecone)" />
+    <meta property="og:url" content="https://acm.im/bristlecone/{{fsdocs-source-basename}}.html">
+    <meta property="og:type" content="website" />
+    <!-- Twitter cards (https://developer.twitter.com/en/docs/twitter-for-websites/cards/overview/summary-card-with-large-image) -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:site" content="https://acm.im/bristlecone/">
+    <meta name="twitter:title" content="TimeSeries (bristlecone)">
+    
+    <title>TimeSeries (bristlecone) | bristlecone</title>
+    <link href="https://fonts.googleapis.com" rel="preconnect">
+    <link crossorigin href="https://fonts.gstatic.com" rel="preconnect">
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code&display=swap" rel="stylesheet">
+    <script src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js"></script>
+    <link href="https://acm.im/bristlecone/img/favicon.ico" rel="icon" sizes="32x32" type="image/png"/>
+    <script type="application/javascript" src="https://acm.im/bristlecone/content/fsdocs-theme-set-dark.js"></script>
+    <script type="application/javascript" src="https://acm.im/bristlecone/content/fsdocs-details-set-expanded.js"></script>
+    <link href="https://acm.im/bristlecone/content/fsdocs-default.css" rel="stylesheet" type="text/css"/>
+    <link href="https://acm.im/bristlecone/content/fsdocs-theme.css" rel="stylesheet" type="text/css"/>
+    <script src="https://cdn.plot.ly/plotly-2.21.0.min.js"></script>
+    
+</head>
+<body class="api-docs">
+<header>
+    <div class="start">
+        <div id="menu-toggle">
+            <iconify-icon class="icon closed" height="22" icon="eva:menu-fill" width="22"></iconify-icon>
+            <iconify-icon class="icon open" height="22" icon="mi:close" width="22"></iconify-icon>
+            <input type="checkbox" name="mobile-menu" />
+            <ul class="menu">
+                <li class="nav-header">Links</li>
+                <li class="license-menu-item builtin-menu-item nav-item"><a class="nav-link" href="https://github.com/AndrewIOM/bristlecone/blob/master/LICENSE">License</a>
+                </li>
+                <li class="release-notes-menu-item builtin-menu-item nav-item"><a class="nav-link"
+                                        href="https://github.com/AndrewIOM/bristlecone/blob/master/RELEASE_NOTES.MD">Release
+                    Notes</a></li>
+                <li class="repository-menu-item builtin-menu-item nav-item"><a class="nav-link" href="https://github.com/AndrewIOM/bristlecone/">Source
+                    Repository</a></li>
+                <li class="nav-header ">
+  The Bristlecone Language
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/language.html">
+    Writing Models
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model.html">
+    Defining a Hypothesis (or Model System)
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/estimation-engine.html">
+    Defining a Model-Fitting Method (Estimation Engine)
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/composing-models.html">
+    Composing models into many hypotheses
+  </a>
+</li>             
+<li class="nav-header ">
+  Techniques
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model-fitting.html">
+    Model Fitting
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model-selection.html">
+    Model Selection
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/workflow.html">
+    Ensembles and Parallel Processing
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/confidence-intervals.html">
+    Calculating Confidence Intervals
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/diagnostics.html">
+    Diagnostics
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/data.html">
+    Loading and Saving Data
+  </a>
+</li>             
+<li class="nav-header ">
+  Bristlecone.Dendro
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/dendro.html">
+    Dendroecology
+  </a>
+</li>             
+<li class="nav-header ">
+  Examples
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/predator-prey.html">
+    Predator-Prey Dynamics
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/sedimentary.html">
+    The long-term ecological detective: Holocene ecosystem functioning
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/dendroecology.html">
+    Wood rings: investigating plant-environment interactions
+  </a>
+</li>             
+<li class="nav-header ">
+  Components
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/optimisation.html">
+    Optimisation
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/time-series.html">
+    Time-Series and Time-Frames
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/integration.html">
+    Integration
+  </a>
+</li>             
+<li class="nav-header ">
+  Other
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/data/dendro/readme.html">
+    readme
+  </a>
+</li>
+                <li class="nav-header">
+  API Reference
+</li>             
+<li class="nav-item">
+  <a class="nav-link" href="https://acm.im/bristlecone/reference/index.html">
+    All Namespaces
+  </a>
+</li>
+            </ul>
+        </div>
+        <a href="https://acm.im/bristlecone/">
+            <img alt="Header menu logo" src="https://acm.im/bristlecone//img/logo.png">
+            <strong>bristlecone</strong>
+        </a>
+    </div>
+    <div class="end">
+        <a href="https://github.com/AndrewIOM/bristlecone/" target="_blank">
+            <iconify-icon icon="uil:github" width="26" height="26"></iconify-icon>
+        </a>
+        <iconify-icon id="search-btn" icon="carbon:search" class="search" width="24" height="24"></iconify-icon>
+        <fsdocs-theme-toggle></fsdocs-theme-toggle>
+    </div>
+</header>
+<aside id="fsdocs-main-menu">
+    <ul class="menu">
+        <li class="nav-header">Links</li>
+        <li class="license-menu-item builtin-menu-item nav-item"><a class="nav-link" href="https://github.com/AndrewIOM/bristlecone/blob/master/LICENSE">License</a>
+        </li>
+        <li class="release-notes-menu-item builtin-menu-item nav-item"><a class="nav-link"
+                                href="https://github.com/AndrewIOM/bristlecone/blob/master/RELEASE_NOTES.MD">Release
+            Notes</a></li>
+        <li class="repository-menu-item builtin-menu-item nav-item"><a class="nav-link" href="https://github.com/AndrewIOM/bristlecone/">Source
+            Repository</a></li>
+        <li class="nav-header ">
+  The Bristlecone Language
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/language.html">
+    Writing Models
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model.html">
+    Defining a Hypothesis (or Model System)
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/estimation-engine.html">
+    Defining a Model-Fitting Method (Estimation Engine)
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/composing-models.html">
+    Composing models into many hypotheses
+  </a>
+</li>             
+<li class="nav-header ">
+  Techniques
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model-fitting.html">
+    Model Fitting
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model-selection.html">
+    Model Selection
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/workflow.html">
+    Ensembles and Parallel Processing
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/confidence-intervals.html">
+    Calculating Confidence Intervals
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/diagnostics.html">
+    Diagnostics
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/data.html">
+    Loading and Saving Data
+  </a>
+</li>             
+<li class="nav-header ">
+  Bristlecone.Dendro
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/dendro.html">
+    Dendroecology
+  </a>
+</li>             
+<li class="nav-header ">
+  Examples
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/predator-prey.html">
+    Predator-Prey Dynamics
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/sedimentary.html">
+    The long-term ecological detective: Holocene ecosystem functioning
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/dendroecology.html">
+    Wood rings: investigating plant-environment interactions
+  </a>
+</li>             
+<li class="nav-header ">
+  Components
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/optimisation.html">
+    Optimisation
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/time-series.html">
+    Time-Series and Time-Frames
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/integration.html">
+    Integration
+  </a>
+</li>             
+<li class="nav-header ">
+  Other
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/data/dendro/readme.html">
+    readme
+  </a>
+</li>
+        <li class="nav-header">
+  API Reference
+</li>             
+<li class="nav-item">
+  <a class="nav-link" href="https://acm.im/bristlecone/reference/index.html">
+    All Namespaces
+  </a>
+</li>
+    </ul>
+</aside>
+<main>
+    <div id="content">
+        <div>
+  <h2>
+    TimeSeries Module
+  </h2>
+  <dl class="fsdocs-metadata">
+    <dt>
+      Namespace: 
+      <a href="https://acm.im/bristlecone/reference/bristlecone.html">
+        Bristlecone
+      </a>
+    </dt>
+    <dt>
+      Assembly: Bristlecone.dll
+    </dt>
+    <dt>
+      Parent Module: 
+      <a href="https://acm.im/bristlecone/reference/bristlecone-time.html">
+        Time
+      </a>
+    </dt>
+  </dl>
+  <div class="fsdocs-xmldoc">
+    <div>
+      <pre>Contains functions and types to create and manipulate
+ `TimeSeries` values, which represent observations ordered in time.</pre>
+    </div>
+  </div>
+  <div>
+    <h3>
+      Types and nested modules
+    </h3>
+    <table class="table outer-list fsdocs-entity-list">
+      <thead>
+        <tr>
+          <td>
+            Type/Module
+          </td>
+          <td>
+            Description
+          </td>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="fsdocs-entity-name">
+            <p>
+              <a name="Bootstrap">
+                <a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-bootstrap.html">
+                  Bootstrap
+                </a>
+              </a>
+            </p>
+          </td>
+          <td class="fsdocs-entity-xmldoc">
+            <div>
+              <div class="fsdocs-summary-contents">
+                <p class="fsdocs-summary">
+                   Contains functions for bootstrapping one or many time series.
+                </p>
+              </div>
+              <div class="icon-button-row">
+                <a href="https://github.com/AndrewIOM/bristlecone/tree/master/src/Bristlecone/Time.fs#L1057-1057" class="fsdocs-source-link" title="Source on GitHub">
+                  <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                </a>
+                <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'T:Bristlecone.Time.TimeSeries.Bootstrap\'/>')">
+                  <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+                </div>
+                <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('`cref:T:Bristlecone.Time.TimeSeries.Bootstrap`')">
+                  <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+                </div>
+              </div>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-entity-name">
+            <p>
+              <a name="FloatingTimeSeries<'T, 'timespan>">
+                <a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-floatingtimeseries-2.html">
+                  FloatingTimeSeries<'T, 'timespan>
+                </a>
+              </a>
+            </p>
+          </td>
+          <td class="fsdocs-entity-xmldoc">
+            <div>
+              <div class="fsdocs-summary-contents">
+                <p class="fsdocs-summary">
+                   A sequence of data observed at time points.
+                </p>
+              </div>
+              <div class="icon-button-row">
+                <a href="https://github.com/AndrewIOM/bristlecone/tree/master/src/Bristlecone/Time.fs#L635-635" class="fsdocs-source-link" title="Source on GitHub">
+                  <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                </a>
+                <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'T:Bristlecone.Time.TimeSeries.FloatingTimeSeries`2\'/>')">
+                  <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+                </div>
+                <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('``cref:T:Bristlecone.Time.TimeSeries.FloatingTimeSeries`2``')">
+                  <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+                </div>
+              </div>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-entity-name">
+            <p>
+              <a name="TimeSeries<'T, 'date, 'timeunit, 'timespan>">
+                <a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">
+                  TimeSeries<'T, 'date, 'timeunit, 'timespan>
+                </a>
+              </a>
+            </p>
+          </td>
+          <td class="fsdocs-entity-xmldoc">
+            <div>
+              <div class="fsdocs-summary-contents">
+                <p class="fsdocs-summary">
+                   A sequence of data observed at time intervals (regular or irregular),
+ where the sampling intervals occur following a fixed start observation.
+                </p>
+              </div>
+              <div class="icon-button-row">
+                <a href="https://github.com/AndrewIOM/bristlecone/tree/master/src/Bristlecone/Time.fs#L639-639" class="fsdocs-source-link" title="Source on GitHub">
+                  <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                </a>
+                <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'T:Bristlecone.Time.TimeSeries.TimeSeries`4\'/>')">
+                  <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+                </div>
+                <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('``cref:T:Bristlecone.Time.TimeSeries.TimeSeries`4``')">
+                  <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+                </div>
+              </div>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div>
+    <h3>
+      Functions and values
+    </h3>
+    <table class="table outer-list fsdocs-member-list">
+      <thead>
+        <tr>
+          <td class="fsdocs-member-list-header">
+            Function or value
+          </td>
+          <td class="fsdocs-member-list-header">
+            Description
+            <fsdocs-details-toggle></fsdocs-details-toggle>
+          </td>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '301', 301)" onmouseover="showTip(event, '301', 301)">
+                <p>
+                  <a id="bound">
+                    <a href="#bound">
+                      <code><span>TimeSeries.bound&#32;<span>startDate&#32;endDate&#32;series</span></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="301">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>TimeSeries.bound&#32;<span>startDate&#32;endDate&#32;series</span></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        startDate
+                      </b>
+                      :
+                      <code>'a</code>
+                       - 
+                      A start date to clip from
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        endDate
+                      </b>
+                      :
+                      <code>'a</code>
+                       - 
+                      An end date to clip beyond
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        series
+                      </b>
+                      :
+                      <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'b,&#32;'a,&#32;'c,&#32;'d</span>&gt;</span></code>
+                       - 
+                      A time-series
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code><span><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'b,&#32;'a,&#32;'c,&#32;'d</span>&gt;</span>&#32;option</span></code>
+                  </span>
+                  
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <details>
+              <summary>
+                <div class="fsdocs-summary">
+                  <div class="fsdocs-summary-contents">
+                    <p class="fsdocs-summary">
+                      Bound a time series inclusively of the specified
+ start and end date (if either are present, they will
+ be included in the new time series).
+                    </p>
+                  </div>
+                  <div class="icon-button-row">
+                    <a href="https://github.com/AndrewIOM/bristlecone/tree/master/src/Bristlecone/Time.fs#L846-846" class="fsdocs-source-link" title="Source on GitHub">
+                      <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                    </a>
+                    <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'M:Bristlecone.Time.TimeSeries.bound``4\'/>')">
+                      <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+                    </div>
+                    <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('```cref:M:Bristlecone.Time.TimeSeries.bound``4```')">
+                      <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+                    </div>
+                  </div>
+                </div>
+              </summary>
+              <dl class="fsdocs-params">
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    startDate
+                  </span>
+                  :
+                  <code>'a</code>
+                </dt>
+                <dd class="fsdocs-param-docs">
+                  <p>
+                    A start date to clip from
+                  </p>
+                </dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    endDate
+                  </span>
+                  :
+                  <code>'a</code>
+                </dt>
+                <dd class="fsdocs-param-docs">
+                  <p>
+                    An end date to clip beyond
+                  </p>
+                </dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    series
+                  </span>
+                  :
+                  <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'b,&#32;'a,&#32;'c,&#32;'d</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs">
+                  <p>
+                    A time-series
+                  </p>
+                </dd>
+              </dl>
+              <dl class="fsdocs-returns">
+                <dt>
+                  <span class="fsdocs-return-name">
+                    Returns: 
+                  </span>
+                  <code><span><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'b,&#32;'a,&#32;'c,&#32;'d</span>&gt;</span>&#32;option</span></code>
+                </dt>
+                <dd class="fsdocs-return-docs">
+                  <p>
+                    
+                  </p>
+                </dd>
+              </dl>
+            </details>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '302', 302)" onmouseover="showTip(event, '302', 302)">
+                <p>
+                  <a id="commonTimeline">
+                    <a href="#commonTimeline">
+                      <code><span>TimeSeries.commonTimeline&#32;<span>series</span></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="302">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>TimeSeries.commonTimeline&#32;<span>series</span></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        series
+                      </b>
+                      :
+                      <code><span><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'T,&#32;'date,&#32;'timeunit,&#32;'timespan</span>&gt;</span>&#32;seq</span></code>
+                       - 
+                      A sequence of time-series to assess for commonality
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code><span><span>'date[]</span>&#32;option</span></code>
+                  </span>
+                  An array of 'timespan containing the epochs of the common timeline,
+ or `None` if there is no common timeline.
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <details>
+              <summary>
+                <div class="fsdocs-summary">
+                  <div class="fsdocs-summary-contents">
+                    <p class="fsdocs-summary">
+                      Determines if multiple time series have the same temporal extent and time steps.
+                    </p>
+                  </div>
+                  <div class="icon-button-row">
+                    <a href="https://github.com/AndrewIOM/bristlecone/tree/master/src/Bristlecone/Time.fs#L1042-1042" class="fsdocs-source-link" title="Source on GitHub">
+                      <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                    </a>
+                    <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'M:Bristlecone.Time.TimeSeries.commonTimeline``4\'/>')">
+                      <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+                    </div>
+                    <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('```cref:M:Bristlecone.Time.TimeSeries.commonTimeline``4```')">
+                      <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+                    </div>
+                  </div>
+                </div>
+              </summary>
+              <dl class="fsdocs-params">
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    series
+                  </span>
+                  :
+                  <code><span><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'T,&#32;'date,&#32;'timeunit,&#32;'timespan</span>&gt;</span>&#32;seq</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs">
+                  <p>
+                    A sequence of time-series to assess for commonality
+                  </p>
+                </dd>
+              </dl>
+              <dl class="fsdocs-returns">
+                <dt>
+                  <span class="fsdocs-return-name">
+                    Returns: 
+                  </span>
+                  <code><span><span>'date[]</span>&#32;option</span></code>
+                </dt>
+                <dd class="fsdocs-return-docs">
+                  <p>
+                    An array of 'timespan containing the epochs of the common timeline,
+ or `None` if there is no common timeline.
+                  </p>
+                </dd>
+              </dl>
+            </details>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '303', 303)" onmouseover="showTip(event, '303', 303)">
+                <p>
+                  <a id="dates">
+                    <a href="#dates">
+                      <code><span>TimeSeries.dates&#32;<span>series</span></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="303">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>TimeSeries.dates&#32;<span>series</span></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        series
+                      </b>
+                      :
+                      <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'a,&#32;'b,&#32;'c,&#32;'d</span>&gt;</span></code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code><span>'b&#32;seq</span></code>
+                  </span>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <details>
+              <summary>
+                <div class="fsdocs-summary">
+                  <div class="fsdocs-summary-contents">
+                    <p class="fsdocs-summary">
+                      The times at which observations that form the time-series were made.
+                    </p>
+                  </div>
+                  <div class="icon-button-row">
+                    <a href="https://github.com/AndrewIOM/bristlecone/tree/master/src/Bristlecone/Time.fs#L792-792" class="fsdocs-source-link" title="Source on GitHub">
+                      <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                    </a>
+                    <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'M:Bristlecone.Time.TimeSeries.dates``4\'/>')">
+                      <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+                    </div>
+                    <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('```cref:M:Bristlecone.Time.TimeSeries.dates``4```')">
+                      <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+                    </div>
+                  </div>
+                </div>
+              </summary>
+              <dl class="fsdocs-params">
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    series
+                  </span>
+                  :
+                  <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'a,&#32;'b,&#32;'c,&#32;'d</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+              </dl>
+              <dl class="fsdocs-returns">
+                <dt>
+                  <span class="fsdocs-return-name">
+                    Returns: 
+                  </span>
+                  <code><span>'b&#32;seq</span></code>
+                </dt>
+                <dd class="fsdocs-return-docs"></dd>
+              </dl>
+            </details>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '304', 304)" onmouseover="showTip(event, '304', 304)">
+                <p>
+                  <a id="endDate">
+                    <a href="#endDate">
+                      <code><span>TimeSeries.endDate&#32;<span>series</span></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="304">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>TimeSeries.endDate&#32;<span>series</span></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        series
+                      </b>
+                      :
+                      <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'a,&#32;'b,&#32;'c,&#32;'d</span>&gt;</span></code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code>'b</code>
+                  </span>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <details>
+              <summary>
+                <div class="fsdocs-summary">
+                  <div class="fsdocs-summary-contents">
+                    <p class="fsdocs-summary">
+                      The date of the last observation within a time series.
+                    </p>
+                  </div>
+                  <div class="icon-button-row">
+                    <a href="https://github.com/AndrewIOM/bristlecone/tree/master/src/Bristlecone/Time.fs#L788-788" class="fsdocs-source-link" title="Source on GitHub">
+                      <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                    </a>
+                    <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'M:Bristlecone.Time.TimeSeries.endDate``4\'/>')">
+                      <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+                    </div>
+                    <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('```cref:M:Bristlecone.Time.TimeSeries.endDate``4```')">
+                      <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+                    </div>
+                  </div>
+                </div>
+              </summary>
+              <dl class="fsdocs-params">
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    series
+                  </span>
+                  :
+                  <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'a,&#32;'b,&#32;'c,&#32;'d</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+              </dl>
+              <dl class="fsdocs-returns">
+                <dt>
+                  <span class="fsdocs-return-name">
+                    Returns: 
+                  </span>
+                  <code>'b</code>
+                </dt>
+                <dd class="fsdocs-return-docs"></dd>
+              </dl>
+            </details>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '305', 305)" onmouseover="showTip(event, '305', 305)">
+                <p>
+                  <a id="epochs">
+                    <a href="#epochs">
+                      <code><span>TimeSeries.epochs&#32;<span>series</span></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="305">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>TimeSeries.epochs&#32;<span>series</span></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        series
+                      </b>
+                      :
+                      <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'a,&#32;'b,&#32;'c,&#32;'d</span>&gt;</span></code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code><span>'d[]</span></code>
+                  </span>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <details>
+              <summary>
+                <div class="fsdocs-summary">
+                  <pre>The time intervals - or epochs - that form the time series, where the baseline
+ time is that defined in the time-series.</pre>
+                  <div class="icon-button-row">
+                    <a href="https://github.com/AndrewIOM/bristlecone/tree/master/src/Bristlecone/Time.fs#L785-785" class="fsdocs-source-link" title="Source on GitHub">
+                      <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                    </a>
+                    <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'M:Bristlecone.Time.TimeSeries.epochs``4\'/>')">
+                      <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+                    </div>
+                    <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('```cref:M:Bristlecone.Time.TimeSeries.epochs``4```')">
+                      <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+                    </div>
+                  </div>
+                </div>
+              </summary>
+              <dl class="fsdocs-params">
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    series
+                  </span>
+                  :
+                  <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'a,&#32;'b,&#32;'c,&#32;'d</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+              </dl>
+              <dl class="fsdocs-returns">
+                <dt>
+                  <span class="fsdocs-return-name">
+                    Returns: 
+                  </span>
+                  <code><span>'d[]</span></code>
+                </dt>
+                <dd class="fsdocs-return-docs"></dd>
+              </dl>
+            </details>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '306', 306)" onmouseover="showTip(event, '306', 306)">
+                <p>
+                  <a id="findExact">
+                    <a href="#findExact">
+                      <code><span>TimeSeries.findExact&#32;<span>time&#32;series</span></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="306">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>TimeSeries.findExact&#32;<span>time&#32;series</span></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        time
+                      </b>
+                      :
+                      <code>'a</code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        series
+                      </b>
+                      :
+                      <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'b,&#32;'a,&#32;'c,&#32;'d</span>&gt;</span></code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code><span>'b&#32;*&#32;'a</span></code>
+                  </span>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <details>
+              <summary>
+                <div class="fsdocs-summary">
+                  <div class="fsdocs-summary-contents">
+                    <p class="fsdocs-summary">
+                       Find an observation by its exact time of occurrence.
+                    </p>
+                  </div>
+                  <div class="icon-button-row">
+                    <a href="https://github.com/AndrewIOM/bristlecone/tree/master/src/Bristlecone/Time.fs#L795-795" class="fsdocs-source-link" title="Source on GitHub">
+                      <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                    </a>
+                    <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'M:Bristlecone.Time.TimeSeries.findExact``4\'/>')">
+                      <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+                    </div>
+                    <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('```cref:M:Bristlecone.Time.TimeSeries.findExact``4```')">
+                      <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+                    </div>
+                  </div>
+                </div>
+              </summary>
+              <dl class="fsdocs-params">
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    time
+                  </span>
+                  :
+                  <code>'a</code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    series
+                  </span>
+                  :
+                  <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'b,&#32;'a,&#32;'c,&#32;'d</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+              </dl>
+              <dl class="fsdocs-returns">
+                <dt>
+                  <span class="fsdocs-return-name">
+                    Returns: 
+                  </span>
+                  <code><span>'b&#32;*&#32;'a</span></code>
+                </dt>
+                <dd class="fsdocs-return-docs"></dd>
+              </dl>
+            </details>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '307', 307)" onmouseover="showTip(event, '307', 307)">
+                <p>
+                  <a id="fromCalibratedRadiocarbonObservations">
+                    <a href="#fromCalibratedRadiocarbonObservations">
+                      <code><span>TimeSeries.fromCalibratedRadiocarbonObservations&#32;<span>dataset</span></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="307">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>TimeSeries.fromCalibratedRadiocarbonObservations&#32;<span>dataset</span></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        dataset
+                      </b>
+                      :
+                      <code><span><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-observation-2.html">Observation</a>&lt;<span>'a,&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-time-datingmethods-radiocarboncal.html">RadiocarbonCal</a></span>&gt;</span>&#32;seq</span></code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'a,&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-time-datingmethods-radiocarboncal.html">RadiocarbonCal</a>,&#32;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-float-1">float</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-time-cal_yr_bp.html">cal&#32;yr&#32;BP</a>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span>,&#32;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-float-1">float</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-time-cal_yr_bp.html">cal&#32;yr&#32;BP</a>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span></span>&gt;</span></code>
+                  </span>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <div class="fsdocs-member-xmldoc-column">
+              <div class="icon-button-row">
+                <a href="https://github.com/AndrewIOM/bristlecone/tree/master/src/Bristlecone/Time.fs#L714-714" class="fsdocs-source-link" title="Source on GitHub">
+                  <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                </a>
+              </div>
+              <dl class="fsdocs-params">
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    dataset
+                  </span>
+                  :
+                  <code><span><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-observation-2.html">Observation</a>&lt;<span>'a,&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-time-datingmethods-radiocarboncal.html">RadiocarbonCal</a></span>&gt;</span>&#32;seq</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+              </dl>
+              <dl class="fsdocs-returns">
+                <dt>
+                  <span class="fsdocs-return-name">
+                    Returns: 
+                  </span>
+                  <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'a,&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-time-datingmethods-radiocarboncal.html">RadiocarbonCal</a>,&#32;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-float-1">float</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-time-cal_yr_bp.html">cal&#32;yr&#32;BP</a>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span>,&#32;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-float-1">float</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-time-cal_yr_bp.html">cal&#32;yr&#32;BP</a>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span></span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-return-docs"></dd>
+              </dl>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '308', 308)" onmouseover="showTip(event, '308', 308)">
+                <p>
+                  <a id="fromNeoObservations">
+                    <a href="#fromNeoObservations">
+                      <code><span>TimeSeries.fromNeoObservations&#32;<span>dataset</span></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="308">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>TimeSeries.fromNeoObservations&#32;<span>dataset</span></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        dataset
+                      </b>
+                      :
+                      <code><span><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-observation-2.html">Observation</a>&lt;<span>'a,&#32;<a href="https://learn.microsoft.com/dotnet/api/system.datetime">DateTime</a></span>&gt;</span>&#32;seq</span></code>
+                       - 
+                      A sequence of observations, which consist of data and dates / times
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'a,&#32;<a href="https://learn.microsoft.com/dotnet/api/system.datetime">DateTime</a>,&#32;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-int-1">int</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-time-year.html">year</a>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span>,&#32;<a href="https://learn.microsoft.com/dotnet/api/system.timespan">TimeSpan</a></span>&gt;</span></code>
+                  </span>
+                  A time-series of DateTime observations ordered oldest to newest.
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <details>
+              <summary>
+                <div class="fsdocs-summary">
+                  <div class="fsdocs-summary-contents">
+                    <p class="fsdocs-summary">
+                      Create a time-series where time is represented by standard
+ (modern) calendars and dates and times through the built-in .NET
+ DateTime type.
+                    </p>
+                  </div>
+                  <div class="icon-button-row">
+                    <a href="https://github.com/AndrewIOM/bristlecone/tree/master/src/Bristlecone/Time.fs#L723-723" class="fsdocs-source-link" title="Source on GitHub">
+                      <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                    </a>
+                    <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'M:Bristlecone.Time.TimeSeries.fromNeoObservations``1\'/>')">
+                      <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+                    </div>
+                    <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('```cref:M:Bristlecone.Time.TimeSeries.fromNeoObservations``1```')">
+                      <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+                    </div>
+                  </div>
+                </div>
+              </summary>
+              <dl class="fsdocs-params">
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    dataset
+                  </span>
+                  :
+                  <code><span><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-observation-2.html">Observation</a>&lt;<span>'a,&#32;<a href="https://learn.microsoft.com/dotnet/api/system.datetime">DateTime</a></span>&gt;</span>&#32;seq</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs">
+                  <p>
+                    A sequence of observations, which consist of data and dates / times
+                  </p>
+                </dd>
+              </dl>
+              <dl class="fsdocs-returns">
+                <dt>
+                  <span class="fsdocs-return-name">
+                    Returns: 
+                  </span>
+                  <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'a,&#32;<a href="https://learn.microsoft.com/dotnet/api/system.datetime">DateTime</a>,&#32;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-int-1">int</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-time-year.html">year</a>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span>,&#32;<a href="https://learn.microsoft.com/dotnet/api/system.timespan">TimeSpan</a></span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-return-docs">
+                  <p>
+                    A time-series of DateTime observations ordered oldest to newest.
+                  </p>
+                </dd>
+              </dl>
+            </details>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '309', 309)" onmouseover="showTip(event, '309', 309)">
+                <p>
+                  <a id="fromObservations">
+                    <a href="#fromObservations">
+                      <code><span>TimeSeries.fromObservations&#32;<span>dateType&#32;dataset</span></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="309">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>TimeSeries.fromObservations&#32;<span>dateType&#32;dataset</span></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        dateType
+                      </b>
+                      :
+                      <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-datemode-datemode-3.html">DateMode</a>&lt;<span>'date,&#32;'dateUnit,&#32;'timespan</span>&gt;</span></code>
+                       - 
+                      A `DateMode` that handles the dating mode of choosing.
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        dataset
+                      </b>
+                      :
+                      <code><span><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-observation-2.html">Observation</a>&lt;<span>'T,&#32;'date</span>&gt;</span>&#32;seq</span></code>
+                       - 
+                      A sequence of observations, which consist of data and dates / times
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'T,&#32;'date,&#32;'dateUnit,&#32;'timespan</span>&gt;</span></code>
+                  </span>
+                  A time-series of observations ordered in time from oldest to newest.
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <details>
+              <summary>
+                <div class="fsdocs-summary">
+                  <div class="fsdocs-summary-contents">
+                    <p class="fsdocs-summary">
+                      Arrange existing observations as a bristlecone `TimeSeries`.
+ Observations become ordered and indexed by time.
+                    </p>
+                  </div>
+                  <div class="icon-button-row">
+                    <a href="https://github.com/AndrewIOM/bristlecone/tree/master/src/Bristlecone/Time.fs#L671-671" class="fsdocs-source-link" title="Source on GitHub">
+                      <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                    </a>
+                    <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'M:Bristlecone.Time.TimeSeries.fromObservations``4\'/>')">
+                      <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+                    </div>
+                    <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('```cref:M:Bristlecone.Time.TimeSeries.fromObservations``4```')">
+                      <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+                    </div>
+                  </div>
+                </div>
+              </summary>
+              <dl class="fsdocs-params">
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    dateType
+                  </span>
+                  :
+                  <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-datemode-datemode-3.html">DateMode</a>&lt;<span>'date,&#32;'dateUnit,&#32;'timespan</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs">
+                  <p>
+                    A `DateMode` that handles the dating mode of choosing.
+                  </p>
+                </dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    dataset
+                  </span>
+                  :
+                  <code><span><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-observation-2.html">Observation</a>&lt;<span>'T,&#32;'date</span>&gt;</span>&#32;seq</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs">
+                  <p>
+                    A sequence of observations, which consist of data and dates / times
+                  </p>
+                </dd>
+              </dl>
+              <dl class="fsdocs-returns">
+                <dt>
+                  <span class="fsdocs-return-name">
+                    Returns: 
+                  </span>
+                  <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'T,&#32;'date,&#32;'dateUnit,&#32;'timespan</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-return-docs">
+                  <p>
+                    A time-series of observations ordered in time from oldest to newest.
+                  </p>
+                </dd>
+              </dl>
+            </details>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '310', 310)" onmouseover="showTip(event, '310', 310)">
+                <p>
+                  <a id="fromRadiocarbonObservations">
+                    <a href="#fromRadiocarbonObservations">
+                      <code><span>TimeSeries.fromRadiocarbonObservations&#32;<span>dataset</span></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="310">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>TimeSeries.fromRadiocarbonObservations&#32;<span>dataset</span></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        dataset
+                      </b>
+                      :
+                      <code><span><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-observation-2.html">Observation</a>&lt;<span>'a,&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-time-datingmethods-radiocarbonuncal.html">RadiocarbonUncal</a></span>&gt;</span>&#32;seq</span></code>
+                       - 
+                      A sequence of observations, which consist of data and dates / times
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'a,&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-time-datingmethods-radiocarbonuncal.html">RadiocarbonUncal</a>,&#32;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-float-1">float</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-time-bp_(radiocarbon).html">BP&#32;(radiocarbon)</a>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span>,&#32;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-float-1">float</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-time-bp_(radiocarbon).html">BP&#32;(radiocarbon)</a>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span></span>&gt;</span></code>
+                  </span>
+                  A time-series of BP date observations ordered oldest to newest.
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <details>
+              <summary>
+                <div class="fsdocs-summary">
+                  <div class="fsdocs-summary-contents">
+                    <p class="fsdocs-summary">
+                      Create a time-series where time is represented by uncalibrated
+ radiocarbon dates (BP dates).
+                    </p>
+                  </div>
+                  <div class="icon-button-row">
+                    <a href="https://github.com/AndrewIOM/bristlecone/tree/master/src/Bristlecone/Time.fs#L711-711" class="fsdocs-source-link" title="Source on GitHub">
+                      <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                    </a>
+                    <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'M:Bristlecone.Time.TimeSeries.fromRadiocarbonObservations``1\'/>')">
+                      <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+                    </div>
+                    <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('```cref:M:Bristlecone.Time.TimeSeries.fromRadiocarbonObservations``1```')">
+                      <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+                    </div>
+                  </div>
+                </div>
+              </summary>
+              <dl class="fsdocs-params">
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    dataset
+                  </span>
+                  :
+                  <code><span><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-observation-2.html">Observation</a>&lt;<span>'a,&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-time-datingmethods-radiocarbonuncal.html">RadiocarbonUncal</a></span>&gt;</span>&#32;seq</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs">
+                  <p>
+                    A sequence of observations, which consist of data and dates / times
+                  </p>
+                </dd>
+              </dl>
+              <dl class="fsdocs-returns">
+                <dt>
+                  <span class="fsdocs-return-name">
+                    Returns: 
+                  </span>
+                  <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'a,&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-time-datingmethods-radiocarbonuncal.html">RadiocarbonUncal</a>,&#32;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-float-1">float</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-time-bp_(radiocarbon).html">BP&#32;(radiocarbon)</a>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span>,&#32;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-float-1">float</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-time-bp_(radiocarbon).html">BP&#32;(radiocarbon)</a>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span></span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-return-docs">
+                  <p>
+                    A time-series of BP date observations ordered oldest to newest.
+                  </p>
+                </dd>
+              </dl>
+            </details>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '311', 311)" onmouseover="showTip(event, '311', 311)">
+                <p>
+                  <a id="fromSeq">
+                    <a href="#fromSeq">
+                      <code><span>TimeSeries.fromSeq&#32;<span>timeUnitMode&#32;t1&#32;resolution&#32;data</span></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="311">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>TimeSeries.fromSeq&#32;<span>timeUnitMode&#32;t1&#32;resolution&#32;data</span></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        timeUnitMode
+                      </b>
+                      :
+                      <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-datemode-datemode-3.html">DateMode</a>&lt;<span>'date,&#32;'timeunit,&#32;'timespan</span>&gt;</span></code>
+                       - 
+                      A `DateMode` that handles the dating mode of choosing.
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        t1
+                      </b>
+                      :
+                      <code>'date</code>
+                       - 
+                      The time to fix to the initial observation
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        resolution
+                      </b>
+                      :
+                      <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-resolution-fixedtemporalresolution-1.html">FixedTemporalResolution</a>&lt;'timespan&gt;</span></code>
+                       - 
+                      The temporal resolution of the time-series
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        data
+                      </b>
+                      :
+                      <code><span>'a&#32;seq</span></code>
+                       - 
+                      The underlying data points
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'a,&#32;'date,&#32;'timeunit,&#32;'timespan</span>&gt;</span></code>
+                  </span>
+                  
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <details>
+              <summary>
+                <div class="fsdocs-summary">
+                  <div class="fsdocs-summary-contents">
+                    <p class="fsdocs-summary">
+                      Create a time series from a sequence of existing data, where each
+ observation is equally spaced in time.
+                    </p>
+                  </div>
+                  <div class="icon-button-row">
+                    <a href="https://github.com/AndrewIOM/bristlecone/tree/master/src/Bristlecone/Time.fs#L737-737" class="fsdocs-source-link" title="Source on GitHub">
+                      <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                    </a>
+                    <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'M:Bristlecone.Time.TimeSeries.fromSeq``4\'/>')">
+                      <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+                    </div>
+                    <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('```cref:M:Bristlecone.Time.TimeSeries.fromSeq``4```')">
+                      <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+                    </div>
+                  </div>
+                </div>
+              </summary>
+              <dl class="fsdocs-params">
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    timeUnitMode
+                  </span>
+                  :
+                  <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-datemode-datemode-3.html">DateMode</a>&lt;<span>'date,&#32;'timeunit,&#32;'timespan</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs">
+                  <p>
+                    A `DateMode` that handles the dating mode of choosing.
+                  </p>
+                </dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    t1
+                  </span>
+                  :
+                  <code>'date</code>
+                </dt>
+                <dd class="fsdocs-param-docs">
+                  <p>
+                    The time to fix to the initial observation
+                  </p>
+                </dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    resolution
+                  </span>
+                  :
+                  <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-resolution-fixedtemporalresolution-1.html">FixedTemporalResolution</a>&lt;'timespan&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs">
+                  <p>
+                    The temporal resolution of the time-series
+                  </p>
+                </dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    data
+                  </span>
+                  :
+                  <code><span>'a&#32;seq</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs">
+                  <p>
+                    The underlying data points
+                  </p>
+                </dd>
+              </dl>
+              <dl class="fsdocs-returns">
+                <dt>
+                  <span class="fsdocs-return-name">
+                    Returns: 
+                  </span>
+                  <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'a,&#32;'date,&#32;'timeunit,&#32;'timespan</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-return-docs">
+                  <p>
+                    
+                  </p>
+                </dd>
+              </dl>
+            </details>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '312', 312)" onmouseover="showTip(event, '312', 312)">
+                <p>
+                  <a id="generalise">
+                    <a href="#generalise">
+                      <code><span>TimeSeries.generalise&#32;<span>desiredResolution&#32;upscaleFunction&#32;series</span></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="312">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>TimeSeries.generalise&#32;<span>desiredResolution&#32;upscaleFunction&#32;series</span></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        desiredResolution
+                      </b>
+                      :
+                      <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-resolution-fixedtemporalresolution-1.html">FixedTemporalResolution</a>&lt;'a&gt;</span></code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        upscaleFunction
+                      </b>
+                      :
+                      <code><span><span><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-observation-2.html">Observation</a>&lt;<span>'T,&#32;'date</span>&gt;</span>&#32;seq</span>&#32;->&#32;'T2</span></code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        series
+                      </b>
+                      :
+                      <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'T,&#32;'date,&#32;'timeunit,&#32;'timespan</span>&gt;</span></code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'T2,&#32;'date,&#32;'timeunit,&#32;'timespan</span>&gt;</span></code>
+                  </span>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <details>
+              <summary>
+                <div class="fsdocs-summary">
+                  <div class="fsdocs-summary-contents">
+                    <p class="fsdocs-summary">
+                       Reduces the temporal resolution of `series`.
+ The time series must be able to be split exactly into the lower resolution. For example,
+ when upscaling from one to three years, the time series must be a multiple of three years.
+                    </p>
+                  </div>
+                  <div class="icon-button-row">
+                    <a href="https://github.com/AndrewIOM/bristlecone/tree/master/src/Bristlecone/Time.fs#L926-926" class="fsdocs-source-link" title="Source on GitHub">
+                      <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                    </a>
+                    <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'M:Bristlecone.Time.TimeSeries.generalise``6\'/>')">
+                      <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+                    </div>
+                    <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('```cref:M:Bristlecone.Time.TimeSeries.generalise``6```')">
+                      <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+                    </div>
+                  </div>
+                </div>
+              </summary>
+              <dl class="fsdocs-params">
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    desiredResolution
+                  </span>
+                  :
+                  <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-resolution-fixedtemporalresolution-1.html">FixedTemporalResolution</a>&lt;'a&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    upscaleFunction
+                  </span>
+                  :
+                  <code><span><span><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-observation-2.html">Observation</a>&lt;<span>'T,&#32;'date</span>&gt;</span>&#32;seq</span>&#32;->&#32;'T2</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    series
+                  </span>
+                  :
+                  <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'T,&#32;'date,&#32;'timeunit,&#32;'timespan</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+              </dl>
+              <dl class="fsdocs-returns">
+                <dt>
+                  <span class="fsdocs-return-name">
+                    Returns: 
+                  </span>
+                  <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'T2,&#32;'date,&#32;'timeunit,&#32;'timespan</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-return-docs"></dd>
+              </dl>
+            </details>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '313', 313)" onmouseover="showTip(event, '313', 313)">
+                <p>
+                  <a id="head">
+                    <a href="#head">
+                      <code><span>TimeSeries.head&#32;<span>ts</span></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="313">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>TimeSeries.head&#32;<span>ts</span></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        ts
+                      </b>
+                      :
+                      <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'a,&#32;'b,&#32;'c,&#32;'d</span>&gt;</span></code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-observation-2.html">Observation</a>&lt;<span>'a,&#32;'b</span>&gt;</span></code>
+                  </span>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <div class="fsdocs-member-xmldoc-column">
+              <div class="icon-button-row">
+                <a href="https://github.com/AndrewIOM/bristlecone/tree/master/src/Bristlecone/Time.fs#L704-704" class="fsdocs-source-link" title="Source on GitHub">
+                  <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                </a>
+              </div>
+              <dl class="fsdocs-params">
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    ts
+                  </span>
+                  :
+                  <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'a,&#32;'b,&#32;'c,&#32;'d</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+              </dl>
+              <dl class="fsdocs-returns">
+                <dt>
+                  <span class="fsdocs-return-name">
+                    Returns: 
+                  </span>
+                  <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-observation-2.html">Observation</a>&lt;<span>'a,&#32;'b</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-return-docs"></dd>
+              </dl>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '314', 314)" onmouseover="showTip(event, '314', 314)">
+                <p>
+                  <a id="initTimeline">
+                    <a href="#initTimeline">
+                      <code><span>TimeSeries.initTimeline&#32;<span>timeUnitMode&#32;t1&#32;tEnd&#32;resolution</span></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="314">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>TimeSeries.initTimeline&#32;<span>timeUnitMode&#32;t1&#32;tEnd&#32;resolution</span></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        timeUnitMode
+                      </b>
+                      :
+                      <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-datemode-datemode-3.html">DateMode</a>&lt;<span>'date,&#32;'timeunit,&#32;'timespan</span>&gt;</span></code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        t1
+                      </b>
+                      :
+                      <code>'date</code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        tEnd
+                      </b>
+                      :
+                      <code>'date</code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        resolution
+                      </b>
+                      :
+                      <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-resolution-fixedtemporalresolution-1.html">FixedTemporalResolution</a>&lt;'timespan&gt;</span></code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code><span>'date&#32;seq</span></code>
+                  </span>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <details>
+              <summary>
+                <div class="fsdocs-summary">
+                  <div class="fsdocs-summary-contents">
+                    <p class="fsdocs-summary">
+                       Make a timeline based on a resolution and start and end dates.
+                    </p>
+                  </div>
+                  <div class="icon-button-row">
+                    <a href="https://github.com/AndrewIOM/bristlecone/tree/master/src/Bristlecone/Time.fs#L744-744" class="fsdocs-source-link" title="Source on GitHub">
+                      <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                    </a>
+                    <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'M:Bristlecone.Time.TimeSeries.initTimeline``3\'/>')">
+                      <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+                    </div>
+                    <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('```cref:M:Bristlecone.Time.TimeSeries.initTimeline``3```')">
+                      <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+                    </div>
+                  </div>
+                </div>
+              </summary>
+              <dl class="fsdocs-params">
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    timeUnitMode
+                  </span>
+                  :
+                  <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-datemode-datemode-3.html">DateMode</a>&lt;<span>'date,&#32;'timeunit,&#32;'timespan</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    t1
+                  </span>
+                  :
+                  <code>'date</code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    tEnd
+                  </span>
+                  :
+                  <code>'date</code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    resolution
+                  </span>
+                  :
+                  <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-resolution-fixedtemporalresolution-1.html">FixedTemporalResolution</a>&lt;'timespan&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+              </dl>
+              <dl class="fsdocs-returns">
+                <dt>
+                  <span class="fsdocs-return-name">
+                    Returns: 
+                  </span>
+                  <code><span>'date&#32;seq</span></code>
+                </dt>
+                <dd class="fsdocs-return-docs"></dd>
+              </dl>
+            </details>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '315', 315)" onmouseover="showTip(event, '315', 315)">
+                <p>
+                  <a id="interpolateFloats">
+                    <a href="#interpolateFloats">
+                      <code><span>TimeSeries.interpolateFloats&#32;<span>resolution&#32;series</span></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="315">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>TimeSeries.interpolateFloats&#32;<span>resolution&#32;series</span></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        resolution
+                      </b>
+                      :
+                      <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-resolution-fixedtemporalresolution-1.html">FixedTemporalResolution</a>&lt;'timespan&gt;</span></code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        series
+                      </b>
+                      :
+                      <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span><span><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-float-1">float</a>&lt;'u&gt;</span>&#32;option</span>,&#32;'date,&#32;'timeunit,&#32;'timespan</span>&gt;</span></code>
+                       - 
+                      A time-series of option values to interpolate
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-float-1">float</a>&lt;'u&gt;</span>,&#32;'date,&#32;'timeunit,&#32;'timespan</span>&gt;</span></code>
+                  </span>
+                  
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <details>
+              <summary>
+                <div class="fsdocs-summary">
+                  <div class="fsdocs-summary-contents">
+                    <p class="fsdocs-summary">
+                      Interpolates missing values in a time series, where missing values
+ are represented as an `Option` type.
+                    </p>
+                  </div>
+                  <div class="icon-button-row">
+                    <a href="https://github.com/AndrewIOM/bristlecone/tree/master/src/Bristlecone/Time.fs#L985-985" class="fsdocs-source-link" title="Source on GitHub">
+                      <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                    </a>
+                    <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'M:Bristlecone.Time.TimeSeries.interpolateFloats``4\'/>')">
+                      <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+                    </div>
+                    <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('```cref:M:Bristlecone.Time.TimeSeries.interpolateFloats``4```')">
+                      <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+                    </div>
+                  </div>
+                </div>
+              </summary>
+              <dl class="fsdocs-params">
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    resolution
+                  </span>
+                  :
+                  <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-resolution-fixedtemporalresolution-1.html">FixedTemporalResolution</a>&lt;'timespan&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    series
+                  </span>
+                  :
+                  <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span><span><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-float-1">float</a>&lt;'u&gt;</span>&#32;option</span>,&#32;'date,&#32;'timeunit,&#32;'timespan</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs">
+                  <p>
+                    A time-series of option values to interpolate
+                  </p>
+                </dd>
+              </dl>
+              <dl class="fsdocs-returns">
+                <dt>
+                  <span class="fsdocs-return-name">
+                    Returns: 
+                  </span>
+                  <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-float-1">float</a>&lt;'u&gt;</span>,&#32;'date,&#32;'timeunit,&#32;'timespan</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-return-docs">
+                  <p>
+                    
+                  </p>
+                </dd>
+              </dl>
+            </details>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '316', 316)" onmouseover="showTip(event, '316', 316)">
+                <p>
+                  <a id="map">
+                    <a href="#map">
+                      <code><span>TimeSeries.map&#32;<span>f&#32;series</span></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="316">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>TimeSeries.map&#32;<span>f&#32;series</span></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        f
+                      </b>
+                      :
+                      <code><span><span>'T&#32;*&#32;'timespan</span>&#32;->&#32;'T2</span></code>
+                       - 
+                      A function that takes an observation and returns a transformed data value
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        series
+                      </b>
+                      :
+                      <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'T,&#32;'date,&#32;'dateUnit,&#32;'timespan</span>&gt;</span></code>
+                       - 
+                      A time-series to transform
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'T2,&#32;'date,&#32;'dateUnit,&#32;'timespan</span>&gt;</span></code>
+                  </span>
+                  A new time-series in which the data values have been transformed
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <details>
+              <summary>
+                <div class="fsdocs-summary">
+                  <div class="fsdocs-summary-contents">
+                    <p class="fsdocs-summary">
+                      Apply a function to each observation in the time series.
+                    </p>
+                  </div>
+                  <div class="icon-button-row">
+                    <a href="https://github.com/AndrewIOM/bristlecone/tree/master/src/Bristlecone/Time.fs#L774-774" class="fsdocs-source-link" title="Source on GitHub">
+                      <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                    </a>
+                    <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'M:Bristlecone.Time.TimeSeries.map``5\'/>')">
+                      <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+                    </div>
+                    <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('```cref:M:Bristlecone.Time.TimeSeries.map``5```')">
+                      <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+                    </div>
+                  </div>
+                </div>
+              </summary>
+              <dl class="fsdocs-params">
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    f
+                  </span>
+                  :
+                  <code><span><span>'T&#32;*&#32;'timespan</span>&#32;->&#32;'T2</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs">
+                  <p>
+                    A function that takes an observation and returns a transformed data value
+                  </p>
+                </dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    series
+                  </span>
+                  :
+                  <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'T,&#32;'date,&#32;'dateUnit,&#32;'timespan</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs">
+                  <p>
+                    A time-series to transform
+                  </p>
+                </dd>
+              </dl>
+              <dl class="fsdocs-returns">
+                <dt>
+                  <span class="fsdocs-return-name">
+                    Returns: 
+                  </span>
+                  <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'T2,&#32;'date,&#32;'dateUnit,&#32;'timespan</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-return-docs">
+                  <p>
+                    A new time-series in which the data values have been transformed
+                  </p>
+                </dd>
+              </dl>
+            </details>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '317', 317)" onmouseover="showTip(event, '317', 317)">
+                <p>
+                  <a id="resolution">
+                    <a href="#resolution">
+                      <code><span>TimeSeries.resolution&#32;<span>series</span></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="317">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>TimeSeries.resolution&#32;<span>series</span></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        series
+                      </b>
+                      :
+                      <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'T,&#32;'date,&#32;'dateUnit,&#32;'timespan</span>&gt;</span></code>
+                       - 
+                      A time-series of observations
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-resolution-temporalresolution-1.html">TemporalResolution</a>&lt;'timespan&gt;</span></code>
+                  </span>
+                  A temporal resolution in days, months, years, or a custom epoch;
+ the most precise will be returned (e.g. 2 months rather than 61 days).
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <details>
+              <summary>
+                <div class="fsdocs-summary">
+                  <div class="fsdocs-summary-contents">
+                    <p class="fsdocs-summary">
+                      Calculates the temporal resolution of a time series.
+                    </p>
+                  </div>
+                  <div class="icon-button-row">
+                    <a href="https://github.com/AndrewIOM/bristlecone/tree/master/src/Bristlecone/Time.fs#L859-859" class="fsdocs-source-link" title="Source on GitHub">
+                      <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                    </a>
+                    <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'M:Bristlecone.Time.TimeSeries.resolution``4\'/>')">
+                      <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+                    </div>
+                    <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('```cref:M:Bristlecone.Time.TimeSeries.resolution``4```')">
+                      <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+                    </div>
+                  </div>
+                </div>
+              </summary>
+              <dl class="fsdocs-params">
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    series
+                  </span>
+                  :
+                  <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'T,&#32;'date,&#32;'dateUnit,&#32;'timespan</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs">
+                  <p>
+                    A time-series of observations
+                  </p>
+                </dd>
+              </dl>
+              <dl class="fsdocs-returns">
+                <dt>
+                  <span class="fsdocs-return-name">
+                    Returns: 
+                  </span>
+                  <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-resolution-temporalresolution-1.html">TemporalResolution</a>&lt;'timespan&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-return-docs">
+                  <p>
+                    A temporal resolution in days, months, years, or a custom epoch;
+ the most precise will be returned (e.g. 2 months rather than 61 days).
+                  </p>
+                </dd>
+              </dl>
+            </details>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '318', 318)" onmouseover="showTip(event, '318', 318)">
+                <p>
+                  <a id="tail">
+                    <a href="#tail">
+                      <code><span>TimeSeries.tail&#32;<span>series</span></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="318">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>TimeSeries.tail&#32;<span>series</span></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        series
+                      </b>
+                      :
+                      <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'a,&#32;'b,&#32;'c,&#32;'d</span>&gt;</span></code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'a,&#32;'b,&#32;'c,&#32;'d</span>&gt;</span></code>
+                  </span>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <div class="fsdocs-member-xmldoc-column">
+              <div class="icon-button-row">
+                <a href="https://github.com/AndrewIOM/bristlecone/tree/master/src/Bristlecone/Time.fs#L818-818" class="fsdocs-source-link" title="Source on GitHub">
+                  <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                </a>
+              </div>
+              <dl class="fsdocs-params">
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    series
+                  </span>
+                  :
+                  <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'a,&#32;'b,&#32;'c,&#32;'d</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+              </dl>
+              <dl class="fsdocs-returns">
+                <dt>
+                  <span class="fsdocs-return-name">
+                    Returns: 
+                  </span>
+                  <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'a,&#32;'b,&#32;'c,&#32;'d</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-return-docs"></dd>
+              </dl>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '319', 319)" onmouseover="showTip(event, '319', 319)">
+                <p>
+                  <a id="toObservations">
+                    <a href="#toObservations">
+                      <code><span>TimeSeries.toObservations&#32;<span>series</span></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="319">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>TimeSeries.toObservations&#32;<span>series</span></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        series
+                      </b>
+                      :
+                      <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'a,&#32;'b,&#32;'c,&#32;'d</span>&gt;</span></code>
+                       - 
+                      A time-series
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code><span><span>(<span>'a&#32;*&#32;'b</span>)</span>&#32;seq</span></code>
+                  </span>
+                  
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <details>
+              <summary>
+                <div class="fsdocs-summary">
+                  <div class="fsdocs-summary-contents">
+                    <p class="fsdocs-summary">
+                      Turn a time series into a sequence of observations
+                    </p>
+                  </div>
+                  <div class="icon-button-row">
+                    <a href="https://github.com/AndrewIOM/bristlecone/tree/master/src/Bristlecone/Time.fs#L759-759" class="fsdocs-source-link" title="Source on GitHub">
+                      <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                    </a>
+                    <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'M:Bristlecone.Time.TimeSeries.toObservations``4\'/>')">
+                      <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+                    </div>
+                    <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('```cref:M:Bristlecone.Time.TimeSeries.toObservations``4```')">
+                      <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+                    </div>
+                  </div>
+                </div>
+              </summary>
+              <dl class="fsdocs-params">
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    series
+                  </span>
+                  :
+                  <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'a,&#32;'b,&#32;'c,&#32;'d</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs">
+                  <p>
+                    A time-series
+                  </p>
+                </dd>
+              </dl>
+              <dl class="fsdocs-returns">
+                <dt>
+                  <span class="fsdocs-return-name">
+                    Returns: 
+                  </span>
+                  <code><span><span>(<span>'a&#32;*&#32;'b</span>)</span>&#32;seq</span></code>
+                </dt>
+                <dd class="fsdocs-return-docs">
+                  <p>
+                    
+                  </p>
+                </dd>
+              </dl>
+            </details>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '320', 320)" onmouseover="showTip(event, '320', 320)">
+                <p>
+                  <a id="trimEnd">
+                    <a href="#trimEnd">
+                      <code><span>TimeSeries.trimEnd&#32;<span>endDate&#32;series</span></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="320">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>TimeSeries.trimEnd&#32;<span>endDate&#32;series</span></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        endDate
+                      </b>
+                      :
+                      <code>'a</code>
+                       - 
+                      An end date to clip beyond
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        series
+                      </b>
+                      :
+                      <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'b,&#32;'a,&#32;'c,&#32;'d</span>&gt;</span></code>
+                       - 
+                      A time-series
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code><span><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'b,&#32;'a,&#32;'c,&#32;'d</span>&gt;</span>&#32;option</span></code>
+                  </span>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <details>
+              <summary>
+                <div class="fsdocs-summary">
+                  <div class="fsdocs-summary-contents">
+                    <p class="fsdocs-summary">
+                      Remove all time points that occur after the desired end date.
+                    </p>
+                  </div>
+                  <div class="icon-button-row">
+                    <a href="https://github.com/AndrewIOM/bristlecone/tree/master/src/Bristlecone/Time.fs#L830-830" class="fsdocs-source-link" title="Source on GitHub">
+                      <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                    </a>
+                    <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'M:Bristlecone.Time.TimeSeries.trimEnd``4\'/>')">
+                      <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+                    </div>
+                    <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('```cref:M:Bristlecone.Time.TimeSeries.trimEnd``4```')">
+                      <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+                    </div>
+                  </div>
+                </div>
+              </summary>
+              <dl class="fsdocs-params">
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    endDate
+                  </span>
+                  :
+                  <code>'a</code>
+                </dt>
+                <dd class="fsdocs-param-docs">
+                  <p>
+                    An end date to clip beyond
+                  </p>
+                </dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    series
+                  </span>
+                  :
+                  <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'b,&#32;'a,&#32;'c,&#32;'d</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs">
+                  <p>
+                    A time-series
+                  </p>
+                </dd>
+              </dl>
+              <dl class="fsdocs-returns">
+                <dt>
+                  <span class="fsdocs-return-name">
+                    Returns: 
+                  </span>
+                  <code><span><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'b,&#32;'a,&#32;'c,&#32;'d</span>&gt;</span>&#32;option</span></code>
+                </dt>
+                <dd class="fsdocs-return-docs"></dd>
+              </dl>
+            </details>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '321', 321)" onmouseover="showTip(event, '321', 321)">
+                <p>
+                  <a id="trimStart">
+                    <a href="#trimStart">
+                      <code><span>TimeSeries.trimStart&#32;<span>startDate&#32;series</span></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="321">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>TimeSeries.trimStart&#32;<span>startDate&#32;series</span></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        startDate
+                      </b>
+                      :
+                      <code>'a</code>
+                       - 
+                      A start date to clip from
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        series
+                      </b>
+                      :
+                      <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'b,&#32;'a,&#32;'c,&#32;'d</span>&gt;</span></code>
+                       - 
+                      A time-series
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code><span><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'b,&#32;'a,&#32;'c,&#32;'d</span>&gt;</span>&#32;option</span></code>
+                  </span>
+                  A new time-series with the clipped observations removed
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <details>
+              <summary>
+                <div class="fsdocs-summary">
+                  <div class="fsdocs-summary-contents">
+                    <p class="fsdocs-summary">
+                      Remove all time points that occur before the desired start date,
+ still including the specified start date if present.
+                    </p>
+                  </div>
+                  <div class="icon-button-row">
+                    <a href="https://github.com/AndrewIOM/bristlecone/tree/master/src/Bristlecone/Time.fs#L805-805" class="fsdocs-source-link" title="Source on GitHub">
+                      <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                    </a>
+                    <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'M:Bristlecone.Time.TimeSeries.trimStart``4\'/>')">
+                      <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+                    </div>
+                    <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('```cref:M:Bristlecone.Time.TimeSeries.trimStart``4```')">
+                      <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+                    </div>
+                  </div>
+                </div>
+              </summary>
+              <dl class="fsdocs-params">
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    startDate
+                  </span>
+                  :
+                  <code>'a</code>
+                </dt>
+                <dd class="fsdocs-param-docs">
+                  <p>
+                    A start date to clip from
+                  </p>
+                </dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    series
+                  </span>
+                  :
+                  <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'b,&#32;'a,&#32;'c,&#32;'d</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs">
+                  <p>
+                    A time-series
+                  </p>
+                </dd>
+              </dl>
+              <dl class="fsdocs-returns">
+                <dt>
+                  <span class="fsdocs-return-name">
+                    Returns: 
+                  </span>
+                  <code><span><span><a href="https://acm.im/bristlecone/reference/bristlecone-time-timeseries-timeseries-4.html">TimeSeries</a>&lt;<span>'b,&#32;'a,&#32;'c,&#32;'d</span>&gt;</span>&#32;option</span></code>
+                </dt>
+                <dd class="fsdocs-return-docs">
+                  <p>
+                    A new time-series with the clipped observations removed
+                  </p>
+                </dd>
+              </dl>
+            </details>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div></div>
+  <div></div>
+  <div></div>
+  <div></div>
+  <div></div>
+  <div></div>
+  <div></div>
+  <div></div>
+</div>
+        
+    </div>
+</main>
+<aside id="fsdocs-page-menu">
+    <p id="on-this-page">On this page</p>
+    <div class="empty"></div>
+</aside>
+<dialog>
+    <input type="search" placeholder="Search docs" />
+    <div class="results">
+        <ul></ul>
+        <p class="empty">Type something to start searching.</p>
+    </div>
+</dialog>
+<script type="module" src="https://acm.im/bristlecone/content/fsdocs-tips.js"></script>
+<script type="module" src="https://acm.im/bristlecone/content/fsdocs-theme-toggle.js"></script>
+<script type="module" src="https://acm.im/bristlecone/content/fsdocs-details-toggle.js"></script>
+<script type="module" src="https://acm.im/bristlecone/content/fsdocs-theme.js"></script>
+<script type="module" src="https://acm.im/bristlecone/content/fsdocs-search.js"></script>
+
+</body>
+</html>

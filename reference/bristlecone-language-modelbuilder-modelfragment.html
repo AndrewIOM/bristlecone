@@ -1,0 +1,959 @@
+<!DOCTYPE html>
+<html lang="en" data-root="https://acm.im/bristlecone/">
+<head>
+    <meta charset="UTF-8">
+    <meta content="IE=edge" http-equiv="X-UA-Compatible">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+    <meta content="Andrew Martin" name="author">
+    <!-- Opengraph properties (https://ogp.me/) -->
+    <meta property="og:site_name" content="bristlecone">
+    <meta property="og:title" content="ModelFragment<'time> (bristlecone)" />
+    <meta property="og:url" content="https://acm.im/bristlecone/{{fsdocs-source-basename}}.html">
+    <meta property="og:type" content="website" />
+    <!-- Twitter cards (https://developer.twitter.com/en/docs/twitter-for-websites/cards/overview/summary-card-with-large-image) -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:site" content="https://acm.im/bristlecone/">
+    <meta name="twitter:title" content="ModelFragment<'time> (bristlecone)">
+    
+    <title>ModelFragment<'time> (bristlecone) | bristlecone</title>
+    <link href="https://fonts.googleapis.com" rel="preconnect">
+    <link crossorigin href="https://fonts.gstatic.com" rel="preconnect">
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code&display=swap" rel="stylesheet">
+    <script src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js"></script>
+    <link href="https://acm.im/bristlecone/img/favicon.ico" rel="icon" sizes="32x32" type="image/png"/>
+    <script type="application/javascript" src="https://acm.im/bristlecone/content/fsdocs-theme-set-dark.js"></script>
+    <script type="application/javascript" src="https://acm.im/bristlecone/content/fsdocs-details-set-expanded.js"></script>
+    <link href="https://acm.im/bristlecone/content/fsdocs-default.css" rel="stylesheet" type="text/css"/>
+    <link href="https://acm.im/bristlecone/content/fsdocs-theme.css" rel="stylesheet" type="text/css"/>
+    <script src="https://cdn.plot.ly/plotly-2.21.0.min.js"></script>
+    
+</head>
+<body class="api-docs">
+<header>
+    <div class="start">
+        <div id="menu-toggle">
+            <iconify-icon class="icon closed" height="22" icon="eva:menu-fill" width="22"></iconify-icon>
+            <iconify-icon class="icon open" height="22" icon="mi:close" width="22"></iconify-icon>
+            <input type="checkbox" name="mobile-menu" />
+            <ul class="menu">
+                <li class="nav-header">Links</li>
+                <li class="license-menu-item builtin-menu-item nav-item"><a class="nav-link" href="https://github.com/AndrewIOM/bristlecone/blob/master/LICENSE">License</a>
+                </li>
+                <li class="release-notes-menu-item builtin-menu-item nav-item"><a class="nav-link"
+                                        href="https://github.com/AndrewIOM/bristlecone/blob/master/RELEASE_NOTES.MD">Release
+                    Notes</a></li>
+                <li class="repository-menu-item builtin-menu-item nav-item"><a class="nav-link" href="https://github.com/AndrewIOM/bristlecone/">Source
+                    Repository</a></li>
+                <li class="nav-header ">
+  The Bristlecone Language
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/language.html">
+    Writing Models
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model.html">
+    Defining a Hypothesis (or Model System)
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/estimation-engine.html">
+    Defining a Model-Fitting Method (Estimation Engine)
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/composing-models.html">
+    Composing models into many hypotheses
+  </a>
+</li>             
+<li class="nav-header ">
+  Techniques
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model-fitting.html">
+    Model Fitting
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model-selection.html">
+    Model Selection
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/workflow.html">
+    Ensembles and Parallel Processing
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/confidence-intervals.html">
+    Calculating Confidence Intervals
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/diagnostics.html">
+    Diagnostics
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/data.html">
+    Loading and Saving Data
+  </a>
+</li>             
+<li class="nav-header ">
+  Bristlecone.Dendro
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/dendro.html">
+    Dendroecology
+  </a>
+</li>             
+<li class="nav-header ">
+  Examples
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/predator-prey.html">
+    Predator-Prey Dynamics
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/sedimentary.html">
+    The long-term ecological detective: Holocene ecosystem functioning
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/dendroecology.html">
+    Wood rings: investigating plant-environment interactions
+  </a>
+</li>             
+<li class="nav-header ">
+  Components
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/optimisation.html">
+    Optimisation
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/time-series.html">
+    Time-Series and Time-Frames
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/integration.html">
+    Integration
+  </a>
+</li>             
+<li class="nav-header ">
+  Other
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/data/dendro/readme.html">
+    readme
+  </a>
+</li>
+                <li class="nav-header">
+  API Reference
+</li>             
+<li class="nav-item">
+  <a class="nav-link" href="https://acm.im/bristlecone/reference/index.html">
+    All Namespaces
+  </a>
+</li>
+            </ul>
+        </div>
+        <a href="https://acm.im/bristlecone/">
+            <img alt="Header menu logo" src="https://acm.im/bristlecone//img/logo.png">
+            <strong>bristlecone</strong>
+        </a>
+    </div>
+    <div class="end">
+        <a href="https://github.com/AndrewIOM/bristlecone/" target="_blank">
+            <iconify-icon icon="uil:github" width="26" height="26"></iconify-icon>
+        </a>
+        <iconify-icon id="search-btn" icon="carbon:search" class="search" width="24" height="24"></iconify-icon>
+        <fsdocs-theme-toggle></fsdocs-theme-toggle>
+    </div>
+</header>
+<aside id="fsdocs-main-menu">
+    <ul class="menu">
+        <li class="nav-header">Links</li>
+        <li class="license-menu-item builtin-menu-item nav-item"><a class="nav-link" href="https://github.com/AndrewIOM/bristlecone/blob/master/LICENSE">License</a>
+        </li>
+        <li class="release-notes-menu-item builtin-menu-item nav-item"><a class="nav-link"
+                                href="https://github.com/AndrewIOM/bristlecone/blob/master/RELEASE_NOTES.MD">Release
+            Notes</a></li>
+        <li class="repository-menu-item builtin-menu-item nav-item"><a class="nav-link" href="https://github.com/AndrewIOM/bristlecone/">Source
+            Repository</a></li>
+        <li class="nav-header ">
+  The Bristlecone Language
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/language.html">
+    Writing Models
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model.html">
+    Defining a Hypothesis (or Model System)
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/estimation-engine.html">
+    Defining a Model-Fitting Method (Estimation Engine)
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/composing-models.html">
+    Composing models into many hypotheses
+  </a>
+</li>             
+<li class="nav-header ">
+  Techniques
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model-fitting.html">
+    Model Fitting
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model-selection.html">
+    Model Selection
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/workflow.html">
+    Ensembles and Parallel Processing
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/confidence-intervals.html">
+    Calculating Confidence Intervals
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/diagnostics.html">
+    Diagnostics
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/data.html">
+    Loading and Saving Data
+  </a>
+</li>             
+<li class="nav-header ">
+  Bristlecone.Dendro
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/dendro.html">
+    Dendroecology
+  </a>
+</li>             
+<li class="nav-header ">
+  Examples
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/predator-prey.html">
+    Predator-Prey Dynamics
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/sedimentary.html">
+    The long-term ecological detective: Holocene ecosystem functioning
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/dendroecology.html">
+    Wood rings: investigating plant-environment interactions
+  </a>
+</li>             
+<li class="nav-header ">
+  Components
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/optimisation.html">
+    Optimisation
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/time-series.html">
+    Time-Series and Time-Frames
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/integration.html">
+    Integration
+  </a>
+</li>             
+<li class="nav-header ">
+  Other
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/data/dendro/readme.html">
+    readme
+  </a>
+</li>
+        <li class="nav-header">
+  API Reference
+</li>             
+<li class="nav-item">
+  <a class="nav-link" href="https://acm.im/bristlecone/reference/index.html">
+    All Namespaces
+  </a>
+</li>
+    </ul>
+</aside>
+<main>
+    <div id="content">
+        <div>
+  <h2>
+    ModelFragment<'time> Type
+  </h2>
+  <dl class="fsdocs-metadata">
+    <dt>
+      Namespace: 
+      <a href="https://acm.im/bristlecone/reference/bristlecone.html">
+        Bristlecone
+      </a>
+    </dt>
+    <dt>
+      Assembly: Bristlecone.dll
+    </dt>
+    <dt>
+      Parent Module: 
+      <a href="https://acm.im/bristlecone/reference/bristlecone-language-modelbuilder.html">
+        ModelBuilder
+      </a>
+    </dt>
+    <dt>
+      Base Type: 
+      <code>obj</code>
+    </dt>
+  </dl>
+  <div class="fsdocs-xmldoc">
+    <div>
+      <div class="fsdocs-summary-contents">
+        <p class="fsdocs-summary">
+          
+        </p>
+      </div>
+    </div>
+  </div>
+  <div></div>
+  <div></div>
+  <div></div>
+  <div>
+    <h3>
+      Union cases
+    </h3>
+    <table class="table outer-list fsdocs-member-list">
+      <thead>
+        <tr>
+          <td class="fsdocs-member-list-header">
+            Union case
+          </td>
+          <td class="fsdocs-member-list-header">
+            Description
+            <fsdocs-details-toggle></fsdocs-details-toggle>
+          </td>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '657', 657)" onmouseover="showTip(event, '657', 657)">
+                <p>
+                  <a id="EquationFragment">
+                    <a href="#EquationFragment">
+                      <code><span>EquationFragment(<span><span><a href="https://acm.im/bristlecone/reference/bristlecone-language-expressionparser-requirement.html">Requirement</a>&#32;list</span>,&#32;<span><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelbuilder-equationthunk.html">EquationThunk</a>&lt;'time&gt;</span></span>)</span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="657">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>EquationFragment(<span><span><a href="https://acm.im/bristlecone/reference/bristlecone-language-expressionparser-requirement.html">Requirement</a>&#32;list</span>,&#32;<span><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelbuilder-equationthunk.html">EquationThunk</a>&lt;'time&gt;</span></span>)</span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        Item1
+                      </b>
+                      :
+                      <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-language-expressionparser-requirement.html">Requirement</a>&#32;list</span></code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        Item2
+                      </b>
+                      :
+                      <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelbuilder-equationthunk.html">EquationThunk</a>&lt;'time&gt;</span></code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <div class="fsdocs-member-xmldoc-column">
+              <div class="icon-button-row">
+                <a href="https://github.com/AndrewIOM/bristlecone/tree/master/src/Bristlecone/Language.fs#L1033-1033" class="fsdocs-source-link" title="Source on GitHub">
+                  <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                </a>
+              </div>
+              <dl class="fsdocs-params">
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    Item1
+                  </span>
+                  :
+                  <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-language-expressionparser-requirement.html">Requirement</a>&#32;list</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    Item2
+                  </span>
+                  :
+                  <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelbuilder-equationthunk.html">EquationThunk</a>&lt;'time&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+              </dl>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '658', 658)" onmouseover="showTip(event, '658', 658)">
+                <p>
+                  <a id="InitialiserFragment">
+                    <a href="#InitialiserFragment">
+                      <code><span>InitialiserFragment(<span><span><a href="https://acm.im/bristlecone/reference/bristlecone-language-expressionparser-requirement.html">Requirement</a>&#32;list</span>,&#32;<span><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelbuilder-initialiserthunk-1.html">InitialiserThunk</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-modelsystem-state.html">state</a>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span></span>)</span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="658">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>InitialiserFragment(<span><span><a href="https://acm.im/bristlecone/reference/bristlecone-language-expressionparser-requirement.html">Requirement</a>&#32;list</span>,&#32;<span><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelbuilder-initialiserthunk-1.html">InitialiserThunk</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-modelsystem-state.html">state</a>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span></span>)</span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        Item1
+                      </b>
+                      :
+                      <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-language-expressionparser-requirement.html">Requirement</a>&#32;list</span></code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        Item2
+                      </b>
+                      :
+                      <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelbuilder-initialiserthunk-1.html">InitialiserThunk</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-modelsystem-state.html">state</a>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span></code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <div class="fsdocs-member-xmldoc-column">
+              <div class="icon-button-row">
+                <a href="https://github.com/AndrewIOM/bristlecone/tree/master/src/Bristlecone/Language.fs#L1037-1037" class="fsdocs-source-link" title="Source on GitHub">
+                  <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                </a>
+              </div>
+              <dl class="fsdocs-params">
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    Item1
+                  </span>
+                  :
+                  <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-language-expressionparser-requirement.html">Requirement</a>&#32;list</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    Item2
+                  </span>
+                  :
+                  <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelbuilder-initialiserthunk-1.html">InitialiserThunk</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-modelsystem-state.html">state</a>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+              </dl>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '659', 659)" onmouseover="showTip(event, '659', 659)">
+                <p>
+                  <a id="LikelihoodFragment">
+                    <a href="#LikelihoodFragment">
+                      <code><span>LikelihoodFragment&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-language-modelbuilder-likelihoodthunk.html">LikelihoodThunk</a></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="659">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>LikelihoodFragment&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-language-modelbuilder-likelihoodthunk.html">LikelihoodThunk</a></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        Item
+                      </b>
+                      :
+                      <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelbuilder-likelihoodthunk.html">LikelihoodThunk</a></code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <div class="fsdocs-member-xmldoc-column">
+              <div class="icon-button-row">
+                <a href="https://github.com/AndrewIOM/bristlecone/tree/master/src/Bristlecone/Language.fs#L1035-1035" class="fsdocs-source-link" title="Source on GitHub">
+                  <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                </a>
+              </div>
+              <dl class="fsdocs-params">
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    Item
+                  </span>
+                  :
+                  <code><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelbuilder-likelihoodthunk.html">LikelihoodThunk</a></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+              </dl>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '660', 660)" onmouseover="showTip(event, '660', 660)">
+                <p>
+                  <a id="MeasureFragment">
+                    <a href="#MeasureFragment">
+                      <code><span>MeasureFragment(<span><span><a href="https://acm.im/bristlecone/reference/bristlecone-language-expressionparser-requirement.html">Requirement</a>&#32;list</span>,&#32;<span><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelbuilder-measurethunk-1.html">MeasureThunk</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-modelsystem-state.html">state</a>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span></span>)</span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="660">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>MeasureFragment(<span><span><a href="https://acm.im/bristlecone/reference/bristlecone-language-expressionparser-requirement.html">Requirement</a>&#32;list</span>,&#32;<span><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelbuilder-measurethunk-1.html">MeasureThunk</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-modelsystem-state.html">state</a>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span></span>)</span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        Item1
+                      </b>
+                      :
+                      <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-language-expressionparser-requirement.html">Requirement</a>&#32;list</span></code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        Item2
+                      </b>
+                      :
+                      <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelbuilder-measurethunk-1.html">MeasureThunk</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-modelsystem-state.html">state</a>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span></code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <div class="fsdocs-member-xmldoc-column">
+              <div class="icon-button-row">
+                <a href="https://github.com/AndrewIOM/bristlecone/tree/master/src/Bristlecone/Language.fs#L1036-1036" class="fsdocs-source-link" title="Source on GitHub">
+                  <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                </a>
+              </div>
+              <dl class="fsdocs-params">
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    Item1
+                  </span>
+                  :
+                  <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-language-expressionparser-requirement.html">Requirement</a>&#32;list</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    Item2
+                  </span>
+                  :
+                  <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-language-modelbuilder-measurethunk-1.html">MeasureThunk</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-modelsystem-state.html">state</a>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+              </dl>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '661', 661)" onmouseover="showTip(event, '661', 661)">
+                <p>
+                  <a id="ParameterFragment">
+                    <a href="#ParameterFragment">
+                      <code><span>ParameterFragment&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-parameter-pool-anyparameter.html">AnyParameter</a></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="661">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>ParameterFragment&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-parameter-pool-anyparameter.html">AnyParameter</a></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        Item
+                      </b>
+                      :
+                      <code><a href="https://acm.im/bristlecone/reference/bristlecone-parameter-pool-anyparameter.html">AnyParameter</a></code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <div class="fsdocs-member-xmldoc-column">
+              <div class="icon-button-row">
+                <a href="https://github.com/AndrewIOM/bristlecone/tree/master/src/Bristlecone/Language.fs#L1034-1034" class="fsdocs-source-link" title="Source on GitHub">
+                  <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                </a>
+              </div>
+              <dl class="fsdocs-params">
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    Item
+                  </span>
+                  :
+                  <code><a href="https://acm.im/bristlecone/reference/bristlecone-parameter-pool-anyparameter.html">AnyParameter</a></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+              </dl>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div></div>
+  <div></div>
+  <div></div>
+  <div>
+    <h3>
+      Instance members
+    </h3>
+    <table class="table outer-list fsdocs-member-list">
+      <thead>
+        <tr>
+          <td class="fsdocs-member-list-header">
+            Instance member
+          </td>
+          <td class="fsdocs-member-list-header">
+            Description
+            <fsdocs-details-toggle></fsdocs-details-toggle>
+          </td>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '662', 662)" onmouseover="showTip(event, '662', 662)">
+                <p>
+                  <a id="IsEquationFragment">
+                    <a href="#IsEquationFragment">
+                      <code><span>this.IsEquationFragment</span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="662">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>this.IsEquationFragment</span></code>
+                  <br/>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code>bool</code>
+                  </span>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <div class="fsdocs-member-xmldoc-column">
+              <div class="icon-button-row">
+                <a href="https://github.com/AndrewIOM/bristlecone/tree/master/src/Bristlecone/Language.fs#L1033-1033" class="fsdocs-source-link" title="Source on GitHub">
+                  <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                </a>
+              </div>
+              <dl class="fsdocs-returns">
+                <dt>
+                  <span class="fsdocs-return-name">
+                    Returns: 
+                  </span>
+                  <code>bool</code>
+                </dt>
+                <dd class="fsdocs-return-docs"></dd>
+              </dl>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '663', 663)" onmouseover="showTip(event, '663', 663)">
+                <p>
+                  <a id="IsInitialiserFragment">
+                    <a href="#IsInitialiserFragment">
+                      <code><span>this.IsInitialiserFragment</span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="663">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>this.IsInitialiserFragment</span></code>
+                  <br/>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code>bool</code>
+                  </span>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <div class="fsdocs-member-xmldoc-column">
+              <div class="icon-button-row">
+                <a href="https://github.com/AndrewIOM/bristlecone/tree/master/src/Bristlecone/Language.fs#L1037-1037" class="fsdocs-source-link" title="Source on GitHub">
+                  <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                </a>
+              </div>
+              <dl class="fsdocs-returns">
+                <dt>
+                  <span class="fsdocs-return-name">
+                    Returns: 
+                  </span>
+                  <code>bool</code>
+                </dt>
+                <dd class="fsdocs-return-docs"></dd>
+              </dl>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '664', 664)" onmouseover="showTip(event, '664', 664)">
+                <p>
+                  <a id="IsLikelihoodFragment">
+                    <a href="#IsLikelihoodFragment">
+                      <code><span>this.IsLikelihoodFragment</span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="664">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>this.IsLikelihoodFragment</span></code>
+                  <br/>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code>bool</code>
+                  </span>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <div class="fsdocs-member-xmldoc-column">
+              <div class="icon-button-row">
+                <a href="https://github.com/AndrewIOM/bristlecone/tree/master/src/Bristlecone/Language.fs#L1035-1035" class="fsdocs-source-link" title="Source on GitHub">
+                  <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                </a>
+              </div>
+              <dl class="fsdocs-returns">
+                <dt>
+                  <span class="fsdocs-return-name">
+                    Returns: 
+                  </span>
+                  <code>bool</code>
+                </dt>
+                <dd class="fsdocs-return-docs"></dd>
+              </dl>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '665', 665)" onmouseover="showTip(event, '665', 665)">
+                <p>
+                  <a id="IsMeasureFragment">
+                    <a href="#IsMeasureFragment">
+                      <code><span>this.IsMeasureFragment</span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="665">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>this.IsMeasureFragment</span></code>
+                  <br/>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code>bool</code>
+                  </span>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <div class="fsdocs-member-xmldoc-column">
+              <div class="icon-button-row">
+                <a href="https://github.com/AndrewIOM/bristlecone/tree/master/src/Bristlecone/Language.fs#L1036-1036" class="fsdocs-source-link" title="Source on GitHub">
+                  <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                </a>
+              </div>
+              <dl class="fsdocs-returns">
+                <dt>
+                  <span class="fsdocs-return-name">
+                    Returns: 
+                  </span>
+                  <code>bool</code>
+                </dt>
+                <dd class="fsdocs-return-docs"></dd>
+              </dl>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '666', 666)" onmouseover="showTip(event, '666', 666)">
+                <p>
+                  <a id="IsParameterFragment">
+                    <a href="#IsParameterFragment">
+                      <code><span>this.IsParameterFragment</span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="666">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>this.IsParameterFragment</span></code>
+                  <br/>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code>bool</code>
+                  </span>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <div class="fsdocs-member-xmldoc-column">
+              <div class="icon-button-row">
+                <a href="https://github.com/AndrewIOM/bristlecone/tree/master/src/Bristlecone/Language.fs#L1034-1034" class="fsdocs-source-link" title="Source on GitHub">
+                  <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                </a>
+              </div>
+              <dl class="fsdocs-returns">
+                <dt>
+                  <span class="fsdocs-return-name">
+                    Returns: 
+                  </span>
+                  <code>bool</code>
+                </dt>
+                <dd class="fsdocs-return-docs"></dd>
+              </dl>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div></div>
+</div>
+        
+    </div>
+</main>
+<aside id="fsdocs-page-menu">
+    <p id="on-this-page">On this page</p>
+    <div class="empty"></div>
+</aside>
+<dialog>
+    <input type="search" placeholder="Search docs" />
+    <div class="results">
+        <ul></ul>
+        <p class="empty">Type something to start searching.</p>
+    </div>
+</dialog>
+<script type="module" src="https://acm.im/bristlecone/content/fsdocs-tips.js"></script>
+<script type="module" src="https://acm.im/bristlecone/content/fsdocs-theme-toggle.js"></script>
+<script type="module" src="https://acm.im/bristlecone/content/fsdocs-details-toggle.js"></script>
+<script type="module" src="https://acm.im/bristlecone/content/fsdocs-theme.js"></script>
+<script type="module" src="https://acm.im/bristlecone/content/fsdocs-search.js"></script>
+
+</body>
+</html>

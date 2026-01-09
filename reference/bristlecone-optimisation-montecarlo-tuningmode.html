@@ -1,0 +1,2071 @@
+<!DOCTYPE html>
+<html lang="en" data-root="https://acm.im/bristlecone/">
+<head>
+    <meta charset="UTF-8">
+    <meta content="IE=edge" http-equiv="X-UA-Compatible">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+    <meta content="Andrew Martin" name="author">
+    <!-- Opengraph properties (https://ogp.me/) -->
+    <meta property="og:site_name" content="bristlecone">
+    <meta property="og:title" content="TuningMode (bristlecone)" />
+    <meta property="og:url" content="https://acm.im/bristlecone/{{fsdocs-source-basename}}.html">
+    <meta property="og:type" content="website" />
+    <!-- Twitter cards (https://developer.twitter.com/en/docs/twitter-for-websites/cards/overview/summary-card-with-large-image) -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:site" content="https://acm.im/bristlecone/">
+    <meta name="twitter:title" content="TuningMode (bristlecone)">
+    
+    <title>TuningMode (bristlecone) | bristlecone</title>
+    <link href="https://fonts.googleapis.com" rel="preconnect">
+    <link crossorigin href="https://fonts.gstatic.com" rel="preconnect">
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code&display=swap" rel="stylesheet">
+    <script src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js"></script>
+    <link href="https://acm.im/bristlecone/img/favicon.ico" rel="icon" sizes="32x32" type="image/png"/>
+    <script type="application/javascript" src="https://acm.im/bristlecone/content/fsdocs-theme-set-dark.js"></script>
+    <script type="application/javascript" src="https://acm.im/bristlecone/content/fsdocs-details-set-expanded.js"></script>
+    <link href="https://acm.im/bristlecone/content/fsdocs-default.css" rel="stylesheet" type="text/css"/>
+    <link href="https://acm.im/bristlecone/content/fsdocs-theme.css" rel="stylesheet" type="text/css"/>
+    <script src="https://cdn.plot.ly/plotly-2.21.0.min.js"></script>
+    
+</head>
+<body class="api-docs">
+<header>
+    <div class="start">
+        <div id="menu-toggle">
+            <iconify-icon class="icon closed" height="22" icon="eva:menu-fill" width="22"></iconify-icon>
+            <iconify-icon class="icon open" height="22" icon="mi:close" width="22"></iconify-icon>
+            <input type="checkbox" name="mobile-menu" />
+            <ul class="menu">
+                <li class="nav-header">Links</li>
+                <li class="license-menu-item builtin-menu-item nav-item"><a class="nav-link" href="https://github.com/AndrewIOM/bristlecone/blob/master/LICENSE">License</a>
+                </li>
+                <li class="release-notes-menu-item builtin-menu-item nav-item"><a class="nav-link"
+                                        href="https://github.com/AndrewIOM/bristlecone/blob/master/RELEASE_NOTES.MD">Release
+                    Notes</a></li>
+                <li class="repository-menu-item builtin-menu-item nav-item"><a class="nav-link" href="https://github.com/AndrewIOM/bristlecone/">Source
+                    Repository</a></li>
+                <li class="nav-header ">
+  The Bristlecone Language
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/language.html">
+    Writing Models
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model.html">
+    Defining a Hypothesis (or Model System)
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/estimation-engine.html">
+    Defining a Model-Fitting Method (Estimation Engine)
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/composing-models.html">
+    Composing models into many hypotheses
+  </a>
+</li>             
+<li class="nav-header ">
+  Techniques
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model-fitting.html">
+    Model Fitting
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model-selection.html">
+    Model Selection
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/workflow.html">
+    Ensembles and Parallel Processing
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/confidence-intervals.html">
+    Calculating Confidence Intervals
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/diagnostics.html">
+    Diagnostics
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/data.html">
+    Loading and Saving Data
+  </a>
+</li>             
+<li class="nav-header ">
+  Bristlecone.Dendro
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/dendro.html">
+    Dendroecology
+  </a>
+</li>             
+<li class="nav-header ">
+  Examples
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/predator-prey.html">
+    Predator-Prey Dynamics
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/sedimentary.html">
+    The long-term ecological detective: Holocene ecosystem functioning
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/dendroecology.html">
+    Wood rings: investigating plant-environment interactions
+  </a>
+</li>             
+<li class="nav-header ">
+  Components
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/optimisation.html">
+    Optimisation
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/time-series.html">
+    Time-Series and Time-Frames
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/integration.html">
+    Integration
+  </a>
+</li>             
+<li class="nav-header ">
+  Other
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/data/dendro/readme.html">
+    readme
+  </a>
+</li>
+                <li class="nav-header">
+  API Reference
+</li>             
+<li class="nav-item">
+  <a class="nav-link" href="https://acm.im/bristlecone/reference/index.html">
+    All Namespaces
+  </a>
+</li>
+            </ul>
+        </div>
+        <a href="https://acm.im/bristlecone/">
+            <img alt="Header menu logo" src="https://acm.im/bristlecone//img/logo.png">
+            <strong>bristlecone</strong>
+        </a>
+    </div>
+    <div class="end">
+        <a href="https://github.com/AndrewIOM/bristlecone/" target="_blank">
+            <iconify-icon icon="uil:github" width="26" height="26"></iconify-icon>
+        </a>
+        <iconify-icon id="search-btn" icon="carbon:search" class="search" width="24" height="24"></iconify-icon>
+        <fsdocs-theme-toggle></fsdocs-theme-toggle>
+    </div>
+</header>
+<aside id="fsdocs-main-menu">
+    <ul class="menu">
+        <li class="nav-header">Links</li>
+        <li class="license-menu-item builtin-menu-item nav-item"><a class="nav-link" href="https://github.com/AndrewIOM/bristlecone/blob/master/LICENSE">License</a>
+        </li>
+        <li class="release-notes-menu-item builtin-menu-item nav-item"><a class="nav-link"
+                                href="https://github.com/AndrewIOM/bristlecone/blob/master/RELEASE_NOTES.MD">Release
+            Notes</a></li>
+        <li class="repository-menu-item builtin-menu-item nav-item"><a class="nav-link" href="https://github.com/AndrewIOM/bristlecone/">Source
+            Repository</a></li>
+        <li class="nav-header ">
+  The Bristlecone Language
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/language.html">
+    Writing Models
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model.html">
+    Defining a Hypothesis (or Model System)
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/estimation-engine.html">
+    Defining a Model-Fitting Method (Estimation Engine)
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/composing-models.html">
+    Composing models into many hypotheses
+  </a>
+</li>             
+<li class="nav-header ">
+  Techniques
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model-fitting.html">
+    Model Fitting
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model-selection.html">
+    Model Selection
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/workflow.html">
+    Ensembles and Parallel Processing
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/confidence-intervals.html">
+    Calculating Confidence Intervals
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/diagnostics.html">
+    Diagnostics
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/data.html">
+    Loading and Saving Data
+  </a>
+</li>             
+<li class="nav-header ">
+  Bristlecone.Dendro
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/dendro.html">
+    Dendroecology
+  </a>
+</li>             
+<li class="nav-header ">
+  Examples
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/predator-prey.html">
+    Predator-Prey Dynamics
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/sedimentary.html">
+    The long-term ecological detective: Holocene ecosystem functioning
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/dendroecology.html">
+    Wood rings: investigating plant-environment interactions
+  </a>
+</li>             
+<li class="nav-header ">
+  Components
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/optimisation.html">
+    Optimisation
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/time-series.html">
+    Time-Series and Time-Frames
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/integration.html">
+    Integration
+  </a>
+</li>             
+<li class="nav-header ">
+  Other
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/data/dendro/readme.html">
+    readme
+  </a>
+</li>
+        <li class="nav-header">
+  API Reference
+</li>             
+<li class="nav-item">
+  <a class="nav-link" href="https://acm.im/bristlecone/reference/index.html">
+    All Namespaces
+  </a>
+</li>
+    </ul>
+</aside>
+<main>
+    <div id="content">
+        <div>
+  <h2>
+    TuningMode Module
+  </h2>
+  <dl class="fsdocs-metadata">
+    <dt>
+      Namespace: 
+      <a href="https://acm.im/bristlecone/reference/bristlecone-optimisation.html">
+        Bristlecone.Optimisation
+      </a>
+    </dt>
+    <dt>
+      Assembly: Bristlecone.dll
+    </dt>
+    <dt>
+      Parent Module: 
+      <a href="https://acm.im/bristlecone/reference/bristlecone-optimisation-montecarlo.html">
+        MonteCarlo
+      </a>
+    </dt>
+  </dl>
+  <div class="fsdocs-xmldoc">
+    <div>
+      <div class="fsdocs-summary-contents">
+        <p class="fsdocs-summary">
+          
+        </p>
+      </div>
+    </div>
+  </div>
+  <div>
+    <h3>
+      Functions and values
+    </h3>
+    <table class="table outer-list fsdocs-member-list">
+      <thead>
+        <tr>
+          <td class="fsdocs-member-list-header">
+            Function or value
+          </td>
+          <td class="fsdocs-member-list-header">
+            Description
+            <fsdocs-details-toggle></fsdocs-details-toggle>
+          </td>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '483', 483)" onmouseover="showTip(event, '483', 483)">
+                <p>
+                  <a id="covariance">
+                    <a href="#covariance">
+                      <code><span>covariance&#32;<span>tuneInterval&#32;weighting&#32;remaining&#32;history&#32;scale</span></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="483">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>covariance&#32;<span>tuneInterval&#32;weighting&#32;remaining&#32;history&#32;scale</span></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        tuneInterval
+                      </b>
+                      :
+                      <code><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-int-1">int</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-iteration.html">iteration</a>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span></code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        weighting
+                      </b>
+                      :
+                      <code>float</code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        remaining
+                      </b>
+                      :
+                      <code><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-int-1">int</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-iteration.html">iteration</a>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span></code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        history
+                      </b>
+                      :
+                      <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-estimationengine-solution.html">Solution</a>&#32;seq</span></code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        scale
+                      </b>
+                      :
+                      <code><span><a href="https://learn.microsoft.com/dotnet/api/mathnet.numerics.linearalgebra.matrix-1">Matrix</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-float-1">float</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-optim-space.html">optim-space</a>,&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-optim-space.html">optim-space</a></span>&gt;</span>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span>&gt;</span></code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code><span><a href="https://learn.microsoft.com/dotnet/api/mathnet.numerics.linearalgebra.matrix-1">Matrix</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-float-1">float</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-optim-space.html">optim-space</a>,&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-optim-space.html">optim-space</a></span>&gt;</span>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span>&gt;</span></code>
+                  </span>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <details>
+              <summary>
+                <div class="fsdocs-summary">
+                  <div class="fsdocs-summary-contents">
+                    <p class="fsdocs-summary">
+                       Tune previously observed covariance based on most recent period.
+ Works directly with the empirical covariance of the chain history.
+                    </p>
+                  </div>
+                  <div class="icon-button-row">
+                    <a href="https://github.com/AndrewIOM/bristlecone/tree/master/src/Bristlecone/Optimisation.fs#L263-263" class="fsdocs-source-link" title="Source on GitHub">
+                      <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                    </a>
+                    <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'M:Bristlecone.Optimisation.MonteCarlo.TuningMode.covariance\'/>')">
+                      <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+                    </div>
+                    <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('`cref:M:Bristlecone.Optimisation.MonteCarlo.TuningMode.covariance`')">
+                      <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+                    </div>
+                  </div>
+                </div>
+              </summary>
+              <dl class="fsdocs-params">
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    tuneInterval
+                  </span>
+                  :
+                  <code><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-int-1">int</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-iteration.html">iteration</a>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    weighting
+                  </span>
+                  :
+                  <code>float</code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    remaining
+                  </span>
+                  :
+                  <code><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-int-1">int</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-iteration.html">iteration</a>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    history
+                  </span>
+                  :
+                  <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-estimationengine-solution.html">Solution</a>&#32;seq</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    scale
+                  </span>
+                  :
+                  <code><span><a href="https://learn.microsoft.com/dotnet/api/mathnet.numerics.linearalgebra.matrix-1">Matrix</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-float-1">float</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-optim-space.html">optim-space</a>,&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-optim-space.html">optim-space</a></span>&gt;</span>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+              </dl>
+              <dl class="fsdocs-returns">
+                <dt>
+                  <span class="fsdocs-return-name">
+                    Returns: 
+                  </span>
+                  <code><span><a href="https://learn.microsoft.com/dotnet/api/mathnet.numerics.linearalgebra.matrix-1">Matrix</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-float-1">float</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-optim-space.html">optim-space</a>,&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-optim-space.html">optim-space</a></span>&gt;</span>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-return-docs"></dd>
+              </dl>
+            </details>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '484', 484)" onmouseover="showTip(event, '484', 484)">
+                <p>
+                  <a id="covarianceAllTime">
+                    <a href="#covarianceAllTime">
+                      <code><span>covarianceAllTime&#32;<span>weighting&#32;history&#32;scale</span></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="484">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>covarianceAllTime&#32;<span>weighting&#32;history&#32;scale</span></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        weighting
+                      </b>
+                      :
+                      <code>float</code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        history
+                      </b>
+                      :
+                      <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-estimationengine-solution.html">Solution</a>&#32;seq</span></code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        scale
+                      </b>
+                      :
+                      <code><span><a href="https://learn.microsoft.com/dotnet/api/mathnet.numerics.linearalgebra.matrix-1">Matrix</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-float-1">float</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-optim-space.html">optim-space</a>,&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-optim-space.html">optim-space</a></span>&gt;</span>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span>&gt;</span></code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code><span><a href="https://learn.microsoft.com/dotnet/api/mathnet.numerics.linearalgebra.matrix-1">Matrix</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-float-1">float</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-optim-space.html">optim-space</a>,&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-optim-space.html">optim-space</a></span>&gt;</span>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span>&gt;</span></code>
+                  </span>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <details>
+              <summary>
+                <div class="fsdocs-summary">
+                  <div class="fsdocs-summary-contents">
+                    <p class="fsdocs-summary">
+                       Tune previously observed covariance based on all time
+                    </p>
+                  </div>
+                  <div class="icon-button-row">
+                    <a href="https://github.com/AndrewIOM/bristlecone/tree/master/src/Bristlecone/Optimisation.fs#L302-302" class="fsdocs-source-link" title="Source on GitHub">
+                      <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                    </a>
+                    <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'M:Bristlecone.Optimisation.MonteCarlo.TuningMode.covarianceAllTime\'/>')">
+                      <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+                    </div>
+                    <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('`cref:M:Bristlecone.Optimisation.MonteCarlo.TuningMode.covarianceAllTime`')">
+                      <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+                    </div>
+                  </div>
+                </div>
+              </summary>
+              <dl class="fsdocs-params">
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    weighting
+                  </span>
+                  :
+                  <code>float</code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    history
+                  </span>
+                  :
+                  <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-estimationengine-solution.html">Solution</a>&#32;seq</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    scale
+                  </span>
+                  :
+                  <code><span><a href="https://learn.microsoft.com/dotnet/api/mathnet.numerics.linearalgebra.matrix-1">Matrix</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-float-1">float</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-optim-space.html">optim-space</a>,&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-optim-space.html">optim-space</a></span>&gt;</span>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+              </dl>
+              <dl class="fsdocs-returns">
+                <dt>
+                  <span class="fsdocs-return-name">
+                    Returns: 
+                  </span>
+                  <code><span><a href="https://learn.microsoft.com/dotnet/api/mathnet.numerics.linearalgebra.matrix-1">Matrix</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-float-1">float</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-optim-space.html">optim-space</a>,&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-optim-space.html">optim-space</a></span>&gt;</span>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-return-docs"></dd>
+              </dl>
+            </details>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '485', 485)" onmouseover="showTip(event, '485', 485)">
+                <p>
+                  <a id="covarianceFromBounds">
+                    <a href="#covarianceFromBounds">
+                      <code><span>covarianceFromBounds&#32;<span>n&#32;domain&#32;random</span></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="485">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>covarianceFromBounds&#32;<span>n&#32;domain&#32;random</span></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        n
+                      </b>
+                      :
+                      <code>int</code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        domain
+                      </b>
+                      :
+                      <code><a href="https://acm.im/bristlecone/reference/bristlecone-estimationengine-domain.html">Domain</a></code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        random
+                      </b>
+                      :
+                      <code><a href="https://learn.microsoft.com/dotnet/api/system.random">Random</a></code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code><span><a href="https://learn.microsoft.com/dotnet/api/mathnet.numerics.linearalgebra.matrix-1">Matrix</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-float-1">float</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-optim-space.html">optim-space</a>,&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-optim-space.html">optim-space</a></span>&gt;</span>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span>&gt;</span></code>
+                  </span>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <details>
+              <summary>
+                <div class="fsdocs-summary">
+                  <div class="fsdocs-summary-contents">
+                    <p class="fsdocs-summary">
+                       Generic unit-based covariance-from-bounds
+                    </p>
+                  </div>
+                  <div class="icon-button-row">
+                    <a href="https://github.com/AndrewIOM/bristlecone/tree/master/src/Bristlecone/Optimisation.fs#L233-233" class="fsdocs-source-link" title="Source on GitHub">
+                      <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                    </a>
+                    <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'M:Bristlecone.Optimisation.MonteCarlo.TuningMode.covarianceFromBounds\'/>')">
+                      <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+                    </div>
+                    <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('`cref:M:Bristlecone.Optimisation.MonteCarlo.TuningMode.covarianceFromBounds`')">
+                      <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+                    </div>
+                  </div>
+                </div>
+              </summary>
+              <dl class="fsdocs-params">
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    n
+                  </span>
+                  :
+                  <code>int</code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    domain
+                  </span>
+                  :
+                  <code><a href="https://acm.im/bristlecone/reference/bristlecone-estimationengine-domain.html">Domain</a></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    random
+                  </span>
+                  :
+                  <code><a href="https://learn.microsoft.com/dotnet/api/system.random">Random</a></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+              </dl>
+              <dl class="fsdocs-returns">
+                <dt>
+                  <span class="fsdocs-return-name">
+                    Returns: 
+                  </span>
+                  <code><span><a href="https://learn.microsoft.com/dotnet/api/mathnet.numerics.linearalgebra.matrix-1">Matrix</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-float-1">float</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-optim-space.html">optim-space</a>,&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-optim-space.html">optim-space</a></span>&gt;</span>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-return-docs"></dd>
+              </dl>
+            </details>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '486', 486)" onmouseover="showTip(event, '486', 486)">
+                <p>
+                  <a id="covarianceFromStandardDeviations">
+                    <a href="#covarianceFromStandardDeviations">
+                      <code><span>covarianceFromStandardDeviations&#32;<span>n&#32;random&#32;sigmas</span></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="486">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>covarianceFromStandardDeviations&#32;<span>n&#32;random&#32;sigmas</span></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        n
+                      </b>
+                      :
+                      <code>int</code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        random
+                      </b>
+                      :
+                      <code><a href="https://learn.microsoft.com/dotnet/api/system.random">Random</a></code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        sigmas
+                      </b>
+                      :
+                      <code><span><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-float-1">float</a>&lt;'u&gt;</span>[]</span></code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code><span><a href="https://learn.microsoft.com/dotnet/api/mathnet.numerics.linearalgebra.matrix-1">Matrix</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-float-1">float</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span>'u,&#32;'u</span>&gt;</span>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span>&gt;</span></code>
+                  </span>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <details>
+              <summary>
+                <div class="fsdocs-summary">
+                  <div class="fsdocs-summary-contents">
+                    <p class="fsdocs-summary">
+                       Synthesises a full covariance matrix by drawing synthetic
+ samples from marginal scales.
+                    </p>
+                  </div>
+                  <div class="icon-button-row">
+                    <a href="https://github.com/AndrewIOM/bristlecone/tree/master/src/Bristlecone/Optimisation.fs#L248-248" class="fsdocs-source-link" title="Source on GitHub">
+                      <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                    </a>
+                    <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'M:Bristlecone.Optimisation.MonteCarlo.TuningMode.covarianceFromStandardDeviations``1\'/>')">
+                      <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+                    </div>
+                    <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('```cref:M:Bristlecone.Optimisation.MonteCarlo.TuningMode.covarianceFromStandardDeviations``1```')">
+                      <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+                    </div>
+                  </div>
+                </div>
+              </summary>
+              <dl class="fsdocs-params">
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    n
+                  </span>
+                  :
+                  <code>int</code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    random
+                  </span>
+                  :
+                  <code><a href="https://learn.microsoft.com/dotnet/api/system.random">Random</a></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    sigmas
+                  </span>
+                  :
+                  <code><span><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-float-1">float</a>&lt;'u&gt;</span>[]</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+              </dl>
+              <dl class="fsdocs-returns">
+                <dt>
+                  <span class="fsdocs-return-name">
+                    Returns: 
+                  </span>
+                  <code><span><a href="https://learn.microsoft.com/dotnet/api/mathnet.numerics.linearalgebra.matrix-1">Matrix</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-float-1">float</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span>'u,&#32;'u</span>&gt;</span>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-return-docs"></dd>
+              </dl>
+            </details>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '487', 487)" onmouseover="showTip(event, '487', 487)">
+                <p>
+                  <a id="covarianceOnly">
+                    <a href="#covarianceOnly">
+                      <code><span>covarianceOnly&#32;<span>tuneInterval&#32;weighting&#32;remaining&#32;history&#32;<span>(<span>arg5,&#32;arg5</span>)</span></span></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="487">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>covarianceOnly&#32;<span>tuneInterval&#32;weighting&#32;remaining&#32;history&#32;<span>(<span>arg5,&#32;arg5</span>)</span></span></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        tuneInterval
+                      </b>
+                      :
+                      <code><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-int-1">int</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-iteration.html">iteration</a>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span></code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        weighting
+                      </b>
+                      :
+                      <code>float</code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        remaining
+                      </b>
+                      :
+                      <code><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-int-1">int</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-iteration.html">iteration</a>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span></code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        history
+                      </b>
+                      :
+                      <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-estimationengine-solution.html">Solution</a>&#32;seq</span></code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        arg4
+                      </b>
+                      :
+                      <code><span><a href="https://learn.microsoft.com/dotnet/api/mathnet.numerics.linearalgebra.matrix-1">Matrix</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-float-1">float</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-optim-space.html">optim-space</a>,&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-optim-space.html">optim-space</a></span>&gt;</span>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span>&gt;</span></code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        arg5
+                      </b>
+                      :
+                      <code>'a</code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code><span><span><a href="https://learn.microsoft.com/dotnet/api/mathnet.numerics.linearalgebra.matrix-1">Matrix</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-float-1">float</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-optim-space.html">optim-space</a>,&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-optim-space.html">optim-space</a></span>&gt;</span>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span>&gt;</span>&#32;*&#32;'a</span></code>
+                  </span>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <div class="fsdocs-member-xmldoc-column">
+              <div class="icon-button-row">
+                <a href="https://github.com/AndrewIOM/bristlecone/tree/master/src/Bristlecone/Optimisation.fs#L296-296" class="fsdocs-source-link" title="Source on GitHub">
+                  <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                </a>
+              </div>
+              <dl class="fsdocs-params">
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    tuneInterval
+                  </span>
+                  :
+                  <code><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-int-1">int</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-iteration.html">iteration</a>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    weighting
+                  </span>
+                  :
+                  <code>float</code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    remaining
+                  </span>
+                  :
+                  <code><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-int-1">int</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-iteration.html">iteration</a>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    history
+                  </span>
+                  :
+                  <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-estimationengine-solution.html">Solution</a>&#32;seq</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    arg4
+                  </span>
+                  :
+                  <code><span><a href="https://learn.microsoft.com/dotnet/api/mathnet.numerics.linearalgebra.matrix-1">Matrix</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-float-1">float</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-optim-space.html">optim-space</a>,&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-optim-space.html">optim-space</a></span>&gt;</span>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    arg5
+                  </span>
+                  :
+                  <code>'a</code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+              </dl>
+              <dl class="fsdocs-returns">
+                <dt>
+                  <span class="fsdocs-return-name">
+                    Returns: 
+                  </span>
+                  <code><span><span><a href="https://learn.microsoft.com/dotnet/api/mathnet.numerics.linearalgebra.matrix-1">Matrix</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-float-1">float</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-optim-space.html">optim-space</a>,&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-optim-space.html">optim-space</a></span>&gt;</span>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span>&gt;</span>&#32;*&#32;'a</span></code>
+                </dt>
+                <dd class="fsdocs-return-docs"></dd>
+              </dl>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '488', 488)" onmouseover="showTip(event, '488', 488)">
+                <p>
+                  <a id="defaultCovariance">
+                    <a href="#defaultCovariance">
+                      <code><span>defaultCovariance&#32;<span>n</span></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="488">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>defaultCovariance&#32;<span>n</span></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        n
+                      </b>
+                      :
+                      <code>int</code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code><span><a href="https://learn.microsoft.com/dotnet/api/mathnet.numerics.linearalgebra.matrix-1">Matrix</a>&lt;float&gt;</span></code>
+                  </span>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <details>
+              <summary>
+                <div class="fsdocs-summary">
+                  <div class="fsdocs-summary-contents">
+                    <p class="fsdocs-summary">
+                       The starting covariance matrix for parameters in a multivariate distribution
+                    </p>
+                  </div>
+                  <div class="icon-button-row">
+                    <a href="https://github.com/AndrewIOM/bristlecone/tree/master/src/Bristlecone/Optimisation.fs#L229-229" class="fsdocs-source-link" title="Source on GitHub">
+                      <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                    </a>
+                    <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'M:Bristlecone.Optimisation.MonteCarlo.TuningMode.defaultCovariance\'/>')">
+                      <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+                    </div>
+                    <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('`cref:M:Bristlecone.Optimisation.MonteCarlo.TuningMode.defaultCovariance`')">
+                      <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+                    </div>
+                  </div>
+                </div>
+              </summary>
+              <dl class="fsdocs-params">
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    n
+                  </span>
+                  :
+                  <code>int</code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+              </dl>
+              <dl class="fsdocs-returns">
+                <dt>
+                  <span class="fsdocs-return-name">
+                    Returns: 
+                  </span>
+                  <code><span><a href="https://learn.microsoft.com/dotnet/api/mathnet.numerics.linearalgebra.matrix-1">Matrix</a>&lt;float&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-return-docs"></dd>
+              </dl>
+            </details>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '489', 489)" onmouseover="showTip(event, '489', 489)">
+                <p>
+                  <a id="dual">
+                    <a href="#dual">
+                      <code><span>dual&#32;<span>tuneInterval&#32;weighting&#32;remaining&#32;history&#32;<span>(<span>arg5,&#32;arg5</span>)</span></span></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="489">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>dual&#32;<span>tuneInterval&#32;weighting&#32;remaining&#32;history&#32;<span>(<span>arg5,&#32;arg5</span>)</span></span></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        tuneInterval
+                      </b>
+                      :
+                      <code><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-int-1">int</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-iteration.html">iteration</a>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span></code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        weighting
+                      </b>
+                      :
+                      <code>float</code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        remaining
+                      </b>
+                      :
+                      <code><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-int-1">int</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-iteration.html">iteration</a>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span></code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        history
+                      </b>
+                      :
+                      <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-estimationengine-solution.html">Solution</a>&#32;seq</span></code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        arg4
+                      </b>
+                      :
+                      <code><span><a href="https://learn.microsoft.com/dotnet/api/mathnet.numerics.linearalgebra.matrix-1">Matrix</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-float-1">float</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-optim-space.html">optim-space</a>,&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-optim-space.html">optim-space</a></span>&gt;</span>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span>&gt;</span></code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        arg5
+                      </b>
+                      :
+                      <code>float</code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code><span><span><a href="https://learn.microsoft.com/dotnet/api/mathnet.numerics.linearalgebra.matrix-1">Matrix</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-float-1">float</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-optim-space.html">optim-space</a>,&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-optim-space.html">optim-space</a></span>&gt;</span>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span>&gt;</span>&#32;*&#32;float</span></code>
+                  </span>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <div class="fsdocs-member-xmldoc-column">
+              <div class="icon-button-row">
+                <a href="https://github.com/AndrewIOM/bristlecone/tree/master/src/Bristlecone/Optimisation.fs#L285-285" class="fsdocs-source-link" title="Source on GitHub">
+                  <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                </a>
+              </div>
+              <dl class="fsdocs-params">
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    tuneInterval
+                  </span>
+                  :
+                  <code><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-int-1">int</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-iteration.html">iteration</a>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    weighting
+                  </span>
+                  :
+                  <code>float</code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    remaining
+                  </span>
+                  :
+                  <code><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-int-1">int</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-iteration.html">iteration</a>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    history
+                  </span>
+                  :
+                  <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-estimationengine-solution.html">Solution</a>&#32;seq</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    arg4
+                  </span>
+                  :
+                  <code><span><a href="https://learn.microsoft.com/dotnet/api/mathnet.numerics.linearalgebra.matrix-1">Matrix</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-float-1">float</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-optim-space.html">optim-space</a>,&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-optim-space.html">optim-space</a></span>&gt;</span>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    arg5
+                  </span>
+                  :
+                  <code>float</code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+              </dl>
+              <dl class="fsdocs-returns">
+                <dt>
+                  <span class="fsdocs-return-name">
+                    Returns: 
+                  </span>
+                  <code><span><span><a href="https://learn.microsoft.com/dotnet/api/mathnet.numerics.linearalgebra.matrix-1">Matrix</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-float-1">float</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-optim-space.html">optim-space</a>,&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-optim-space.html">optim-space</a></span>&gt;</span>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span>&gt;</span>&#32;*&#32;float</span></code>
+                </dt>
+                <dd class="fsdocs-return-docs"></dd>
+              </dl>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '490', 490)" onmouseover="showTip(event, '490', 490)">
+                <p>
+                  <a id="dualTotalHistory">
+                    <a href="#dualTotalHistory">
+                      <code><span>dualTotalHistory&#32;<span>tuneInterval&#32;weighting&#32;remaining&#32;history&#32;<span>(<span>arg5,&#32;arg5</span>)</span></span></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="490">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>dualTotalHistory&#32;<span>tuneInterval&#32;weighting&#32;remaining&#32;history&#32;<span>(<span>arg5,&#32;arg5</span>)</span></span></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        tuneInterval
+                      </b>
+                      :
+                      <code><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-int-1">int</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-iteration.html">iteration</a>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span></code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        weighting
+                      </b>
+                      :
+                      <code>float</code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        remaining
+                      </b>
+                      :
+                      <code><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-int-1">int</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-iteration.html">iteration</a>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span></code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        history
+                      </b>
+                      :
+                      <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-estimationengine-solution.html">Solution</a>&#32;seq</span></code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        arg4
+                      </b>
+                      :
+                      <code><span><a href="https://learn.microsoft.com/dotnet/api/mathnet.numerics.linearalgebra.matrix-1">Matrix</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-float-1">float</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-optim-space.html">optim-space</a>,&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-optim-space.html">optim-space</a></span>&gt;</span>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span>&gt;</span></code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        arg5
+                      </b>
+                      :
+                      <code>float</code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code><span><span><a href="https://learn.microsoft.com/dotnet/api/mathnet.numerics.linearalgebra.matrix-1">Matrix</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-float-1">float</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-optim-space.html">optim-space</a>,&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-optim-space.html">optim-space</a></span>&gt;</span>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span>&gt;</span>&#32;*&#32;float</span></code>
+                  </span>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <div class="fsdocs-member-xmldoc-column">
+              <div class="icon-button-row">
+                <a href="https://github.com/AndrewIOM/bristlecone/tree/master/src/Bristlecone/Optimisation.fs#L316-316" class="fsdocs-source-link" title="Source on GitHub">
+                  <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                </a>
+              </div>
+              <dl class="fsdocs-params">
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    tuneInterval
+                  </span>
+                  :
+                  <code><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-int-1">int</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-iteration.html">iteration</a>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    weighting
+                  </span>
+                  :
+                  <code>float</code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    remaining
+                  </span>
+                  :
+                  <code><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-int-1">int</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-iteration.html">iteration</a>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    history
+                  </span>
+                  :
+                  <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-estimationengine-solution.html">Solution</a>&#32;seq</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    arg4
+                  </span>
+                  :
+                  <code><span><a href="https://learn.microsoft.com/dotnet/api/mathnet.numerics.linearalgebra.matrix-1">Matrix</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-float-1">float</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-optim-space.html">optim-space</a>,&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-optim-space.html">optim-space</a></span>&gt;</span>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    arg5
+                  </span>
+                  :
+                  <code>float</code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+              </dl>
+              <dl class="fsdocs-returns">
+                <dt>
+                  <span class="fsdocs-return-name">
+                    Returns: 
+                  </span>
+                  <code><span><span><a href="https://learn.microsoft.com/dotnet/api/mathnet.numerics.linearalgebra.matrix-1">Matrix</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-float-1">float</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-optim-space.html">optim-space</a>,&#32;<a href="https://acm.im/bristlecone/reference/bristlecone-optim-space.html">optim-space</a></span>&gt;</span>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span>&gt;</span>&#32;*&#32;float</span></code>
+                </dt>
+                <dd class="fsdocs-return-docs"></dd>
+              </dl>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '491', 491)" onmouseover="showTip(event, '491', 491)">
+                <p>
+                  <a id="none">
+                    <a href="#none">
+                      <code><span>none&#32;<span>arg1&#32;arg2&#32;factors</span></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="491">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>none&#32;<span>arg1&#32;arg2&#32;factors</span></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        arg0
+                      </b>
+                      :
+                      <code>'a</code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        arg1
+                      </b>
+                      :
+                      <code>'b</code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        factors
+                      </b>
+                      :
+                      <code>'c</code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code>'c</code>
+                  </span>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <div class="fsdocs-member-xmldoc-column">
+              <div class="icon-button-row">
+                <a href="https://github.com/AndrewIOM/bristlecone/tree/master/src/Bristlecone/Optimisation.fs#L322-322" class="fsdocs-source-link" title="Source on GitHub">
+                  <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                </a>
+              </div>
+              <dl class="fsdocs-params">
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    arg0
+                  </span>
+                  :
+                  <code>'a</code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    arg1
+                  </span>
+                  :
+                  <code>'b</code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    factors
+                  </span>
+                  :
+                  <code>'c</code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+              </dl>
+              <dl class="fsdocs-returns">
+                <dt>
+                  <span class="fsdocs-return-name">
+                    Returns: 
+                  </span>
+                  <code>'c</code>
+                </dt>
+                <dd class="fsdocs-return-docs"></dd>
+              </dl>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '492', 492)" onmouseover="showTip(event, '492', 492)">
+                <p>
+                  <a id="samplesToMatrix">
+                    <a href="#samplesToMatrix">
+                      <code><span>samplesToMatrix&#32;<span>samples</span></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="492">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>samplesToMatrix&#32;<span>samples</span></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        samples
+                      </b>
+                      :
+                      <code><span><span><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-float-1">float</a>&lt;'u&gt;</span>[]</span>[]</span></code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code><span><a href="https://learn.microsoft.com/dotnet/api/mathnet.numerics.linearalgebra.matrix-1">Matrix</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-float-1">float</a>&lt;'u&gt;</span>&gt;</span></code>
+                  </span>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <details>
+              <summary>
+                <div class="fsdocs-summary">
+                  <div class="fsdocs-summary-contents">
+                    <p class="fsdocs-summary">
+                       Parameters to matrix
+                    </p>
+                  </div>
+                  <div class="icon-button-row">
+                    <a href="https://github.com/AndrewIOM/bristlecone/tree/master/src/Bristlecone/Optimisation.fs#L226-226" class="fsdocs-source-link" title="Source on GitHub">
+                      <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                    </a>
+                    <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'M:Bristlecone.Optimisation.MonteCarlo.TuningMode.samplesToMatrix``1\'/>')">
+                      <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+                    </div>
+                    <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('```cref:M:Bristlecone.Optimisation.MonteCarlo.TuningMode.samplesToMatrix``1```')">
+                      <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+                    </div>
+                  </div>
+                </div>
+              </summary>
+              <dl class="fsdocs-params">
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    samples
+                  </span>
+                  :
+                  <code><span><span><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-float-1">float</a>&lt;'u&gt;</span>[]</span>[]</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+              </dl>
+              <dl class="fsdocs-returns">
+                <dt>
+                  <span class="fsdocs-return-name">
+                    Returns: 
+                  </span>
+                  <code><span><a href="https://learn.microsoft.com/dotnet/api/mathnet.numerics.linearalgebra.matrix-1">Matrix</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-float-1">float</a>&lt;'u&gt;</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-return-docs"></dd>
+              </dl>
+            </details>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '493', 493)" onmouseover="showTip(event, '493', 493)">
+                <p>
+                  <a id="scaleFactor">
+                    <a href="#scaleFactor">
+                      <code><span>scaleFactor&#32;<span>tuneInterval&#32;remainingIterations&#32;history&#32;scale</span></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="493">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>scaleFactor&#32;<span>tuneInterval&#32;remainingIterations&#32;history&#32;scale</span></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        tuneInterval
+                      </b>
+                      :
+                      <code><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-int-1">int</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-iteration.html">iteration</a>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span></code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        remainingIterations
+                      </b>
+                      :
+                      <code><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-int-1">int</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-iteration.html">iteration</a>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span></code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        history
+                      </b>
+                      :
+                      <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-estimationengine-solution.html">Solution</a>&#32;seq</span></code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        scale
+                      </b>
+                      :
+                      <code>float</code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code>float</code>
+                  </span>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <details>
+              <summary>
+                <div class="fsdocs-summary">
+                  <div class="fsdocs-summary-contents">
+                    <p class="fsdocs-summary">
+                       Modifies a scale factor
+                    </p>
+                  </div>
+                  <div class="icon-button-row">
+                    <a href="https://github.com/AndrewIOM/bristlecone/tree/master/src/Bristlecone/Optimisation.fs#L194-194" class="fsdocs-source-link" title="Source on GitHub">
+                      <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                    </a>
+                    <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'M:Bristlecone.Optimisation.MonteCarlo.TuningMode.scaleFactor\'/>')">
+                      <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+                    </div>
+                    <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('`cref:M:Bristlecone.Optimisation.MonteCarlo.TuningMode.scaleFactor`')">
+                      <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+                    </div>
+                  </div>
+                </div>
+              </summary>
+              <dl class="fsdocs-params">
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    tuneInterval
+                  </span>
+                  :
+                  <code><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-int-1">int</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-iteration.html">iteration</a>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    remainingIterations
+                  </span>
+                  :
+                  <code><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-int-1">int</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-iteration.html">iteration</a>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    history
+                  </span>
+                  :
+                  <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-estimationengine-solution.html">Solution</a>&#32;seq</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    scale
+                  </span>
+                  :
+                  <code>float</code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+              </dl>
+              <dl class="fsdocs-returns">
+                <dt>
+                  <span class="fsdocs-return-name">
+                    Returns: 
+                  </span>
+                  <code>float</code>
+                </dt>
+                <dd class="fsdocs-return-docs"></dd>
+              </dl>
+            </details>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '494', 494)" onmouseover="showTip(event, '494', 494)">
+                <p>
+                  <a id="scaleOnly">
+                    <a href="#scaleOnly">
+                      <code><span>scaleOnly&#32;<span>tuneInterval&#32;remaining&#32;history&#32;<span>(<span>arg4,&#32;arg4</span>)</span></span></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="494">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>scaleOnly&#32;<span>tuneInterval&#32;remaining&#32;history&#32;<span>(<span>arg4,&#32;arg4</span>)</span></span></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        tuneInterval
+                      </b>
+                      :
+                      <code><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-int-1">int</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-iteration.html">iteration</a>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span></code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        remaining
+                      </b>
+                      :
+                      <code><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-int-1">int</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-iteration.html">iteration</a>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span></code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        history
+                      </b>
+                      :
+                      <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-estimationengine-solution.html">Solution</a>&#32;seq</span></code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        arg3
+                      </b>
+                      :
+                      <code>'a</code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        arg4
+                      </b>
+                      :
+                      <code>float</code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code><span>'a&#32;*&#32;float</span></code>
+                  </span>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <div class="fsdocs-member-xmldoc-column">
+              <div class="icon-button-row">
+                <a href="https://github.com/AndrewIOM/bristlecone/tree/master/src/Bristlecone/Optimisation.fs#L291-291" class="fsdocs-source-link" title="Source on GitHub">
+                  <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                </a>
+              </div>
+              <dl class="fsdocs-params">
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    tuneInterval
+                  </span>
+                  :
+                  <code><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-int-1">int</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-iteration.html">iteration</a>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    remaining
+                  </span>
+                  :
+                  <code><span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-int-1">int</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureproduct-2">MeasureProduct</a>&lt;<span><a href="https://acm.im/bristlecone/reference/bristlecone-iteration.html">iteration</a>,&#32;<a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-compilerservices-measureone">MeasureOne</a></span>&gt;</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    history
+                  </span>
+                  :
+                  <code><span><a href="https://acm.im/bristlecone/reference/bristlecone-estimationengine-solution.html">Solution</a>&#32;seq</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    arg3
+                  </span>
+                  :
+                  <code>'a</code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    arg4
+                  </span>
+                  :
+                  <code>float</code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+              </dl>
+              <dl class="fsdocs-returns">
+                <dt>
+                  <span class="fsdocs-return-name">
+                    Returns: 
+                  </span>
+                  <code><span>'a&#32;*&#32;float</span></code>
+                </dt>
+                <dd class="fsdocs-return-docs"></dd>
+              </dl>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '495', 495)" onmouseover="showTip(event, '495', 495)">
+                <p>
+                  <a id="tuneCovariance">
+                    <a href="#tuneCovariance">
+                      <code><span>tuneCovariance&#32;<span>weight&#32;recentCovariance&#32;oldCovariance</span></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="495">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>tuneCovariance&#32;<span>weight&#32;recentCovariance&#32;oldCovariance</span></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        weight
+                      </b>
+                      :
+                      <code>float</code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        recentCovariance
+                      </b>
+                      :
+                      <code><span><a href="https://learn.microsoft.com/dotnet/api/mathnet.numerics.linearalgebra.matrix-1">Matrix</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-float-1">float</a>&lt;'u&gt;</span>&gt;</span></code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        oldCovariance
+                      </b>
+                      :
+                      <code><span><a href="https://learn.microsoft.com/dotnet/api/mathnet.numerics.linearalgebra.matrix-1">Matrix</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-float-1">float</a>&lt;'u&gt;</span>&gt;</span></code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code><span><a href="https://learn.microsoft.com/dotnet/api/mathnet.numerics.linearalgebra.matrix-1">Matrix</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-float-1">float</a>&lt;'u&gt;</span>&gt;</span></code>
+                  </span>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <details>
+              <summary>
+                <div class="fsdocs-summary">
+                  <div class="fsdocs-summary-contents">
+                    <p class="fsdocs-summary">
+                       Tunes a covariance matrix based on recent samples.
+ Blend two covariance matrices with a given weight.
+ Works for any unit of measure 'u.
+                    </p>
+                  </div>
+                  <div class="icon-button-row">
+                    <a href="https://github.com/AndrewIOM/bristlecone/tree/master/src/Bristlecone/Optimisation.fs#L216-216" class="fsdocs-source-link" title="Source on GitHub">
+                      <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                    </a>
+                    <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'M:Bristlecone.Optimisation.MonteCarlo.TuningMode.tuneCovariance``1\'/>')">
+                      <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+                    </div>
+                    <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('```cref:M:Bristlecone.Optimisation.MonteCarlo.TuningMode.tuneCovariance``1```')">
+                      <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+                    </div>
+                  </div>
+                </div>
+              </summary>
+              <dl class="fsdocs-params">
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    weight
+                  </span>
+                  :
+                  <code>float</code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    recentCovariance
+                  </span>
+                  :
+                  <code><span><a href="https://learn.microsoft.com/dotnet/api/mathnet.numerics.linearalgebra.matrix-1">Matrix</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-float-1">float</a>&lt;'u&gt;</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    oldCovariance
+                  </span>
+                  :
+                  <code><span><a href="https://learn.microsoft.com/dotnet/api/mathnet.numerics.linearalgebra.matrix-1">Matrix</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-float-1">float</a>&lt;'u&gt;</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+              </dl>
+              <dl class="fsdocs-returns">
+                <dt>
+                  <span class="fsdocs-return-name">
+                    Returns: 
+                  </span>
+                  <code><span><a href="https://learn.microsoft.com/dotnet/api/mathnet.numerics.linearalgebra.matrix-1">Matrix</a>&lt;<span><a href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-core-float-1">float</a>&lt;'u&gt;</span>&gt;</span></code>
+                </dt>
+                <dd class="fsdocs-return-docs"></dd>
+              </dl>
+            </details>
+          </td>
+        </tr>
+        <tr>
+          <td class="fsdocs-member-usage">
+            <div>
+              <code onmouseout="hideTip(event, '496', 496)" onmouseover="showTip(event, '496', 496)">
+                <p>
+                  <a id="tuneScale">
+                    <a href="#tuneScale">
+                      <code><span>tuneScale&#32;<span>scale&#32;accRate</span></span></code>
+                    </a>
+                  </a>
+                </p>
+              </code>
+              <div class="fsdocs-tip" id="496">
+                <div class="member-tooltip">
+                  Full Usage: 
+                  <code><span>tuneScale&#32;<span>scale&#32;accRate</span></span></code>
+                  <br/>
+                  <br/>
+                  Parameters: 
+                  <ul>
+                    <span>
+                      <b>
+                        scale
+                      </b>
+                      :
+                      <code>float</code>
+                    </span>
+                    <br/>
+                    <span>
+                      <b>
+                        accRate
+                      </b>
+                      :
+                      <code>float</code>
+                    </span>
+                    <br/>
+                  </ul>
+                  <br/>
+                  <span>
+                    Returns: 
+                    <code>float</code>
+                  </span>
+                  <br/>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="fsdocs-member-xmldoc">
+            <details>
+              <summary>
+                <div class="fsdocs-summary">
+                  <div class="fsdocs-summary-contents">
+                    <p class="fsdocs-summary">
+                       Find an appropriate scale factor for a standard deviation and its acceptance rate.
+                    </p>
+                  </div>
+                  <div class="icon-button-row">
+                    <a href="https://github.com/AndrewIOM/bristlecone/tree/master/src/Bristlecone/Optimisation.fs#L183-183" class="fsdocs-source-link" title="Source on GitHub">
+                      <iconify-icon icon="ri:github-fill" height="24" width="24"></iconify-icon>
+                    </a>
+                    <div class="fsdocs-source-link" title="Copy signature (XML)" onclick="Clipboard_CopyTo('<see cref=\'M:Bristlecone.Optimisation.MonteCarlo.TuningMode.tuneScale\'/>')">
+                      <iconify-icon icon="bi:filetype-xml" height="24" width="24"></iconify-icon>
+                    </div>
+                    <div class="fsdocs-source-link" title="Copy signature (Markdown)" onclick="Clipboard_CopyTo('`cref:M:Bristlecone.Optimisation.MonteCarlo.TuningMode.tuneScale`')">
+                      <iconify-icon icon="bi:filetype-md" height="24" width="24"></iconify-icon>
+                    </div>
+                  </div>
+                </div>
+              </summary>
+              <dl class="fsdocs-params">
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    scale
+                  </span>
+                  :
+                  <code>float</code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+                <dt class="fsdocs-param">
+                  <span class="fsdocs-param-name">
+                    accRate
+                  </span>
+                  :
+                  <code>float</code>
+                </dt>
+                <dd class="fsdocs-param-docs"></dd>
+              </dl>
+              <dl class="fsdocs-returns">
+                <dt>
+                  <span class="fsdocs-return-name">
+                    Returns: 
+                  </span>
+                  <code>float</code>
+                </dt>
+                <dd class="fsdocs-return-docs"></dd>
+              </dl>
+            </details>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div></div>
+  <div></div>
+  <div></div>
+  <div></div>
+  <div></div>
+  <div></div>
+  <div></div>
+  <div></div>
+</div>
+        
+    </div>
+</main>
+<aside id="fsdocs-page-menu">
+    <p id="on-this-page">On this page</p>
+    <div class="empty"></div>
+</aside>
+<dialog>
+    <input type="search" placeholder="Search docs" />
+    <div class="results">
+        <ul></ul>
+        <p class="empty">Type something to start searching.</p>
+    </div>
+</dialog>
+<script type="module" src="https://acm.im/bristlecone/content/fsdocs-tips.js"></script>
+<script type="module" src="https://acm.im/bristlecone/content/fsdocs-theme-toggle.js"></script>
+<script type="module" src="https://acm.im/bristlecone/content/fsdocs-details-toggle.js"></script>
+<script type="module" src="https://acm.im/bristlecone/content/fsdocs-theme.js"></script>
+<script type="module" src="https://acm.im/bristlecone/content/fsdocs-search.js"></script>
+
+</body>
+</html>
