@@ -168,6 +168,7 @@ module Parameter =
                 |> List.mapi (fun i (sc, ap) ->
                     let value =
                         realVec.Value.[i] |> float |> LanguagePrimitives.FloatWithMeasure<parameter>
+
                     let newAp = ap.FromTensorRealIO(Tensors.allocateTensor (float value))
                     sc, newAp)
                 |> Map.ofList

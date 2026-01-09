@@ -573,8 +573,7 @@ module Language =
             let d = x.toDouble ()
             if System.Double.IsFinite d then x else invalidPenalty
 
-        let convertMask mask =
-            dsharp.cast (mask, Dtype.Float64)
+        let convertMask mask = dsharp.cast (mask, Dtype.Float64)
 
         /// Blends the true and false cases for AD-safe operation, but eagerly
         /// evaluates both sides. If a NaN is present, it will contaminate the

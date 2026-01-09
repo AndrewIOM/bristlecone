@@ -229,14 +229,14 @@ module Resolution =
         let monthsPerYear = 12.<month / year>
         let daysPerMonth = daysPerYear / monthsPerYear
 
-    let dayEquivalent totalDays = function
+    let dayEquivalent totalDays =
+        function
         | Years y -> Units.intToFloat y.Value * Canonical.daysPerYear
         | Months m -> Units.intToFloat m.Value * Canonical.daysPerMonth
         | Days d -> Units.intToFloat d.Value
         | CustomEpoch c -> totalDays c
 
-    let finestResolution spanToDays
-        (r1: FixedTemporalResolution<'ts>) (r2: FixedTemporalResolution<'ts>) =
+    let finestResolution spanToDays (r1: FixedTemporalResolution<'ts>) (r2: FixedTemporalResolution<'ts>) =
         let days1 = dayEquivalent spanToDays r1
         let days2 = dayEquivalent spanToDays r2
         if days1 < days2 then r1 else r2
@@ -249,17 +249,18 @@ module DatingMethods =
     /// We assume that dates in old date formats are fixed to
     /// 365 days per year.
     module AnnualCalendars =
-        let daysPerYear= 365.<day / year>
+        let daysPerYear = 365.<day / year>
         let monthsPerYear = 12.<month / year>
         let daysPerMonth = daysPerYear / monthsPerYear
         let oldMonthToYear (months: float<month>) = months * (daysPerMonth / daysPerYear)
         let oldDayToYear (days: float<day>) = days / daysPerYear
 
-        let internal resRadiocarbonToYears (rc:float<_>) =
-            rc |> float |> (*) 1.<year>
+        let internal resRadiocarbonToYears (rc: float<_>) = rc |> float |> (*) 1.<year>
 
         let internal radiocarbonToDays rc = resRadiocarbonToYears rc * daysPerYear
-        let internal radiocarbonToMonths rc = resRadiocarbonToYears rc * (daysPerYear / daysPerMonth)
+
+        let internal radiocarbonToMonths rc =
+            resRadiocarbonToYears rc * (daysPerYear / daysPerMonth)
 
 
     /// Converts 'old years' (i.e. with 365 days per year) into
@@ -470,7 +471,11 @@ module DateMode =
           EqualWithin = fun ts1 ts2 -> ts1 = ts2 }
 
     let radiocarbonDateMode: DateMode<RadiocarbonUncal, float<``BP (radiocarbon)``>, float<``BP (radiocarbon)``>> =
-        { Resolution = Ticks((fun d -> AnnualCalendars.radiocarbonToDays d.Value), (fun d -> AnnualCalendars.radiocarbonToMonths d.Value))
+        { Resolution =
+            Ticks(
+                (fun d -> AnnualCalendars.radiocarbonToDays d.Value),
+                (fun d -> AnnualCalendars.radiocarbonToMonths d.Value)
+            )
           GetYear = fun d -> d |> Radiocarbon.Unwrap<_>
           AddYears = Radiocarbon.AddYears
           AddMonths = fun d months -> Radiocarbon.AddMonths months d
@@ -494,7 +499,11 @@ module DateMode =
           EqualWithin = fun x y -> abs (float (x - y)) < 1e-9 }
 
     let radiocarbonCalDateMode: DateMode<RadiocarbonCal, float<``cal yr BP``>, float<``cal yr BP``>> =
-        { Resolution = Ticks((fun d -> AnnualCalendars.radiocarbonToDays d.Value), (fun d -> AnnualCalendars.radiocarbonToMonths d.Value))
+        { Resolution =
+            Ticks(
+                (fun d -> AnnualCalendars.radiocarbonToDays d.Value),
+                (fun d -> AnnualCalendars.radiocarbonToMonths d.Value)
+            )
           GetYear = fun d -> d |> Radiocarbon.Unwrap<_>
           AddYears = Radiocarbon.AddYears
           AddMonths = fun d months -> Radiocarbon.AddMonths months d
@@ -525,8 +534,8 @@ module DateMode =
 
         /// Represents a conversion from a grounded timespan into a model-time unit.
         /// First, converts from the timespan into a fixed resolution. Then,
-        type ResolutionToModelUnits<'date,'timespan,[<Measure>] 'modelTimeUnit> =
-            ConvertFrom<'date,'timespan> -> float<'modelTimeUnit>
+        type ResolutionToModelUnits<'date, 'timespan, [<Measure>] 'modelTimeUnit> =
+            ConvertFrom<'date, 'timespan> -> float<'modelTimeUnit>
 
         let private toYearCore customEpoch =
             fun from ->
@@ -541,7 +550,7 @@ module DateMode =
 
         module CalendarDates =
 
-            let toDays : ResolutionToModelUnits<DateTime, TimeSpan, day> =
+            let toDays: ResolutionToModelUnits<DateTime, TimeSpan, day> =
                 fun from ->
                     match from with
                     | FromDifference diff -> diff.DayFraction
@@ -552,7 +561,7 @@ module DateMode =
                         | Resolution.Years y -> Units.intToFloat y.Value * AnnualCalendars.daysPerYear
                         | Resolution.CustomEpoch c -> float c.Days * 1.<day>
 
-            let toMonths : ResolutionToModelUnits<DateTime, TimeSpan, month> =
+            let toMonths: ResolutionToModelUnits<DateTime, TimeSpan, month> =
                 fun from ->
                     match from with
                     | FromDifference diff -> diff.MonthFraction
@@ -563,30 +572,36 @@ module DateMode =
                         | Resolution.Years y -> Units.intToFloat y.Value * AnnualCalendars.monthsPerYear
                         | Resolution.CustomEpoch c -> float c.Days * 1.<day> / AnnualCalendars.daysPerMonth
 
-            let toYears : ResolutionToModelUnits<DateTime, TimeSpan, year> =
-                fun from -> toYearCore (fun (c:TimeSpan) -> float c.Days * 1.<day> / AnnualCalendars.daysPerYear) from
+            let toYears: ResolutionToModelUnits<DateTime, TimeSpan, year> =
+                fun from -> toYearCore (fun (c: TimeSpan) -> float c.Days * 1.<day> / AnnualCalendars.daysPerYear) from
 
-            let toTicks : ResolutionToModelUnits<DateTime, TimeSpan, ticks> =
+            let toTicks: ResolutionToModelUnits<DateTime, TimeSpan, ticks> =
                 fun from ->
                     match from with
                     | FromDifference diff -> diff.Ticks
                     | FromResolution res ->
                         match res with
                         | Resolution.Days d -> d.Value |> Units.removeUnitFromInt |> TimeSpan.FromDays
-                        | Resolution.Months m -> Units.intToFloat m.Value * AnnualCalendars.daysPerMonth |> Units.removeUnitFromFloat |> TimeSpan.FromDays
-                        | Resolution.Years y -> Units.intToFloat y.Value * AnnualCalendars.daysPerYear |> Units.removeUnitFromFloat |> TimeSpan.FromDays
+                        | Resolution.Months m ->
+                            Units.intToFloat m.Value * AnnualCalendars.daysPerMonth
+                            |> Units.removeUnitFromFloat
+                            |> TimeSpan.FromDays
+                        | Resolution.Years y ->
+                            Units.intToFloat y.Value * AnnualCalendars.daysPerYear
+                            |> Units.removeUnitFromFloat
+                            |> TimeSpan.FromDays
                         | Resolution.CustomEpoch c -> c
                         |> fun ts -> ts.Ticks |> float |> (*) 1.<ticks>
 
 
         module RadiocarbonDates =
 
-            let toYears : ResolutionToModelUnits<Radiocarbon<'u>, float<'u>, year> =
+            let toYears: ResolutionToModelUnits<Radiocarbon<'u>, float<'u>, year> =
                 fun from -> toYearCore (fun c -> float c * 1.<year>) from
 
         module Annual =
 
-            let toYears : ResolutionToModelUnits<Annual, int<year>, year> =
+            let toYears: ResolutionToModelUnits<Annual, int<year>, year> =
                 fun from -> toYearCore (fun c -> float c * 1.<year>) from
 
 
@@ -727,12 +742,14 @@ module TimeSeries =
 
     /// Make a timeline based on a resolution and start and end dates.
     let initTimeline (timeUnitMode: DateMode.DateMode<'date, 'timeunit, 'timespan>) t1 tEnd resolution =
-        Seq.unfold (fun current ->
-            if timeUnitMode.SortOldestFirst current tEnd > 0 then None
-            else
-                let next = TimePoint.increment resolution timeUnitMode current
-                Some(current, next)
-        ) t1
+        Seq.unfold
+            (fun current ->
+                if timeUnitMode.SortOldestFirst current tEnd > 0 then
+                    None
+                else
+                    let next = TimePoint.increment resolution timeUnitMode current
+                    Some(current, next))
+            t1
 
     /// <summary>Turn a time series into a sequence of observations</summary>
     /// <param name="series">A time-series</param>
@@ -966,18 +983,20 @@ module TimeSeries =
     /// <typeparam name="'timespan">The timespan representation for the dating method</typeparam>
     /// <returns></returns>
     let interpolateFloats resolution (series: TimeSeries<float<'u> option, 'date, 'timeunit, 'timespan>) =
-        
+
         let observations = series |> toObservations |> Array.ofSeq
 
         let startDate = observations |> Seq.map snd |> Seq.head
         let endDate = observations |> Seq.map snd |> Seq.last
         let dm = series.DateMode
-        let timeline = initTimeline series.DateMode startDate endDate resolution |> Array.ofSeq
+
+        let timeline =
+            initTimeline series.DateMode startDate endDate resolution |> Array.ofSeq
 
         // Collect indices and values of known points
         let obsMap =
             observations
-            |> Seq.choose (fun (vOpt,d) -> vOpt |> Option.map (fun v -> d,v))
+            |> Seq.choose (fun (vOpt, d) -> vOpt |> Option.map (fun v -> d, v))
             |> Map.ofSeq
 
         if Map.isEmpty obsMap then
@@ -989,20 +1008,29 @@ module TimeSeries =
                 match Map.tryFind d obsMap with
                 | Some v -> v, d
                 | None ->
-                    let prev = obsMap |> Map.toSeq |> Seq.filter (fun (dp,_) -> dm.SortOldestFirst dp d < 0) |> Seq.tryLast
-                    let next = obsMap |> Map.toSeq |> Seq.filter (fun (dn,_) -> dm.SortOldestFirst dn d > 0) |> Seq.tryHead
-                    match prev,next with
-                    | Some(dPrev,vPrev), Some(dNext,vNext) ->
-                        let spanTotal = dm.TotalDays (dm.Minus dNext dPrev)
-                        let spanPart  = dm.TotalDays (dm.Minus d dPrev)
-                        vPrev + (vNext - vPrev) * (spanPart/spanTotal), d
-                    | Some(_,vPrev), None -> vPrev, d
-                    | None, Some(_,vNext) -> vNext, d
-                    | _ -> invalidOp $"Interpolation failed at {d}: no neighbours found."
-            )
+                    let prev =
+                        obsMap
+                        |> Map.toSeq
+                        |> Seq.filter (fun (dp, _) -> dm.SortOldestFirst dp d < 0)
+                        |> Seq.tryLast
+
+                    let next =
+                        obsMap
+                        |> Map.toSeq
+                        |> Seq.filter (fun (dn, _) -> dm.SortOldestFirst dn d > 0)
+                        |> Seq.tryHead
+
+                    match prev, next with
+                    | Some(dPrev, vPrev), Some(dNext, vNext) ->
+                        let spanTotal = dm.TotalDays(dm.Minus dNext dPrev)
+                        let spanPart = dm.TotalDays(dm.Minus d dPrev)
+                        vPrev + (vNext - vPrev) * (spanPart / spanTotal), d
+                    | Some(_, vPrev), None -> vPrev, d
+                    | None, Some(_, vNext) -> vNext, d
+                    | _ -> invalidOp $"Interpolation failed at {d}: no neighbours found.")
 
         fromObservations series.DateMode filled
-        
+
     /// <summary>Determines if multiple time series have the same temporal extent and time steps.</summary>
     /// <param name="series">A sequence of time-series to assess for commonality</param>
     /// <typeparam name="'T">The data type of the observations</typeparam>
@@ -1091,7 +1119,11 @@ module TimeIndex =
     /// value may be interpolated using an interpolation function. Here,
     /// `'T` is the data value type.
     type IndexMode<'T, [<Measure>] 'modelTimeUnit> =
-        | Interpolate of ((float<'modelTimeUnit ``time index``> * 'T) -> (float<'modelTimeUnit ``time index``> * 'T) -> float<'modelTimeUnit ``time index``> -> 'T)
+        | Interpolate of
+            ((float<'modelTimeUnit ``time index``> * 'T)
+                -> (float<'modelTimeUnit ``time index``> * 'T)
+                -> float<'modelTimeUnit ``time index``>
+                -> 'T)
         | Exact
 
     /// <summary>Index a single time series in accordance with the baseline 0 (time index) set as
@@ -1105,16 +1137,19 @@ module TimeIndex =
     /// <param name="series">A time-series to index.</param>
     /// <typeparam name="'T">The underlying data type of the time-series</typeparam>
     /// <returns>A temporal index </returns>
-    let create 
+    let create
         (t0: 'date)
-        (toTargetResolution: DateMode.Conversion.ConvertFrom<'date,'timespan> -> float<'modelTimeUnit>) 
+        (toTargetResolution: DateMode.Conversion.ConvertFrom<'date, 'timespan> -> float<'modelTimeUnit>)
         (series: TimeSeries.TimeSeries<'T, 'date, 'timeunit, 'timespan>)
         : seq<float<'modelTimeUnit ``time index``> * 'T> =
         series
         |> TimeSeries.toObservations
         |> Seq.map (fun (v, tn) ->
             let diff = series.DateMode.SignedDifference t0 tn
-            toTargetResolution (DateMode.Conversion.FromDifference diff) * 1.<``time index``>, v)
+
+            toTargetResolution (DateMode.Conversion.FromDifference diff)
+            * 1.<``time index``>,
+            v)
 
     /// <summary>A representation of temporal data as fractions of a common fixed temporal resolution,
     /// from a given baseline. The baseline must be greater than or equal to the baseline
@@ -1122,7 +1157,7 @@ module TimeIndex =
     type TimeIndex<'T, 'date, 'timeunit, 'timespan, [<Measure>] 'modelTimeUnit>
         (
             baseDate: 'date,
-            toTargetResolution: DateMode.Conversion.ConvertFrom<'date,'timespan> -> float<'modelTimeUnit>,
+            toTargetResolution: DateMode.Conversion.ConvertFrom<'date, 'timespan> -> float<'modelTimeUnit>,
             mode: IndexMode<'T, 'modelTimeUnit>,
             series: TimeSeries.TimeSeries<'T, 'date, 'timeunit, 'timespan>
         ) =
@@ -1144,8 +1179,7 @@ module TimeIndex =
                         // Find the closest points in the index before and after t
                         match
                             tablePairwise
-                            |> Array.tryFind (fun ((k1, _), (k2, _)) ->
-                                (t - k1) >  zero && (t - k2) < zero)
+                            |> Array.tryFind (fun ((k1, _), (k2, _)) -> (t - k1) > zero && (t - k2) < zero)
                         with
                         | Some((k1, v1), (k2, v2)) -> interpolateFn (k1, v1) (k2, v2) t
                         | None ->

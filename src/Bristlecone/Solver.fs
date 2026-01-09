@@ -31,7 +31,7 @@ module Solver =
             (stepType: StepType<'date>)
             (dateMode: DateMode.DateMode<'date, 'yearType, 'timespan>)
             (startDate: 'date)
-            (dataTimeToIndexTime: DateMode.Conversion.ResolutionToModelUnits<'date,'timespan,``time index``>)
+            (dataTimeToIndexTime: DateMode.Conversion.ResolutionToModelUnits<'date, 'timespan, ``time index``>)
             : RunnerOutput<1> -> CodedMap<TypedTensor<Vector, state>> =
 
             match stepType with
@@ -46,7 +46,7 @@ module Solver =
                     obsDates
                     |> List.map (fun d ->
                         let diff = dateMode.Difference startDate d
-                        dataTimeToIndexTime (DateMode.Conversion.FromDifference diff) )
+                        dataTimeToIndexTime (DateMode.Conversion.FromDifference diff))
                     |> Set.ofList
 
                 fun output ->
@@ -209,22 +209,22 @@ module Solver =
 
                 let tStart, tEnd = times.[0], times.[times.Length - 1]
                 let tStep = 1.<``time index``>
-                let timelineIntegrated = [| tStart .. tStep .. tEnd |]
+                let timelineIntegrated = [| tStart..tStep..tEnd |]
 
                 let compiledRhs =
-                    Integration.Base.makeCompiledFunctionForIntegration
-                        tStart
-                        tEnd
-                        tStep
-                        forcings
-                        initialStateFn
-                        eqs
+                    Integration.Base.makeCompiledFunctionForIntegration tStart tEnd tStep forcings initialStateFn eqs
 
-                let toPureIndex (x:float<'modelTime ``time index``>) = x / LanguagePrimitives.FloatWithMeasure<'modelTime> 1.
-                let fromPureIndex (x:float<``time index``>) = x * LanguagePrimitives.FloatWithMeasure<'modelTime> 1.
+                let toPureIndex (x: float<'modelTime ``time index``>) =
+                    x / LanguagePrimitives.FloatWithMeasure<'modelTime> 1.
+
+                let fromPureIndex (x: float<``time index``>) =
+                    x * LanguagePrimitives.FloatWithMeasure<'modelTime> 1.
 
                 let integrate =
-                    integrator (Typed.ofScalar (toPureIndex tStart)) (Typed.ofScalar (toPureIndex tEnd)) (Typed.ofScalar tStep)
+                    integrator
+                        (Typed.ofScalar (toPureIndex tStart))
+                        (Typed.ofScalar (toPureIndex tEnd))
+                        (Typed.ofScalar tStep)
 
                 fun parameters ->
                     let states = integrate (initialStateFn parameters) (compiledRhs parameters)
@@ -314,7 +314,8 @@ module Solver =
         /// resolution to another. Introduces discrepancies when a date mode
         /// with non-uniform time-spans is used (e.g. gregorian leap years).
         let private computeCanonicalFactor toModelUnits integrationRes =
-            toModelUnits (DateMode.Conversion.FromResolution integrationRes) / 1.0<``time index``>
+            toModelUnits (DateMode.Conversion.FromResolution integrationRes)
+            / 1.0<``time index``>
 
         let private interpFunction =
             function
@@ -325,7 +326,7 @@ module Solver =
         let private buildEnvIndex
             getInterpModeFor
             startDate
-            (dataTimeToIndexTime: DateMode.Conversion.ConvertFrom<'date,'timespan> -> float<1>)
+            (dataTimeToIndexTime: DateMode.Conversion.ConvertFrom<'date, 'timespan> -> float<1>)
             (environment: option<TimeFrame.TimeFrame<float<environment>, 'date, 'timeunit, 'timespan>>)
             : CodedMap<TimeIndex.TimeIndex<float<environment>, 'date, 'timeunit, 'timespan, 1>> =
             environment
@@ -365,7 +366,7 @@ module Solver =
         /// t0 (conditioned or otherwise) is obtained automatically from the dynamic series.
         let compile
             logTo
-            (dataTimeToModelTime: DateMode.Conversion.ResolutionToModelUnits<'date,'timespan,'modelTimeUnit>)
+            (dataTimeToModelTime: DateMode.Conversion.ResolutionToModelUnits<'date, 'timespan, 'modelTimeUnit>)
             (modelEquations: ModelForm<'modelTimeUnit>)
             engineTimeMode
             (stepType: StepType<'date>)
@@ -431,11 +432,13 @@ module Solver =
             let modelInTI = TimeWrapping.wrapModelForm factor modelEquations
 
             // 4. Build timeline and env index
-            let modelTimeIndexToIndex (x:float<'modelTimeUnit ``time index``>) = x / LanguagePrimitives.FloatWithMeasure<'modelTimeUnit> 1.
-            let modelTimeToIndex (x:float<'modelTimeUnit>) : float<``time index``> = Units.retype x
-            let eraseModelUnit (x:float<'modelTimeUnit>) : float<1> = Units.retype x
+            let modelTimeIndexToIndex (x: float<'modelTimeUnit ``time index``>) =
+                x / LanguagePrimitives.FloatWithMeasure<'modelTimeUnit> 1.
 
-            let envIndex: CodedMap<TimeIndex.TimeIndex<float<environment>,'date,'timeunit,'timespan,1>> =
+            let modelTimeToIndex (x: float<'modelTimeUnit>) : float<``time index``> = Units.retype x
+            let eraseModelUnit (x: float<'modelTimeUnit>) : float<1> = Units.retype x
+
+            let envIndex: CodedMap<TimeIndex.TimeIndex<float<environment>, 'date, 'timeunit, 'timespan, 1>> =
                 buildEnvIndex interpolationModeFor startDate (dataTimeToModelTime >> eraseModelUnit) environment
 
             // 4. Precompute a keep-mask for External mode
@@ -454,6 +457,7 @@ module Solver =
 
             // 5. Pick runner automatically
             let obsResolution = TimeFrame.resolution observedStates
+
             let runner =
                 match obsResolution with
                 | Resolution.Fixed _ ->
@@ -464,7 +468,8 @@ module Solver =
                         |> Seq.map (fst >> modelTimeIndexToIndex)
                         |> Seq.toArray
 
-                    logTo <| Logging.GeneralEvent(sprintf "Fixed timeline in model's time resolution is %A" fixedTimeline)
+                    logTo
+                    <| Logging.GeneralEvent(sprintf "Fixed timeline in model's time resolution is %A" fixedTimeline)
 
                     match modelInTI, engineTimeMode with
                     | DifferentialEqs eqs, Continuous i ->
@@ -482,8 +487,9 @@ module Solver =
                         |> TimeFrame.dates
                         |> Seq.map (fun d ->
                             let diff = dateMode.Difference startDate d
+
                             dataTimeToModelTime (DateMode.Conversion.FromDifference diff)
-                            |> modelTimeToIndex )
+                            |> modelTimeToIndex)
                         |> Seq.toArray
 
                     logTo <| Logging.GeneralEvent(sprintf "Variable timeline is %A" obsTimes)
@@ -580,9 +586,8 @@ module Solver =
                 t0 |> Map.partition (fun k _ -> measureKeys |> Seq.contains k)
 
             let hiddenT0 =
-                nonMeasures |> Map.filter (fun k _ ->
-                    equationKeys |> Seq.contains k &&
-                    not (observedTF.Keys |> Seq.contains k))
+                nonMeasures
+                |> Map.filter (fun k _ -> equationKeys |> Seq.contains k && not (observedTF.Keys |> Seq.contains k))
 
             { StatesObservedForSolver = toEquationStatesOnly equationKeys dynamicForSolver
               StatesHiddenForSolver = hiddenT0

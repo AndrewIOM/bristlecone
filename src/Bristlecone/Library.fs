@@ -49,9 +49,9 @@ module Bristlecone =
     let withOutput out engine = { engine with LogTo = out }
 
     let withTimeConversion<'d, 'd2, 'timespan, 'timespan2, [<Measure>] 'modelTimeUnit, 'o1, [<Measure>] 'o2, [<Measure>] 'u>
-        (fn: DateMode.Conversion.ResolutionToModelUnits<'d2,'timespan2,'modelTimeUnit>)
-        (engine: EstimationEngine<'d,'o1, 'o2, 'u>)
-        : EstimationEngine<'d2,'timespan2, 'modelTimeUnit, 'u> =
+        (fn: DateMode.Conversion.ResolutionToModelUnits<'d2, 'timespan2, 'modelTimeUnit>)
+        (engine: EstimationEngine<'d, 'o1, 'o2, 'u>)
+        : EstimationEngine<'d2, 'timespan2, 'modelTimeUnit, 'u> =
         { TimeHandling = engine.TimeHandling
           OptimiseWith = engine.OptimiseWith
           LogTo = engine.LogTo
@@ -61,8 +61,11 @@ module Bristlecone =
           InterpolationPerVariable = engine.InterpolationPerVariable
           Conditioning = engine.Conditioning }
 
-    let forDailyModel engine = withTimeConversion DateMode.Conversion.CalendarDates.toDays engine
-    let forMonthlyModel engine = withTimeConversion DateMode.Conversion.CalendarDates.toMonths engine
+    let forDailyModel engine =
+        withTimeConversion DateMode.Conversion.CalendarDates.toDays engine
+
+    let forMonthlyModel engine =
+        withTimeConversion DateMode.Conversion.CalendarDates.toMonths engine
 
     /// Use a mersenne twister random number generator
     /// with a specific seed.
