@@ -3,7 +3,7 @@
 title: Predator-Prey Dynamics
 category: Examples
 categoryindex: 3
-index: 1
+index: 2
 ---
 
 [![Script]({{root}}/img/badge-script.svg)]({{root}}/{{fsdocs-source-basename}}.fsx)&emsp;
