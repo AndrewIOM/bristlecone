@@ -255,8 +255,116 @@ module RootFinding =
         open DiffSharp
 
         let private one = Bristlecone.Tensors.allocateTensor 1.0
+        let private two = Bristlecone.Tensors.allocateTensor 2.0
         let private half = Bristlecone.Tensors.allocateTensor 0.5
         let private zero = Bristlecone.Tensors.allocateTensor 0.
+        let private absTol = Bristlecone.Tensors.allocateTensor 1e-8
+        let private relTol = Bristlecone.Tensors.allocateTensor 1e-6
+
+        /// Functions for constraining the interval over which to conduct
+        /// root-finding.
+        module Interval =
+
+            let makeGrid (n: int) (lo: Tensor) (hi: Tensor) =
+                let idx = dsharp.linspace(0.0, 1.0, n + 1)
+                lo + idx * (hi - lo)
+
+            let detectOutOfRange penaltyScale target (values:Tensor) =
+                let fLo, fHi = values.[0], values.[values.nelement - 1]
+
+                let below =
+                    dsharp.lt(target, fLo)
+                    |> fun m -> dsharp.clamp(m.sum(), 0.0, 1.0)
+
+                let above =
+                    dsharp.gt(target, fHi)
+                    |> fun m -> dsharp.clamp(m.sum(), 0.0, 1.0)
+                let outOfRange = below + above
+                let inRange = one - outOfRange
+
+                let dist = (fLo - target) * below + (target - fHi) * above
+                let penalty = dsharp.pow(dist, two) * penaltyScale
+
+                below, above, outOfRange, inRange, penalty
+
+            let narrowInterval (grid:Tensor) values (target:Tensor) =
+                let n = grid.nelement - 1
+
+                let diffs = values - target
+                let signs = dsharp.sign diffs
+                let prod = signs.[0..n-1] * signs.[1..n]
+
+                let zeros = dsharp.zerosLike prod
+                let changeMask = dsharp.lt(prod, zeros) |> fun t -> dsharp.cast(t,grid.dtype)
+
+                // For a single sign change, these sums pick out exactly that interval.
+                let loNarrow = (changeMask * grid.[0..n-1]).sum()
+                let hiNarrow = (changeMask * grid.[1..n]).sum()
+
+                // Any change? clamp(sum(mask), 0, 1) gives a 0/1 tensor, no scalar extraction.
+                let hasChange =
+                    changeMask.sum()
+                    |> fun s -> dsharp.clamp(s, 0.0, 1.0)
+
+                loNarrow, hiNarrow, hasChange
+
+            let identify n penaltyScale f (target: Tensor) (lo: Tensor) (hi: Tensor) =
+                let grid = makeGrid n lo hi
+                let values: Tensor = f grid
+                let below, above, outOfRange, inRange, penalty =
+                    detectOutOfRange penaltyScale target values
+                let clamped = below * lo + above * hi
+                let loNarrow, hiNarrow, hasChange =
+                    narrowInterval grid values target
+                let lo2 =
+                    outOfRange * clamped +
+                    inRange * (hasChange * loNarrow + (one - hasChange) * lo)
+
+                let hi2 =
+                    outOfRange * clamped +
+                    inRange * (hasChange * hiNarrow + (one - hasChange) * hi)
+
+                {| Low = lo2
+                   High = hi2
+                   Penalty = penalty
+                   InRange = inRange
+                   Grid = grid
+                   Values = values |}
+
+
+        /// Finds the root of a non-linear equation by solving f() over
+        /// an equally-spaced grid of size `nGrid`. Uses AD gradients.
+        let refinedGrid
+            (f: Tensor -> Tensor)
+            (target: Tensor)
+            (grid: Tensor)
+            (values: Tensor)
+            (lo: Tensor)
+            (hi: Tensor)
+            : Tensor =
+
+            let errors = dsharp.abs (values - target)
+            let minErr = dsharp.min errors
+            let minErrExpanded = dsharp.fullLike(errors, minErr)
+
+            let eps = 
+                let raw = dsharp.max(absTol, dsharp.abs minErr * relTol)
+                dsharp.fullLike(errors, raw)
+
+            let diff = dsharp.abs(errors - minErrExpanded)
+            let mask =
+                dsharp.le(diff, eps)
+                |> fun t -> dsharp.cast(t, grid.dtype)
+
+            let x0 = (mask * grid).sum()
+
+            let fLifted z = f z - target
+            let fx = fLifted x0
+            let dfx = dsharp.grad fLifted x0
+            let x1 = x0 - fx / dfx
+
+            dsharp.max (lo, dsharp.min (hi, x1))
+
 
         /// Bisect method for finding root of non-linear equations.
         /// `adSafe` keeps within tensor space for all operations,
@@ -270,7 +378,10 @@ module RootFinding =
             (maxIter: int)
             : Tensor =
 
-            let rec loop (a: Tensor) (b: Tensor) i =
+            let fa0 = f lo - target
+            let fb0 = f hi - target
+
+            let rec loop (a: Tensor, fa: Tensor) (b: Tensor, fb: Tensor) i =
                 let c = (a + b) * half
                 let fc = f c - target
 
@@ -278,18 +389,21 @@ module RootFinding =
                     c
                 else
                     let stopMask = dsharp.lt (dsharp.abs fc, tol) + dsharp.lt ((b - a) * half, tol)
-
-                    let fa = f a - target
-                    let prod = (fa * fc)
-                    let mask = dsharp.cast (dsharp.gt (prod, zero), a.dtype)
-                    let invMask = one - mask
                     let stopF = dsharp.cast (stopMask, a.dtype)
                     let contF = one - stopF
+
+                    let prod = fa * fc
+                    let mask = dsharp.cast (dsharp.gt (prod, zero), a.dtype)
+                    let invMask = one - mask
+
                     let a' = a * stopF + (a * invMask + c * mask) * contF
                     let b' = b * stopF + (b * mask + c * invMask) * contF
-                    loop a' b' (i + 1)
 
-            loop lo hi 0
+                    let fa' = fa * stopF + (fa * invMask + fc * mask) * contF
+                    let fb' = fb * stopF + (fb * mask    + fc * invMask) * contF
+                    loop (a', fa') (b', fb') (i + 1)
+
+            loop (lo, fa0) (hi, fb0) 0
 
         /// Newton–Raphson root finder using AD for derivative.
         let newtonRaphson
