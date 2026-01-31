@@ -1,3 +1,8 @@
+#### 3.0.0 - 2026-01-31
+* FEATURE: Fast grid-based inverse for root finding
+* FEATURE: Heteroscedacity in simple likelihood functions
+* BUGFIX: Amoeba solver correctly takes account of dimensionality
+
 #### 3.0.0-beta1 - 2025-11-13
 * FEATURE: Whole library and language is Tensor-based using DiffSharp.
 * FEATURE: Units of measure in language (model definitions).
