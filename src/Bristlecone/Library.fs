@@ -31,7 +31,7 @@ module Bristlecone =
     /// <summary>A basic estimation engine for ordinary differential equations, using a Nelder-Mead optimiser.</summary>
     let mkContinuous () =
         { TimeHandling = Continuous <| Integration.RungeKutta.rk4
-          OptimiseWith = Optimisation.Amoeba.single Optimisation.Amoeba.Solver.Default
+          OptimiseWith = Optimisation.Amoeba.swarm 5 10 Optimisation.Amoeba.Solver.Default
           LogTo = Console.logger 1000<iteration>
           Random = MathNet.Numerics.Random.MersenneTwister true
           ToModelTime = DateMode.Conversion.CalendarDates.toYears

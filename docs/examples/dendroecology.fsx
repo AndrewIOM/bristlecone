@@ -3,7 +3,7 @@
 title: Wood rings: investigating plant-environment interactions
 category: Examples
 categoryindex: 3
-index: 2
+index: 3
 ---
 
 [![Script]({{root}}/img/badge-script.svg)]({{root}}/{{fsdocs-source-basename}}.fsx)&emsp;

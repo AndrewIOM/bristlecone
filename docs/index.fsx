@@ -12,16 +12,10 @@ index: 1
 
 (*** condition: prepare ***)
 #nowarn "211"
-#r "../src/Bristlecone/bin/Debug/net10.0/Bristlecone.dll"
+#r "nuget: DiffSharp-cpu, v=1.0.7"
 #r "nuget: MathNet.Numerics.FSharp,5.0.0"
-(*** condition: fsx ***)
-#if FSX
-#r "nuget: Bristlecone,{{package-version}}"
-#endif // FSX
-(*** condition: ipynb ***)
-#if IPYNB
-#r "nuget: Bristlecone,{{package-version}}"
-#endif // IPYNB
+#r "nuget: FSharp.Data,6.6"
+#r "../src/Bristlecone/bin/Debug/net10.0/Bristlecone.dll"
 
 (**
 Bristlecone
@@ -51,15 +45,18 @@ This example demonstrates the layout of a model when defined in Bristlecone.
 *)
 open Bristlecone // Opens Bristlecone core library and estimation engine
 open Bristlecone.Language // Open the language for writing Bristlecone models
-open FSharp.Data.UnitSystems.SI.UnitSymbols
+
+let mass = state<1> "mass"
 
 let hypothesis =
 
-    let mass = state "mass"
-
+    // Model parameters:
     let η = parameter "η" noConstraints 0.50 1.50
     let β = parameter "β" noConstraints 0.01 1.00 // m
     let κ = parameter "κ" noConstraints 0.01 1.00
+
+    // Likelihood parameters:
+    let sigma = parameter "σ[x]" notNegative 0.01 0.10
 
     let vonBertalanffy = P η * This ** P β - P κ * This
 
@@ -68,21 +65,24 @@ let hypothesis =
     |> Model.estimateParameter η
     |> Model.estimateParameter β
     |> Model.estimateParameter κ
-    |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ Require.state mass ])
+    |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.gaussian (Require.state mass) )
+    |> Model.estimateParameter sigma
     |> Model.compile
 
-let engine =
-    Bristlecone.mkContinuous ()
-    |> Bristlecone.withCustomOptimisation (Optimisation.Amoeba.swarm 5 20 Optimisation.Amoeba.Solver.Default)
-
-let testSettings = Bristlecone.Test.defaultSettings
-let testResult = Bristlecone.testModel engine testSettings hypothesis
-
-(*** include-fsi-output ***)
-
+// Given some data (loaded using Bristlecone functions or others)...
+fun data ->
+  let engine = Bristlecone.mkContinuous ()
+  let endCond = Optimisation.EndConditions.atIteration 10000<iteration>
+  Bristlecone.fit engine endCond data hypothesis
 
 (**
-In the above snippet, a von Bertalanffy growth model is defined as a hypothesis to test. We then create an `EstimationEngine`, which defines the methodology for model-fitting. In Bristlecone, an `EstimationEngine` is created and customised using the F# forward pipe operator (for R users this may be familiar; this concept was adapted into the dplyr %>% operator). The call to `testModel` generates random test data, and assesses whether the model-fitting method can accurately estimate known parameters.
+In the above snippet, a von Bertalanffy growth model is defined as a model hypothesis.
+We then create an `EstimationEngine`, which defines the methodology for model-fitting.
+In Bristlecone, an `EstimationEngine` is created and customised using the F# forward pipe
+operator (for R users this may be familiar; this concept was adapted into the dplyr %>% operator).
+
+To apply the model to data, the `Bristlecone.fit` function can be called with an end condition
+for the optimisation routine chosen in the given engine.
 
 Samples & documentation
 -----------------------
@@ -92,10 +92,14 @@ An API reference is automatically generated from XML comments in the library imp
 In addition, this documentation includes step-by-step example analyses. Each analysis may be downloaded
 as an F# script or Jupyter notebook using the buttons at the top of each example page.
 
- * [The predator-prey example](examples/predator-prey.html) covers basic model-fitting with Bristlecone.
+ * For basic functions, a comparison of [plant growth models](examples/plant-growth.html) and a classic [predator-prey example](examples/predator-prey.html)
+   cover model-fitting with Bristlecone.
 
- * [The shrub-resource example](examples/shrub-resource.html) is a more 
-   comprehensive example that covers model-fitting and model-selection (MFMS) with Bristlecone.
+ * For dendroecology, a [shrub-resource example](examples/shrub-resource.html) demonstrates
+   model-fitting and model-selection (MFMS) with Bristlecone.
+
+ * For palaeoecology, a [sediment core example](examples/sedimentary.html) shows similar methods
+   applied to sedimentary isotope and pollen time-series with uneven time-steps.
 
  * The [API Reference](reference/index.html) contains automatically generated documentation for all types, modules
    and functions in the library. This includes additional brief samples on using most of the
