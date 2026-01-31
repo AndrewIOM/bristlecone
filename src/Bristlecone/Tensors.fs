@@ -266,5 +266,9 @@ module Tensors =
     /// in DiffSharp for working with raw tensors.
     module Unsafe =
         let logicalNot (b: Tensor) = dsharp.eq (b, dsharp.zerosLike b)
-        let logicalOr (a: Tensor) (b: Tensor) = dsharp.gt (dsharp.add(a,b), dsharp.zerosLike a)
-        let logicalAnd (a: Tensor) (b: Tensor) = dsharp.eq (dsharp.add(a,b), dsharp.onesLike a)
+
+        let logicalOr (a: Tensor) (b: Tensor) =
+            dsharp.gt (dsharp.add (a, b), dsharp.zerosLike a)
+
+        let logicalAnd (a: Tensor) (b: Tensor) =
+            dsharp.eq (dsharp.add (a, b), dsharp.onesLike a)

@@ -16,26 +16,25 @@ module Likelihood =
     module Variance =
 
         /// A variance function maps expected values to per-point σ
-        type VarianceFunction<[<Measure>] 'u, [<Measure>] 'v> =
-            TypedTensor<Vector,'v> -> TypedTensor<Vector,'u>
+        type VarianceFunction<[<Measure>] 'u, [<Measure>] 'v> = TypedTensor<Vector, 'v> -> TypedTensor<Vector, 'u>
 
         /// Variance is constant within through time.
         let constant sigma : VarianceFunction<'u, 'v> =
             fun expected -> Typed.broadcastScalarToVector sigma (Typed.length expected)
 
         /// Variance is proportional to the expected value (σ = σ0 * x).
-        let proportional (sigma0: TypedTensor<Scalar,'u/'v>) : VarianceFunction<'u, 'v> =
-            fun (expected: TypedTensor<Vector,'v>) -> expected * sigma0
+        let proportional (sigma0: TypedTensor<Scalar, 'u / 'v>) : VarianceFunction<'u, 'v> =
+            fun (expected: TypedTensor<Vector, 'v>) -> expected * sigma0
 
         /// Variance is exponential to the expected value (σ = σ0 * exp(σ1 * x)),
         /// where sigma1 is the baseline variance and sigma2 is the rate of growth
         /// in variance per units of expx.
-        let exponential (sigma0: TypedTensor<Scalar,'u>) (sigma1: TypedTensor<Scalar,1/'v>) : VarianceFunction<'u,'v> =
+        let exponential
+            (sigma0: TypedTensor<Scalar, 'u>)
+            (sigma1: TypedTensor<Scalar, 1 / 'v>)
+            : VarianceFunction<'u, 'v> =
             fun expected -> sigma0 * Typed.expVector (sigma1 * expected)
 
-        // / Variance follows a power law in the expected value (σ = σ0 * x^α).
-        // let power (sigma0: TypedTensor<Scalar,'u>) (alpha: TypedTensor<Scalar,1>) : VarianceFunction<'u,'v> =
-        //     fun (expected: TypedTensor<Vector,'v>) -> sigma0 * (Typed.powVector expected alpha)
 
 
     let internal getData key (pairs: CodedMap<SeriesPair<'u>>) =
@@ -109,6 +108,7 @@ module Likelihood =
         let variance (paramAccessor: ParameterValueAccessor) =
             let sigmax = paramAccessor.Get "σ[x]" |> Typed.retype<parameter, 'u, Scalar>
             Variance.constant sigmax
+
         gaussian' variance key
 
     /// <summary>
@@ -118,9 +118,10 @@ module Likelihood =
     /// </summary>
     let gaussianWithExponentialVariance key =
         let variance (paramAccessor: ParameterValueAccessor) =
-            let sigma0 = paramAccessor.Get "σ0[x]" |> Typed.retype<parameter,'u,Scalar>
-            let sigma1 = paramAccessor.Get "σ1[x]" |> Typed.retype<parameter,1/'v,Scalar>
+            let sigma0 = paramAccessor.Get "σ0[x]" |> Typed.retype<parameter, 'u, Scalar>
+            let sigma1 = paramAccessor.Get "σ1[x]" |> Typed.retype<parameter, 1 / 'v, Scalar>
             Variance.exponential sigma0 sigma1
+
         gaussian' variance key
 
     /// <summary>
@@ -130,21 +131,10 @@ module Likelihood =
     /// </summary>
     let gaussianWithProportionalVariance key =
         let variance (paramAccessor: ParameterValueAccessor) =
-            let sigma0 = paramAccessor.Get "σ[x]" |> Typed.retype<parameter,'u,Scalar>
+            let sigma0 = paramAccessor.Get "σ[x]" |> Typed.retype<parameter, 'u, Scalar>
             Variance.proportional sigma0
-        gaussian' variance key
 
-    // /// <summary>
-    // /// Log likelihood function for single equation system, assuming Gaussian error for x
-    // /// that increases on a power law with quantity; ⍺[x] is the exponent.
-    // /// Requires parameter 'σ[x]' and '⍺[x]' to be included in any `ModelSystem` that uses it.
-    // /// </summary>
-    // let gaussianWithPowerVariance key =
-    //     let variance (paramAccessor: ParameterValueAccessor) =
-    //         let sigma0 = paramAccessor.Get "σ[x]" |> Typed.retype<parameter,'u,Scalar>
-    //         let alpha = paramAccessor.Get "⍺[x]" |> Typed.retype<parameter,'u,Scalar>
-    //         Variance.power sigma0 alpha
-    //     gaussian' variance key
+        gaussian' variance key
 
 
     /// Negative log likelihood for a bivariate normal distribution.

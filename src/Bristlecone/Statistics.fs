@@ -266,63 +266,56 @@ module RootFinding =
         module Interval =
 
             let makeGrid (n: int) (lo: Tensor) (hi: Tensor) =
-                let idx = dsharp.linspace(0.0, 1.0, n + 1)
+                let idx = dsharp.linspace (0.0, 1.0, n + 1)
                 lo + idx * (hi - lo)
 
-            let detectOutOfRange penaltyScale target (values:Tensor) =
+            let detectOutOfRange penaltyScale target (values: Tensor) =
                 let fLo, fHi = values.[0], values.[values.nelement - 1]
 
-                let below =
-                    dsharp.lt(target, fLo)
-                    |> fun m -> dsharp.clamp(m.sum(), 0.0, 1.0)
+                let below = dsharp.lt (target, fLo) |> fun m -> dsharp.clamp (m.sum (), 0.0, 1.0)
 
-                let above =
-                    dsharp.gt(target, fHi)
-                    |> fun m -> dsharp.clamp(m.sum(), 0.0, 1.0)
+                let above = dsharp.gt (target, fHi) |> fun m -> dsharp.clamp (m.sum (), 0.0, 1.0)
                 let outOfRange = below + above
                 let inRange = one - outOfRange
 
                 let dist = (fLo - target) * below + (target - fHi) * above
-                let penalty = dsharp.pow(dist, two) * penaltyScale
+                let penalty = dsharp.pow (dist, two) * penaltyScale
 
                 below, above, outOfRange, inRange, penalty
 
-            let narrowInterval (grid:Tensor) values (target:Tensor) =
+            let narrowInterval (grid: Tensor) values (target: Tensor) =
                 let n = grid.nelement - 1
 
                 let diffs = values - target
                 let signs = dsharp.sign diffs
-                let prod = signs.[0..n-1] * signs.[1..n]
+                let prod = signs.[0 .. n - 1] * signs.[1..n]
 
                 let zeros = dsharp.zerosLike prod
-                let changeMask = dsharp.lt(prod, zeros) |> fun t -> dsharp.cast(t,grid.dtype)
+                let changeMask = dsharp.lt (prod, zeros) |> fun t -> dsharp.cast (t, grid.dtype)
 
                 // For a single sign change, these sums pick out exactly that interval.
-                let loNarrow = (changeMask * grid.[0..n-1]).sum()
-                let hiNarrow = (changeMask * grid.[1..n]).sum()
+                let loNarrow = (changeMask * grid.[0 .. n - 1]).sum ()
+                let hiNarrow = (changeMask * grid.[1..n]).sum ()
 
-                // Any change? clamp(sum(mask), 0, 1) gives a 0/1 tensor, no scalar extraction.
-                let hasChange =
-                    changeMask.sum()
-                    |> fun s -> dsharp.clamp(s, 0.0, 1.0)
+                let hasChange = changeMask.sum () |> fun s -> dsharp.clamp (s, 0.0, 1.0)
 
                 loNarrow, hiNarrow, hasChange
 
             let identify n penaltyScale f (target: Tensor) (lo: Tensor) (hi: Tensor) =
                 let grid = makeGrid n lo hi
                 let values: Tensor = f grid
+
                 let below, above, outOfRange, inRange, penalty =
                     detectOutOfRange penaltyScale target values
+
                 let clamped = below * lo + above * hi
-                let loNarrow, hiNarrow, hasChange =
-                    narrowInterval grid values target
+                let loNarrow, hiNarrow, hasChange = narrowInterval grid values target
+
                 let lo2 =
-                    outOfRange * clamped +
-                    inRange * (hasChange * loNarrow + (one - hasChange) * lo)
+                    outOfRange * clamped + inRange * (hasChange * loNarrow + (one - hasChange) * lo)
 
                 let hi2 =
-                    outOfRange * clamped +
-                    inRange * (hasChange * hiNarrow + (one - hasChange) * hi)
+                    outOfRange * clamped + inRange * (hasChange * hiNarrow + (one - hasChange) * hi)
 
                 {| Low = lo2
                    High = hi2
@@ -345,18 +338,16 @@ module RootFinding =
 
             let errors = dsharp.abs (values - target)
             let minErr = dsharp.min errors
-            let minErrExpanded = dsharp.fullLike(errors, minErr)
+            let minErrExpanded = dsharp.fullLike (errors, minErr)
 
-            let eps = 
-                let raw = dsharp.max(absTol, dsharp.abs minErr * relTol)
-                dsharp.fullLike(errors, raw)
+            let eps =
+                let raw = dsharp.max (absTol, dsharp.abs minErr * relTol)
+                dsharp.fullLike (errors, raw)
 
-            let diff = dsharp.abs(errors - minErrExpanded)
-            let mask =
-                dsharp.le(diff, eps)
-                |> fun t -> dsharp.cast(t, grid.dtype)
+            let diff = dsharp.abs (errors - minErrExpanded)
+            let mask = dsharp.le (diff, eps) |> fun t -> dsharp.cast (t, grid.dtype)
 
-            let x0 = (mask * grid).sum()
+            let x0 = (mask * grid).sum ()
 
             let fLifted z = f z - target
             let fx = fLifted x0
@@ -400,7 +391,7 @@ module RootFinding =
                     let b' = b * stopF + (b * mask + c * invMask) * contF
 
                     let fa' = fa * stopF + (fa * invMask + fc * mask) * contF
-                    let fb' = fb * stopF + (fb * mask    + fc * invMask) * contF
+                    let fb' = fb * stopF + (fb * mask + fc * invMask) * contF
                     loop (a', fa') (b', fb') (i + 1)
 
             loop (lo, fa0) (hi, fb0) 0

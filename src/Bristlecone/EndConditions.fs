@@ -37,9 +37,10 @@ module EndConditions =
                     |> List.take (Units.removeUnitFromInt nRecent)
                     |> List.pairwise
                     |> List.sumBy (fun (n, old) -> max 0.<``-logL``> (old - n)) // Captures backwards jumps
+
                 if imp <= defaultTolerance then NoImprovement else Continue
 
-    let noImprovement interval: EndCondition =
+    let noImprovement interval : EndCondition =
         fun results iteration ->
             if iteration % interval = 0<iteration> && iteration > 0<iteration> then
                 let imp =
@@ -49,7 +50,8 @@ module EndConditions =
                     |> List.averageBy (fun (n, old) -> if n > old then n - old else old - n) // Mean change in objective value
 
                 if imp <= defaultTolerance then NoImprovement else Continue
-            else Continue
+            else
+                Continue
 
     let improvementCount count interval : EndCondition =
         fun results iteration ->

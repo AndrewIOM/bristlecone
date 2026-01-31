@@ -560,8 +560,7 @@ module Language =
         let internal clampLow = mkTensor -1e30
         let internal clampHi = mkTensor 1e30
 
-        let convertMask (mask:Tensor) =
-            dsharp.cast (mask, Dtype.Float64)
+        let convertMask (mask: Tensor) = dsharp.cast (mask, Dtype.Float64)
 
         /// Blends the true and false cases for AD-safe operation, but eagerly
         /// evaluates both sides. If a NaN is present, it will contaminate the
@@ -571,40 +570,38 @@ module Language =
                 match %c with
                 | Bool mask ->
                     let m = convertMask mask
-                    dsharp.add(dsharp.mul(%t,m), dsharp.mul(%f, dsharp.sub(one, m)))
+                    dsharp.add (dsharp.mul (%t, m), dsharp.mul (%f, dsharp.sub (one, m)))
             @>
 
         let private tensorSum (xs: Expr<Tensor> list) : Expr<Tensor> =
             match xs with
             | [] -> failwith "Cannot add an empty list"
-            | x :: rest ->
-                rest |> List.fold (fun acc e -> <@ dsharp.add(%acc, %e) @>) x
+            | x :: rest -> rest |> List.fold (fun acc e -> <@ dsharp.add (%acc, %e) @>) x
 
         let private tensorProduct (xs: Expr<Tensor> list) : Expr<Tensor> =
             match xs with
-            | [] ->
-                failwith "Cannot multiply an empty list"
-            | x :: rest ->
-                rest |> List.fold (fun acc e -> <@ dsharp.mul(%acc, %e) @>) x
+            | [] -> failwith "Cannot multiply an empty list"
+            | x :: rest -> rest |> List.fold (fun acc e -> <@ dsharp.mul (%acc, %e) @>) x
 
 
         let private penalty = allocateTensor 1e6
 
         let inverse fLambda targetExpr loExpr hiExpr tol maxIter =
             let tol = allocateTensor tol
+
             <@
                 let interval =
                     Statistics.RootFinding.Tensor.Interval.identify
                         500
                         penalty
-                        (%%fLambda : Tensor -> Tensor)
+                        (%%fLambda: Tensor -> Tensor)
                         %targetExpr
                         %loExpr
                         %hiExpr
 
                 let x =
                     Statistics.RootFinding.Tensor.refinedGrid
-                        (%%fLambda : Tensor -> Tensor)
+                        (%%fLambda: Tensor -> Tensor)
                         %targetExpr
                         interval.Grid
                         interval.Values
@@ -708,7 +705,7 @@ module Language =
               constValLift =
                 fun one n ->
                     let tensor = mkTensor n
-                    <@ dsharp.mul(%one,tensor) @>
+                    <@ dsharp.mul (%one, tensor) @>
               parameter = fun name -> <@ (%%Expr.Var pVar: TypedTensor<Vector, ``parameter``>).Value.[pIndex.[name]] @>
               environment = fun _ -> failwith "Environment not supported in measures"
               timeVal = <@ mkTensor (float (%%Expr.Var tIdxVar: int)) @>
@@ -720,7 +717,7 @@ module Language =
               pow = fun (l, r) -> <@ dsharp.pow (%l, %r) @>
               log = fun e -> <@ dsharp.log %e @>
               exp = fun e -> <@ dsharp.exp %e @>
-              modulo = fun (l, r) -> <@ %l - %r * dsharp.floor (dsharp.div(%l,%r)) @>
+              modulo = fun (l, r) -> <@ %l - %r * dsharp.floor (dsharp.div (%l, %r)) @>
               cond = fun (c, t, f) -> blendConditional c t f
               label = fun (_, m) -> m
               invalid = fun () -> <@ invalidPenalty @>
