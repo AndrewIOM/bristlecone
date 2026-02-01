@@ -865,14 +865,12 @@ module MonteCarlo =
         module Tuning =
 
             type TuningSettings =
-                { InitialScale: float
-                  TuneLength: int<iteration>
+                { TuneLength: int<iteration>
                   TuneN: int<iteration> }
 
                 static member Default =
-                    { InitialScale = 0.001
-                      TuneLength = 100000<iteration>
-                      TuneN = 50<iteration> }
+                    { TuneLength = 300<iteration>
+                      TuneN = 20<iteration> }
 
             /// Tune individual parameter step sizes based on acceptance rate.
             /// Returns tuned scales and the final point.
@@ -923,8 +921,8 @@ module MonteCarlo =
                                         prev |> Array.pairwise |> Array.where (fun (a, b) -> a <> b) |> Array.length
 
                                     match float changes / float settings.TuneN with
-                                    | ar when ar < 0.35 -> (ti * 0.80, Array.empty)
-                                    | ar when ar > 0.50 -> (ti * 1.20, Array.empty)
+                                    | ar when ar < 0.35 -> (ti * exp (-1.0 * (0.35 - ar)), Array.empty)
+                                    | ar when ar > 0.50 -> (ti * exp (1.0 * (ar - 0.50)), Array.empty)
                                     | _ -> (ti, Array.empty)
                                 else
                                     (ti, prev))
@@ -954,7 +952,7 @@ module MonteCarlo =
 
             /// An exploration method that perturbs around a point in optimisation-space.
             /// Used for profile likelihood in the Confidence module.
-            let perturb settings : Optimiser =
+            let perturb initialScale settings : Optimiser =
                 InDetachedSpace
                 <| fun random writeOut _ domain _ (f: Objective) ->
                     let gaussian (scale: float<``optim-space``>) (t: float) =
@@ -965,7 +963,7 @@ module MonteCarlo =
 
                     let initialScale =
                         [| 1 .. theta1 |> Typed.length |]
-                        |> Array.map (fun _ -> settings.InitialScale * 1.<``optim-space``>)
+                        |> Array.map (fun _ -> initialScale * 1.<``optim-space``>)
 
                     tuneStepSizes
                         writeOut
@@ -988,19 +986,26 @@ module MonteCarlo =
               TemperatureCeiling: float option
               BoilingAcceptanceRate: float
               InitialTemperature: float
-              PreTuneLength: int<iteration>
+              PreTuneLength: EndCondition
               Tuning: Tuning.TuningSettings
               AnnealStepLength: EndCondition }
 
             static member Default =
-                { HeatStepLength = EndConditions.atIteration 250<iteration>
+                { HeatStepLength = EndConditions.atIteration 50<iteration>
                   HeatRamp = fun t -> t * 1.10
                   BoilingAcceptanceRate = 0.85
                   TemperatureCeiling = Some 200.
                   InitialTemperature = 1.00
-                  PreTuneLength = 5000<iteration>
+                  PreTuneLength = EndConditions.noImprovement 50<iteration>
                   Tuning = Tuning.TuningSettings.Default
-                  AnnealStepLength = EndConditions.improvementCount 250 250<iteration> }
+                  AnnealStepLength = EndConditions.improvementCount 100 100<iteration> }
+
+        // NB Make a plot of sub-plots showing in X-Y space the walking around at each
+        // annealing step of the parameter values, on a pairs of parameters basis. This
+        // would make a nice visualisation of how the algorithm is working. Could do
+        // with plotly.
+
+        // NB Implement better tuning schedules for 
 
 
         /// Run a homogenous Markov chain recursively until an end condition - `atEnd` - is met.
@@ -1141,11 +1146,7 @@ module MonteCarlo =
             let initialScale = [| 1 .. theta1 |> Typed.length |] |> Array.map (fun _ -> scale)
 
             let tunedScale, l2, theta2 =
-                homogenousChain
-                    initialScale
-                    (EndConditions.atIteration settings.PreTuneLength)
-                    1.
-                    (l1 |> Typed.toFloatScalar, theta1)
+                homogenousChain initialScale settings.PreTuneLength 1. (l1 |> Typed.toFloatScalar, theta1)
                 |> List.minBy fst
                 // |> tune (initialScale |> Array.map (fun t -> (t, Array.empty))) 1<iteration>
                 |> Tuning.tuneStepSizes writeOut random domain draw' machine f initialScale settings.Tuning

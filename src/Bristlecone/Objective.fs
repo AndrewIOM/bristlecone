@@ -26,6 +26,8 @@ module Objective =
             let i = initial |> Map.find k
             Typed.prepend1D i v)
 
+    let private invalidTensor = Typed.ofScalar (nan * 1.<state>)
+
     /// Compute the system's `Measures` from the dynamic variables produced by the solver.
     /// All operations happen in Tensor-space. Initial conditions (t0) are added to the front
     /// of the predictions to enable previous value lookup where needed.
@@ -41,11 +43,13 @@ module Objective =
 
         let measuredSeries =
             measures
-            |> Map.map (fun _ measFn ->
+            |> Map.map (fun measKey measFn ->
                 let buf = ResizeArray()
+                let initialThis = initialConditions |> Map.tryFind measKey |> Option.defaultValue invalidTensor
 
                 for i = 1 to length - 1 do
-                    let value = measFn parameters expectedWithT0 i
+                    let thisVal = if i = 1 then initialThis else buf.[i-2]
+                    let value = measFn parameters expectedWithT0 thisVal i
                     buf.Add value
 
                 buf.ToArray() |> Typed.stack1D)

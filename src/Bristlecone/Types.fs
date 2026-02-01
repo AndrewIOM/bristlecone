@@ -169,6 +169,9 @@ module Map =
                 | None -> Map.add key values acc)
             group2
 
+    let append (map1:Map<'k,'v>) (map2:Map<'k,'v>) =
+        Map.fold(fun s k t -> s |> Map.add k t) map1 map2
+
     let tryFindBy (f: 'key -> bool) map =
         map |> Map.toSeq |> Seq.tryFind (fun (k, _) -> f k) |> Option.map snd
 

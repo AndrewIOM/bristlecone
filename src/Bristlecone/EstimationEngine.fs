@@ -77,6 +77,7 @@ module ModelSystem =
     type Measurement<[<Measure>] 'u> =
         TypedTensor<Vector, ``parameter``> // current parameters
             -> CodedMap<TypedTensor<Vector, state>> // states time-series
+            -> TypedTensor<Scalar, state> // last value of this measurement
             -> int // current time index
             -> TypedTensor<Scalar, 'u>
 

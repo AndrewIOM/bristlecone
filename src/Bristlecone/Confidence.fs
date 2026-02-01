@@ -86,6 +86,7 @@ module ProfileLikelihood =
                 { engine with
                     OptimiseWith =
                         MonteCarlo.SimulatedAnnealing.Tuning.perturb
+                            0.001
                             MonteCarlo.SimulatedAnnealing.Tuning.TuningSettings.Default
                     LogTo =
                         fun e ->

@@ -713,7 +713,7 @@ module Language =
                                 | None -> failwithf "Baseline state not available for: %s" name
                         @> }
 
-        let private tensorOpsForMeasure (pIndex: Map<string, int>) (pVar: Var) (statesVar: Var) (tIdxVar: Var) =
+        let private tensorOpsForMeasure (pIndex: Map<string, int>) (pVar: Var) (statesVar: Var) (thisVar: Var) (tIdxVar: Var) =
             { constVal =
                 fun n ->
                     let tensor = mkTensor n
@@ -725,7 +725,7 @@ module Language =
               parameter = fun name -> <@ (%%Expr.Var pVar: TypedTensor<Vector, ``parameter``>).Value.[pIndex.[name]] @>
               environment = fun _ -> failwith "Environment not supported in measures"
               timeVal = <@ mkTensor (float (%%Expr.Var tIdxVar: int)) @>
-              thisVal = <@ mkTensor nan @> // not used in measures
+              thisVal = <@ (%%Expr.Var thisVar: TypedTensor<Scalar, ModelSystem.state>).Value @>
               add = tensorSum
               sub = fun (l, r) -> <@ dsharp.sub (%l, %r) @>
               mul = mul
@@ -927,15 +927,16 @@ module Language =
 
             let statesVar =
                 Var("states", typeof<CodedMap<TypedTensor<Vector, ModelSystem.state>>>)
+            let thisVar = Var("thisVal", typeof<TypedTensor<Scalar, ModelSystem.state>>)
 
             let tIdxVar = Var("timeIndex", typeof<int>)
             let pIndex = paramIndex parameters
 
             let core =
-                buildQuotationCached (tensorOpsForMeasure pIndex pVar statesVar tIdxVar) Map.empty expr
+                buildQuotationCached (tensorOpsForMeasure pIndex pVar statesVar thisVar tIdxVar) Map.empty expr
 
             <@ tryAsScalar<ModelSystem.state> %core |> Option.get @>
-            |> fun body -> Expr.Lambda(pVar, Expr.Lambda(statesVar, Expr.Lambda(tIdxVar, body)))
+            |> fun body -> Expr.Lambda(pVar, Expr.Lambda(statesVar, Expr.Lambda(thisVar, Expr.Lambda(tIdxVar, body))))
             |> LeafExpressionConverter.EvaluateQuotation
             |> unbox<ModelSystem.Measurement<'stateUnit>>
 
@@ -1052,7 +1053,7 @@ module Language =
 
         module Measurement =
             let adapt<[<Measure>] 'u> (m: ModelSystem.Measurement<'u>) : ModelSystem.Measurement<ModelSystem.state> =
-                fun p s i -> (m p s i).Value |> Tensors.tryAsScalar<ModelSystem.state> |> Option.get
+                fun p s sThis i -> (m p s sThis i).Value |> Tensors.tryAsScalar<ModelSystem.state> |> Option.get
 
         module Likelihood =
 
