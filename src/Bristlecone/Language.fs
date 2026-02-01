@@ -497,7 +497,7 @@ module Language =
                     let loExpr = build (ME lo)
                     let hiExpr = build (ME hi)
 
-                    let tol, maxIter = 1e-6, 20
+                    let tol, maxIter = 1e-6, 50
                     ops.inverse (fLambda, targetExpr, loExpr, hiExpr, tol, maxIter))
 
             | ME(GreaterThan _)
