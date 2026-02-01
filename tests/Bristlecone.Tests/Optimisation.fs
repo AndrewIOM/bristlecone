@@ -190,7 +190,7 @@ module ``Gradient Descent`` =
                 let c, w = cw |> Array.unzip
                 let cVec = optimVector (c |> Array.map(fun c -> c.Get))
                 let wVec = optimVector (w |> Array.map(fun c -> c.Get))
-                let rVec = reflect cVec wVec Default
+                let rVec = reflect cVec wVec (asTensorSettings Default)
                 let lhs = toFloats (rVec - cVec)
                 let rhs = toFloats (cVec - wVec) |> Array.map (fun x -> x * Default.Alpha)
                 Expect.all (Array.zip lhs rhs) (fun (a,b) -> abs (a - b) < 1e-8<``optim-space``>)
@@ -201,7 +201,7 @@ module ``Gradient Descent`` =
                 let c, x = cx |> Array.unzip
                 let cVec = optimVector (c |> Array.map(fun c -> c.Get))
                 let xVec = optimVector (x |> Array.map(fun c -> c.Get))
-                let eVec = expand cVec xVec Default
+                let eVec = expand cVec xVec (asTensorSettings Default)
                 let dirOrig = toFloats (xVec - cVec)
                 let dirExp  = toFloats (eVec - cVec)
                 Expect.all (Array.zip dirExp dirOrig) (fun (de,d) -> abs (de - Default.Gamma * d) < 1e-8<``optim-space``>)
@@ -212,7 +212,7 @@ module ``Gradient Descent`` =
                 let c, w = cw |> Array.unzip
                 let cVec = optimVector (c |> Array.map(fun c -> c.Get))
                 let wVec = optimVector (w |> Array.map(fun c -> c.Get))
-                let kVec = contract cVec wVec Default
+                let kVec = contract cVec wVec (asTensorSettings Default)
                 let cF, wF, kF = toFloats cVec, toFloats wVec, toFloats kVec
                 Expect.all (Array.zip3 cF wF kF) (fun (ci,wi,ki) ->
                     (ci <= ki && ki <= wi) || (wi <= ki && ki <= ci)) ""
@@ -222,7 +222,7 @@ module ``Gradient Descent`` =
                 let best, other = bestOther |> Array.unzip
                 let bestVec = optimVector (best |> Array.map(fun c -> c.Get))
                 let otherVec = optimVector (other |> Array.map(fun c -> c.Get))
-                let shrunk = shrinkTowardsBest bestVec otherVec Default
+                let shrunk = shrinkTowardsBest bestVec otherVec (asTensorSettings Default)
                 let expected = bestVec + (otherVec - bestVec) * Tensors.Typed.ofScalar Default.Sigma
                 let sF, eF = toFloats shrunk, toFloats expected
                 Expect.all (Array.zip sF eF) (fun (a,b) -> abs (a - b) < 1e-8<``optim-space``>)

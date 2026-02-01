@@ -557,23 +557,10 @@ module Language =
 
         let invalidPenalty = mkTensor 1e30
         let internal one = mkTensor 1.0
+        let internal clampLow = mkTensor -1e30
+        let internal clampHi = mkTensor 1e30
 
-        /// If a tensor is infinite or nan, replaces its value with a high
-        /// penalty value (1e30).
-        let nonFiniteToPenalty (x: Tensor) =
-            // // x.clamp(low = -1e30, high = 1e30)
-            // let nanMask = dsharp.isnan x
-            // let infMask = dsharp.isinf x
-            // let nanF = dsharp.cast(nanMask, Dtype.Float64)
-            // let infF = dsharp.cast(infMask, Dtype.Float64)
-            // let badMask = nanF + infF
-            // let goodMask = 1.0 - badMask
-            // let penalty = dsharp.tensor(invalidPenalty, dtype = Dtype.Float64)
-            // x * goodMask + penalty * badMask
-            let d = x.toDouble ()
-            if System.Double.IsFinite d then x else invalidPenalty
-
-        let convertMask mask = dsharp.cast (mask, Dtype.Float64)
+        let convertMask (mask: Tensor) = dsharp.cast (mask, Dtype.Float64)
 
         /// Blends the true and false cases for AD-safe operation, but eagerly
         /// evaluates both sides. If a NaN is present, it will contaminate the
@@ -583,50 +570,47 @@ module Language =
                 match %c with
                 | Bool mask ->
                     let m = convertMask mask
-                    nonFiniteToPenalty %t * m + nonFiniteToPenalty %f * (one - m)
+                    dsharp.add (dsharp.mul (%t, m), dsharp.mul (%f, dsharp.sub (one, m)))
             @>
 
         let private tensorSum (xs: Expr<Tensor> list) : Expr<Tensor> =
             match xs with
             | [] -> failwith "Cannot add an empty list"
-            | [ one ] -> one
-            | _ ->
-                // splice the list into an array, then stack into a tensor
-                let arrExpr = Expr.NewArray(typeof<Tensor>, xs |> List.map (fun e -> e :> Expr))
-                <@ dsharp.sum (dsharp.stack ((%%arrExpr: Tensor[]), 0)) @>
+            | x :: rest -> rest |> List.fold (fun acc e -> <@ dsharp.add (%acc, %e) @>) x
 
-        let private tensorProduct (arr: Tensor[]) =
-            arr |> Array.reduce (fun acc t -> dsharp.mul (acc, t))
-
-        let mul (xs: Expr<Tensor> list) : Expr<Tensor> =
+        let private tensorProduct (xs: Expr<Tensor> list) : Expr<Tensor> =
             match xs with
-            | [] -> <@ mkTensor 1.0 @>
-            | [ x ] -> x
-            | _ ->
-                let arrExpr = Expr.NewArray(typeof<Tensor>, xs |> List.map (fun e -> e :> Expr))
-                <@ tensorProduct (%%arrExpr: Tensor[]) @>
+            | [] -> failwith "Cannot multiply an empty list"
+            | x :: rest -> rest |> List.fold (fun acc e -> <@ dsharp.mul (%acc, %e) @>) x
 
-        let private two = allocateTensor 2.0
-        let private half = allocateTensor 0.5
+
+        let private penalty = allocateTensor 1e6
 
         let inverse fLambda targetExpr loExpr hiExpr tol maxIter =
             let tol = allocateTensor tol
 
             <@
-                let loVal = %loExpr
-                let hiVal = %hiExpr
-                let range = dsharp.sub (hiVal, loVal)
-                let n = dsharp.log (range / tol) / dsharp.log two
-                let maxIter = min (int (System.Math.Ceiling(n.toDouble ()))) maxIter
-                let midpoint = (loVal + hiVal) * half
+                let interval =
+                    Statistics.RootFinding.Tensor.Interval.identify
+                        500
+                        penalty
+                        (%%fLambda: Tensor -> Tensor)
+                        %targetExpr
+                        %loExpr
+                        %hiExpr
 
-                Statistics.RootFinding.Tensor.newtonRaphson
-                    (%%fLambda: Tensor -> Tensor)
-                    %targetExpr
-                    midpoint
-                    %loExpr
-                    %hiExpr
-                    maxIter
+                let x =
+                    Statistics.RootFinding.Tensor.refinedGrid
+                        (%%fLambda: Tensor -> Tensor)
+                        %targetExpr
+                        interval.Grid
+                        interval.Values
+                        interval.Low
+                        interval.High
+
+                let mask = interval.InRange
+                let invMask = one - mask
+                mask * x + invMask * interval.Penalty
             @>
 
         let getEnvironment eVar name =
@@ -667,7 +651,7 @@ module Language =
               thisVal = <@ (%%Expr.Var xVar: TypedTensor<Scalar, ModelSystem.state>).Value @>
               add = tensorSum
               sub = fun (l, r) -> <@ dsharp.sub (%l, %r) @>
-              mul = mul
+              mul = tensorProduct
               div = fun (l, r) -> <@ dsharp.div (%l, %r) @>
               pow = fun (l, r) -> <@ dsharp.pow (%l, %r) @>
               log = fun e -> <@ dsharp.log %e @>
@@ -721,19 +705,19 @@ module Language =
               constValLift =
                 fun one n ->
                     let tensor = mkTensor n
-                    <@ %one * tensor @>
+                    <@ dsharp.mul (%one, tensor) @>
               parameter = fun name -> <@ (%%Expr.Var pVar: TypedTensor<Vector, ``parameter``>).Value.[pIndex.[name]] @>
               environment = fun _ -> failwith "Environment not supported in measures"
               timeVal = <@ mkTensor (float (%%Expr.Var tIdxVar: int)) @>
               thisVal = <@ (%%Expr.Var thisVar: TypedTensor<Scalar, ModelSystem.state>).Value @>
               add = tensorSum
               sub = fun (l, r) -> <@ dsharp.sub (%l, %r) @>
-              mul = mul
+              mul = tensorProduct
               div = fun (l, r) -> <@ dsharp.div (%l, %r) @>
               pow = fun (l, r) -> <@ dsharp.pow (%l, %r) @>
               log = fun e -> <@ dsharp.log %e @>
               exp = fun e -> <@ dsharp.exp %e @>
-              modulo = fun (l, r) -> <@ %l - %r * dsharp.floor (%l / %r) @>
+              modulo = fun (l, r) -> <@ %l - %r * dsharp.floor (dsharp.div (%l, %r)) @>
               cond = fun (c, t, f) -> blendConditional c t f
               label = fun (_, m) -> m
               invalid = fun () -> <@ invalidPenalty @>

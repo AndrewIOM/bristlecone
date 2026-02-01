@@ -24,35 +24,38 @@ module EndConditions =
             Continue
 
     /// Given a list of solutions, which are ordered most recent first,
-    /// returns `true` if there are at least `chains` recent results, and
+    /// returns `true` if there are at least `nRecent` recent results, and
     /// the change within the recent results is no more than `tolerance`.
-    let stoppedImproving chains (minimums: Solution list) =
-        if minimums |> List.length < chains then
-            false
-        else
-            (minimums
-             |> List.map fst
-             |> List.take chains
-             |> List.pairwise
-             |> List.sumBy (fun (n, old) -> max 0.<``-logL``> (old - n)) // Captures backwards jumps
-             |> (fun x ->
-                 printfn "Better by %f" x
-                 x))
-            <= defaultTolerance
-
-    let noImprovement: EndCondition =
+    let noImprovementRecently nRecent : EndCondition =
         fun results iteration ->
-            let imp =
-                results
-                |> List.map fst
-                |> List.pairwise
-                |> List.averageBy (fun (n, old) -> if n > old then n - old else old - n) // Mean change in objective value
+            if iteration < nRecent then
+                Continue
+            else
+                let imp =
+                    results
+                    |> List.map fst
+                    |> List.take (Units.removeUnitFromInt nRecent)
+                    |> List.pairwise
+                    |> List.sumBy (fun (n, old) -> max 0.<``-logL``> (old - n)) // Captures backwards jumps
 
-            if imp <= defaultTolerance then NoImprovement else Continue
+                if imp <= defaultTolerance then NoImprovement else Continue
+
+    let noImprovement interval : EndCondition =
+        fun results iteration ->
+            if iteration % interval = 0<iteration> && iteration > 0<iteration> then
+                let imp =
+                    results
+                    |> List.map fst
+                    |> List.pairwise
+                    |> List.averageBy (fun (n, old) -> if n > old then n - old else old - n) // Mean change in objective value
+
+                if imp <= defaultTolerance then NoImprovement else Continue
+            else
+                Continue
 
     let improvementCount count interval : EndCondition =
         fun results iteration ->
-            if iteration % interval = 0<iteration> then
+            if iteration % interval = 0<iteration> && iteration > 0<iteration> then
                 let i =
                     results
                     |> List.pairwise
@@ -277,4 +280,4 @@ module EndConditions =
 
         /// Composite end conditions well-suited to simulated annealing.
         let simulatedAnneal tol =
-            combineEndConditions [ noImprovement; improvementCount 3 100<iteration> ]
+            combineEndConditions [ noImprovement 100<iteration>; improvementCount 3 100<iteration> ]

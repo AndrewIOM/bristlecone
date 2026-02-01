@@ -1414,53 +1414,66 @@ module Amoeba =
             { Dim: int
               Solutions: Solution[] }
 
-            member this.Size = this.Solutions.Length
+            /// If well-formed, size should equal Dim + 1.
+            member this.Vertices = this.Solutions.Length
 
             member this.Best = this.Solutions.[0]
 
-            member this.Worst = this.Solutions.[this.Size - 1]
+            member this.Worst = this.Solutions.[this.Vertices - 1]
 
         type Settings =
             { Alpha: float
               Sigma: float
               Gamma: float
-              Rho: float
-              Size: int }
+              Rho: float }
 
         let Default =
             { Alpha = 1.
               Sigma = 0.5
               Gamma = 2.
-              Rho = 0.5
-              Size = 3 }
+              Rho = 0.5 }
 
-        let fscale (s: float) = Tensors.Typed.ofScalar s
+        type SettingsT =
+            { Alpha: Tensors.TypedTensor<Tensors.Scalar, 1>
+              Sigma: Tensors.TypedTensor<Tensors.Scalar, 1>
+              Gamma: Tensors.TypedTensor<Tensors.Scalar, 1>
+              Rho: Tensors.TypedTensor<Tensors.Scalar, 1> }
+
+        let asTensorSettings (s: Settings) =
+            { Alpha = Tensors.Typed.ofScalar s.Alpha
+              Sigma = Tensors.Typed.ofScalar s.Sigma
+              Gamma = Tensors.Typed.ofScalar s.Gamma
+              Rho = Tensors.Typed.ofScalar s.Rho }
 
         let replace (a: Amoeba) (s: Solution) =
-            let last = a.Size - 1
-            let a' = Array.copy a.Solutions
-            a'.[last] <- s
-
             { a with
-                Solutions = a' |> Array.sortBy fst }
+                Solutions = a.Solutions |> Array.updateAt (a.Vertices - 1) s |> Array.sortBy fst }
+
+        let private one = Tensors.Typed.ofScalar 1.
 
         let centroid (a: Amoeba) =
-            let pts = a.Solutions.[0 .. a.Size - 2] |> Array.map snd
+            let pts = a.Solutions.[0 .. a.Vertices - 2] |> Array.map snd
             let sum = pts |> Array.reduce (+)
-            sum * (Tensors.Typed.ofScalar 1. / Tensors.Typed.ofScalar (float a.Dim))
+            sum * (one / Tensors.Typed.ofScalar (float (a.Vertices - 1)))
 
-        let reflect (c: Point) (w: Point) (s: Settings) = c + (c - w) * fscale s.Alpha
+        let reflect (c: Point) (w: Point) (s: SettingsT) = c + (c - w) * s.Alpha
 
-        let expand (c: Point) (r: Point) (s: Settings) = c + (r - c) * fscale s.Gamma
+        let expand (c: Point) (r: Point) (s: SettingsT) = c + (r - c) * s.Gamma
 
-        let contract (c: Point) (w: Point) (s: Settings) = c + (w - c) * fscale s.Rho
+        let contract (c: Point) (w: Point) (s: SettingsT) = c + (w - c) * s.Rho
 
-        let shrinkTowardsBest (best: Point) (x: Point) (s: Settings) = best + (x - best) * fscale s.Sigma
+        let shrinkTowardsBest (best: Point) (x: Point) (s: SettingsT) = best + (x - best) * s.Sigma
 
-        let evaluate (f: Objective) (x: Point) = f x, x
+        let toFloatLogL (l, p) =
+            let l = Tensors.Typed.toFloatScalar l
+
+            if Units.isFinite l then
+                l, p
+            else
+                System.Double.MaxValue * 1.<``-logL``>, p
+
+        let evaluate (f: Objective) (x: Point) = (f x, x) |> toFloatLogL
         let valueOf (s: Solution) = fst s
-
-        let toFloatLogL (l, p) = Tensors.Typed.toFloatScalar l, p
 
         let shrink (a: Amoeba) (f: Objective) s =
             let best = snd a.Best
@@ -1468,39 +1481,47 @@ module Amoeba =
             { a with
                 Solutions =
                     a.Solutions
+                    |> Array.tail // Skip best point
                     |> Array.map (fun (_, xi) -> shrinkTowardsBest best xi s)
-                    |> Array.map (evaluate f >> toFloatLogL) }
+                    |> Array.map (evaluate f)
+                    |> Array.append [| a.Best |] }
 
-        let update (a: Amoeba) (f: Objective) (s: Settings) =
+        let update (a: Amoeba) (f: Objective) (s: SettingsT) =
             let c = centroid a
 
-            let rv, r = reflect c (snd a.Worst) s |> evaluate f |> toFloatLogL
+            let rv, r = reflect c (snd a.Worst) s |> evaluate f
 
-            if valueOf a.Best <= rv && rv < valueOf a.Solutions.[a.Size - 2] then
-                replace a (rv, r)
-
-            elif rv < valueOf a.Best then
-                let ev, e = expand c r s |> evaluate f |> toFloatLogL
+            match rv with
+            | v when valueOf a.Best <= v && v < valueOf a.Solutions.[a.Vertices - 2] -> replace a (rv, r)
+            | v when v < valueOf a.Best ->
+                let ev, e = expand c r s |> evaluate f
                 if ev < rv then replace a (ev, e) else replace a (rv, r)
-
-            else
-                let cv, cpt = contract c (snd a.Worst) s |> evaluate f |> toFloatLogL
+            | _ ->
+                let cv, cpt = contract c (snd a.Worst) s |> evaluate f
 
                 if cv < valueOf a.Worst then
                     replace a (cv, cpt)
                 else
                     shrink a f s
 
-        let solve settings rng writeOut endCondition domain _ f =
+        let solve settings rng writeOut endCondition domain startPoint f =
             let dim = Array.length domain
+            let nVertices = dim + 1
+
+            let settings = asTensorSettings settings
+
+            if Option.isSome startPoint then
+                writeOut
+                <| GeneralEvent
+                    "Warning: a fixed start point was set, but this Nelder-Mead implementation does not support one."
 
             let start =
-                [| for _ in 1 .. settings.Size -> Initialise.tryGenerateTheta f domain rng 1000 |]
+                [| for _ in 1..nVertices -> Initialise.tryGenerateTheta f domain rng 10000 |]
                 |> Array.map (fun r ->
                     match r with
                     | Ok r -> r
                     | Error _ -> failwith "Could not generate theta")
-                |> Array.map (evaluate f >> toFloatLogL)
+                |> Array.map (evaluate f)
                 |> Array.sortBy fst
 
             let amoeba = { Dim = dim; Solutions = start }
@@ -1548,6 +1569,9 @@ module Amoeba =
                         )
 
                         [||])
+
+            if amoebaResults.Length = 0 then
+                failwith "No valid amoeba results were generated."
 
             // Drop worst 20% of likelihoods
             let mostLikely = amoebaResults |> Array.map List.head |> Array.minBy fst

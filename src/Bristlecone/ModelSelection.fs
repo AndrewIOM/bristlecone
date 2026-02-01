@@ -24,7 +24,11 @@ module ResultSet =
     /// <typeparam name="'hypothesis"></typeparam>
     /// <typeparam name="'a">An estimation result</typeparam>
     /// <returns></returns>
-    let arrangeResultSets<'subject, 'hypothesis> (subjects: 'subject seq) (hypotheses: 'hypothesis seq) getResults =
+    let arrangeResultSets<'subject, 'hypothesis, 'date, 'timeunit, 'timespan>
+        (subjects: 'subject seq)
+        (hypotheses: 'hypothesis seq)
+        (getResults: 'subject -> 'hypothesis -> EstimationResult<'date, 'timeunit, 'timespan> seq)
+        =
         Seq.allPairs subjects hypotheses
         |> Seq.map (fun (s, h) ->
             let r = getResults s h

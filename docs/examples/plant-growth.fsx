@@ -38,8 +38,6 @@ open Bristlecone
 open Bristlecone.Language
 open Bristlecone.Time
 
-DiffSharp.
-
 (**
 ### Defining the models
 
