@@ -1433,25 +1433,20 @@ module Amoeba =
               Rho = 0.5 }
 
         type SettingsT =
-            { Alpha: Tensors.TypedTensor<Tensors.Scalar,1>
-              Sigma: Tensors.TypedTensor<Tensors.Scalar,1>
-              Gamma: Tensors.TypedTensor<Tensors.Scalar,1>
-              Rho: Tensors.TypedTensor<Tensors.Scalar,1> }
+            { Alpha: Tensors.TypedTensor<Tensors.Scalar, 1>
+              Sigma: Tensors.TypedTensor<Tensors.Scalar, 1>
+              Gamma: Tensors.TypedTensor<Tensors.Scalar, 1>
+              Rho: Tensors.TypedTensor<Tensors.Scalar, 1> }
 
-        let asTensorSettings (s:Settings) =
-            {
-                Alpha = Tensors.Typed.ofScalar s.Alpha
-                Sigma = Tensors.Typed.ofScalar s.Sigma
-                Gamma = Tensors.Typed.ofScalar s.Gamma
-                Rho = Tensors.Typed.ofScalar s.Rho
-            }
+        let asTensorSettings (s: Settings) =
+            { Alpha = Tensors.Typed.ofScalar s.Alpha
+              Sigma = Tensors.Typed.ofScalar s.Sigma
+              Gamma = Tensors.Typed.ofScalar s.Gamma
+              Rho = Tensors.Typed.ofScalar s.Rho }
 
         let replace (a: Amoeba) (s: Solution) =
             { a with
-                Solutions = 
-                    a.Solutions
-                    |> Array.updateAt (a.Vertices - 1) s
-                    |> Array.sortBy fst }
+                Solutions = a.Solutions |> Array.updateAt (a.Vertices - 1) s |> Array.sortBy fst }
 
         let private one = Tensors.Typed.ofScalar 1.
 
@@ -1470,10 +1465,13 @@ module Amoeba =
 
         let toFloatLogL (l, p) =
             let l = Tensors.Typed.toFloatScalar l
-            if Units.isFinite l then l, p
-            else System.Double.MaxValue * 1.<``-logL``>, p
 
-        let evaluate (f: Objective) (x: Point) = (f x,x) |> toFloatLogL
+            if Units.isFinite l then
+                l, p
+            else
+                System.Double.MaxValue * 1.<``-logL``>, p
+
+        let evaluate (f: Objective) (x: Point) = (f x, x) |> toFloatLogL
         let valueOf (s: Solution) = fst s
 
         let shrink (a: Amoeba) (f: Objective) s =
@@ -1493,14 +1491,17 @@ module Amoeba =
             let rv, r = reflect c (snd a.Worst) s |> evaluate f
 
             match rv with
-            | v when valueOf a.Best <= v && v < valueOf a.Solutions.[a.Vertices - 2] ->
-                replace a (rv, r)
+            | v when valueOf a.Best <= v && v < valueOf a.Solutions.[a.Vertices - 2] -> replace a (rv, r)
             | v when v < valueOf a.Best ->
                 let ev, e = expand c r s |> evaluate f
                 if ev < rv then replace a (ev, e) else replace a (rv, r)
             | _ ->
                 let cv, cpt = contract c (snd a.Worst) s |> evaluate f
-                if cv < valueOf a.Worst then replace a (cv, cpt) else shrink a f s
+
+                if cv < valueOf a.Worst then
+                    replace a (cv, cpt)
+                else
+                    shrink a f s
 
         let solve settings rng writeOut endCondition domain startPoint f =
             let dim = Array.length domain
@@ -1508,11 +1509,13 @@ module Amoeba =
 
             let settings = asTensorSettings settings
 
-            if Option.isSome startPoint
-            then writeOut <| GeneralEvent "Warning: a fixed start point was set, but this Nelder-Mead implementation does not support one."
+            if Option.isSome startPoint then
+                writeOut
+                <| GeneralEvent
+                    "Warning: a fixed start point was set, but this Nelder-Mead implementation does not support one."
 
             let start =
-                [| for _ in 1 .. nVertices -> Initialise.tryGenerateTheta f domain rng 10000 |]
+                [| for _ in 1..nVertices -> Initialise.tryGenerateTheta f domain rng 10000 |]
                 |> Array.map (fun r ->
                     match r with
                     | Ok r -> r
@@ -1566,7 +1569,8 @@ module Amoeba =
 
                         [||])
 
-            if amoebaResults.Length = 0 then failwith "No valid amoeba results were generated."
+            if amoebaResults.Length = 0 then
+                failwith "No valid amoeba results were generated."
 
             // Drop worst 20% of likelihoods
             let mostLikely = amoebaResults |> Array.map List.head |> Array.minBy fst
