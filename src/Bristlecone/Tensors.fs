@@ -45,6 +45,9 @@ module Tensors =
         static member (-)(a: TypedTensor<Vector, 'u>, b: TypedTensor<Vector, 'u>) : TypedTensor<Vector, 'u> =
             { Inner = a.Value - b.Value }
 
+        static member (/)(a: TypedTensor<Vector, 'u>, b: TypedTensor<Vector, 'v>) : TypedTensor<Vector, 'u / 'v> =
+            { Inner = a.Value / b.Value }
+
         // Vector–Scalar broadcast
         static member (*)(v: TypedTensor<Vector, 'u>, s: TypedTensor<Scalar, 'v>) : TypedTensor<Vector, 'u * 'v> =
             { Inner = v.Value * s.Value }
@@ -96,6 +99,8 @@ module Tensors =
         let logScalar (a: TypedTensor<Scalar, 'u>) : TypedTensor<Scalar, 1> = { Inner = a.Value.log () }
 
         let logVector (a: TypedTensor<Vector, 'u>) : TypedTensor<Vector, 1> = { Inner = a.Value.log () }
+
+        let expVector (a: TypedTensor<Vector, 1>) : TypedTensor<Vector, 1> = { Inner = a.Value.exp () }
 
         let square (x: TypedTensor<Scalar, 'u>) : TypedTensor<Scalar, 'u^2> = { Inner = x.Value ** 2.0 }
 
@@ -261,5 +266,9 @@ module Tensors =
     /// in DiffSharp for working with raw tensors.
     module Unsafe =
         let logicalNot (b: Tensor) = dsharp.eq (b, dsharp.zerosLike b)
-        let logicalOr (a: Tensor) (b: Tensor) = dsharp.gt (a + b, dsharp.zerosLike a)
-        let logicalAnd (a: Tensor) (b: Tensor) = dsharp.eq (a + b, dsharp.onesLike a)
+
+        let logicalOr (a: Tensor) (b: Tensor) =
+            dsharp.gt (dsharp.add (a, b), dsharp.zerosLike a)
+
+        let logicalAnd (a: Tensor) (b: Tensor) =
+            dsharp.eq (dsharp.add (a, b), dsharp.onesLike a)

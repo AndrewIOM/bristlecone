@@ -3,7 +3,7 @@
 title: The long-term ecological detective: Holocene ecosystem functioning
 category: Examples
 categoryindex: 3
-index: 1
+index: 4
 ---
 
 [![Script]({{root}}/img/badge-script.svg)]({{root}}/{{fsdocs-source-basename}}.fsx)&emsp;
@@ -288,7 +288,7 @@ We can fit the ecological models to data by defining an estimation engine
 that contains the method that will be applied for model fitting:
 *)
 
-let engine =
+let engine: EstimationEngine.EstimationEngine<DatingMethods.Radiocarbon<``cal yr BP``>,float<``cal yr BP``>,year,1> =
     Bristlecone.mkContinuous ()
     |> Bristlecone.withCustomOptimisation ( Optimisation.MonteCarlo.Filzbach.filzbach
            { Optimisation.MonteCarlo.Filzbach.FilzbachSettings.Default with BurnLength = Optimisation.EndConditions.atIteration 200000<iteration> })
@@ -321,5 +321,26 @@ let ts =
 We can run an individual model fit like so:
 *)
 
-let result =
-    Bristlecone.tryFit engine endCond ts hypotheses.[5].Model
+open Bristlecone.Workflow
+
+module Settings =
+    let logger = Logging.Console.logger 1000<iteration>
+    let replicates = 3
+    let cache = __SOURCE_DIRECTORY__ + "cached/"
+
+let orchestrator = Orchestration.OrchestrationAgent(Settings.logger, System.Environment.ProcessorCount, false)
+
+let runAll () =
+
+    (hypotheses, [ 1 .. Settings.replicates ])
+    ||> Seq.map2 (fun h _ ->
+        async {
+            let result = Bristlecone.fit engine endCond ts h.Model
+            Data.EstimationResult.saveAll (fun d -> d.ToString()) Settings.cache "loch-duban" h.ReferenceCode None result
+            return result
+        }
+    )
+    |> Seq.iter (Orchestration.OrchestrationMessage.StartWorkPackage >> orchestrator.Post)
+
+runAll ()
+
