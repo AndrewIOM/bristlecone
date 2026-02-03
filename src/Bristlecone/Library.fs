@@ -85,6 +85,10 @@ module Bristlecone =
         { engine with
             OptimiseWith = Optimisation.MonteCarlo.randomWalk tuning }
 
+    let withBristleconeOptimiser engine =
+        { engine with
+            OptimiseWith = Optimisation.MonteCarlo.bristleconeSampler 0.1<``optim-space``> }
+
     let withGradientDescent engine =
         { engine with
             OptimiseWith = Optimisation.Amoeba.single Optimisation.Amoeba.Solver.Default }

@@ -106,6 +106,12 @@ module Tensors =
 
         let squareVector (x: TypedTensor<Vector, 'u>) : TypedTensor<Vector, 'u^2> = { Inner = x.Value ** 2.0 }
 
+        /// Squared Euclidean length of a vector.
+        let squaredLength (v: TypedTensor<Vector, 'u>) : TypedTensor<Scalar, 'u ^ 2> =
+            let inner = v.Value
+            let sq = dsharp.sum (dsharp.mul(inner,inner))
+            { Inner = sq }
+
         let sqrtScalar (x: TypedTensor<Scalar, 'u^2>) : TypedTensor<Scalar, 'u> = { Inner = x.Value.sqrt () }
 
         let dot (a: TypedTensor<Vector, 'u>) (b: TypedTensor<Vector, 'u>) : TypedTensor<Scalar, 'u^2> =

@@ -8,18 +8,15 @@ open Bristlecone.EstimationEngine.Optimisation
 module None =
 
     /// An optimisation function that calculates the value of `f` using
-    /// the given bounds. Use when optimisation of the objective is not required.
+    /// the given minimum bound. Use when optimisation of the objective is not required.
     let none: Optimiser =
         InDetachedSpace
         <| fun _ writeOut _ domain _ f ->
             writeOut
             <| GeneralEvent "Skipping optimisation: only the result of the given parameters will be computed"
 
-            let point = [| for (min, _, _) in domain -> min |] |> Tensors.Typed.ofVector
-
+            let point = [| for min, _, _ in domain -> min |] |> Tensors.Typed.ofVector
             writeOut <| GeneralEvent(sprintf "Parameters under test are %A" point)
-
-
             [ f point |> Tensors.Typed.toFloatScalar, point ]
 
 
@@ -984,28 +981,23 @@ module MonteCarlo =
             { HeatStepLength: EndCondition
               HeatRamp: float -> float
               TemperatureCeiling: float option
+              TemperatureFloor: float option
               BoilingAcceptanceRate: float
               InitialTemperature: float
-              PreTuneLength: EndCondition
               Tuning: Tuning.TuningSettings
-              AnnealStepLength: EndCondition }
+              PreTuneEnd: EndCondition
+              AnnealStepEnd: EndCondition }
 
             static member Default =
-                { HeatStepLength = EndConditions.atIteration 50<iteration>
+                { HeatStepLength = EndConditions.Profiles.SimulatedAnnealing.heating
                   HeatRamp = fun t -> t * 1.10
                   BoilingAcceptanceRate = 0.85
                   TemperatureCeiling = Some 200.
+                  TemperatureFloor = Some 0.75
                   InitialTemperature = 1.00
-                  PreTuneLength = EndConditions.noImprovement 50<iteration>
+                  PreTuneEnd = EndConditions.whenObjectiveFlat 50<iteration>
                   Tuning = Tuning.TuningSettings.Default
-                  AnnealStepLength = EndConditions.improvementCount 100 100<iteration> }
-
-        // NB Make a plot of sub-plots showing in X-Y space the walking around at each
-        // annealing step of the parameter values, on a pairs of parameters basis. This
-        // would make a nice visualisation of how the algorithm is working. Could do
-        // with plotly.
-
-        // NB Implement better tuning schedules for 
+                  AnnealStepEnd = EndConditions.Profiles.SimulatedAnnealing.annealing }
 
 
         /// Run a homogenous Markov chain recursively until an end condition - `atEnd` - is met.
@@ -1044,12 +1036,13 @@ module MonteCarlo =
 
         /// Cool between homoegenous markov chains according to `cool` schedule.
         /// Each anneal recursion begins from the end of the previous markov chain.
-        let rec anneal writeOut chainEnd annealEnd cool markov temperature point previousBests =
-            let results = point |> markov chainEnd temperature
+        let rec anneal writeOut annealStepEnd (saEnd: EndCondition) (tempFloor: float option) cool markov temperature point previousBests iteration =
+            let results = point |> markov annealStepEnd temperature
             let bestAtTemperature = results |> List.minBy fst
             let history = bestAtTemperature :: previousBests
 
-            if (* annealEnd history *) temperature < 0.75 then
+            let belowT = tempFloor |> Option.map(fun f -> temperature < f) |> Option.defaultValue false
+            if saEnd history iteration <> Continue || belowT then
                 history
             else
                 writeOut
@@ -1059,19 +1052,20 @@ module MonteCarlo =
 
                 anneal
                     writeOut
-                    chainEnd
-                    annealEnd
+                    annealStepEnd
+                    saEnd
+                    tempFloor
                     cool
                     markov
                     (cool temperature (history |> List.length))
-                    bestAtTemperature (*(results |> List.head)*)
+                    (results |> List.head)
                     history
+                    (iteration + 1<iteration>)
 
         /// Heat up temperature until acceptance rate of bad moves is above the threshold `endAcceptanceRate`.
         /// If it becomes impossible to propose a move during heating, then heating ends.
-        let rec heat write endCondition ceiling endAcceptanceRate heatingSchedule markov bestTheta temperature =
-            let chain = markov endCondition temperature bestTheta
-            let min = chain |> List.minBy fst
+        let rec heat write endCondition ceiling endAcceptanceRate heatingSchedule markov history temperature =
+            let chain = markov endCondition temperature (List.head history)
 
             let ar =
                 let a, r =
@@ -1109,16 +1103,16 @@ module MonteCarlo =
                     endAcceptanceRate
                     heatingSchedule
                     markov
-                    min
+                    (chain.Head :: history)
                     (temperature |> heatingSchedule)
             else
-                (temperature, min)
+                chain.Head :: history, temperature
 
         // Given a candidate distribution + machine, run base SA algorithm
         let simulatedAnnealing
             (scale: float<``optim-space``>)
             settings
-            annealEnd
+            endCondition
             (machine: float -> float<``-logL``> -> float)
             (jump: System.Random -> float<``optim-space``> -> float -> unit -> float<``optim-space``>)
             cool
@@ -1134,27 +1128,26 @@ module MonteCarlo =
             let l1 = f theta1
 
             // 2. Chain generator
-            let homogenousChain (scales: float<``optim-space``>[]) e temperature =
+            let homogenousChain (scales: float<``optim-space``>[]) endCond temperature =
                 let propose (scale: float<``optim-space``>[]) (theta: Point) =
                     Array.zip3 (theta |> Typed.toFloatArray) scale domain
                     |> Array.map (fun (x, sc, (_, _, con)) -> constrainJump x (draw' sc temperature ()) 1. con)
                     |> Typed.ofVector
 
-                markovChain writeOut e (propose scales) machine random f temperature
+                markovChain writeOut endCond (propose scales) machine random f temperature
 
             // 3. Tune individual step size based on acceptance rate
             let initialScale = [| 1 .. theta1 |> Typed.length |] |> Array.map (fun _ -> scale)
 
             let tunedScale, l2, theta2 =
-                homogenousChain initialScale settings.PreTuneLength 1. (l1 |> Typed.toFloatScalar, theta1)
+                homogenousChain initialScale settings.PreTuneEnd 1. (l1 |> Typed.toFloatScalar, theta1)
                 |> List.minBy fst
-                // |> tune (initialScale |> Array.map (fun t -> (t, Array.empty))) 1<iteration>
                 |> Tuning.tuneStepSizes writeOut random domain draw' machine f initialScale settings.Tuning
 
             writeOut <| GeneralEvent(sprintf "Tuned = %A" tunedScale)
 
             // 4. Heat up
-            let boilingPoint, min =
+            let heatSolutions, boilingPoint =
                 heat
                     writeOut
                     settings.HeatStepLength
@@ -1162,19 +1155,21 @@ module MonteCarlo =
                     settings.BoilingAcceptanceRate
                     settings.HeatRamp
                     (homogenousChain tunedScale)
-                    (l2, theta2)
+                    [ (l2, theta2) ]
                     settings.InitialTemperature
 
             // 5. Gradually cool down (from best point during heat-up)
             anneal
                 writeOut
-                settings.AnnealStepLength
-                annealEnd
+                settings.AnnealStepEnd
+                endCondition
+                settings.TemperatureFloor
                 (cool boilingPoint)
                 (homogenousChain tunedScale)
                 boilingPoint
-                min
+                heatSolutions.Head
                 []
+                1<iteration>
 
         /// Candidate distribution: Gaussian univariate []
         /// Probability: Boltzmann Machine
@@ -1217,6 +1212,34 @@ module MonteCarlo =
                     writeOut
                     domain
                     f
+
+    /// An optimiser that applies fast simulated annealing (SA) as a tuning phase,
+    /// followed by a true homogeneous MCMC chain. SA ends when it's temperature
+    /// becomes T = 1. Bristlecone library defaults are used for all settings.
+    /// Pass the `EndCondition.Profiles.mcmc` end condition to set the stopping
+    /// conditions for the final end.
+    let bristleconeSampler startingScale : Optimiser =
+        let settings = { SimulatedAnnealing.AnnealSettings.Default with TemperatureFloor = Some 1.0 }
+        let sa = SimulatedAnnealing.fastSimulatedAnnealing startingScale false settings
+        InDetachedSpace
+        <| fun random writeOut endCon domain start (f: Objective) ->
+            let saResult =
+                match sa with
+                | InDetachedSpace fn -> fn random writeOut (fun _ _ -> Continue) domain start f
+                | InTransformedSpace _ -> failwith "not expected"
+            let theta = saResult.Head |> snd
+            let randomWalkCov = TuningMode.covarianceFromBounds 10000 domain random
+            RandomWalk.randomWalk'
+                randomWalkCov
+                1.0
+                theta
+                []
+                random
+                writeOut
+                endCon
+                domain
+                f
+            |> fst
 
 
     /// An adaptation of the Filzbach method (originally by Drew Purves)

@@ -106,6 +106,17 @@ module Distributions =
             fun () -> dist.Sample() |> LanguagePrimitives.FloatWithMeasure<'u>
 
 
+/// <summary>Basic statistical functions for sequences of observations.</summary>
+module Observations =
+
+    let variance (obs: seq<float<'u>>) = 
+        let mean = obs |> Seq.average
+        let sumSqDiff = obs |> Seq.sumBy (fun x ->
+            let diff = x - mean
+            diff * diff)
+        sumSqDiff / float (Seq.length obs - 1)
+
+
 module LinearAlgebra =
 
     open MathNet.Numerics.LinearAlgebra
@@ -153,7 +164,7 @@ module Interpolate =
     let lower ((t1: float<'u ``time index``>, v1)) ((t2: float<'u ``time index``>, v2)) t = v1
 
     /// Use the next point
-    let upper ((t1: float<'u ``time index``>, v1)) ((t2: float<'u ``time index``>, v2)) t = v2
+    let upper ((t1: float<'u ``time index``>, v1)) ((t2: float<'u ``time index``>, v2)) t = v2    
 
 
 module Regression =
