@@ -168,29 +168,53 @@ module EndConditions =
     let stationarySquaredJumpDistance log : EndCondition =
         stationarySquaredJumpDistance' 200 5 1e-3 log
 
-    /// Stops when acceptance rate is not within the
+    /// Stops when acceptance rate is consistently within the
     /// defined range. Used to avoid stopping when not mixing.
-    let whenAcceptanceRateOutside min max interval log : EndCondition =
+    let whenStableAcceptanceRate min max interval intervalsRequired log : EndCondition =
+        let intervalN = Units.removeUnitFromInt interval
+        let required = Units.removeUnitFromInt intervalsRequired
         fun results iteration ->
-            onlyOnInterval interval iteration
-            <| fun () ->
-                let r =
+            onlyOnInterval interval iteration <| fun () ->
+                if iteration < interval * intervalsRequired then Continue else
+                
+                let bins =
                     results
-                    |> List.truncate (Units.removeUnitFromInt interval)
-                    |> List.pairwise
-                    |> List.map (fun (a, b) -> fst a - fst b)
+                    |> List.take (intervalN * required)
+                    |> List.chunkBySize intervalN
 
-                let accepted = r |> List.where ((=) 0.<``-logL``> >> not) |> List.length
-                let ar = float accepted / float r.Length
+                let acceptanceRates =
+                    bins
+                    |> List.map (fun chunk ->
+                        let diffs =
+                            chunk
+                            |> List.pairwise
+                            |> List.map (fun (a, b) -> fst a - fst b)
+
+                        let accepted =
+                            diffs
+                            |> List.where ((=) 0.<``-logL``> >> not)
+                            |> List.length
+
+                        float accepted / float diffs.Length
+                    )
+
+                let stable =
+                    acceptanceRates
+                    |> List.forall (fun ar -> ar >= min && ar <= max)
 
                 let result =
-                    if ar >= min && ar <= max then
-                        OptimStopReason.Stuck
+                    if stable then
+                        OptimStopReason.Custom "Stable"
                     else
                         Continue
 
-                log (GeneralEvent(sprintf "[EndCondition] Acceptance rate = %f [%A]" ar result))
+                log (GeneralEvent(sprintf "[EndCondition] Acceptance rates = %A [%A]" acceptanceRates result))
                 result
+
+    let whenAcceptanceRateOutside min max interval intervalsRequired log : EndCondition =
+        fun results iteration ->
+            let within = whenStableAcceptanceRate min max interval intervalsRequired log results iteration
+            if within = Continue then Custom "Outside AR bound" else Continue
 
     /// <summary>Stop when the rolling variance of the objective stabilises.</summary>
     /// <param name="window">number of recent samples to compare</param>
@@ -216,7 +240,7 @@ module EndConditions =
                     Custom "Variance stabilised"
                 else Continue
 
-    let whenNotMoving movementFloor interval : EndCondition =
+    let whenStuck movementFloor interval : EndCondition =
         fun results iteration ->
             onlyOnInterval interval iteration
             <| fun () ->
@@ -247,8 +271,8 @@ module EndConditions =
                 if atIteration maxIter results iter <> Continue then
                     MaxIterations
                 else if
-                    whenAcceptanceRateOutside 0.15 0.5 regularity log results iter <> Continue
-                    && whenNotMoving 1e-6<``-logL``> regularity results iter <> Stuck
+                    whenStableAcceptanceRate 0.15 0.5 regularity 3 log results iter = Custom "Stable"
+                    && whenStuck 1e-6<``-logL``> regularity results iter = Continue // not stuck
                 then
                     log (GeneralEvent(sprintf "[EndCondition] Well mixed"))
                     Custom "Well mixed"
@@ -271,6 +295,12 @@ module EndConditions =
 
         module SimulatedAnnealing =
 
+            let preTuning =
+                combineAny [
+                    whenVarianceStabilised 200<iteration> 0.10
+                    atIteration 1000<iteration>
+                ]
+
             let heating =
                 combineAny [
                     combineAll [
@@ -286,7 +316,7 @@ module EndConditions =
                 combineAny [
                     whenNoBestValueImprovement 100<iteration>
                     whenStationary 1e-6<``optim-space`` ^2> 50<iteration>
-                    whenAcceptanceRateOutside 0.1 1.0 regularity ignore
+                    whenAcceptanceRateOutside 0.1 1.0 regularity 3 ignore
                     atIteration 2000<iteration>
                 ]
 

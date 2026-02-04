@@ -862,14 +862,44 @@ module MonteCarlo =
         module Tuning =
 
             type TuningSettings =
-                { TuneLength: int<iteration>
+                { MinTuneLength: int<iteration>
+                  MaxTuneLength: int<iteration>
+                  RequiredStableCount: int option
                   TuneN: int<iteration> }
 
                 static member Default =
-                    { TuneLength = 300<iteration>
+                    { MinTuneLength = 300<iteration>
+                      MaxTuneLength = 10000<iteration>
+                      RequiredStableCount = Some 5
                       TuneN = 20<iteration> }
 
-            /// Tune individual parameter step sizes based on acceptance rate.
+            type ParamTuningState<[<Measure>] 's> =
+                { Scale: float<'s>
+                  Window: float<'s> array
+                  StableCount: int }
+
+            /// Update the state of an individual parameter during parameter-wise
+            /// adaptation. Determines if the scale is stable on this change (by
+            /// relative), and keeps track of how many stable changes have been.
+            let internal updateParamState (state: ParamTuningState<'s>) (newScale: float<'s>) =
+                let relChange = abs (newScale - state.Scale) / state.Scale
+                let stable = relChange < 0.05
+                { state with
+                    Scale = newScale
+                    StableCount = if stable then state.StableCount + 1 else state.StableCount
+                    Window = [||] }
+
+            let internal addToWindow (state: ParamTuningState<'s>) (v: float<'s>) =
+                { state with Window = Array.append state.Window [| v |] }
+
+            let internal scalesStable requiredStableCount (states: ParamTuningState<'s>[]) =
+                states |> Array.forall (fun p -> p.StableCount >= requiredStableCount)
+
+            /// Diminishing, parameter-wise adaptation of individual
+            /// parameter step sizes based on acceptance rate. Conforms
+            /// to traditional simulated annealing tuning procedure but
+            /// introduces an early-stop mechanism for if scales settle
+            /// earlier than the configured maximum iteration.
             /// Returns tuned scales and the final point.
             let tuneStepSizes
                 writeOut
@@ -883,9 +913,11 @@ module MonteCarlo =
                 (start: float<``-logL``> * Point)
                 =
 
-                let rec tune (p: (float<``optim-space``> * float<``optim-space``>[])[]) k (l1, theta1) =
-                    let chance = float k / float settings.TuneLength
-                    let parameterToChange = random.Next(0, p.Length - 1)
+                let rec tune (p: ParamTuningState<``optim-space``>[]) k history =
+                    let chance : int = k / settings.MaxTuneLength
+                    let parameterToChange =
+                        if p.Length = 1 then 0
+                        else random.Next(0, p.Length)
 
                     let scalesToChange =
                         p
@@ -893,59 +925,83 @@ module MonteCarlo =
 
                     let propose (theta: Point) =
                         Array.zip3 (theta |> Typed.toFloatArray) scalesToChange domain
-                        |> Array.map (fun (x, ((ti, prev), shouldChange), (_, _, con)) ->
+                        |> Array.map (fun (x, (pState, shouldChange), (_, _, con)) ->
                             if shouldChange then
-                                constrainJump x (draw ti 1. ()) 1. con
+                                constrainJump x (draw pState.Scale 1. ()) 1. con
                             else
                                 x)
                         |> Typed.ofVector
 
-                    match tryMove propose (machine 1.) random f 50000 (l1, theta1) with
+                    match tryMove propose (machine 1.) random f 50000 (List.head history) with
                     | None -> failwith "Could not move in parameter space."
                     | Some(lNew, thetaNew) ->
-                        let newScaleInfo =
+                        let newScales =
                             scalesToChange
                             |> Array.zip (thetaNew |> Typed.toFloatArray)
-                            |> Array.map (fun (v, ((ti, prev), changed)) ->
-                                let ti, prev =
+                            |> Array.map (fun (v, (pState, changed)) ->
+                                let pState =
                                     if changed then
-                                        (ti, Array.append prev [| v |])
+                                        addToWindow pState v
                                     else
-                                        (ti, prev)
+                                        pState
 
-                                if prev.Length * 1<iteration> = settings.TuneN then
+                                if pState.Window.Length * 1<iteration> = settings.TuneN then
                                     let changes =
-                                        prev |> Array.pairwise |> Array.where (fun (a, b) -> a <> b) |> Array.length
+                                        pState.Window |> Array.pairwise |> Array.where (fun (a, b) -> a <> b) |> Array.length
 
-                                    match float changes / float settings.TuneN with
-                                    | ar when ar < 0.35 -> (ti * exp (-1.0 * (0.35 - ar)), Array.empty)
-                                    | ar when ar > 0.50 -> (ti * exp (1.0 * (ar - 0.50)), Array.empty)
-                                    | _ -> (ti, Array.empty)
+                                    let newScale =
+                                        match Units.intToFloat changes / Units.intToFloat settings.TuneN with
+                                        | ar when ar < 0.35</iteration> -> pState.Scale * exp (-1.0 * (0.35 - Units.removeUnitFromFloat ar))
+                                        | ar when ar > 0.50</iteration> -> pState.Scale * exp (1.0 * (Units.removeUnitFromFloat ar - 0.50))
+                                        | _ -> pState.Scale
+
+                                    updateParamState pState newScale
                                 else
-                                    (ti, prev))
+                                    pState)
 
-                        if k % 1000<iteration> = 0<iteration> then
+                        if k % 100<iteration> = 0<iteration> then
                             writeOut
                             <| GeneralEvent(
                                 sprintf
                                     "Tuning is at %A (k=%i/%i)"
-                                    (newScaleInfo |> Array.map fst)
+                                    (newScales |> Array.map (fun s -> s.Scale))
                                     k
-                                    settings.TuneLength
+                                    settings.MinTuneLength
                             )
 
-                        if k < settings.TuneLength then
+                        let stable =
+                            match settings.RequiredStableCount with
+                            | None -> false
+                            | Some reqStableCount ->
+                                k > settings.MinTuneLength
+                                && scalesStable reqStableCount newScales
+
+                        if k >= settings.MaxTuneLength then
+                            writeOut <| GeneralEvent "Tuning finished: reached maximum tuning iterations"
+                            newScales |> Array.map (fun s -> s.Scale), lNew, thetaNew
+                        else if stable then
+                            writeOut <| GeneralEvent (
+                                sprintf "Tuning finished early: scales stable for all parameters (required %i consecutive stable updates)"
+                                    settings.RequiredStableCount.Value
+                            )
+                            newScales |> Array.map (fun s -> s.Scale), lNew, thetaNew
+                        else
                             writeOut
                             <| OptimisationEvent
                                 { Iteration = k
                                   Likelihood = lNew
                                   Theta = thetaNew |> Typed.toFloatArray }
 
-                            tune newScaleInfo (k + 1<iteration>) (lNew, thetaNew)
-                        else
-                            (newScaleInfo |> Array.map fst, lNew, thetaNew)
+                            tune newScales (k + 1<iteration>) ((lNew, thetaNew) :: history)
 
-                tune (initialScale |> Array.map (fun t -> (t, Array.empty))) 1<iteration> start
+                let initialStates =
+                    initialScale
+                    |> Array.map (fun s ->
+                        { Scale = s
+                          Window = [||]
+                          StableCount = 0 })
+
+                tune initialStates 1<iteration> [ start ]
 
             /// An exploration method that perturbs around a point in optimisation-space.
             /// Used for profile likelihood in the Confidence module.
@@ -995,7 +1051,7 @@ module MonteCarlo =
                   TemperatureCeiling = Some 200.
                   TemperatureFloor = Some 0.75
                   InitialTemperature = 1.00
-                  PreTuneEnd = EndConditions.whenObjectiveFlat 50<iteration>
+                  PreTuneEnd = EndConditions.Profiles.SimulatedAnnealing.preTuning
                   Tuning = Tuning.TuningSettings.Default
                   AnnealStepEnd = EndConditions.Profiles.SimulatedAnnealing.annealing }
 
@@ -1255,7 +1311,7 @@ module MonteCarlo =
                 { TuneAfterChanges = 50
                   MaxScaleChange = 100.00
                   MinScaleChange = 0.0010
-                  BurnLength = EndConditions.atIteration 2000<iteration> }
+                  BurnLength = EndConditions.Profiles.mcmcTuningStep 100000<iteration> ignore }
 
         type ParameterTuning<[<Measure>] 'u> =
             { Scale: float<'u>
