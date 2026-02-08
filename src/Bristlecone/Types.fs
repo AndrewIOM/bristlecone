@@ -10,7 +10,7 @@ module internal Units =
 
     let removeUnitFromInt (v: int<_>) = int v
     let removeUnitFromFloat (v: float<_>) = float v
-
+    let tagUnit<[<Measure>] 'u> (v:float) : float<'u> = LanguagePrimitives.FloatWithMeasure<'u> v
     let retype (v: float<'u1>) : float<'u2> =
         v |> removeUnitFromFloat |> LanguagePrimitives.FloatWithMeasure<'u2>
 

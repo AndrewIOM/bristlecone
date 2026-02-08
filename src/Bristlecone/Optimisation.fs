@@ -40,6 +40,9 @@ module Initialise =
         |> Array.map ((*) 1.<``optim-space``>)
         |> Tensors.Typed.ofVector
 
+    let initScales (domain:Domain) =
+        domain |> Array.map (fun (l, u, _) -> (u - l) / 6.)
+
     /// Assesses if theta is valid based on the provided
     /// constraints.
     let isInvalidTheta theta constraints =
@@ -868,9 +871,9 @@ module MonteCarlo =
                   TuneN: int<iteration> }
 
                 static member Default =
-                    { MinTuneLength = 300<iteration>
+                    { MinTuneLength = 1000<iteration>
                       MaxTuneLength = 10000<iteration>
-                      RequiredStableCount = Some 5
+                      RequiredStableCount = Some 20
                       TuneN = 20<iteration> }
 
             type ParamTuningState<[<Measure>] 's> =
@@ -1067,7 +1070,7 @@ module MonteCarlo =
                 | None ->
                     writeOut
                     <| GeneralEvent(
-                        sprintf "Abandoning chain at iteration %i as could not move after 100 tries." iteration
+                        sprintf "Abandoning at iteration %i as could not move after 100 tries." iteration
                     )
 
                     d
@@ -1076,8 +1079,13 @@ module MonteCarlo =
                         run point d iteration
                     else
                         let state = newPoint :: d
-
-                        if atEnd state iteration <> Continue then
+                        
+                        let shouldEnd = atEnd state iteration
+                        if shouldEnd <> Continue then
+                            writeOut
+                            <| GeneralEvent(
+                                sprintf "Stopping at iteration %i: %A" iteration shouldEnd
+                            )
                             state
                         else
                             writeOut
@@ -1098,12 +1106,13 @@ module MonteCarlo =
             let history = bestAtTemperature :: previousBests
 
             let belowT = tempFloor |> Option.map(fun f -> temperature < f) |> Option.defaultValue false
-            if saEnd history iteration <> Continue || belowT then
+            let shouldEnd = saEnd history iteration
+            if shouldEnd <> Continue || belowT then
                 history
             else
                 writeOut
                 <| GeneralEvent(
-                    sprintf "[Annealing] Best point is %f at temperature %f" (bestAtTemperature |> fst) temperature
+                    sprintf "[Annealing] Ending temperature %f at -logL %f" temperature (bestAtTemperature |> fst)
                 )
 
                 anneal
@@ -1138,12 +1147,12 @@ module MonteCarlo =
             write
             <| GeneralEvent(
                 sprintf
-                    "Heating - Jump average is %f"
+                    "[Heating] Jump average is %f"
                     (chain |> List.map fst |> List.pairwise |> List.averageBy (fun (a, b) -> b - a))
             )
 
             write
-            <| GeneralEvent(sprintf "Heating (T=%f) - AR of bad moves is %f" temperature ar)
+            <| GeneralEvent(sprintf "[Heating] Acceptance of bad moves is %f at T=%f" ar temperature)
 
             let aboveCeiling =
                 if Option.isSome ceiling then
@@ -1166,7 +1175,7 @@ module MonteCarlo =
 
         // Given a candidate distribution + machine, run base SA algorithm
         let simulatedAnnealing
-            (scale: float<``optim-space``>)
+            (initialScale: float<``optim-space``>[])
             settings
             endCondition
             (machine: float -> float<``-logL``> -> float)
@@ -1193,8 +1202,6 @@ module MonteCarlo =
                 markovChain writeOut endCond (propose scales) machine random f temperature
 
             // 3. Tune individual step size based on acceptance rate
-            let initialScale = [| 1 .. theta1 |> Typed.length |] |> Array.map (fun _ -> scale)
-
             let tunedScale, l2, theta2 =
                 homogenousChain initialScale settings.PreTuneEnd 1. (l1 |> Typed.toFloatScalar, theta1)
                 |> List.minBy fst
@@ -1225,19 +1232,20 @@ module MonteCarlo =
                 boilingPoint
                 heatSolutions.Head
                 []
-                1<iteration>
+                1<iteration>, tunedScale
 
         /// Candidate distribution: Gaussian univariate []
         /// Probability: Boltzmann Machine
         let classicalSimulatedAnnealing scale tDependentProposal settings : Optimiser =
             InDetachedSpace
             <| fun random writeOut endCon domain _ (f: Objective) ->
+                let initialScale = [| 1 .. domain.Length |] |> Array.map (fun _ -> scale)
                 let gaussian rnd (scale: float<``optim-space``>) (t: float) =
                     let s = if tDependentProposal then scale * (sqrt t) else scale
                     fun () -> Normal.draw rnd 0.<``optim-space``> s ()
 
                 simulatedAnnealing
-                    scale
+                    initialScale
                     settings
                     endCon
                     Machines.boltzmann
@@ -1246,19 +1254,20 @@ module MonteCarlo =
                     random
                     writeOut
                     domain
-                    f
+                    f |> fst
 
         /// Candidate distribution: Cauchy univariate []
         /// Probability: Bottzmann Machine
         let fastSimulatedAnnealing scale tDependentProposal settings : Optimiser =
             InDetachedSpace
             <| fun random writeOut endCon domain _ (f: Objective) ->
+                let initialScale = [| 1 .. domain.Length |] |> Array.map (fun _ -> scale)
                 let cauchyDraw random scale t =
                     let s = if tDependentProposal then scale * sqrt t else scale
                     Cauchy.draw<``optim-space``> random 0.0<``optim-space``> s
 
                 simulatedAnnealing
-                    scale
+                    initialScale
                     settings
                     endCon
                     Machines.boltzmann
@@ -1267,24 +1276,34 @@ module MonteCarlo =
                     random
                     writeOut
                     domain
-                    f
+                    f |> fst
 
     /// An optimiser that applies fast simulated annealing (SA) as a tuning phase,
     /// followed by a true homogeneous MCMC chain. SA ends when it's temperature
     /// becomes T = 1. Bristlecone library defaults are used for all settings.
     /// Pass the `EndCondition.Profiles.mcmc` end condition to set the stopping
     /// conditions for the final end.
-    let bristleconeSampler startingScale : Optimiser =
+    let bristleconeSampler : Optimiser =
         let settings = { SimulatedAnnealing.AnnealSettings.Default with TemperatureFloor = Some 1.0 }
-        let sa = SimulatedAnnealing.fastSimulatedAnnealing startingScale false settings
         InDetachedSpace
         <| fun random writeOut endCon domain start (f: Objective) ->
-            let saResult =
-                match sa with
-                | InDetachedSpace fn -> fn random writeOut (fun _ _ -> Continue) domain start f
-                | InTransformedSpace _ -> failwith "not expected"
+            let initialScale = Initialise.initScales domain
+            let saResult, saScales =
+                let cauchyDraw random scale t = Cauchy.draw<``optim-space``> random 0.0<``optim-space``> scale
+                SimulatedAnnealing.simulatedAnnealing
+                    initialScale
+                    settings
+                    endCon
+                    SimulatedAnnealing.Machines.boltzmann
+                    cauchyDraw
+                    SimulatedAnnealing.CoolingSchemes.fastCauchyCoolingSchedule
+                    random
+                    writeOut
+                    domain
+                    f
             let theta = saResult.Head |> snd
-            let randomWalkCov = TuningMode.covarianceFromBounds 10000 domain random
+            // TODO: Blend diagonal SA covariance with small empirical covariance from last SA anneal.
+            let randomWalkCov = TuningMode.covarianceFromStandardDeviations 10000 random saScales
             RandomWalk.randomWalk'
                 randomWalkCov
                 1.0
@@ -1337,7 +1356,7 @@ module MonteCarlo =
             let paramRnd = DiscreteUniform.draw random 0 (Typed.length theta - 1)
 
             // Initial proposal scales: 1/6 of parameter range
-            let initialScale = domain |> Array.map (fun (l, u, _) -> (u - l) / 6.)
+            let initialScale = domain |> Initialise.initScales
 
             let l1 = f theta
 

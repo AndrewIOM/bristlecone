@@ -87,7 +87,7 @@ module Bristlecone =
 
     let withBristleconeOptimiser engine =
         { engine with
-            OptimiseWith = Optimisation.MonteCarlo.bristleconeSampler 0.1<``optim-space``> }
+            OptimiseWith = Optimisation.MonteCarlo.bristleconeSampler }
 
     let withGradientDescent engine =
         { engine with
@@ -449,6 +449,7 @@ module Bristlecone =
     /// was successful or not.</returns>
     let tryTestModel
         (engine: EstimationEngine<'date, 'timespan, 'modelTimeUnit, 'state>)
+        endCondition
         (settings: Test.TestSettings<'state, 'date, 'timeunit, 'timespan>)
         (model: ModelSystem<'modelTimeUnit>)
         =
@@ -460,18 +461,17 @@ module Bristlecone =
             sprintf
                 "The data must comply with %i rules after %i tries."
                 settings.GenerationRules.Length
-                settings.Attempts
+                settings.RetryDataGen
         )
 
         result {
-
 
             // Validate settings and generate synthetic data
             let! settings = Test.isValidSettings model settings
 
             // Set conditioning for solver to be the custom start values
             let engine = engine |> withConditioning (Conditioning.Custom settings.StartValues)
-            let! trueData, trueParamPool = Test.Compute.tryGenerateData engine settings model settings.Attempts
+            let! trueData, trueParamPool = Test.Compute.tryGenerateData engine settings model settings.RetryDataGen
 
             // Merge dynamic + environmental data into one coded map
             let mergedData = Map.merge trueData settings.EnvironmentalData (fun dyn _env -> dyn)
@@ -486,13 +486,13 @@ module Bristlecone =
                 tryFit
                     { engine with
                         OptimiseWith = Optimisation.None.none }
-                    settings.EndCondition
+                    endCondition
                     mergedData
                     { model with
                         Parameters = Parameter.Pool.fromEstimated trueParamPool }
 
             // Fit normally (optimisation enabled)
-            let! estimated = tryFit engine settings.EndCondition mergedData model
+            let! estimated = tryFit engine endCondition mergedData model
 
             let paramDiffs: Test.ParameterTestResult list =
                 estimated.Parameters
@@ -539,10 +539,11 @@ module Bristlecone =
     /// <returns>A test result that indicates differences between the expected and actual fit.</returns>
     let testModel
         (engine: EstimationEngine<'date, 'timespan, 'modelTimeUnit, 'state>)
+        endCondition
         (settings: TestSettings<'state, 'date, 'yearUnit, 'timespan>)
         (model: ModelSystem<'modelTimeUnit>)
         =
-        tryTestModel engine settings model |> Result.forceOk
+        tryTestModel engine endCondition settings model |> Result.forceOk
 
     /// <summary>Repeat a model fit many times, removing a single data point at random each time.</summary>
     /// <param name="engine">The estimation engine / fitting method</param>

@@ -64,13 +64,23 @@ module ModelSystem =
     type LikelihoodEval<[<Measure>] 'u> =
         ParameterValueAccessor -> CodedMap<SeriesPair<'u>> -> TypedTensor<Scalar, ``-logL``>
 
-    type Likelihood<[<Measure>] 'u> =
-        { RequiredCodes: LikelihoodRequirement list
-          Evaluate: LikelihoodEval<'u> }
-
-    and LikelihoodRequirement =
+    type LikelihoodRequirement =
         | State of ShortCode.ShortCode
         | Measure of ShortCode.ShortCode
+
+    type Likelihood<[<Measure>] 'u> =
+        { RequiredCodes: LikelihoodRequirement list
+          RequiredParameters: (ShortCode.ShortCode * Parameter.Pool.AnyParameter) list
+          Evaluate: LikelihoodEval<'u> }
+
+        with
+            static member (+) (l1, l2) =
+                { RequiredCodes = l1.RequiredCodes @ l2.RequiredCodes
+                  RequiredParameters = l1.RequiredParameters @ l2.RequiredParameters
+                  Evaluate =
+                    fun getParam seriesMap ->
+                        l1.Evaluate getParam seriesMap
+                        + l2.Evaluate getParam seriesMap }
 
     /// A function that computes a measured system property given a
     /// current (time t) and previous (time t-1) system state.

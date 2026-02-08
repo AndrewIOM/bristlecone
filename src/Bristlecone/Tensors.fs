@@ -45,12 +45,18 @@ module Tensors =
         static member (-)(a: TypedTensor<Vector, 'u>, b: TypedTensor<Vector, 'u>) : TypedTensor<Vector, 'u> =
             { Inner = a.Value - b.Value }
 
+        static member (*)(a: TypedTensor<Vector, 'u>, b: TypedTensor<Vector, 'v>) : TypedTensor<Vector, 'u * 'v> =
+            { Inner = dsharp.mul(a.Value,b.Value) }
+
         static member (/)(a: TypedTensor<Vector, 'u>, b: TypedTensor<Vector, 'v>) : TypedTensor<Vector, 'u / 'v> =
             { Inner = a.Value / b.Value }
 
         // Vector–Scalar broadcast
         static member (*)(v: TypedTensor<Vector, 'u>, s: TypedTensor<Scalar, 'v>) : TypedTensor<Vector, 'u * 'v> =
             { Inner = v.Value * s.Value }
+
+        static member (+)(v: TypedTensor<Vector, 'u>, s: TypedTensor<Scalar, 'u>) : TypedTensor<Vector, 'u> =
+            { Inner = dsharp.add(v.Value,s.Value) }
 
         static member (*)(s: TypedTensor<Scalar, 'u>, v: TypedTensor<Vector, 'v>) : TypedTensor<Vector, 'u * 'v> =
             { Inner = s.Value * v.Value }
@@ -60,9 +66,6 @@ module Tensors =
 
         // Vector–float exponent
         static member ( ** )(v: TypedTensor<Vector, 'u>, p: float) = { Inner = v.Value ** p }
-
-        static member (*)(a: TypedTensor<Vector, 'u>, b: TypedTensor<Vector, 'v>) : TypedTensor<Vector, 'u * 'v> =
-            { Inner = a.Value * b.Value }
 
 
 
