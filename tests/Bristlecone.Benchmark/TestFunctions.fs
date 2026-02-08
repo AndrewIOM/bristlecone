@@ -79,119 +79,125 @@ module LocalMinima =
         let z = x |> Array.sumBy (fun x -> x ** 2. - a * cos (2. * pi * x))
         a * float x.Length + z
 
+
 module Timeseries =
 
+    open Bristlecone
     open Bristlecone.Language
+    open Bristlecone.Time
+    open Bristlecone.ModelLibrary
 
+    /// Classical Lotka–Volterra model to test identifiability of parameters
+    /// in a non-linear ODE system based on count data.
     module PredatorPrey =
 
-        open Bristlecone.Time
-
-        [<Measure>]
-        type prey
-
-        [<Measure>]
-        type predator
-
-        [<Measure>]
-        type km
-
-        [<Measure>]
-        type area = km^2
+        [<Measure>] type prey = 1
+        [<Measure>] type predator = 1
 
         // States
-        let H = state<prey / area> "prey"
-        let L = state<predator / area> "predator"
+        let H = state<1> "prey" // dimensionless count
+        let L = state<1> "predator" // dimensionless count
 
         let predatorPreyBase =
 
             // Parameters
-            let α = parameter "α" notNegative 0.5< / year> 1.5< / year> // Maximum prey per capita growth rate
+            let α = parameter "α" Positive 0.5<1/year> 1.5<1/year> // Maximum prey per‑capita growth rate
+            let β = parameter "β" Positive 0.01<1/(predator * year)> 0.05<1/(predator * year)> // Predation rate coefficient
+            let γ = parameter "γ" Positive 0.1<1/year> 1.0<1/year> // Predator natural mortality rate
+            let δ = parameter "δ" Positive 0.01<1/(prey * year)> 0.1<1/(prey * year)> // Predator growth efficiency
 
-            let β =
-                parameter "β" notNegative 0.01<1 / (predator / area * year)> 0.05<1 / (predator / area * year)> // Predation rate
+            let ``dH/dt``: ModelExpression<prey / year> =
+                (P α - P β * State L) * This<prey>
 
-            let δ = parameter "δ" notNegative 0.5< / year> 1.0< / year> // Natural death rate of lynx in the absence of food
+            let ``dL/dt``: ModelExpression<predator / year> =
+                (-P γ + P δ * State H) * This<predator>
 
-            let γ =
-                parameter "γ" notNegative 0.01<1 / (prey / area * year)> 0.1<1 / (prey / area * year)> // Predator growth efficiency
-
-            let ``dH/dt``: ModelExpression<(prey / area) / year> =
-                P α * This<prey / area> - P β * This<prey / area> * State L
-
-            let ``dL/dt``: ModelExpression<(predator / area) / year> =
-                P γ * State H * This<predator / area> - P δ * This<predator / area>
-
-            Model.empty
+            Model.empty<year>
             |> Model.addRateEquation H ``dH/dt``
             |> Model.addRateEquation L ``dL/dt``
             |> Model.estimateParameter α // Natural growth rate of hares in absence of predation
             |> Model.estimateParameter β // Death rate per encounter of hares due to predation
-            |> Model.estimateParameter δ // Natural death rate of lynx in the absence of food
-            |> Model.estimateParameter γ // Efficiency of turning predated hares into lynx
+            |> Model.estimateParameter γ // Natural death rate of lynx in the absence of food
+            |> Model.estimateParameter δ // Efficiency of turning predated hares into lynx
 
-        let ecologicalParameters = [ "α", "β", "δ", "γ" ]
-
-        let ``predator-prey`` () =
+        let deterministic =
             predatorPreyBase
             |> Model.useLikelihoodFunction (
-                Bristlecone.ModelLibrary.Likelihood.sumOfSquares [ Require.state H; Require.state L ]
+                NegLogLikelihood.SumOfSquares [ Require.state H; Require.state L ]
             )
             |> Model.compile
 
-        let ``predator-prey [with noise]`` () =
+        let σH = parameter "σ[H]" Positive 0.001 0.100
+        let σL = parameter "σ[L]" Positive 0.001 0.100
+
+        let noisy =
+
+            let NLL =
+                NegLogLikelihood.LogNormal (Require.state H) σH +
+                NegLogLikelihood.LogNormal (Require.state L) σL
+
             predatorPreyBase
-            |> Model.estimateParameterOld "ρ" noConstraints -0.500 0.500
-            |> Model.estimateParameterOld "σ[x]" notNegative 0.001 0.100
-            |> Model.estimateParameterOld "σ[y]" notNegative 0.001 0.100
-            |> Model.useLikelihoodFunction (
-                Bristlecone.ModelLibrary.Likelihood.bivariateGaussian (Require.state H) (Require.state L)
-            )
+            |> Model.useLikelihoodFunction NLL
             |> Model.compile
 
+        let test withNoise logger optimise endCondition =
+            
+            let engine =
+                Bristlecone.mkContinuous ()
+                |> Bristlecone.withCustomOptimisation optimise
+                |> Bristlecone.withOutput logger
+                |> Bristlecone.withTimeConversion DateMode.Conversion.Annual.toYears
+
+            let settings =
+                Test.annualSettings
+                |> Test.seriesLength 30
+                |> Test.withObservationError (Require.state H) (Test.Error.normal σH)
+                |> Test.withObservationError (Require.state L) (Test.Error.normal σL)
+                |> Test.rule (Require.state H) (Test.GenerationRules.between 10. 10000.)
+                |> Test.rule (Require.state L) (Test.GenerationRules.between 10. 10000.)
+                |> Test.t1 (Require.state H) 1.0
+                |> Test.t1 (Require.state L) 1.0
+
+            Bristlecone.tryTestModel engine endCondition settings (if withNoise then noisy else deterministic)
+
+
+    /// A two-compartment soil carbon model that represents the fast turnover
+    /// litter pool versus the slower (recalcitrant) litter pool.
     module SoilCarbon =
 
-        open Bristlecone.Time
-
-        [<Measure>]
-        type carbon // e.g. g C
-
-        [<Measure>]
-        type area // e.g. m^2
-
-        [<Measure>]
-        type temp // °C
+        [<Measure>] type gram
+        [<Measure>] type metre
+        [<Measure>] type area = metre^2
+        [<Measure>] type celsius
 
         // States
-        let Cf = state "Cf" // fast pool
-        let Cs = state "Cs" // slow pool
+        let Cf = state<gram/area> "Cf" // fast pool
+        let Cs = state<gram/area> "Cs" // slow pool
 
         // Environmental input: soil temperature
-        let Ts = environment "T"
+        let Ts = environment "T_soil"
 
         // Measurement variables
-        let R = measure "Respiration"
+        let R = measure "respiration"
 
         let soilCarbonBase =
 
             // Parameters
-            let kf = parameter "kf" notNegative 0.001< / day> 0.1< / day> // base decay rate fast pool
-            let ks = parameter "ks" notNegative 0.0001< / day> 0.01< / day> // base decay rate slow pool
-            let Q10 = parameter "Q10" notNegative 1.5 3.0 // temperature sensitivity
-            let alpha = parameter "alpha" notNegative 0.1 0.9 // fraction of fast decay to slow pool
+            let kf = parameter "kf" Positive 0.001< / day> 0.1< / day> // fast pool base decay rate
+            let ks = parameter "ks" Positive 0.0001< / day> 0.01< / day> // slow pool base decay rate
+            let Q10 = parameter "Q10" Positive 1.5 3.0 // temperature sensitivity
+            let alpha = parameter "alpha" Positive 0.1 0.9 // efficiency of humification
 
             // Temperature modifier (Q10 function relative to 10 °C)
-            let tempEffect =
-                (P Q10) ** ((Environment Ts - Constant 10.0<temp>) / Constant 10.0<temp>)
+            let tempEffect = P Q10 ** ((Environment Ts - Constant 10.0<celsius>) / Constant 10.0<celsius>)
 
             // Rate equations
-            let ``dCf/dt``: ModelExpression<(carbon / area) / day> = -(P kf * tempEffect) * This
-
-            let ``dCs/dt``: ModelExpression<(carbon / area) / day> =
-                (P alpha) * (P kf * tempEffect) * Environment Cf - (P ks * tempEffect) * This
+            let ``dCf/dt``: ModelExpression<(gram/area)/day> = -(P kf * tempEffect) * This
+            let ``dCs/dt``: ModelExpression<(gram/area)/day> =
+                P alpha * (P kf * tempEffect) * Environment Cf - (P ks * tempEffect) * This
 
             // Derived measurement: soil respiration flux
-            let respiration: ModelExpression<(carbon / area) / day> =
+            let respiration: ModelExpression<(gram/area)/day> =
                 (P kf * tempEffect) * State Cf + (P ks * tempEffect) * State Cs
 
             Model.empty
@@ -204,244 +210,100 @@ module Timeseries =
             |> Model.estimateParameter alpha
 
         // Deterministic fit
-        let ``soil-carbon`` () =
+        let deterministic =
             soilCarbonBase
-            |> Model.useLikelihoodFunction (Bristlecone.ModelLibrary.Likelihood.sumOfSquares [ Require.measure R ])
+            |> Model.useLikelihoodFunction (NegLogLikelihood.SumOfSquares [ Require.measure R ])
             |> Model.compile
+
+        let sigma = parameter "σ" Positive 0.001<(gram/area)/day> 10.0<(gram/area)/day>
 
         // With Gaussian observation noise
-        let ``soil-carbon [with noise]`` () =
+        let noisy =
+            let NLL = NegLogLikelihood.Normal (Require.measure R) sigma
             soilCarbonBase
-            |> Model.estimateParameterOld "σ" notNegative 0.001 10.0
+            |> Model.useLikelihoodFunction NLL
             |> Model.compile
 
+        let test withNoise logger optimise endCondition =
+            
+            let engine =
+                Bristlecone.mkContinuous ()
+                |> Bristlecone.withCustomOptimisation optimise
+                |> Bristlecone.withOutput logger
+                |> Bristlecone.withTimeConversion DateMode.Conversion.CalendarDates.toDays
 
+            let mkTemperature =
+                Dendro.Environment.Synthetic.genTemperatureSeasonal
+                    10.<celsius> 10.<celsius> 365.<day> 0.
+
+            let settings =
+                Test.defaultSettings
+                |> Test.resolution (Daily 1<day>)
+                |> Test.seriesLength 30
+                |> Test.withObservationError (Require.measure R) (Test.Error.normal sigma)
+                |> Test.rule (Require.measure R) (Test.GenerationRules.alwaysLessThan 1000.)
+                |> Test.withEnvironmentGenBySpan Ts mkTemperature (fun x -> float x.Days * 1.<day>)
+
+            Bristlecone.tryTestModel engine endCondition settings (if withNoise then noisy else deterministic)
+
+
+    /// A discrete-time test model, which represents the temperature-dependence
+    /// of population growth.
     module RickerTemperature =
 
-        open Bristlecone.Time
+        [<Measure>] type individuals = 1
+        [<Measure>] type celsius
 
-        [<Measure>]
-        type individuals
-
-        [<Measure>]
-        type degC
-
-        // State: population size
         let N = state<individuals> "N"
-
-        // Measures
         let logN = measure "logN"
-
-        // Environmental input: temperature anomaly
-        let T = environment "T" // -5.0<degC> 5.0<degC>
+        let temperatureAnomaly = environment<celsius> "T"
 
         let rickerBase: ModelBuilder.ModelBuilder<1> =
 
             // Parameters
-            let r = parameter "r" noConstraints 0.1 2.0 // intrinsic growth rate
-            let K = parameter "K" notNegative 50.<individuals> 500.<individuals> // carrying capacity
-            let beta = parameter "beta" noConstraints -1.0 1.0 // temperature effect
+            let r = parameter "r" NoConstraints 0.1 2.0 // maximum per‑capita growth rate (intrinsic growth rate)
+            let K = parameter "K" Positive 50.<individuals> 500.<individuals> // carrying capacity
+            let beta = parameter "beta" Positive -1.0</celsius> 1.0</celsius> // temperature effect
 
-            // Discrete‑time update:
-            // N_{t+1} = N_t * exp(r * (1 - N_t/K) + beta * T_t)
-            let update: ModelExpression<individuals> =
-                This * exp (P r * (Constant 1.0 - This / P K) + P beta * Environment T)
+            let ``N[t+1]``: ModelExpression<individuals> =
+                This * exp (P r * (Constant 1. - This / P K) + P beta * Environment temperatureAnomaly)
 
-            let eqLogNM = State N // |> Logarithm
+            let eqLogNM = State N |> Logarithm
 
             Model.discrete
-            |> Model.addDiscreteEquation N update
+            |> Model.addDiscreteEquation N ``N[t+1]``
             |> Model.addMeasure logN eqLogNM
             |> Model.estimateParameter r
             |> Model.estimateParameter K
             |> Model.estimateParameter beta
 
-        // Deterministic fit
-        let ``ricker-temperature`` () =
+        let deterministic =
             rickerBase
-            |> Model.useLikelihoodFunction (Bristlecone.ModelLibrary.Likelihood.sumOfSquares [ Require.measure logN ])
+            |> Model.useLikelihoodFunction (NegLogLikelihood.SumOfSquares [ Require.measure logN ])
             |> Model.compile
 
-        // With Gaussian observation noise
-        let ``ricker-temperature [with noise]`` () =
+        let sigma = parameter "σ" Positive 0.001 10.0
+
+        let noisy =
+            let NLL = NegLogLikelihood.Normal (Require.measure logN) sigma
+
             rickerBase
-            |> Model.estimateParameterOld "σ" notNegative 0.001 10.0
+            |> Model.useLikelihoodFunction NLL
             |> Model.compile
 
+        let test withNoise logger optimise endCondition =
+            
+            let engine =
+                Bristlecone.mkDiscrete ()
+                |> Bristlecone.withCustomOptimisation optimise
+                |> Bristlecone.withOutput logger
+                |> Bristlecone.withTimeConversion DateMode.Conversion.CalendarDates.toDays
 
+            let settings =
+                Test.create
+                |> Test.seriesLength 30
+                |> Test.withObservationError (Require.measure logN) (Test.Error.normal sigma)
+                |> Test.rule (Require.measure logN) (Test.GenerationRules.alwaysLessThan 1000.)
+                |> Test.t1 (Require.measure logN) 1.0
 
-    module LogisticHarvest =
-
-        open Bristlecone.Time
-
-        [<Measure>]
-        type biomass // e.g. tonnes of fish
-
-        [<Measure>]
-        type km
-
-        [<Measure>]
-        type area = km^2
-
-        let B = state "B"
-
-        let logisticHarvestBase =
-
-            // Parameters
-            let r = parameter "r" noConstraints 0.1< / year> 1.0< / year> // intrinsic per‑capita growth rate
-            let K = parameter "K" notNegative 50.<biomass / area> 500.<biomass / area> // carrying capacity
-
-            let h =
-                parameter "h" notNegative 0.01<biomass / area / year> 50.<biomass / area / year> // constant harvest rate
-
-            // Logistic growth with harvest: dB/dt = r * B * (1 - B/K) - h
-            let ``dB/dt``: ModelExpression<(biomass / area) / year> =
-                P r * This<biomass / area> * (Constant 1.0 - This<biomass / area> / P K) - P h
-
-            Model.empty<year>
-            |> Model.addRateEquation B ``dB/dt``
-            |> Model.estimateParameter r
-            |> Model.estimateParameter K
-            |> Model.estimateParameter h
-
-        // Deterministic fit
-        let ``logistic-harvest`` () =
-            logisticHarvestBase
-            |> Model.useLikelihoodFunction (Bristlecone.ModelLibrary.Likelihood.sumOfSquares [ Require.state B ])
-            |> Model.compile
-
-        // Stochastic fit with Gaussian observation noise
-        let ``logistic-harvest [with noise]`` () =
-            logisticHarvestBase
-            |> Model.estimateParameterOld "σ" notNegative 0.001 10.0 // observation noise s.d.
-            // |> Model.useLikelihoodFunction (Bristlecone.ModelLibrary.Likelihood.gaussian "biomass")
-            |> Model.compile
-
-
-    module PlantSoilMonod =
-
-        open Bristlecone.Time
-
-        // Units
-        [<Measure>]
-        type biomass // e.g., t of plant material
-
-        [<Measure>]
-        type nutrient // e.g., kg N
-
-        [<Measure>]
-        type km
-
-        [<Measure>]
-        type area = km^2
-
-        // States
-        let B = state<biomass / area> "biomass" // plant biomass density
-        let S = state<nutrient / area> "soilN" // soil nutrient availability
-
-        // Base model: plant biomass limited by soil nutrient via Monod uptake
-        let plantSoilBase =
-
-            // Parameters
-            let q =
-                parameter "q" notNegative 0.01<nutrient / (biomass * year)> 2.0<nutrient / (biomass * year)> // uptake capacity (nutrient per biomass per time)
-
-            let e = parameter "e" notNegative 0.10<biomass / nutrient> 2.0<biomass / nutrient> // conversion efficiency of nutrient to biomass
-            let m = parameter "m" notNegative 0.01< / year> 1.0< / year> // plant mortality/turnover
-
-            let I =
-                parameter "I" notNegative 0.001<nutrient / area / year> 100.0<nutrient / area / year> // external nutrient input (deposition, fertiliser)
-
-            let l = parameter "l" notNegative 0.01< / year> 2.0< / year> // nutrient loss (leaching/mineralisation balance)
-            let Ks = parameter "Ks" notNegative 1.0<nutrient / area> 100.0<nutrient / area> // half-saturation constant for uptake
-
-            // Monod (Holling type II) limitation: f(S) = S / (Ks + S)  (dimensionless)
-            let fS: ModelExpression<1> = Environment S / (P Ks + Environment S)
-
-            // Plant biomass dynamics:
-            // dB/dt = e * q * f(S) * B  -  m * B
-            let ``dB/dt``: ModelExpression<(biomass / area) / year> =
-                P e * P q * fS * This<biomass / area> - P m * This<biomass / area>
-
-            // Soil nutrient dynamics:
-            // dS/dt = I  -  q * f(S) * B  -  l * S
-            let ``dS/dt``: ModelExpression<(nutrient / area) / year> =
-                P I - P q * fS * This<biomass / area> - P l * This<nutrient / area>
-
-            Model.empty<year>
-            |> Model.addRateEquation B ``dB/dt``
-            |> Model.addRateEquation S ``dS/dt``
-            |> Model.estimateParameter q
-            |> Model.estimateParameter e
-            |> Model.estimateParameter m
-            |> Model.estimateParameter I
-            |> Model.estimateParameter l
-            |> Model.estimateParameter Ks
-
-        // Deterministic fit
-        let ``plant-soil monod`` () =
-            plantSoilBase
-            |> Model.useLikelihoodFunction (
-                Bristlecone.ModelLibrary.Likelihood.sumOfSquares [ Require.state B; Require.state S ]
-            )
-            |> Model.compile
-
-        // With Gaussian observation noise
-        let ``plant-soil monod [with noise]`` () =
-            plantSoilBase
-            |> Model.estimateParameterOld "ρ" noConstraints -0.500 0.500
-            |> Model.estimateParameterOld "σ[x]" notNegative 0.001 0.100
-            |> Model.estimateParameterOld "σ[y]" notNegative 0.001 0.100
-            |> Model.useLikelihoodFunction (
-                Bristlecone.ModelLibrary.Likelihood.bivariateGaussian (Require.state B) (Require.state S)
-            )
-            |> Model.compile
-
-
-    module Housing =
-
-        open Bristlecone.Time
-
-        // Units
-        [<Measure>]
-        type person
-
-        [<Measure>]
-        type dwelling
-
-        [<Measure>]
-        type household
-
-        // Parameters
-        let theta =
-            parameter "theta" noConstraints 0.1<dwelling / person> 0.2<dwelling / person>
-
-        let h65_slope =
-            parameter "h65_slope" noConstraints 0.1<(household / person) / year> 0.2<(household / person) / year>
-
-        let r_sec = parameter "r_sec" noConstraints 0.1< / year> 0.2< / year>
-        let r_str = parameter "r_str" noConstraints 0.1< / year> 0.2< / year>
-        let str_sat = parameter "str_sat" noConstraints 0.1 0.2
-        let k_reno = parameter "k_reno" noConstraints 0.1< / year> 0.2< / year>
-        let reno_target = parameter "reno_target" noConstraints 0.1 0.2
-
-        // States
-        let H = state<household / person> "headship"
-        let SH = state<1> "second home share"
-        let STR = state<1> "STR?"
-        let R = state<1> "renovation"
-        let O = state<dwelling> "occupied dwellings"
-
-
-        // External forcings
-        let age65plus: StateId<person> = environment "Age65Plus"
-
-
-// // State equations (ODEs)
-// let ``dH/dt`` = P h65_slope * Environment age65plus
-// let ``dSH/dt``: ModelExpression</year> = P r_sec + State SH * (Constant 1. - State SH)
-// let ``dSTR/dt``: ModelExpression</year> = P r_str + State STR * (P str_sat - State STR)
-// let ``dR/dt`` = - P k_reno * (State R - P reno_target)
-// let ``dO/dt``: ModelExpression<dwelling/year> =
-//     P theta * State H * (Constant 1. - State SH)
-//         * (Constant 1. - State STR) * (Constant 1. - State R)
+            Bristlecone.tryTestModel engine endCondition settings (if withNoise then noisy else deterministic)
