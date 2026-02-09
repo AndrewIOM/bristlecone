@@ -258,7 +258,7 @@ module Timeseries =
         let logN = measure "logN"
         let temperatureAnomaly = environment<celsius> "T"
 
-        let rickerBase: ModelBuilder.ModelBuilder<1> =
+        let rickerBase: ModelBuilder.ModelBuilder<day> =
 
             // Parameters
             let r = parameter "r" NoConstraints 0.1 2.0 // maximum per‑capita growth rate (intrinsic growth rate)
