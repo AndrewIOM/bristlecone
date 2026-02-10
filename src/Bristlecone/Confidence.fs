@@ -98,7 +98,9 @@ module ProfileLikelihood =
 
             let validTrace =
                 a.Trace
-                |> List.filter (fun (l, _) -> (l - mle) < 2.00<``-logL``> && (l - mle) > 0.00<``-logL``>)
+                |> List.head
+                |> fun t -> t.Results
+                |> List.filter (fun (l,_) -> (l - mle) < 2.00<``-logL``> && (l - mle) > 0.00<``-logL``>)
                 |> List.distinct
 
             engine.LogTo

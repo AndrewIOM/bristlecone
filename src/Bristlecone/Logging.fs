@@ -4,9 +4,11 @@ open Bristlecone
 
 type LogEvent =
     | OptimisationEvent of ModelFitState
+    | OptimisationPhaseEvent of PhaseState
     | CompleteEvent
     | GeneralEvent of string
-    | DebugEvent of string
+    | WarningEvent of warningMessage:string
+    | DebugEvent of origin:string * message:string
     | OrchestrationEvent of string
 
 and ModelFitState =
@@ -14,9 +16,17 @@ and ModelFitState =
       Likelihood: float<``-logL``>
       Theta: seq<float<``optim-space``>> }
 
+/// Within each optimisation component, multiple instances (i.e. chains)
+/// may be run, for example on a vectorised algorithm.
+and PhaseState =
+    | OptimComponentStarting of string
+    | OptimComponentEnding of string
+    | PhaseStarting of string * instanceId:int
+
 type ThreadStatus =
     { ThreadId: int
-      Stage: string
+      Phase: string
+      InstanceId: int
       Iteration: int<iteration>
       Likelihood: float<``-logL``>
       Theta: string
@@ -103,7 +113,7 @@ module ConsoleTable =
 
                 // Rows
                 for KeyValue(_, st) in active |> Seq.sortBy (fun kv -> kv.Key) do
-                    let stageCol = truncate st.Stage 30
+                    let stageCol = truncate st.Status 30
 
                     let fixedCols =
                         sprintf
@@ -123,7 +133,7 @@ module ConsoleTable =
 
         let appendCompletedLog (st: ThreadStatus) =
             Console.ForegroundColor <- ConsoleColor.DarkGray
-            let stageCol = truncate st.Stage 30
+            let stageCol = truncate st.Phase 30
 
             let fixedCols =
                 sprintf
@@ -158,7 +168,8 @@ module ConsoleTable =
 
                             active.[threadId] <-
                                 { ThreadId = threadId
-                                  Stage = "Optimising"
+                                  Phase = "Optimising"
+                                  InstanceId = 1
                                   Iteration = e.Iteration
                                   Likelihood = e.Likelihood
                                   Theta = formatThetaValues e.Theta
@@ -167,17 +178,18 @@ module ConsoleTable =
                             redrawActiveTable ()
 
                         | GeneralEvent s ->
-                            let cleanStage = oneLine s
+                            let cleanMessage = oneLine s
 
                             active.AddOrUpdate(
                                 threadId,
                                 { ThreadId = threadId
-                                  Stage = cleanStage
+                                  Phase = cleanMessage
+                                  InstanceId = 1
                                   Iteration = 0<iteration>
                                   Status = ""
                                   Likelihood = nan * 1.<``-logL``>
                                   Theta = "" },
-                                fun _ old -> { old with Stage = cleanStage }
+                                fun _ old -> { old with Phase = cleanMessage }
                             )
                             |> ignore
 
@@ -212,6 +224,12 @@ module Console =
 
     let internal print nIteration threadId (x: LogEvent) =
         match x with
+        | DebugEvent (o,m) -> printfn "##%i## [DEBUG / %s] %s" threadId o m
+        | OptimisationPhaseEvent p ->
+            match p with
+            | PhaseState.OptimComponentStarting m -> printfn "##%i## [OPTIMISATION START] %s starting" threadId m
+            | PhaseState.OptimComponentEnding m -> printfn "##%i## [OPTIMISATION END] %s ending" threadId m
+            | PhaseState.PhaseStarting (s,i) -> printfn "##%i##(%i) [OPTIMISATION -> PHASE] %s" threadId i s
         | OptimisationEvent e ->
             if e.Iteration % nIteration = 0<iteration> then
                 printfn "##%i## At iteration %i (-logL = %f) %A" threadId e.Iteration e.Likelihood e.Theta

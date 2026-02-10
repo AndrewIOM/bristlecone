@@ -106,31 +106,50 @@ module Trace =
         let fromEstimate thinBy subject modelId result : seq<BristleconeTrace.Row> =
             result.Trace
             |> Seq.rev
-            |> Seq.mapi (fun iterationNumber (likelihood, values) ->
-                result.Parameters
-                |> Parameter.Pool.toList
-                |> Seq.mapi (fun i (name, _) ->
-                    (subject,
-                     modelId,
-                     iterationNumber + 1,
-                     result.ResultId,
-                     name.Value,
-                     float likelihood,
-                     float values.[i])
-                    |> BristleconeTrace.Row))
-            |> if (thinBy |> Option.isSome) then
+            |> Seq.collect (fun trace ->
+                trace.Results
+                |> Seq.rev
+                |> Seq.mapi(fun iterationNumber (likelihood,values) ->
+                    result.Parameters
+                    |> Parameter.Pool.toList
+                    |> Seq.mapi (fun nParam (name, _) ->
+                        (subject,
+                        modelId,
+                        trace.ComponentName,
+                        trace.StageName,
+                        trace.ReplicateNumber,
+                        iterationNumber + 1,
+                        result.ResultId,
+                        name.Value,
+                        float likelihood,
+                        float values.[nParam])
+                        |> BristleconeTrace.Row)))
+            |> if thinBy |> Option.isSome then
                    Seq.everyNth thinBy.Value
                else
                    id
             |> Seq.concat
 
-        let toTrace (data: BristleconeTrace) : (float * float[]) list =
+        let toTrace (data: BristleconeTrace) : Trace list = //(float * float[]) list =
             data.Rows
-            |> Seq.groupBy (fun r -> r.Iteration)
-            |> Seq.map (fun (i, r) ->
-                i, (r |> Seq.head).NegativeLogLikelihood, r |> Seq.map (fun r -> r.ParameterValue) |> Seq.toArray)
-            |> Seq.sortByDescending (fun (i, _, _) -> i)
-            |> Seq.map (fun (_, x, y) -> x, y)
+            |> Seq.groupBy (fun r -> r.OptimStage, r.OptimSubstage, r.Replicate)
+            |> Seq.map (fun ((stage,subStage,rep), solutions) ->
+                let results =
+                    solutions
+                    |> Seq.groupBy(fun i -> i.Iteration)
+                    |> Seq.map(fun (i,pv) ->
+                        i,
+                        (Seq.head pv).NegativeLogLikelihood * 1.<``-logL``>,
+                        pv |> Seq.map(fun r -> r.ParameterValue * 1.<parameter>) |> Seq.toArray)
+                    |> Seq.sortByDescending(fun (i,_,_) -> i)
+                    |> Seq.map(fun (_,a,b) -> a,b)
+                    |> Seq.toList
+                {
+                    ComponentName = stage
+                    StageName = subStage
+                    ReplicateNumber = rep
+                    Results = results
+                })
             |> Seq.toList
 
     /// Save the trace of an `EstimationResult` to a CSV file.
@@ -340,9 +359,7 @@ module EstimationResult =
               Parameters = p
               Series = s
               InternalDynamics = None
-              Trace =
-                t
-                |> List.map (fun (x, y) -> x * 1.<``-logL``>, y |> Array.map ((*) 1.<parameter>)) })
+              Trace = t })
 
 [<RequireQualifiedAccess>]
 module Confidence =

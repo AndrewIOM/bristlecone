@@ -377,7 +377,10 @@ module Bristlecone =
                     obsDataForObjective
 
             let result = objective |> optimise
-            let lowestLikelihood, bestPoint = result |> List.minBy (fun (l, _) -> l)
+            let lowestLikelihood, bestPoint =
+                match result |> Optimisation.Optimiser.tryGetSolution with
+                | Some sol -> sol
+                | None -> failwith "The optimisation algorithm did not return any results."
 
             let estimatedSeries =
                 Objective.createPredictor
@@ -414,14 +417,22 @@ module Bristlecone =
             let estimatedHighResFloat =
                 estimatedHighRes |> Map.map (fun _ v -> v |> Tensors.Typed.toFloatArray) |> Some
 
-            // engine.LogTo CompleteEvent
+            engine.LogTo CompleteEvent
+
+            let trace = result |> List.map(fun r ->
+                {
+                    ComponentName = r.Component
+                    StageName = r.Stage
+                    ReplicateNumber = r.Replicate
+                    Results = r.Results |> toRealSpaceSolutions optimConfig
+                })
 
             return
                 { ResultId = resultId
                   Likelihood = lowestLikelihood
                   Parameters = bestPointPool
                   Series = paired
-                  Trace = result |> toRealSpaceSolutions optimConfig
+                  Trace = trace
                   InternalDynamics = estimatedHighResFloat }
         }
 
@@ -523,7 +534,7 @@ module Bristlecone =
 
             return
                 { ErrorStructure = errorStructure
-                  IterationsRun = estimated.Trace.Length * 1<iteration>
+                  IterationsRun = (estimated.Trace |> List.sumBy(fun i -> i.Results.Length)) * 1<iteration>
                   Parameters = paramDiffs
                   Series = estimated.Series |> Seq.map (fun k -> k.Key.Value, k.Value) |> Map.ofSeq
                   RealLikelihood = realEstimate.Likelihood
