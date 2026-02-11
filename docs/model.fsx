@@ -54,8 +54,8 @@ Bristlecone expressions.*
 [<Measure>]
 type individuals
 
-let r = parameter "r" notNegative 0.01< / Time.day> 0.50< / Time.day>
-let K = parameter "K" notNegative 20.<individuals> 50.<individuals>
+let r = parameter "r" Positive 0.01< / Time.day> 0.50< / Time.day>
+let K = parameter "K" Positive 20.<individuals> 50.<individuals>
 let N = state<individuals> "N"
 
 (**
@@ -105,7 +105,7 @@ let hypothesis =
     |> Model.addRateEquation N ``dN/dt``
     |> Model.estimateParameter r
     |> Model.estimateParameter K
-    |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ Require.state N ])
+    |> Model.useLikelihoodFunction (ModelLibrary.NegLogLikelihood.SumOfSquares [ Require.state N ])
     |> Model.compile
 
 (**

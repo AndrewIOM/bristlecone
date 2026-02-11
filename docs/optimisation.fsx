@@ -105,7 +105,7 @@ It can be used as follows:
 let settingsNM = Amoeba.Solver.Default
 (*** include-value: settingsNM ***)
 
-let single: EstimationEngine.Optimisation.Optimise = Amoeba.Solver.solve settingsNM
+let single: EstimationEngine.Optimisation.Optimiser = Amoeba.single settingsNM
 
 (**
 A single Nelder-Mead solver is highly subject to local minima. To reduce

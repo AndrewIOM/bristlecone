@@ -53,14 +53,16 @@ apply a simple model of non-linear plant growth. To do this, we
 first define a base model as a `ModelSystem` that takes a number of interchangable components:
 *)
 
-let r = parameter "r" noConstraints 0.01< / Time.month> 1.00< / Time.month>
+let r = parameter "r" Positive 0.01< / Time.month> 1.00< / Time.month>
 let m = state<kilogram> "m"
+
+let NLL = ModelLibrary.NegLogLikelihood.SumOfSquares [ Require.state m ]
 
 let baseModel growthLimit lossRate =
     Model.empty<Time.month>
     |> Model.addRateEquation m (P r * growthLimit This<kilogram> - lossRate This<kilogram>)
     |> Model.estimateParameter r
-    |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ Require.state m ])
+    |> Model.useLikelihoodFunction NLL
 
 (** 
 You can see from the type signatures that growthLimit returns a kilogram value, whereas
@@ -75,7 +77,7 @@ These are made using the `modelComponent` and `subComponent` functions as follow
 
 open Bristlecone.Language.Components
 
-let K = parameter "K" notNegative 10.0<kilogram> 50.0<kilogram>
+let K = parameter "K" Positive 10.0<kilogram> 50.0<kilogram>
 
 let growthLimit =
     modelComponent
@@ -100,7 +102,7 @@ the `estimateParameter` function as above.
 We can similarly define the other required component for the base model - the loss rate:
 *)
 
-let alpha = parameter "alpha" notNegative 0.001< / Time.month> 0.10< / Time.month>
+let alpha = parameter "alpha" Positive 0.001< / Time.month> 0.10< / Time.month>
 
 let lossRate =
     modelComponent

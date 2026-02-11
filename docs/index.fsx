@@ -51,25 +51,26 @@ let mass = state<1> "mass"
 let hypothesis =
 
     // Model parameters:
-    let η = parameter "η" noConstraints 0.50 1.50
-    let β = parameter "β" noConstraints 0.01 1.00 // m
-    let κ = parameter "κ" noConstraints 0.01 1.00
+    let η = parameter "η" NoConstraints 0.50 1.50
+    let β = parameter "β" NoConstraints 0.01 1.00 // m
+    let κ = parameter "κ" NoConstraints 0.01 1.00
 
     // Likelihood parameters:
-    let sigma = parameter "σ[x]" notNegative 0.01 0.10
+    let sigma = parameter "σ[x]" Positive 0.01 0.10
 
     let vonBertalanffy = P η * This ** P β - P κ * This
+
+    let NLL = ModelLibrary.NegLogLikelihood.Normal (Require.state mass) sigma
 
     Model.empty
     |> Model.addRateEquation mass vonBertalanffy
     |> Model.estimateParameter η
     |> Model.estimateParameter β
     |> Model.estimateParameter κ
-    |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.gaussian (Require.state mass) )
-    |> Model.estimateParameter sigma
+    |> Model.useLikelihoodFunction NLL
     |> Model.compile
 
-// Given some data (loaded using Bristlecone functions or others)...
+// Given some data (loaded using Bristlecone functions, FSharp.Data, etc.)...
 fun data ->
   let engine = Bristlecone.mkContinuous ()
   let endCond = Optimisation.EndConditions.atIteration 10000<iteration>
