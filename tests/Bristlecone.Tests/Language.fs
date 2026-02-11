@@ -131,7 +131,7 @@ let modelExpressions =
             testPropertyWithConfig Config.config "Parameter retrieved to true value"
             <| fun (pool:Parameter.Pool.ParameterPool) (pVal:NormalFloat) (t:NormalFloat) ->
                 let paramToTest = pool |> Parameter.Pool.keys |> randomiseList |> Seq.head
-                let dummyParam = parameter paramToTest.Value noConstraints 0.1 0.2 
+                let dummyParam = parameter paramToTest.Value NoConstraints 0.1 0.2 
                 let fakePoolVector = pool |> Parameter.Pool.keys |> Seq.map(fun pn -> if pn = paramToTest then pVal.Get * 1.<parameter> else nan * 1.<parameter>) |> Seq.toArray |> Tensors.Typed.ofVector
                 let t' = Typed.ofScalar <| t.Get * 1.<Time.year>
                 let this = Typed.ofScalar 999.<ModelSystem.state>

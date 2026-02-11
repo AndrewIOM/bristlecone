@@ -71,7 +71,7 @@ type BristleconeTypesGen() =
                 List.zip3 codes bounds1 bounds2
                 |> List.map (fun (c, b1, b2) ->
                     c,
-                    match Parameter.create noConstraints b1.Get b2.Get with
+                    match Parameter.create NoConstraints b1.Get b2.Get with
                     | Some (p: Parameter.Parameter<1>) -> Parameter.Pool.boxParam<1> c.Value p
                     | None -> failwithf "The bounds %f - %f cannot be used to estimate a parameter. See docs." b1.Get b2.Get
                 )

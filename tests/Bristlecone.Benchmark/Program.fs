@@ -134,10 +134,10 @@ let summariseRuns
     trueMinima
     minVal
     (minima: float list list)
-    (results: ((EstimationEngine.Solution list * float[]) * int) seq)
+    (results: ((EstimationEngine.Optimisation.OptimisationTrace list * float[]) * int) seq)
     =
     let eachRunMinimum =
-        results |> Seq.map (fun ((r, _), _) -> r |> Seq.minBy fst)
+        results |> Seq.map (fun ((r, _), _) -> r |> Seq.map(fun r -> r.Results |> Seq.minBy fst) |> Seq.minBy fst)
 
     let distancesFromRealMinimum =
         eachRunMinimum |> Seq.map (fun o -> abs ((fst o) - minVal))
@@ -206,7 +206,7 @@ let runOptimTests optimFunctions =
                     |> Array.map ((*) 1.<``optim-space``>)
                     |> Tensors.Typed.ofVector
 
-                let result: list<EstimationEngine.Solution> =
+                let result: list<EstimationEngine.Optimisation.OptimisationTrace> =
                     // Using a shim to go between tensor space and float space
                     let f' point =
                         f (Tensors.Typed.toFloatArray point |> Array.map float) * 1.<``-logL``>

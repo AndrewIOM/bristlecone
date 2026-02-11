@@ -50,9 +50,10 @@ let initialBounds =
             <| fun shouldTransform (data: float list) (b1: NormalFloat) (b2: NormalFloat) ->
 
                 // Returns the parameter value
-                let fakeLikelihood code : ModelSystem.Likelihood<'u> =
+                let fakeLikelihood (code:ShortCode.ShortCode) : ModelSystem.Likelihood<'u> =
                     { Evaluate = fun paramAccessor _ -> paramAccessor.Get "a" |> Tensors.Typed.retype
-                      RequiredCodes = code }
+                      RequiredParameters = []
+                      RequiredCodes = [ LikelihoodRequirement.State code ] }
 
                 if b1.Get = b2.Get || b1.Get = 0. || b2.Get = 0. then
                     ()
@@ -62,9 +63,9 @@ let initialBounds =
 
                     let mode =
                         if shouldTransform then
-                            Language.notNegative
+                            Language.Positive
                         else
-                            Language.noConstraints
+                            Language.NoConstraints
 
                     let X = Language.state "x"
                     let a = Language.parameter "a" mode (min b1 b2) (max b1 b2)
@@ -73,7 +74,7 @@ let initialBounds =
                         Language.Model.empty
                         |> Language.Model.addRateEquation X (Language.P a)
                         |> Language.Model.estimateParameter a
-                        |> Language.Model.useLikelihoodFunction (fakeLikelihood [ Language.Require.state X ])
+                        |> Language.Model.useLikelihoodFunction (fakeLikelihood X.Code )
                         |> Language.Model.compile
 
                     let optimConfig = Parameter.Pool.DetachedConfig (Parameter.Pool.toOptimiserConfigBounded model.Parameters)
