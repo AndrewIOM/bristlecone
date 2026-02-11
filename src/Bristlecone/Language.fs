@@ -1441,6 +1441,12 @@ module Language =
                     let sigma = getParam sigma pool
                     ObservationError.normal rnd sigma
 
+            let logNormal sigma =
+                fun rnd pool ->
+                    let sigma = getParam sigma pool
+                    ObservationError.logNormal rnd sigma
+
+
         /// <summary>Add observation error ('noise') to a particular time-series when
         /// generating fake time-series. Built-in noise functions are in the `Noise` module.</summary>
         /// <param name="obs">The state or measure to add to (use Require.state or Require.measure)</param>

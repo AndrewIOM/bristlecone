@@ -538,7 +538,8 @@ module Bristlecone =
                   Parameters = paramDiffs
                   Series = estimated.Series |> Seq.map (fun k -> k.Key.Value, k.Value) |> Map.ofSeq
                   RealLikelihood = realEstimate.Likelihood
-                  EstimatedLikelihood = estimated.Likelihood }
+                  EstimatedLikelihood = estimated.Likelihood
+                  Trace = estimated.Trace }
         }
 
     /// <summary>Test that the specified estimation engine can correctly

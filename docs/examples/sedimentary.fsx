@@ -63,19 +63,19 @@ let obsN = measure "observed_N" // After conversion with an alpha conversion fac
 let obsPAR = measure<(grain / cm^2) / year> "observed_PAR"
 
 // Core ecological parameters
-let λ = parameter "λ" notNegative 0.01<conc/year> 1.0<conc/year> // External N input
-let γN = parameter "γ[N]" notNegative 0.001<1/year> 0.1<1/year> // N loss rate
-let r   = parameter "r" notNegative 0.001<(indiv/area)/conc> 20.<(indiv/area)/conc> // Intrinsic growth rate
-let γX = parameter "γ[X]" notNegative 0.01<1/year> 0.2<1/year> // mortality
+let λ = parameter "λ" Positive 0.01<conc/year> 1.0<conc/year> // External N input
+let γN = parameter "γ[N]" Positive 0.001<1/year> 0.1<1/year> // N loss rate
+let r   = parameter "r" Positive 0.001<(indiv/area)/conc> 20.<(indiv/area)/conc> // Intrinsic growth rate
+let γX = parameter "γ[X]" Positive 0.01<1/year> 0.2<1/year> // mortality
 
 // Measurement model parameters
-let αδ15N = parameter<d15N> "αδ15N" noConstraints -2.0<d15N> 2.0<d15N>   // intercept for δ15N proxy
-let βδ15N = parameter<d15N/conc> "βδ15N" noConstraints 0.1<d15N/conc> 2.0<d15N/conc>    // slope linking latent N to δ15N
+let αδ15N = parameter<d15N> "αδ15N" NoConstraints -2.0<d15N> 2.0<d15N>   // intercept for δ15N proxy
+let βδ15N = parameter<d15N/conc> "βδ15N" NoConstraints 0.1<d15N/conc> 2.0<d15N/conc>    // slope linking latent N to δ15N
 
 // Likelihood function parameters
-let ρ = parameter "ρ" noConstraints -0.500 0.500
-let σx = parameter "σ[x]" notNegative 10. 50.
-let σy = parameter "σ[y]" notNegative 0.001 0.100
+let ρ = parameter "ρ" NoConstraints -0.500 0.500
+let σx = parameter "σ[x]" Positive 10.<indiv/area> 50.<indiv/area>
+let σy = parameter "σ[y]" Positive 0.001<d15N> 0.100<d15N>
 
 (**
 In this scenario, we will assess eight hypotheses that relate to the form of
@@ -106,6 +106,9 @@ let baseModel
     let nToProxy : ModelExpression<d15N> = P αδ15N + P βδ15N * State N
     let nFromProxy : ModelExpression<conc> = (Measure obsN - P αδ15N) / P βδ15N
 
+    // -log likelihood function
+    let NLL = ModelLibrary.NegLogLikelihood.BivariateNormal (Require.state X) (Require.measure obsN) σx σy ρ
+
     Model.empty
     // Add the core ecological ODEs:
     |> Model.addRateEquation X ``dX/dt``
@@ -120,10 +123,7 @@ let baseModel
     |> Model.estimateParameter αδ15N
     |> Model.estimateParameter βδ15N
     // Add the likelihood function:
-    |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.bivariateGaussian (Require.state X) (Require.measure obsN))
-    |> Model.estimateParameter ρ
-    |> Model.estimateParameter σx
-    |> Model.estimateParameter σy
+    |> Model.useLikelihoodFunction NLL
     
 
 (**
@@ -145,7 +145,7 @@ mathematical form.
 let feedbackMode =
 
     // Conversion factor (individuals into N)
-    let σ  = parameter "α" notNegative 0.01<conc/(indiv/area)> 10.<conc/(indiv/area)>
+    let σ  = parameter "α" Positive 0.01<conc/(indiv/area)> 10.<conc/(indiv/area)>
 
     let none _ = Constant 0.<conc/year>
     let positive (X: ModelExpression<indiv/area>) = P σ * P γX * X
@@ -179,8 +179,8 @@ specified: N-independent, linear N-dependency, and saturating N-dependency.
 let uptakeMode =
 
     // Parameters:
-    let a = parameter "a" notNegative 1e-6<area/(indiv year)> 1e-3<area/(indiv year)> // Uptake rate constant
-    let b = parameter "b" notNegative 0.5</conc> 2.0</conc> // Half-saturation (MM)
+    let a = parameter "a" Positive 1e-6<area/(indiv year)> 1e-3<area/(indiv year)> // Uptake rate constant
+    let b = parameter "b" Positive 0.5</conc> 2.0</conc> // Half-saturation (MM)
 
     // If independent, need to substitute 1 into the growth equation instead of 0.
     let independent _ _ =
@@ -214,8 +214,8 @@ let uptakeMode =
 
 let densityMode =
 
-    let K   = parameter "K_growth"   notNegative 1.<indiv/area> 1e6<indiv/area>
-    let c  = parameter "c_density"  notNegative 0.01<area/indiv> 1e-3<area/indiv>
+    let K   = parameter "K_growth"   Positive 1.<indiv/area> 1e6<indiv/area>
+    let c  = parameter "c_density"  Positive 0.01<area/indiv> 1e-3<area/indiv>
 
     let logisticDD (X: ModelExpression<indiv/area>) : ModelExpression<1> =
         Constant 1.<1> - X / P K

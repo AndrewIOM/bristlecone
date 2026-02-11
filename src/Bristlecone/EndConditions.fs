@@ -175,7 +175,7 @@ module EndConditions =
         let required = Units.removeUnitFromInt intervalsRequired
         fun results iteration ->
             onlyOnInterval interval iteration <| fun () ->
-                if iteration < interval * intervalsRequired then Continue else
+                if iteration <= interval * intervalsRequired then Continue else
                 
                 let bins =
                     results
@@ -297,27 +297,27 @@ module EndConditions =
 
             let preTuning =
                 combineAny [
-                    whenVarianceStabilised 200<iteration> 0.10
-                    atIteration 1000<iteration>
+                    whenVarianceStabilised 500<iteration> 0.02
+                    atIteration 1500<iteration>
                 ]
 
             let heating =
                 combineAny [
                     combineAll [
-                        whenVarianceStabilised 50<iteration> 0.05
-                        whenWorstValuePlateaued 50<iteration>
+                        whenVarianceStabilised 200<iteration> 0.05
+                        whenWorstValuePlateaued 200<iteration>
                     ]
-                    atIteration 500<iteration>
+                    atIteration 1500<iteration>
                 ]
 
             /// Annealing will stop when either: there is little movement in parameter space;
             /// no improvements are being made; or acceptance rates are very low.
             let annealing =
                 combineAny [
-                    whenNoBestValueImprovement 100<iteration>
-                    whenStationary 1e-6<``optim-space`` ^2> 50<iteration>
-                    whenAcceptanceRateOutside 0.1 1.0 regularity 3 ignore
-                    atIteration 2000<iteration>
+                    whenNoBestValueImprovement 500<iteration>
+                    whenStationary 1e-6<``optim-space`` ^2> 100<iteration>
+                    // whenAcceptanceRateOutside 0.1 1.0 regularity 5 ignore // TODO Fix: triggering on i=1
+                    atIteration 5000<iteration>
                 ]
 
 

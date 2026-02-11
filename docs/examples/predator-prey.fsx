@@ -47,35 +47,48 @@ components:
 * **Likelihood function**. The (negative log) likelihood function *-logL* represents the probability of observing the data given the parameter set. We use a negative log likelihood function, which is then minimised during optimisation.
 
 In this example, we demonstrate using the *Lotka–Volterra* predator–prey model as the
-model system. For the -logL function we use a bivariate normal negative log likelihood function.
-This -logL function assumes normally-distributed observation error around each observation
-at each time-point, for both the lynx and hare data. The -logL function contains
-three parameters that are to be estimated alongside the deterministic model: the variability
-in lynx data, the variability in hare data, and their covariance.
+model system. For the -logL function we assume log-normal observation error for each
+of the two states, as we treat hare and lynx as dimensionless counts and assume multiplicative
+observation error; we model this with a lognormal likelihood. This is appropriate here because
+the fur‑return counts are strictly positive and vary over orders of magnitude. Any parameters
+passed into -logL functions are automatically estimated alongside model parameters;
+in this case these are sigma-hare and sigma-lynx.
+
+*Note. If we instead modelled density (e.g. individuals per km²), we would typically use a
+Gaussian or Student‑t likelihood on the raw scale, because taking logs of dimensional quantities
+is not physically meaningful.*
 *)
 
-[<Measure>] type prey
-[<Measure>] type predator
-[<Measure>] type km
-[<Measure>] type area = km^2
+[<Measure>] type prey = 1 // dimensionless counts
+[<Measure>] type predator = 1 // dimensionless counts
+
+// States
+let H = state<prey> "hare"
+let L = state<predator> "lynx"
+
+// Likelihood parameters
+let σH = parameter "σ[H]" Positive 0.001 0.100
+let σL = parameter "σ[L]" Positive 0.001 0.100
+
 
 let ``predator-prey`` =
 
-    // States
-    let H = state<prey / area> "hare"
-    let L = state<predator / area> "lynx"
-
     // Parameters
-    let α = parameter "α" notNegative 0.5< / year> 1.5< / year> // Maximum prey per capita growth rate
-    let β = parameter "β" notNegative 0.01<1 / (predator / area * year)> 0.05<1 / (predator / area * year)> // Predation rate
-    let δ = parameter "δ" notNegative 0.5< / year> 1.0< / year> // Natural death rate of lynx in the absence of food
-    let γ = parameter "γ" notNegative 0.01<1 / (prey / area * year)> 0.1<1 / (prey / area * year)> // Predator growth efficiency
+    let α = parameter "α" Positive 0.5<1/year> 1.5<1/year> // Maximum prey per‑capita growth rate
+    let β = parameter "β" Positive 0.01<1/(predator * year)> 0.05<1/(predator * year)> // Predation rate coefficient
+    let γ = parameter "γ" Positive 0.1<1/year> 1.0<1/year> // Predator natural mortality rate
+    let δ = parameter "δ" Positive 0.01<1/(prey * year)> 0.1<1/(prey * year)> // Predator growth efficiency
 
-    let ``dH/dt``: ModelExpression<(prey / area) / year> =
-        P α * This<prey / area> - P β * This<prey / area> * State L
+    let ``dH/dt``: ModelExpression<prey / year> =
+        (P α - P β * State L) * This<prey>
 
-    let ``dL/dt``: ModelExpression<(predator / area) / year> =
-        P γ * State H * This<predator / area> - P δ * This<predator / area>
+    let ``dL/dt``: ModelExpression<predator / year> =
+        (-P γ + P δ * State H) * This<predator>
+
+    // Likelihood
+    let NLL =
+        ModelLibrary.NegLogLikelihood.LogNormal (Require.state H) σH +
+        ModelLibrary.NegLogLikelihood.LogNormal (Require.state L) σL
 
     Model.empty
     |> Model.addRateEquation H ``dH/dt``
@@ -84,10 +97,7 @@ let ``predator-prey`` =
     |> Model.estimateParameter β
     |> Model.estimateParameter δ
     |> Model.estimateParameter γ
-    |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.bivariateGaussian (Require.state H) (Require.state L))
-    |> Model.estimateParameterOld "ρ" noConstraints -0.500 0.500
-    |> Model.estimateParameterOld "σ[x]" notNegative 0.001 0.100
-    |> Model.estimateParameterOld "σ[y]" notNegative 0.001 0.100
+    |> Model.useLikelihoodFunction NLL
     |> Model.compile
 
 
@@ -100,10 +110,9 @@ This engine uses a gradident descent method (Nelder Mead simplex), and a basic
 Runge-Kutta 4 integration method provided by MathNet Numerics.
 *)
 
-let engine =
+let engine: EstimationEngine.EstimationEngine<DatingMethods.Annual,int<year>,year,1> =
     Bristlecone.mkContinuous ()
-    |> Bristlecone.withCustomOptimisation ( Optimisation.MonteCarlo.Filzbach.filzbach
-           { Optimisation.MonteCarlo.Filzbach.FilzbachSettings.Default with BurnLength = Optimisation.EndConditions.atIteration 5000<iteration> })
+    |> Bristlecone.withBristleconeOptimiser
     |> Bristlecone.withConditioning Conditioning.NoConditioning
     |> Bristlecone.withSeed 1500 // We are setting a seed for this example - see below
     |> Bristlecone.withTimeConversion DateMode.Conversion.Annual.toYears
@@ -131,17 +140,14 @@ but here we will configure some additional settings:
 *)
 
 let testSettings =
-    Test.annualSettings
-    |> Test.addStartValues [ "hare", 50.; "lynx", 75. ]
-    |> Test.addNoise (Test.Noise.tryAddNormal "σ[y]" "lynx")
-    |> Test.addNoise (Test.Noise.tryAddNormal "σ[x]" "hare")
-    |> Test.addGenerationRules
-        [ Test.GenerationRules.alwaysLessThan 100000. "lynx"
-          Test.GenerationRules.alwaysMoreThan 10. "lynx"
-          Test.GenerationRules.alwaysLessThan 100000. "hare"
-          Test.GenerationRules.alwaysMoreThan 10. "hare" ]
-    |> Test.withTimeSeriesLength 30
-    |> Test.endWhen (Optimisation.EndConditions.Profiles.mcmc 5000<iteration> ignore)
+    Test.createWithTimeMode DateMode.annualDateMode (Yearly 1<year>) (DatingMethods.Annual 1970<year>)
+    |> Test.seriesLength 15
+    |> Test.t1 (Require.state H) 50.
+    |> Test.t1 (Require.state L) 75.
+    |> Test.withObservationError (Require.state H) (Test.Error.logNormal σH)
+    |> Test.withObservationError (Require.state L) (Test.Error.logNormal σL)
+    |> Test.rule (Require.state H) (Test.GenerationRules.between 10. 10000.)
+    |> Test.rule (Require.state L) (Test.GenerationRules.between 10. 10000.)
 
 (**
 In our `TestSettings`, we have specified the initial time point (t = 0)
@@ -152,21 +158,50 @@ should be 30 years in length.
 With these test settings, we can now run the test.
 *)
 
-let testResult = ``predator-prey`` |> Bristlecone.tryTestModel engine testSettings
-(*** include-output ***)
+let endCondition = Optimisation.EndConditions.Profiles.mcmc 5000<iteration> engine.LogTo
+
+(*** do-not-eval ***)
+let testResult = ``predator-prey`` |> Bristlecone.tryTestModel engine endCondition testSettings
+
+(forceOk testResult).Parameters
 
 (**
-
 In the example using this seed, the ecological parameter set under test is:
-> 1.4845 (α), 0.0377 (β), 0.0190 (γ), 0.9856 (δ) [ noise = 0.2135 (ρ), 0.0297 (σ_x), 0.0152 (σ_y) ]
+> 1.1070 (α), 0.03299 (β), 0.7930 (γ), 0.01487 (δ) [ error: 0.0706 (σH), 0.0868 (σL) ]
 Here, the sigma values represent the *standard deviation* of the noise around hare and lynx respectively.
 
-From the test results, the key questions is whether the ecological dynamics were recovered
-with the correct parameters. To find this:
+From the test results, the key questions is whether the ecological dynamics were recovered.
+To identify this we can look at these factors:
 
-* Do the trajectories match? Compare difference between predicted and observed series.
-* Were parameters recovered?
-     
+* Was the estimated -logL near the true -logL?
+* Were all of the true parameters recovered (within a tolerance)?
+* Do the estimated and observed trajectories look similar?
+* Are there trends in the error structure over time?
+
+First, the true -logL was 65.8821, while the estimated minimum was
+66.5655, which are close given that observation error was added.
+
+Second, the parameters were recovered to reasonable levels, again
+given that observation error was added to a short 15-point time-series:
+
+```fsharp
+val it: Test.ParameterTestResult list =
+  [{ Identifier = "α"
+     RealValue = 1.149500728
+     EstimatedValue = 1.107033385 }; { Identifier = "β"
+                                       RealValue = 0.0329926312
+                                       EstimatedValue = 0.03244952328 };
+   { Identifier = "γ"
+     RealValue = 0.7930286527
+     EstimatedValue = 0.8282329879 }; { Identifier = "δ"
+                                        RealValue = 0.0148735689
+                                        EstimatedValue = 0.0160377167 };
+   { Identifier = "σ[H]"
+     RealValue = 0.07067647576
+     EstimatedValue = 0.05908173058 }; { Identifier = "σ[L]"
+                                         RealValue = 0.08681011945
+                                         EstimatedValue = 0.09076999054 }]
+```
 *)
 
 (*** hide ***)
@@ -196,9 +231,6 @@ module Graphing =
                 printfn "%A" x
                 x
             |> GenericChart.toChartHTML
-            |> fun x ->
-                printfn "%s" x
-                x
         | Error e -> sprintf "Cannot display data, as model fit did not run successfully (%s)" e
 
     let pairedFitsForTestResult (testResult: Result<Bristlecone.Test.TestResult<DatingMethods.Annual,int<year>,int<year>,'u>, string>) =
@@ -211,23 +243,87 @@ module Graphing =
         | Ok r -> pairedFits (r.Series |> Seq.map (fun kv -> kv.Key.Value, kv.Value) |> Map.ofSeq)
         | Error e -> sprintf "Cannot display data, as model fit did not run successfully (%s)" e
 
-    let parameterTrace (result: Result<ModelSystem.EstimationResult<_, _, _>, 'b>) =
-        match result with
-        | Ok r ->
-            r.Trace
-            |> Seq.map snd
-            |> Seq.map Seq.toList
-            |> Seq.toList
-            |> List.flip
-            |> List.map (fun values -> Chart.Line(y = values, x = [ 1 .. values.Length ]))
-            |> Chart.Grid(3, 3)
-            |> GenericChart.toChartHTML
-        | Error _ -> "Model did not fit successfully"
+    let parameterTrace (trace: list<ModelSystem.Trace>) =
+        trace
+        |> Seq.collect(fun r -> r.Results |> Seq.map snd)
+        |> Seq.map Seq.toList
+        |> Seq.toList
+        |> List.flip
+        |> List.map (fun values -> Chart.Line(y = values, x = [ 1 .. values.Length ]))
+        |> Chart.Grid(3, 3)
+        |> Chart.withSize(800,800)
+        |> GenericChart.toChartHTML
 
+    let optimisationPaths paramTraces =
+        paramTraces
+        |> List.allPairs paramTraces
+        |> List.map(fun ((p1,pv1),(p2,pv2)) ->
+            let min1, max1 = pv1 |> Seq.min, pv1 |> Seq.max
+            let min2, max2 = pv2 |> Seq.min, pv2 |> Seq.max
+            let rescaled1 = pv1 |> Seq.map(fun v -> (v - min1) / max1)
+            let rescaled2 = pv2 |> Seq.map(fun v -> (v - min2) / max2)
 
+            Chart.Line(x = rescaled1, y = rescaled2, Name = sprintf "%s ~ %s" p1 p2, LineWidth = 0.6)
+            |> Chart.withXAxisStyle p1
+            |> Chart.withYAxisStyle p2
+            )
+        |> Chart.Grid(nRows = 6, nCols = 6, Pattern = StyleParam.LayoutGridPattern.Coupled)
+        |> Chart.withSize(800, 800)
+        |> Chart.withTemplate ChartTemplates.lightMirrored
+        |> GenericChart.toChartHTML
+
+    let optimPathsFromTestResult (testResult:Result<Test.TestResult<DatingMethods.Annual,int<year>,int<year>,ModelSystem.state>,string>) =
+        let paramNames = (testResult |> forceOk).Parameters |> List.map(fun p -> p.Identifier)
+        let paramTraces =
+            paramNames
+            |> List.mapi(fun pi p ->
+                p,
+                (testResult |> forceOk).Trace
+                |> List.collect(fun trace -> (trace.Results |> List.map(fun i -> (snd i).[pi])))
+                |> List.chunkBySize 50
+                |> List.map(fun c -> c.Head)
+            )
+        optimisationPaths paramTraces
+
+(**
+Third, we can look at the predicted versus observed time-series:
+*)
 
 (*** hide ***)
-Graphing.pairedFitsForTestResult testResult
+// Graphing.pairedFitsForTestResult testResult
+System.IO.File.ReadAllText(__SOURCE_DIRECTORY__ + "/cached/pred-prey-test-fit.txt")
+(*** include-it-raw ***)
+
+(**
+The fit is relatively tight. The test result type also includes
+`.ErrorStructure`, which shows the per-observation root squared
+error in the units state^2, where state here is the count of hare
+/ lynx.
+
+We can also examine raw parameter traces to visualise the contours
+of the parameter space. Note that the traces are
+organised from newest to oldest. The `.Trace` is organised
+into a list, where each item is a stage or sub-stage of the
+optimisation method applied. Here, this includes first a pre-tuning phase,
+then a tuning phase, each heating level, each annealing level,
+and finally a 'clean' MCMC chain.
+*)
+
+(*** hide ***)
+// Graphing.parameterTrace (testResult |> forceOk).Trace
+System.IO.File.ReadAllText(__SOURCE_DIRECTORY__ + "/cached/pred-prey-test-param-trace.txt")
+(*** include-it-raw ***)
+
+(**
+You can see from the traces that - once tuning had occured - the
+heating within the fast simulated annealing part allowed the parameter
+space to be broadly explored, before settling down to a solution during
+the annealing phase.
+*)
+
+(*** hide ***)
+// Graphing.optimPathsFromTestResult testResult
+System.IO.File.ReadAllText(__SOURCE_DIRECTORY__ + "/cached/pred-prey-test-walk.txt")
 (*** include-it-raw ***)
 
 (**
@@ -258,11 +354,8 @@ Once the data are in Bristlecone `TimeSeries` we can run `Bristlecone.fit`, whic
 the main fitting function of the Bristlecone library.
 *)
 
-let endCondition = Optimisation.EndConditions.Profiles.mcmc 5000<iteration> engine.LogTo
-
+(*** do-not-eval ***)
 let result = ``predator-prey`` |> Bristlecone.tryFit engine endCondition data
-
-(*** include-value: result ***)
 
 (**
 ### Inspecting the model fit
@@ -274,13 +367,12 @@ key information that may be used to inspect the model fit:
 * Parameters. The parameter set (*θ*) identified at the minimum likelihood.
 * Series. A TimeSeries for each variable in the model, which at each time point contains paired Modelled-Observed values.
 * Trace. The likelihood and *θ* that occurred at each step in optimisation, with the latest first.
-* Internal Dynamics. Not relevant for this simple model.
 
 First, we can use the `Series` to inspect by eye the model fit versus the observed time-series:
 *)
 
 (*** hide ***)
-Graphing.pairedFitsForResult result
+// Graphing.pairedFitsForResult result
 (*** include-it-raw ***)
 
 (**
@@ -289,7 +381,7 @@ Next, we can examine the traces to see how parameter values evolved over the cou
 the optimisation routine:
 *)
 
-Graphing.parameterTrace result
+// Graphing.parameterTrace (forceOk result).Trace
 (*** include-it-raw ***)
 
 (**
@@ -298,9 +390,7 @@ For the pelt dataset, we know from other sources that the estimated
 parameters should be around this range:
 * Prey growth rate (α): around 0.9–1.1 per year.
 * Predation rate (β): around 0.02–0.03 per predator per hare per year.
-* Predator efficiency (γ): ~0.01–0.02, reflecting conversion of prey into predator growth.
-* Predator death rate (δ): ~0.8–0.9 per year.
-
-
+* Predator death rate (γ): ~0.8-0.9 per year.
+* Predator growth efficiency (δ): ~0.01–0.02, reflecting conversion of prey into predator growth.
 
 *)

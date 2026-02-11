@@ -65,13 +65,13 @@ will run in a transformed (unbounded) parameter space.
 module GrowthFunctions =
 
     // Parameters
-    let K = parameter "K" notNegative 20.0<gram> 40.0<gram> // upper asymptote
-    let β = parameter "β" notNegative 0.1 2.0
-    let L = parameter "L" notNegative 20.0<gram> 40.0<gram> // lower asymptote
+    let K = parameter "K" Positive 20.0<gram> 40.0<gram> // upper asymptote
+    let β = parameter "β" Positive 0.1 2.0
+    let L = parameter "L" Positive 20.0<gram> 40.0<gram> // lower asymptote
 
     // The meaning of r changes between models, so define it seperately
-    let rAbs = parameter "r_abs" notNegative 1.1<gram/day> 1.2<gram/day>
-    let r = parameter "r" notNegative 0.01</day> 2.00</day>
+    let rAbs = parameter "r_abs" Positive 1.1<gram/day> 1.2<gram/day>
+    let r = parameter "r" Positive 0.01</day> 2.00</day>
 
     // 7x typical model forms (ODEs)
     let linear = P rAbs
@@ -161,17 +161,16 @@ module Settings =
         |> Bristlecone.withCustomOptimisation (Optimisation.Amoeba.swarm 5 10 Optimisation.Amoeba.Solver.Default)
         |> Bristlecone.withConditioning Conditioning.NoConditioning
 
-    let endCond = Optimisation.EndConditions.noImprovementRecently 100<iteration>
+    let endCond = Optimisation.EndConditions.whenNoBestValueImprovement 100<iteration>
 
-let sigma = parameter "σ[x]" notNegative 0.01 0.5
+let sigma = parameter "σ[x]" Positive 0.01<gram> 0.5<gram>
 
 let results =
     GrowthFunctions.hypotheses
     |> List.map (fun h ->
             let hy =
                 snd h
-                |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.gaussian (Require.state mass))
-                |> Model.estimateParameter sigma
+                |> Model.useLikelihoodFunction (ModelLibrary.NegLogLikelihood.Normal (Require.state mass) sigma)
                 |> Model.compile
             fst h, Bristlecone.fit Settings.engine Settings.endCond data hy
     )
@@ -226,7 +225,6 @@ The resultant model fits are shown in the below graph.
 *)
 
 Graphing.fitPlot results
-|>Plotly.NET.Chart.show
 |> Plotly.NET.GenericChart.toChartHTML
 (*** include-it-raw ***)
 
@@ -278,8 +276,7 @@ let likelihoodProfile =
         let h =
             GrowthFunctions.hypotheses |> Seq.find (fun s -> fst s = name)
             |> snd
-            |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.gaussian (Require.state mass))
-            |> Model.estimateParameter sigma
+            |> Model.useLikelihoodFunction (ModelLibrary.NegLogLikelihood.Normal (Require.state mass) sigma)
             |> Model.compile
 
         // Run a profile likelihood around the Maximum Likelihood Estimate:
@@ -295,17 +292,16 @@ let likelihoodProfile =
     |> Seq.toList
 
 
-let sigmaBase = parameter "σ0[x]" notNegative 0.01 0.5
-let sigmaGrowth = parameter "σ1[x]" notNegative 0.01 0.5
+let sigmaBase = parameter "σ0[x]" Positive 0.01<gram> 0.5<gram>
+let sigmaGrowth = parameter "σ1[x]" Positive 0.01</gram> 0.5</gram>
 
-let results =
+let results2 =
     GrowthFunctions.hypotheses
     |> List.map (fun h ->
+            let variance = ModelLibrary.NegLogLikelihood.Variance.exponential sigmaBase sigmaGrowth
             let hy =
                 snd h
-                |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.gaussianWithExponentialVariance (Require.state mass))
-                |> Model.estimateParameter sigmaBase
-                |> Model.estimateParameter sigmaGrowth
+                |> Model.useLikelihoodFunction (ModelLibrary.NegLogLikelihood.NormalWithVariance (Require.state mass) variance)
                 |> Model.compile
             fst h, Bristlecone.fit Settings.engine Settings.endCond data hy
     )

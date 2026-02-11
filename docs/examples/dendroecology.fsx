@@ -34,6 +34,7 @@ open Bristlecone.Language // Open the language for writing Bristlecone models
 open Bristlecone.Time
 open FSharp.Data.UnitSystems.SI.UnitSymbols
 
+
 (**
 ### Step 1. Defining the ecological model (hypothesis)
 
@@ -64,12 +65,12 @@ let hypothesis =
     /// The universal gas constant in J mol−1 K−1
     let gasConstant = Constant 8.314<(J/mol)/K>
 
-    let Ea    = parameter "Ea" noConstraints 30.0<J/mol> 80.0<J/mol>
-    let γB    = parameter "γB" noConstraints 1e-5</day> 1e-1</day>
-    let r     = parameter "r" notNegative 1e-5</day> 1e-1</day>
-    let Rstar = parameter "r*" notNegative 2.<mm> 10.<mm>
-    let q     = parameter "q"  noConstraints 0.3<1> 0.9<1>
-    let σx    = parameter "σ[x]" notNegative 0.05 0.3
+    let Ea    = parameter "Ea" NoConstraints 30.0<J/mol> 80.0<J/mol>
+    let γB    = parameter "γB" NoConstraints 1e-5</day> 1e-1</day>
+    let r     = parameter "r" Positive 1e-5</day> 1e-1</day>
+    let Rstar = parameter "r*" Positive 2.<mm> 10.<mm>
+    let q     = parameter "q"  NoConstraints 0.3<1> 0.9<1>
+    let σx    = parameter "σ[x]" Positive 0.05<mm> 0.3<mm>
 
     /// An Arrhenius function to represent temperature limitation on growth.
     let temperatureLimitation =
@@ -96,8 +97,7 @@ let hypothesis =
     |> Model.estimateParameter r
     |> Model.estimateParameter Rstar
     |> Model.estimateParameter q
-    |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.gaussian (Require.state SR) )
-    |> Model.estimateParameter σx
+    |> Model.useLikelihoodFunction (ModelLibrary.NegLogLikelihood.Normal (Require.state SR) σx)
     |> Model.compile
 
 (**
@@ -124,11 +124,10 @@ Some built in time conversions (of the type `ResolutionToModelUnits`) are includ
 `DateMode.Conversion` module within the `Bristlecone.Time` module.
 *)
 
-let engine =
+let engine: EstimationEngine.EstimationEngine<System.DateTime,System.TimeSpan,day,1> =
     Bristlecone.mkContinuous ()
     |> Bristlecone.withConditioning Conditioning.RepeatFirstDataPoint
-    |> Bristlecone.withCustomOptimisation ( Optimisation.MonteCarlo.Filzbach.filzbach
-           { Optimisation.MonteCarlo.Filzbach.FilzbachSettings.Default with TuneAfterChanges = 10; BurnLength = Optimisation.EndConditions.atIteration 1000<iteration> })
+    |> Bristlecone.withBristleconeOptimiser
     |> Bristlecone.withOutput Settings.logger
     |> Bristlecone.withTimeConversion DateMode.Conversion.CalendarDates.toDays
 

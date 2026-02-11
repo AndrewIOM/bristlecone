@@ -172,7 +172,8 @@ module Test =
           ErrorStructure: Map<string, seq<float<'u^2>>>
           IterationsRun: int<iteration>
           RealLikelihood: float<``-logL``>
-          EstimatedLikelihood: float<``-logL``> }
+          EstimatedLikelihood: float<``-logL``>
+          Trace: Trace list }
 
     /// Ensures settings are valid for a test, by ensuring that
     /// start values have been set for each equation.
