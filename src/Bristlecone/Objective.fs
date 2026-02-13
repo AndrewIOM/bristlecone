@@ -45,10 +45,12 @@ module Objective =
             measures
             |> Map.map (fun measKey measFn ->
                 let buf = ResizeArray()
-                let initialThis = initialConditions |> Map.tryFind measKey |> Option.defaultValue invalidTensor
+
+                let initialThis =
+                    initialConditions |> Map.tryFind measKey |> Option.defaultValue invalidTensor
 
                 for i = 1 to length - 1 do
-                    let thisVal = if i = 1 then initialThis else buf.[i-2]
+                    let thisVal = if i = 1 then initialThis else buf.[i - 2]
                     let value = measFn parameters expectedWithT0 thisVal i
                     buf.Add value
 

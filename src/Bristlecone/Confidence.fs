@@ -100,7 +100,7 @@ module ProfileLikelihood =
                 a.Trace
                 |> List.head
                 |> fun t -> t.Results
-                |> List.filter (fun (l,_) -> (l - mle) < 2.00<``-logL``> && (l - mle) > 0.00<``-logL``>)
+                |> List.filter (fun (l, _) -> (l - mle) < 2.00<``-logL``> && (l - mle) > 0.00<``-logL``>)
                 |> List.distinct
 
             engine.LogTo

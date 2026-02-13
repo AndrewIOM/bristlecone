@@ -109,20 +109,20 @@ module Trace =
             |> Seq.collect (fun trace ->
                 trace.Results
                 |> Seq.rev
-                |> Seq.mapi(fun iterationNumber (likelihood,values) ->
+                |> Seq.mapi (fun iterationNumber (likelihood, values) ->
                     result.Parameters
                     |> Parameter.Pool.toList
                     |> Seq.mapi (fun nParam (name, _) ->
                         (subject,
-                        modelId,
-                        trace.ComponentName,
-                        trace.StageName,
-                        trace.ReplicateNumber,
-                        iterationNumber + 1,
-                        result.ResultId,
-                        name.Value,
-                        float likelihood,
-                        float values.[nParam])
+                         modelId,
+                         trace.ComponentName,
+                         trace.StageName,
+                         trace.ReplicateNumber,
+                         iterationNumber + 1,
+                         result.ResultId,
+                         name.Value,
+                         float likelihood,
+                         float values.[nParam])
                         |> BristleconeTrace.Row)))
             |> if thinBy |> Option.isSome then
                    Seq.everyNth thinBy.Value
@@ -133,23 +133,22 @@ module Trace =
         let toTrace (data: BristleconeTrace) : Trace list = //(float * float[]) list =
             data.Rows
             |> Seq.groupBy (fun r -> r.OptimStage, r.OptimSubstage, r.Replicate)
-            |> Seq.map (fun ((stage,subStage,rep), solutions) ->
+            |> Seq.map (fun ((stage, subStage, rep), solutions) ->
                 let results =
                     solutions
-                    |> Seq.groupBy(fun i -> i.Iteration)
-                    |> Seq.map(fun (i,pv) ->
+                    |> Seq.groupBy (fun i -> i.Iteration)
+                    |> Seq.map (fun (i, pv) ->
                         i,
                         (Seq.head pv).NegativeLogLikelihood * 1.<``-logL``>,
-                        pv |> Seq.map(fun r -> r.ParameterValue * 1.<parameter>) |> Seq.toArray)
-                    |> Seq.sortByDescending(fun (i,_,_) -> i)
-                    |> Seq.map(fun (_,a,b) -> a,b)
+                        pv |> Seq.map (fun r -> r.ParameterValue * 1.<parameter>) |> Seq.toArray)
+                    |> Seq.sortByDescending (fun (i, _, _) -> i)
+                    |> Seq.map (fun (_, a, b) -> a, b)
                     |> Seq.toList
-                {
-                    ComponentName = stage
-                    StageName = subStage
-                    ReplicateNumber = rep
-                    Results = results
-                })
+
+                { ComponentName = stage
+                  StageName = subStage
+                  ReplicateNumber = rep
+                  Results = results })
             |> Seq.toList
 
     /// Save the trace of an `EstimationResult` to a CSV file.

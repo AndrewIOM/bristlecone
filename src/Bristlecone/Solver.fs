@@ -498,14 +498,13 @@ module Solver =
                     | DifferentialEqs eqs, Continuous i ->
                         SolverRunners.DifferentialTime.variableRunner eqs i obsTimes envIndex t0States
 
-                    | DifferenceEqs eqs, Discrete -> SolverRunners.DiscreteTime.variableRunner eqs obsTimes envIndex t0States
+                    | DifferenceEqs eqs, Discrete ->
+                        SolverRunners.DiscreteTime.variableRunner eqs obsTimes envIndex t0States
 
                     | _ -> invalidOp "Mismatch between time-mode and differential/difference equation form."
 
             // 6. Return configured solver
-            fun point ->
-                point |> runner |> maskOutput,
-                t0States point |> Map.append observedMeasuresT0
+            fun point -> point |> runner |> maskOutput, t0States point |> Map.append observedMeasuresT0
 
 
     /// Solver conditioning enables adding synthetic initial time-points

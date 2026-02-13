@@ -13,14 +13,20 @@ module NegLogLikelihood =
     open Bristlecone.Tensors
 
     /// A small helper for unit-safety when working with units-of-measure-based Language types.
-    let internal getParamValue<[<Measure>] 'u> (paramAccessor:ParameterValueAccessor) (par:Language.IncludedParameter<'u>) : TypedTensor<Scalar,'u> =
+    let internal getParamValue<[<Measure>] 'u>
+        (paramAccessor: ParameterValueAccessor)
+        (par: Language.IncludedParameter<'u>)
+        : TypedTensor<Scalar, 'u> =
         paramAccessor.Get par.ParamId.Inner.Value |> Typed.retype
 
     let internal paramToAny<[<Measure>] 'u> (p: Language.IncludedParameter<'u>) =
         let boxed = Parameter.Pool.boxParam<'u> p.ParamId.Inner.Value p.Parameter
         p.ParamId.Inner, boxed
 
-    let inline internal getData<[<Measure>] 'u, [<Measure>] 'state> (obsKey:Language.Require.ObsForLikelihood<'u>) (pairs: CodedMap<SeriesPair<'state>>) : SeriesPair<'u> =
+    let inline internal getData<[<Measure>] 'u, [<Measure>] 'state>
+        (obsKey: Language.Require.ObsForLikelihood<'u>)
+        (pairs: CodedMap<SeriesPair<'state>>)
+        : SeriesPair<'u> =
         let key =
             match obsKey with
             | Language.Require.StateObs r -> r.Code
@@ -38,9 +44,9 @@ module NegLogLikelihood =
         | Language.Require.StateObs s -> LikelihoodRequirement.State s.Code
         | Language.Require.MeasureObs s -> LikelihoodRequirement.Measure s.Code
 
-    let internal requirePositiveParam label (p:Language.IncludedParameter<'u>) =
-        if p.Parameter |> Parameter.getConstraint <> Parameter.Constraint.PositiveOnly
-        then failwithf "The specified %s parameter must be positive-only" label
+    let internal requirePositiveParam label (p: Language.IncludedParameter<'u>) =
+        if p.Parameter |> Parameter.getConstraint <> Parameter.Constraint.PositiveOnly then
+            failwithf "The specified %s parameter must be positive-only" label
 
     let private likelihoodTag = Typed.ofScalar 1.<``-logL``>
 
@@ -51,8 +57,8 @@ module NegLogLikelihood =
 
         /// A variance function maps expected values to per-point σ
         type VarianceFunction<[<Measure>] 'sigma, [<Measure>] 'x> =
-            { Evaluate : ParameterValueAccessor -> TypedTensor<Vector,'x> -> TypedTensor<Vector,'sigma>
-              RequiredParameters : (ShortCode.ShortCode * Parameter.Pool.AnyParameter) list }
+            { Evaluate: ParameterValueAccessor -> TypedTensor<Vector, 'x> -> TypedTensor<Vector, 'sigma>
+              RequiredParameters: (ShortCode.ShortCode * Parameter.Pool.AnyParameter) list }
 
         /// Variance is constant within through time.
         let constant sigma : VarianceFunction<'x, 'x> =
@@ -60,8 +66,7 @@ module NegLogLikelihood =
                 fun accessor expected ->
                     let sigmaVal = getParamValue accessor sigma
                     Typed.broadcastScalarToVector sigmaVal (Typed.length expected)
-              RequiredParameters = [ paramToAny sigma ]
-            }
+              RequiredParameters = [ paramToAny sigma ] }
 
         /// Variance is proportional to the expected value (σ = σ0 * x).
         let proportional (sigma0: Language.IncludedParameter<'sigma / 'x>) : VarianceFunction<'sigma, 'x> =
@@ -69,8 +74,7 @@ module NegLogLikelihood =
                 fun accessor expected ->
                     let sigma0Val = getParamValue accessor sigma0
                     expected * sigma0Val
-              RequiredParameters = [ paramToAny sigma0 ]
-            }
+              RequiredParameters = [ paramToAny sigma0 ] }
 
         /// Variance is exponential to the expected value (σ = σ0 * exp(σ1 * x)),
         /// where sigma1 is the baseline variance and sigma2 is the rate of growth
@@ -84,8 +88,7 @@ module NegLogLikelihood =
                     let sigma0Val = getParamValue accessor sigma0
                     let sigma1Val = getParamValue accessor sigma1
                     sigma0Val * Typed.expVector (sigma1Val * expected)
-              RequiredParameters = [ paramToAny sigma0; paramToAny sigma1 ]
-            }
+              RequiredParameters = [ paramToAny sigma0; paramToAny sigma1 ] }
 
 
     module Internal =
@@ -104,7 +107,10 @@ module NegLogLikelihood =
                 |> List.reduce (+)
                 |> Typed.sumVector
                 |> Typed.retype
-            |> fun f -> { Evaluate = f; RequiredCodes = List.map obsKeyToLikelihoodKey keys; RequiredParameters = [] }
+            |> fun f ->
+                { Evaluate = f
+                  RequiredCodes = List.map obsKeyToLikelihoodKey keys
+                  RequiredParameters = [] }
 
         let private one = Typed.ofScalar 1.0
         let private two = Typed.ofScalar 2.0
@@ -130,7 +136,10 @@ module NegLogLikelihood =
 
             (term1 + term2 + term3) * likelihoodTag
 
-        let internal gaussian' (mkVariance:Variance.VarianceFunction<'s,'s>) (key: Language.Require.ObsForLikelihood<'s>) : Likelihood<'state> =
+        let internal gaussian'
+            (mkVariance: Variance.VarianceFunction<'s, 's>)
+            (key: Language.Require.ObsForLikelihood<'s>)
+            : Likelihood<'state> =
             fun (paramAccessor: ParameterValueAccessor) data ->
                 let x = data |> getData key
                 let obsx = Typed.tail x.Observed
@@ -169,7 +178,9 @@ module NegLogLikelihood =
             let zta3 = Typed.squareVector (diffy / sigmay)
 
             let q =
-                half * (one / (one - Typed.square rho)) * (zta1 - zta2 + zta3 : TypedTensor<Vector,1>)
+                half
+                * (one / (one - Typed.square rho))
+                * (zta1 - zta2 + zta3: TypedTensor<Vector, 1>)
 
             let logNorm =
                 Typed.logScalar twoPi
@@ -177,8 +188,7 @@ module NegLogLikelihood =
                 + Typed.logScalar sigmay
                 + half * Typed.logScalar (one - Typed.square rho)
 
-            let logNormVec =
-                Typed.broadcastScalarToVector logNorm (Typed.length obsx)
+            let logNormVec = Typed.broadcastScalarToVector logNorm (Typed.length obsx)
 
             logNormVec + q
 
@@ -210,7 +220,9 @@ module NegLogLikelihood =
                 let expx = Typed.tail x.Expected
                 let expy = Typed.tail y.Expected
 
-                bivariateGaussianVec sigmax sigmay rho obsx obsy expx expy |> Typed.sumVector |> (*) likelihoodTag
+                bivariateGaussianVec sigmax sigmay rho obsx obsy expx expy
+                |> Typed.sumVector
+                |> (*) likelihoodTag
             |> fun f ->
                 { Evaluate = f
                   RequiredParameters = [ paramToAny sigmax; paramToAny sigmay; paramToAny rho ]
@@ -219,11 +231,11 @@ module NegLogLikelihood =
         let internal logGaussianVec
             (sigma: TypedTensor<Vector, 'u>)
             (obsx: TypedTensor<Vector, 'u>)
-            (expx: TypedTensor<Vector, 1>) 
+            (expx: TypedTensor<Vector, 1>)
             : TypedTensor<Vector, ``-logL``> =
 
             let logx = Typed.logVector obsx
-            let diff  = logx - expx
+            let diff = logx - expx
 
             let term1Scalar = half * Typed.logScalar twoPi
             let n = Typed.length obsx
@@ -235,7 +247,10 @@ module NegLogLikelihood =
 
             (term1 + term2 + term3 + term4) * likelihoodTag
 
-        let internal logGaussian' (mkVariance:Variance.VarianceFunction<1,1>) (key: Language.Require.ObsForLikelihood<1>) : Likelihood<'state> =
+        let internal logGaussian'
+            (mkVariance: Variance.VarianceFunction<1, 1>)
+            (key: Language.Require.ObsForLikelihood<1>)
+            : Likelihood<'state> =
             fun (paramAccessor: ParameterValueAccessor) data ->
                 let x = data |> getData key
                 let obsx = Typed.tail x.Observed
@@ -254,6 +269,8 @@ module NegLogLikelihood =
     let Normal obs sigma = Internal.gaussian obs sigma
     let NormalWithVariance obs varianceFn = Internal.gaussian' varianceFn obs
     let LogNormal obs sigma = Internal.logGaussian obs sigma
-    let BivariateNormal key1 key2 sigmax sigmay rho = Internal.bivariateGaussian key1 key2 sigmax sigmay rho
+
+    let BivariateNormal key1 key2 sigmax sigmay rho =
+        Internal.bivariateGaussian key1 key2 sigmax sigmay rho
 
     let SumOfSquares obs = Internal.sumOfSquares obs

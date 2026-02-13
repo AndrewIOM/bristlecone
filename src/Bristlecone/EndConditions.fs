@@ -22,7 +22,8 @@ module EndConditions =
             let n = Units.removeUnitFromInt window
             let slice = results |> List.take n
             fn slice
-        else Continue
+        else
+            Continue
 
     /// Stop when any condition has a non-continue reason.
     let combineAny (conditions: EndCondition list) : EndCondition =
@@ -36,8 +37,11 @@ module EndConditions =
     let combineAll (conditions: EndCondition list) : EndCondition =
         fun results iter ->
             let evaluations = conditions |> List.map (fun cond -> cond results iter)
-            if evaluations |> List.exists ((=) Continue) then Continue
-            else evaluations |> List.find (fun r -> r <> Continue)
+
+            if evaluations |> List.exists ((=) Continue) then
+                Continue
+            else
+                evaluations |> List.find (fun r -> r <> Continue)
 
     /// End on or after a minimum number of iterations.
     let atIteration iteration : EndCondition =
@@ -52,31 +56,42 @@ module EndConditions =
     /// the change within the recent results is no more than `tolerance`.
     let whenNoBestValueImprovement window : EndCondition =
         fun results iteration ->
-            rollingWindow window results iteration <| fun window ->
+            rollingWindow window results iteration
+            <| fun window ->
                 let improvement =
                     window
                     |> List.pairwise
                     |> List.sumBy (fun (n, old) -> max 0.<``-logL``> (fst old - fst n))
-                if improvement <= defaultTolerance then NoImprovement else Continue
+
+                if improvement <= defaultTolerance then
+                    NoImprovement
+                else
+                    Continue
 
     /// Ends if the mean change in the objective's value is less than
     /// a tolerance of 1e-6.
     let whenObjectiveFlat interval : EndCondition =
         fun results iteration ->
-            onlyOnInterval interval iteration <| fun () ->
+            onlyOnInterval interval iteration
+            <| fun () ->
                 let improvement =
                     results
                     |> List.map fst
                     |> List.take (Units.removeUnitFromInt interval)
                     |> List.pairwise
                     |> List.averageBy (fun (n, old) -> if n > old then n - old else old - n)
-                if improvement <= defaultTolerance then NoImprovement else Continue
+
+                if improvement <= defaultTolerance then
+                    NoImprovement
+                else
+                    Continue
 
     /// Ends when the overall number of improvements made is
     /// greater than `count`.
     let whenImprovementsMade count interval : EndCondition =
         fun results iteration ->
-            onlyOnInterval interval iteration <| fun () ->
+            onlyOnInterval interval iteration
+            <| fun () ->
                 let i =
                     results
                     |> List.pairwise
@@ -93,32 +108,37 @@ module EndConditions =
     /// simulated annealing.
     let whenWorstValuePlateaued window : EndCondition =
         fun results iteration ->
-            onlyOnInterval (2 * window) iteration <| fun () ->
+            onlyOnInterval (2 * window) iteration
+            <| fun () ->
                 let n = Units.removeUnitFromInt window
 
-                let recentWorst =
-                    results |> List.take n |> List.map fst |> List.max
+                let recentWorst = results |> List.take n |> List.map fst |> List.max
 
-                let olderWorst =
-                    results |> List.skip n |> List.take n |> List.map fst |> List.max
+                let olderWorst = results |> List.skip n |> List.take n |> List.map fst |> List.max
 
                 if abs (recentWorst - olderWorst) <= defaultTolerance then
                     Custom "Worst value plateau"
-                else Continue
+                else
+                    Continue
 
     /// Stops when there is a lack of movement, as indicated by squared jump
     /// distance below threshold across the last n steps.
     let whenStationary threshold nSteps : EndCondition =
         fun results iter ->
-            if iter < nSteps then Continue else
-            let jumps =
-                results
-                |> List.take (Units.removeUnitFromInt nSteps)
-                |> List.pairwise
-                |> List.map (fun ((_,θ1),(_,θ2)) -> Tensors.Typed.squaredLength (θ1 - θ2) |> Tensors.Typed.toFloatScalar)
-            if List.forall (fun d -> d < threshold) jumps then
-                Stationary
-            else Continue
+            if iter < nSteps then
+                Continue
+            else
+                let jumps =
+                    results
+                    |> List.take (Units.removeUnitFromInt nSteps)
+                    |> List.pairwise
+                    |> List.map (fun ((_, θ1), (_, θ2)) ->
+                        Tensors.Typed.squaredLength (θ1 - θ2) |> Tensors.Typed.toFloatScalar)
+
+                if List.forall (fun d -> d < threshold) jumps then
+                    Stationary
+                else
+                    Continue
 
     /// An `EndCondition` that calculates that segregates the most recent n results into
     /// five bins, and runs a regression to detect a temporal variation in the mean
@@ -159,6 +179,7 @@ module EndConditions =
                         Stationary
                     else
                         Continue
+
                 decision
             else
                 Continue
@@ -173,48 +194,41 @@ module EndConditions =
     let whenStableAcceptanceRate min max interval intervalsRequired log : EndCondition =
         let intervalN = Units.removeUnitFromInt interval
         let required = Units.removeUnitFromInt intervalsRequired
+
         fun results iteration ->
-            onlyOnInterval interval iteration <| fun () ->
-                if iteration <= interval * intervalsRequired then Continue else
-                
-                let bins =
-                    results
-                    |> List.take (intervalN * required)
-                    |> List.chunkBySize intervalN
+            onlyOnInterval interval iteration
+            <| fun () ->
+                if iteration <= interval * intervalsRequired then
+                    Continue
+                else
 
-                let acceptanceRates =
-                    bins
-                    |> List.map (fun chunk ->
-                        let diffs =
-                            chunk
-                            |> List.pairwise
-                            |> List.map (fun (a, b) -> fst a - fst b)
+                    let bins = results |> List.take (intervalN * required) |> List.chunkBySize intervalN
 
-                        let accepted =
-                            diffs
-                            |> List.where ((=) 0.<``-logL``> >> not)
-                            |> List.length
+                    let acceptanceRates =
+                        bins
+                        |> List.map (fun chunk ->
+                            let diffs = chunk |> List.pairwise |> List.map (fun (a, b) -> fst a - fst b)
 
-                        float accepted / float diffs.Length
-                    )
+                            let accepted = diffs |> List.where ((=) 0.<``-logL``> >> not) |> List.length
 
-                let stable =
-                    acceptanceRates
-                    |> List.forall (fun ar -> ar >= min && ar <= max)
+                            float accepted / float diffs.Length)
 
-                let result =
-                    if stable then
-                        OptimStopReason.Custom "Stable"
-                    else
-                        Continue
+                    let stable = acceptanceRates |> List.forall (fun ar -> ar >= min && ar <= max)
 
-                log (GeneralEvent(sprintf "[EndCondition] Acceptance rates = %A [%A]" acceptanceRates result))
-                result
+                    let result = if stable then OptimStopReason.Custom "Stable" else Continue
+
+                    log (GeneralEvent(sprintf "[EndCondition] Acceptance rates = %A [%A]" acceptanceRates result))
+                    result
 
     let whenAcceptanceRateOutside min max interval intervalsRequired log : EndCondition =
         fun results iteration ->
-            let within = whenStableAcceptanceRate min max interval intervalsRequired log results iteration
-            if within = Continue then Custom "Outside AR bound" else Continue
+            let within =
+                whenStableAcceptanceRate min max interval intervalsRequired log results iteration
+
+            if within = Continue then
+                Custom "Outside AR bound"
+            else
+                Continue
 
     /// <summary>Stop when the rolling variance of the objective stabilises.</summary>
     /// <param name="window">number of recent samples to compare</param>
@@ -222,23 +236,23 @@ module EndConditions =
     /// <returns>A stop condition or Continue.</returns>
     let whenVarianceStabilised window relTol : EndCondition =
         fun results iteration ->
-            rollingWindow (2 * window) results iteration <| fun _ ->
+            rollingWindow (2 * window) results iteration
+            <| fun _ ->
                 let n = Units.removeUnitFromInt window
 
-                let recent =
-                    results |> List.take n |> List.map fst
+                let recent = results |> List.take n |> List.map fst
 
-                let older =
-                    results |> List.skip n |> List.take n |> List.map fst
+                let older = results |> List.skip n |> List.take n |> List.map fst
 
                 let varRecent = Observations.variance recent
-                let varOlder  = max (Observations.variance older) 1e-12<``-logL``^2>
+                let varOlder = max (Observations.variance older) 1e-12<``-logL``^2>
 
                 let relChange = abs (varRecent - varOlder) / varOlder
 
                 if relChange < relTol then
                     Custom "Variance stabilised"
-                else Continue
+                else
+                    Continue
 
     let whenStuck movementFloor interval : EndCondition =
         fun results iteration ->
@@ -296,29 +310,23 @@ module EndConditions =
         module SimulatedAnnealing =
 
             let preTuning =
-                combineAny [
-                    whenVarianceStabilised 500<iteration> 0.02
-                    atIteration 1500<iteration>
-                ]
+                combineAny [ whenVarianceStabilised 500<iteration> 0.02; atIteration 1500<iteration> ]
 
             let heating =
-                combineAny [
-                    combineAll [
-                        whenVarianceStabilised 200<iteration> 0.05
-                        whenWorstValuePlateaued 200<iteration>
-                    ]
-                    atIteration 1500<iteration>
-                ]
+                combineAny
+                    [ combineAll
+                          [ whenVarianceStabilised 200<iteration> 0.05
+                            whenWorstValuePlateaued 200<iteration> ]
+                      atIteration 1500<iteration> ]
 
             /// Annealing will stop when either: there is little movement in parameter space;
             /// no improvements are being made; or acceptance rates are very low.
             let annealing =
-                combineAny [
-                    whenNoBestValueImprovement 500<iteration>
-                    whenStationary 1e-6<``optim-space`` ^2> 100<iteration>
-                    // whenAcceptanceRateOutside 0.1 1.0 regularity 5 ignore // TODO Fix: triggering on i=1
-                    atIteration 5000<iteration>
-                ]
+                combineAny
+                    [ whenNoBestValueImprovement 500<iteration>
+                      whenStationary 1e-6<``optim-space``^2> 100<iteration>
+                      // whenAcceptanceRateOutside 0.1 1.0 regularity 5 ignore // TODO Fix: triggering on i=1
+                      atIteration 5000<iteration> ]
 
 
     module Ensemble =

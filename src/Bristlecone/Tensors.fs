@@ -46,7 +46,7 @@ module Tensors =
             { Inner = a.Value - b.Value }
 
         static member (*)(a: TypedTensor<Vector, 'u>, b: TypedTensor<Vector, 'v>) : TypedTensor<Vector, 'u * 'v> =
-            { Inner = dsharp.mul(a.Value,b.Value) }
+            { Inner = dsharp.mul (a.Value, b.Value) }
 
         static member (/)(a: TypedTensor<Vector, 'u>, b: TypedTensor<Vector, 'v>) : TypedTensor<Vector, 'u / 'v> =
             { Inner = a.Value / b.Value }
@@ -56,7 +56,7 @@ module Tensors =
             { Inner = v.Value * s.Value }
 
         static member (+)(v: TypedTensor<Vector, 'u>, s: TypedTensor<Scalar, 'u>) : TypedTensor<Vector, 'u> =
-            { Inner = dsharp.add(v.Value,s.Value) }
+            { Inner = dsharp.add (v.Value, s.Value) }
 
         static member (*)(s: TypedTensor<Scalar, 'u>, v: TypedTensor<Vector, 'v>) : TypedTensor<Vector, 'u * 'v> =
             { Inner = s.Value * v.Value }
@@ -110,9 +110,9 @@ module Tensors =
         let squareVector (x: TypedTensor<Vector, 'u>) : TypedTensor<Vector, 'u^2> = { Inner = x.Value ** 2.0 }
 
         /// Squared Euclidean length of a vector.
-        let squaredLength (v: TypedTensor<Vector, 'u>) : TypedTensor<Scalar, 'u ^ 2> =
+        let squaredLength (v: TypedTensor<Vector, 'u>) : TypedTensor<Scalar, 'u^2> =
             let inner = v.Value
-            let sq = dsharp.sum (dsharp.mul(inner,inner))
+            let sq = dsharp.sum (dsharp.mul (inner, inner))
             { Inner = sq }
 
         let sqrtScalar (x: TypedTensor<Scalar, 'u^2>) : TypedTensor<Scalar, 'u> = { Inner = x.Value.sqrt () }

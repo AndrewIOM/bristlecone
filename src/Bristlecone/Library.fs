@@ -377,6 +377,7 @@ module Bristlecone =
                     obsDataForObjective
 
             let result = objective |> optimise
+
             let lowestLikelihood, bestPoint =
                 match result |> Optimisation.Optimiser.tryGetSolution with
                 | Some sol -> sol
@@ -419,13 +420,13 @@ module Bristlecone =
 
             engine.LogTo CompleteEvent
 
-            let trace = result |> List.map(fun r ->
-                {
-                    ComponentName = r.Component
-                    StageName = r.Stage
-                    ReplicateNumber = r.Replicate
-                    Results = r.Results |> toRealSpaceSolutions optimConfig
-                })
+            let trace =
+                result
+                |> List.map (fun r ->
+                    { ComponentName = r.Component
+                      StageName = r.Stage
+                      ReplicateNumber = r.Replicate
+                      Results = r.Results |> toRealSpaceSolutions optimConfig })
 
             return
                 { ResultId = resultId
@@ -534,7 +535,7 @@ module Bristlecone =
 
             return
                 { ErrorStructure = errorStructure
-                  IterationsRun = (estimated.Trace |> List.sumBy(fun i -> i.Results.Length)) * 1<iteration>
+                  IterationsRun = (estimated.Trace |> List.sumBy (fun i -> i.Results.Length)) * 1<iteration>
                   Parameters = paramDiffs
                   Series = estimated.Series |> Seq.map (fun k -> k.Key.Value, k.Value) |> Map.ofSeq
                   RealLikelihood = realEstimate.Likelihood

@@ -7,8 +7,8 @@ type LogEvent =
     | OptimisationPhaseEvent of PhaseState
     | CompleteEvent
     | GeneralEvent of string
-    | WarningEvent of warningMessage:string
-    | DebugEvent of origin:string * message:string
+    | WarningEvent of warningMessage: string
+    | DebugEvent of origin: string * message: string
     | OrchestrationEvent of string
 
 and ModelFitState =
@@ -21,7 +21,7 @@ and ModelFitState =
 and PhaseState =
     | OptimComponentStarting of string
     | OptimComponentEnding of string
-    | PhaseStarting of string * instanceId:int
+    | PhaseStarting of string * instanceId: int
 
 type ThreadStatus =
     { ThreadId: int
@@ -224,12 +224,12 @@ module Console =
 
     let internal print nIteration threadId (x: LogEvent) =
         match x with
-        | DebugEvent (o,m) -> printfn "##%i## [DEBUG / %s] %s" threadId o m
+        | DebugEvent(o, m) -> printfn "##%i## [DEBUG / %s] %s" threadId o m
         | OptimisationPhaseEvent p ->
             match p with
             | PhaseState.OptimComponentStarting m -> printfn "##%i## [OPTIMISATION START] %s starting" threadId m
             | PhaseState.OptimComponentEnding m -> printfn "##%i## [OPTIMISATION END] %s ending" threadId m
-            | PhaseState.PhaseStarting (s,i) -> printfn "##%i##(%i) [OPTIMISATION -> PHASE] %s" threadId i s
+            | PhaseState.PhaseStarting(s, i) -> printfn "##%i##(%i) [OPTIMISATION -> PHASE] %s" threadId i s
         | OptimisationEvent e ->
             if e.Iteration % nIteration = 0<iteration> then
                 printfn "##%i## At iteration %i (-logL = %f) %A" threadId e.Iteration e.Likelihood e.Theta

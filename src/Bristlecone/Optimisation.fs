@@ -10,17 +10,18 @@ module Optimiser =
 
     /// Returns the most recent solution from an optimisation trace.
     let tryGetSolution (trace: OptimisationTrace list) =
-        trace
-        |> Seq.tryHead
-        |> Option.bind(fun tr -> tr.Results |> Seq.tryHead)
+        trace |> Seq.tryHead |> Option.bind (fun tr -> tr.Results |> Seq.tryHead)
 
-    let combine (optim1:Optimise) (optim2:Optimise) =
+    let combine (optim1: Optimise) (optim2: Optimise) =
         fun rnd logger endCond domain point objective ->
             let r1 =
                 optim1 rnd logger endCond domain point objective
                 |> tryGetSolution
                 |> Option.map snd
-            if r1.IsNone then failwith "Optimisation part did not return any results."
+
+            if r1.IsNone then
+                failwith "Optimisation part did not return any results."
+
             let r2 = optim2 rnd logger endCond domain r1 objective
             r2
 
@@ -32,15 +33,16 @@ module None =
     let none: Optimiser =
         InDetachedSpace
         <| fun _ writeOut _ domain _ f ->
-            writeOut <| OptimisationPhaseEvent (OptimComponentStarting "None")
+            writeOut <| OptimisationPhaseEvent(OptimComponentStarting "None")
             let point = [| for min, _, _ in domain -> min |] |> Tensors.Typed.ofVector
-            writeOut <| DebugEvent("Optimisation", sprintf "Parameters under test are %A" point)
-            [{
-                Component = "None"
+
+            writeOut
+            <| DebugEvent("Optimisation", sprintf "Parameters under test are %A" point)
+
+            [ { Component = "None"
                 Stage = "None"
                 Replicate = 1
-                Results = [ f point |> Tensors.Typed.toFloatScalar, point ]
-            }]
+                Results = [ f point |> Tensors.Typed.toFloatScalar, point ] } ]
 
 
 module Initialise =
@@ -63,7 +65,7 @@ module Initialise =
         |> Array.map ((*) 1.<``optim-space``>)
         |> Tensors.Typed.ofVector
 
-    let initScales (domain:Domain) =
+    let initScales (domain: Domain) =
         domain |> Array.map (fun (l, u, _) -> (u - l) / 6.)
 
     /// Assesses if theta is valid based on the provided
@@ -101,7 +103,7 @@ module Initialise =
     let getStartPoint f domain random n startPoint =
         match startPoint with
         | Some theta -> theta
-        | None -> 
+        | None ->
             match tryGenerateTheta f domain random n with
             | Ok theta -> theta
             | Error _ -> invalidOp "Could not generate theta"
@@ -366,7 +368,8 @@ module MonteCarlo =
         | CovarianceWithScale w -> TuningMode.dual interval w
         | CovarianceWithScaleTotalHistory w -> TuningMode.dualTotalHistory interval w
 
-    let name = function
+    let name =
+        function
         | Covariance w -> sprintf "Covariance adaptation (weight = %f)" w
         | Scale -> sprintf "Scale adaptation"
         | CovarianceWithScale w -> sprintf "Covariance + scale adaptation (weight = %f)" w
@@ -409,7 +412,7 @@ module MonteCarlo =
             (domain: Domain)
             (f: Objective)
             =
-            writeOut <| OptimisationPhaseEvent (OptimComponentStarting "Random walk")
+            writeOut <| OptimisationPhaseEvent(OptimComponentStarting "Random walk")
             let sample cov = MultivariateNormal.sample cov random
             let initialSolution = f theta |> Typed.toFloatScalar, theta
 
@@ -417,10 +420,13 @@ module MonteCarlo =
             |> Seq.fold
                 (fun (s: OptimisationTrace list, sc) tuneStep ->
                     let phaseName = sprintf "Tuning: %s" (name tuneStep.Method)
-                    writeOut <| OptimisationPhaseEvent (PhaseStarting(phaseName, 1))
+                    writeOut <| OptimisationPhaseEvent(PhaseStarting(phaseName, 1))
+
                     let l, t =
-                        if s.IsEmpty then initialSolution
-                        else s |> Optimiser.tryGetSolution |> Option.get
+                        if s.IsEmpty then
+                            initialSolution
+                        else
+                            s |> Optimiser.tryGetSolution |> Option.get
 
                     let results =
                         metropolisHastings'
@@ -436,16 +442,15 @@ module MonteCarlo =
                             sc
                             1<iteration>
 
-                    {
-                        Component = "Random walk"
-                        Stage = phaseName
-                        Replicate = 1
-                        Results = fst results
-                    } :: s, snd results
-                )
+                    { Component = "Random walk"
+                      Stage = phaseName
+                      Replicate = 1
+                      Results = fst results }
+                    :: s,
+                    snd results)
                 ([], (initialCovariance, initialScale))
             ||> fun trace s ->
-                writeOut <| OptimisationPhaseEvent (PhaseStarting ("Homogeneous chain", 1))
+                writeOut <| OptimisationPhaseEvent(PhaseStarting("Homogeneous chain", 1))
                 let l, t = trace |> Optimiser.tryGetSolution |> Option.defaultValue initialSolution
 
                 let traceHomo =
@@ -465,11 +470,14 @@ module MonteCarlo =
                 { Component = "Random walk"
                   Stage = "Homogeneous chain"
                   Replicate = 1
-                  Results = fst traceHomo } :: trace, s
+                  Results = fst traceHomo }
+                :: trace,
+                s
 
         let randomWalk (tuningSteps: seq<TuneStep>) : Optimise =
             fun random writeOut n domain startPoint f ->
                 let initialCovariance = TuningMode.covarianceFromBounds 10000 domain random
+
                 let theta =
                     match startPoint with
                     | Some p -> p
@@ -477,8 +485,11 @@ module MonteCarlo =
                         match Initialise.tryGenerateTheta f domain random 10000 with
                         | Ok theta -> theta
                         | Error _ -> invalidOp "Could not generate theta"
+
                 writeOut <| DebugEvent("Optimisation", sprintf "Initial theta is %A" theta)
-                randomWalk' initialCovariance 1. theta tuningSteps random writeOut n domain f |> fst
+
+                randomWalk' initialCovariance 1. theta tuningSteps random writeOut n domain f
+                |> fst
 
 
     /// A Markov Chain Monte Carlo (MCMC) sampling algorithm that randomly 'walks'
@@ -761,7 +772,9 @@ module MonteCarlo =
         <| fun random writeOut _ domain startPoint f ->
             let initialTheta = Initialise.getStartPoint f domain random 10000 startPoint
             let initialSigma = Array.init (Typed.length initialTheta) (fun _ -> 0.)
-            writeOut <| DebugEvent("Optimisation", sprintf "Initial theta is %A" initialTheta)
+
+            writeOut
+            <| DebugEvent("Optimisation", sprintf "Initial theta is %A" initialTheta)
 
             let _, result, _ =
                 MetropolisWithinGibbs.core
@@ -776,12 +789,10 @@ module MonteCarlo =
                     initialTheta
                     initialSigma
 
-            [{
-                Component = "Adaptive-Metropolis-within-Gibbs"
+            [ { Component = "Adaptive-Metropolis-within-Gibbs"
                 Stage = "Adaptive"
                 Replicate = 1
-                Results = result
-            }]
+                Results = result } ]
 
     /// A non-adaptive Metropolis-within-gibbs Sampler. Each parameter is updated
     /// individually, unlike the random walk algorithm.
@@ -804,12 +815,10 @@ module MonteCarlo =
                     initialTheta
                     initialSigma
 
-            [{
-                Component = "Metropolis-within-Gibbs"
+            [ { Component = "Metropolis-within-Gibbs"
                 Stage = "Non-adaptive"
                 Replicate = 1
-                Results = result
-            }]
+                Results = result } ]
 
     /// Implementation similar to that proposed by Yang and Rosenthal: "Automatically Tuned
     /// General-Purpose MCMC via New Adaptive Diagnostics"
@@ -826,6 +835,7 @@ module MonteCarlo =
                 MetropolisWithinGibbs.core adapt writeOut random domain f [] batchSize currentBatch theta sigmas
 
             writeOut <| OptimisationPhaseEvent(PhaseStarting("1st Adaptive Phase", 1))
+
             let batches, results, tunedSigmas =
                 initialSigma
                 |> mwg true 100<iteration> 1<MetropolisWithinGibbs.batch> initialTheta
@@ -863,7 +873,9 @@ module MonteCarlo =
                     domain
                     f
 
-            writeOut <| OptimisationPhaseEvent(PhaseStarting("Sampling Phase (random walk MCMC, with burnin)", 1))
+            writeOut
+            <| OptimisationPhaseEvent(PhaseStarting("Sampling Phase (random walk MCMC, with burnin)", 1))
+
             RandomWalk.randomWalk'
                 (finalScale |> fst)
                 (finalScale |> snd)
@@ -944,13 +956,15 @@ module MonteCarlo =
             let internal updateParamState (state: ParamTuningState<'s>) (newScale: float<'s>) =
                 let relChange = abs (newScale - state.Scale) / state.Scale
                 let stable = relChange < 0.05
+
                 { state with
                     Scale = newScale
                     StableCount = if stable then state.StableCount + 1 else state.StableCount
                     Window = [||] }
 
             let internal addToWindow (state: ParamTuningState<'s>) (v: float<'s>) =
-                { state with Window = Array.append state.Window [| v |] }
+                { state with
+                    Window = Array.append state.Window [| v |] }
 
             let internal scalesStable requiredStableCount (states: ParamTuningState<'s>[]) =
                 states |> Array.forall (fun p -> p.StableCount >= requiredStableCount)
@@ -974,10 +988,8 @@ module MonteCarlo =
                 =
 
                 let rec tune (p: ParamTuningState<``optim-space``>[]) k history =
-                    let chance : int = k / settings.MaxTuneLength
-                    let parameterToChange =
-                        if p.Length = 1 then 0
-                        else random.Next(0, p.Length)
+                    let chance: int = k / settings.MaxTuneLength
+                    let parameterToChange = if p.Length = 1 then 0 else random.Next(0, p.Length)
 
                     let scalesToChange =
                         p
@@ -999,20 +1011,21 @@ module MonteCarlo =
                             scalesToChange
                             |> Array.zip (thetaNew |> Typed.toFloatArray)
                             |> Array.map (fun (v, (pState, changed)) ->
-                                let pState =
-                                    if changed then
-                                        addToWindow pState v
-                                    else
-                                        pState
+                                let pState = if changed then addToWindow pState v else pState
 
                                 if pState.Window.Length * 1<iteration> = settings.TuneN then
                                     let changes =
-                                        pState.Window |> Array.pairwise |> Array.where (fun (a, b) -> a <> b) |> Array.length
+                                        pState.Window
+                                        |> Array.pairwise
+                                        |> Array.where (fun (a, b) -> a <> b)
+                                        |> Array.length
 
                                     let newScale =
                                         match Units.intToFloat changes / Units.intToFloat settings.TuneN with
-                                        | ar when ar < 0.35</iteration> -> pState.Scale * exp (-1.0 * (0.35 - Units.removeUnitFromFloat ar))
-                                        | ar when ar > 0.50</iteration> -> pState.Scale * exp (1.0 * (Units.removeUnitFromFloat ar - 0.50))
+                                        | ar when ar < 0.35< / iteration> ->
+                                            pState.Scale * exp (-1.0 * (0.35 - Units.removeUnitFromFloat ar))
+                                        | ar when ar > 0.50< / iteration> ->
+                                            pState.Scale * exp (1.0 * (Units.removeUnitFromFloat ar - 0.50))
                                         | _ -> pState.Scale
 
                                     updateParamState pState newScale
@@ -1032,18 +1045,19 @@ module MonteCarlo =
                         let stable =
                             match settings.RequiredStableCount with
                             | None -> false
-                            | Some reqStableCount ->
-                                k > settings.MinTuneLength
-                                && scalesStable reqStableCount newScales
+                            | Some reqStableCount -> k > settings.MinTuneLength && scalesStable reqStableCount newScales
 
                         if k >= settings.MaxTuneLength then
                             writeOut <| GeneralEvent "Tuning finished: reached maximum tuning iterations"
                             newScales |> Array.map (fun s -> s.Scale), lNew, thetaNew, history
                         else if stable then
-                            writeOut <| GeneralEvent (
-                                sprintf "Tuning finished early: scales stable for all parameters (required %i consecutive stable updates)"
+                            writeOut
+                            <| GeneralEvent(
+                                sprintf
+                                    "Tuning finished early: scales stable for all parameters (required %i consecutive stable updates)"
                                     settings.RequiredStableCount.Value
                             )
+
                             newScales |> Array.map (fun s -> s.Scale), lNew, thetaNew, history
                         else
                             writeOut
@@ -1088,13 +1102,11 @@ module MonteCarlo =
                         initialScale
                         settings
                         (l1 |> Typed.toFloatScalar, theta1)
-                    |> fun (_,_,_,r) ->
-                        [{
-                            Component = "Perturbation around point"
+                    |> fun (_, _, _, r) ->
+                        [ { Component = "Perturbation around point"
                             Stage = "None"
                             Replicate = 1
-                            Results = r
-                        }]
+                            Results = r } ]
 
 
         /// Represents configurable settings of an annealing procedure
@@ -1132,9 +1144,7 @@ module MonteCarlo =
                 match newPoint with
                 | None ->
                     writeOut
-                    <| GeneralEvent(
-                        sprintf "Abandoning at iteration %i as could not move after 100 tries." iteration
-                    )
+                    <| GeneralEvent(sprintf "Abandoning at iteration %i as could not move after 100 tries." iteration)
 
                     d
                 | Some newPoint ->
@@ -1142,13 +1152,13 @@ module MonteCarlo =
                         run point d iteration
                     else
                         let state = newPoint :: d
-                        
+
                         let shouldEnd = atEnd state iteration
+
                         if shouldEnd <> Continue then
                             writeOut
-                            <| GeneralEvent(
-                                sprintf "Stopping at iteration %i: %A" iteration shouldEnd
-                            )
+                            <| GeneralEvent(sprintf "Stopping at iteration %i: %A" iteration shouldEnd)
+
                             state
                         else
                             writeOut
@@ -1163,26 +1173,40 @@ module MonteCarlo =
 
         /// Cool between homoegenous markov chains according to `cool` schedule.
         /// Each anneal recursion begins from the end of the previous markov chain.
-        let rec anneal writeOut (saEnd: EndCondition) (tempFloor: float option) cool markov temperature point previousBests iteration =
+        let rec anneal
+            writeOut
+            (saEnd: EndCondition)
+            (tempFloor: float option)
+            cool
+            markov
+            temperature
+            point
+            previousBests
+            iteration
+            =
 
             let phaseName = sprintf "Annealing (T=%f)" temperature
-            writeOut <| OptimisationPhaseEvent(PhaseStarting(phaseName,1))
+            writeOut <| OptimisationPhaseEvent(PhaseStarting(phaseName, 1))
 
             let annealLevelTrace = point |> markov temperature
-            let history = 
-                {
-                    Component = "Simulated annealing"
-                    Stage = phaseName
-                    Replicate = 1
-                    Results = annealLevelTrace
-                } :: previousBests
 
-            let belowT = tempFloor |> Option.map(fun f -> temperature < f) |> Option.defaultValue false
+            let history =
+                { Component = "Simulated annealing"
+                  Stage = phaseName
+                  Replicate = 1
+                  Results = annealLevelTrace }
+                :: previousBests
+
+            let belowT =
+                tempFloor |> Option.map (fun f -> temperature < f) |> Option.defaultValue false
+
             let shouldEnd = saEnd annealLevelTrace iteration
+
             if shouldEnd <> Continue || belowT then
                 history
             else
                 let bestAtTemperature = annealLevelTrace |> List.minBy fst
+
                 writeOut
                 <| GeneralEvent(
                     sprintf "[Annealing] Ending temperature %f at -logL %f" temperature (bestAtTemperature |> fst)
@@ -1201,11 +1225,11 @@ module MonteCarlo =
 
         /// Heat up temperature until acceptance rate of bad moves is above the threshold `endAcceptanceRate`.
         /// If it becomes impossible to propose a move during heating, then heating ends.
-        let rec heat write ceiling endAcceptanceRate heatingSchedule markov (solution:Solution) history temperature =
-            
+        let rec heat write ceiling endAcceptanceRate heatingSchedule markov (solution: Solution) history temperature =
+
             let phaseName = sprintf "Heating (T=%f)" temperature
-            write <| OptimisationPhaseEvent(PhaseStarting(phaseName,1))
-            
+            write <| OptimisationPhaseEvent(PhaseStarting(phaseName, 1))
+
             let chain = markov temperature solution
 
             let ar =
@@ -1221,14 +1245,15 @@ module MonteCarlo =
                 badAccepted / (badAccepted + badRejected)
 
             write
-            <| DebugEvent("Optimisation",
+            <| DebugEvent(
+                "Optimisation",
                 sprintf
                     "SA Heating: Jump average is %f"
                     (chain |> List.map fst |> List.pairwise |> List.averageBy (fun (a, b) -> b - a))
             )
 
             write
-            <| DebugEvent("Optimisation",sprintf "SA Heating: Acceptance of bad moves is %f at T=%f" ar temperature)
+            <| DebugEvent("Optimisation", sprintf "SA Heating: Acceptance of bad moves is %f at T=%f" ar temperature)
 
             let aboveCeiling =
                 if Option.isSome ceiling then
@@ -1236,12 +1261,11 @@ module MonteCarlo =
                 else
                     false
 
-            let stageResult = 
-                {
-                    Component = "Simulated annealing"
-                    Stage = phaseName
-                    Replicate = 1
-                    Results = chain }
+            let stageResult =
+                { Component = "Simulated annealing"
+                  Stage = phaseName
+                  Replicate = 1
+                  Results = chain }
 
             if ar < endAcceptanceRate && not aboveCeiling then
                 heat
@@ -1284,8 +1308,11 @@ module MonteCarlo =
 
                 markovChain writeOut endCond (propose scales) machine random f temperature
 
-            writeOut <| OptimisationPhaseEvent(PhaseStarting("Pre-tune (homogeneous chain)",1))
-            let preTune = homogenousChain initialScale settings.PreTuneEnd 1. (l1 |> Typed.toFloatScalar, theta1)
+            writeOut
+            <| OptimisationPhaseEvent(PhaseStarting("Pre-tune (homogeneous chain)", 1))
+
+            let preTune =
+                homogenousChain initialScale settings.PreTuneEnd 1. (l1 |> Typed.toFloatScalar, theta1)
 
             // 3. Tune individual step size based on acceptance rate
             let tunedScale, l2, theta2, tuningTrace =
@@ -1308,7 +1335,9 @@ module MonteCarlo =
                     settings.InitialTemperature
 
             let heatEndPosition = heatLevelTraces |> Optimiser.tryGetSolution |> Option.get
-            writeOut <| DebugEvent("Optimisation", sprintf "Heating ended at position %A" heatEndPosition)
+
+            writeOut
+            <| DebugEvent("Optimisation", sprintf "Heating ended at position %A" heatEndPosition)
 
             // 5. Gradually cool down (from best point during heat-up)
             let annealResult =
@@ -1321,21 +1350,22 @@ module MonteCarlo =
                     boilingPoint
                     heatEndPosition
                     []
-                    1<iteration>, tunedScale
+                    1<iteration>,
+                tunedScale
 
-            let preTuneResult = {
-                    Component = "Pre-tune"
-                    Stage = "None"
-                    Replicate = 1
-                    Results = preTune }
-            
-            let tuningResult = {
-                    Component = "Tuning"
-                    Stage = "None"
-                    Replicate = 1
-                    Results = tuningTrace }
+            let preTuneResult =
+                { Component = "Pre-tune"
+                  Stage = "None"
+                  Replicate = 1
+                  Results = preTune }
 
-            List.concat [ fst annealResult; heatLevelTraces; [tuningResult; preTuneResult] ], tunedScale
+            let tuningResult =
+                { Component = "Tuning"
+                  Stage = "None"
+                  Replicate = 1
+                  Results = tuningTrace }
+
+            List.concat [ fst annealResult; heatLevelTraces; [ tuningResult; preTuneResult ] ], tunedScale
 
         /// Candidate distribution: Gaussian univariate []
         /// Probability: Boltzmann Machine
@@ -1343,11 +1373,14 @@ module MonteCarlo =
             InDetachedSpace
             <| fun random writeOut endCon domain _ (f: Objective) ->
                 let initialScale = [| 1 .. domain.Length |] |> Array.map (fun _ -> scale)
+
                 let gaussian rnd (scale: float<``optim-space``>) (t: float) =
                     let s = if tDependentProposal then scale * (sqrt t) else scale
                     fun () -> Normal.draw rnd 0.<``optim-space``> s ()
 
-                writeOut <| OptimisationPhaseEvent(OptimComponentStarting "Simulated annealing (classical)")
+                writeOut
+                <| OptimisationPhaseEvent(OptimComponentStarting "Simulated annealing (classical)")
+
                 simulatedAnnealing
                     initialScale
                     settings
@@ -1358,7 +1391,8 @@ module MonteCarlo =
                     random
                     writeOut
                     domain
-                    f |> fst
+                    f
+                |> fst
 
         /// Candidate distribution: Cauchy univariate []
         /// Probability: Bottzmann Machine
@@ -1366,11 +1400,14 @@ module MonteCarlo =
             InDetachedSpace
             <| fun random writeOut endCon domain _ (f: Objective) ->
                 let initialScale = [| 1 .. domain.Length |] |> Array.map (fun _ -> scale)
+
                 let cauchyDraw random scale t =
                     let s = if tDependentProposal then scale * sqrt t else scale
                     Cauchy.draw<``optim-space``> random 0.0<``optim-space``> s
 
-                writeOut <| OptimisationPhaseEvent(OptimComponentStarting "Simulated annealing (fast)")
+                writeOut
+                <| OptimisationPhaseEvent(OptimComponentStarting "Simulated annealing (fast)")
+
                 simulatedAnnealing
                     initialScale
                     settings
@@ -1381,21 +1418,28 @@ module MonteCarlo =
                     random
                     writeOut
                     domain
-                    f |> fst
+                    f
+                |> fst
 
     /// An optimiser that applies fast simulated annealing (SA) as a tuning phase,
     /// followed by a true homogeneous MCMC chain. SA ends when it's temperature
     /// becomes T = 1. Bristlecone library defaults are used for all settings.
     /// Pass the `EndCondition.Profiles.mcmc` end condition to set the stopping
     /// conditions for the final end.
-    let bristleconeSampler : Optimiser =
-        let settings = { SimulatedAnnealing.AnnealSettings.Default with TemperatureFloor = Some 1.0 }
+    let bristleconeSampler: Optimiser =
+        let settings =
+            { SimulatedAnnealing.AnnealSettings.Default with
+                TemperatureFloor = Some 1.0 }
+
         InDetachedSpace
         <| fun random writeOut endCon domain customStartPoint (f: Objective) ->
             writeOut <| OptimisationPhaseEvent(OptimComponentStarting "Bristlecone sampler")
             let initialScale = Initialise.initScales domain
+
             let saResult, saScales =
-                let cauchyDraw random scale _ = Cauchy.draw<``optim-space``> random 0.0<``optim-space``> scale
+                let cauchyDraw random scale _ =
+                    Cauchy.draw<``optim-space``> random 0.0<``optim-space``> scale
+
                 SimulatedAnnealing.simulatedAnnealing
                     initialScale
                     settings
@@ -1407,19 +1451,15 @@ module MonteCarlo =
                     writeOut
                     domain
                     f
+
             let theta = saResult |> Optimiser.tryGetSolution |> Option.get |> snd
-            let randomWalkCov = TuningMode.covarianceFromStandardDeviations 10000 random saScales
+
+            let randomWalkCov =
+                TuningMode.covarianceFromStandardDeviations 10000 random saScales
+
             let walk =
-                RandomWalk.randomWalk'
-                    randomWalkCov
-                    1.0
-                    theta
-                    []
-                    random
-                    writeOut
-                    endCon
-                    domain
-                    f
+                RandomWalk.randomWalk' randomWalkCov 1.0 theta [] random writeOut endCon domain f
+
             List.append (fst walk) saResult
 
 
@@ -1558,7 +1598,9 @@ module MonteCarlo =
 
                     step isBurnIn newTuningState endWhen result.Value newTrace (iteration + 1<iteration>)
 
-            writeOut <| OptimisationPhaseEvent(PhaseStarting ("Burn-in phase (tuning scales)", 1))
+            writeOut
+            <| OptimisationPhaseEvent(PhaseStarting("Burn-in phase (tuning scales)", 1))
+
             let burnResults, burnScales =
                 step
                     true
@@ -1568,7 +1610,9 @@ module MonteCarlo =
                     []
                     0<iteration>
 
-            writeOut <| OptimisationPhaseEvent(PhaseStarting("Sampling phase (homogeneous chain)", 1))
+            writeOut
+            <| OptimisationPhaseEvent(PhaseStarting("Sampling phase (homogeneous chain)", 1))
+
             let results, _ =
                 step
                     false
@@ -1578,20 +1622,14 @@ module MonteCarlo =
                     []
                     0<iteration>
 
-            [
-                {
-                    Component = "Filzbach"
-                    Stage = "Sampling phase (homogeneous chain)"
-                    Replicate = 1
-                    Results = results
-                }
-                {
-                    Component = "Filzbach"
-                    Stage = "Burn-in phase (tuning scales)"
-                    Replicate = 1
-                    Results = burnResults
-                }
-            ]
+            [ { Component = "Filzbach"
+                Stage = "Sampling phase (homogeneous chain)"
+                Replicate = 1
+                Results = results }
+              { Component = "Filzbach"
+                Stage = "Burn-in phase (tuning scales)"
+                Replicate = 1
+                Results = burnResults } ]
 
         /// A Monte Carlo Markov Chain sampler based on the 'Filzbach' algorithm from
         /// Microsoft Research Cambridge.
@@ -1712,8 +1750,7 @@ module Amoeba =
 
             if Option.isSome startPoint then
                 writeOut
-                <| WarningEvent
-                    "A fixed start point was set, but this Nelder-Mead implementation does not support one."
+                <| WarningEvent "A fixed start point was set, but this Nelder-Mead implementation does not support one."
 
             let start =
                 [| for _ in 1..nVertices -> Initialise.tryGenerateTheta f domain rng 10000 |]
@@ -1759,12 +1796,10 @@ module Amoeba =
                 [| 1..numberOfAmoeba |]
                 |> Array.collect (fun i ->
                     try
-                        [|{
-                            Component = "Amoeba swarm"
-                            Stage = sprintf "Level %i" level
-                            Replicate = i
-                            Results = solve settings rng logger endCondition paramBounds startPoint f
-                        }|]
+                        [| { Component = "Amoeba swarm"
+                             Stage = sprintf "Level %i" level
+                             Replicate = i
+                             Results = solve settings rng logger endCondition paramBounds startPoint f } |]
                     with e ->
                         logger
                         <| WarningEvent(
@@ -1803,7 +1838,8 @@ module Amoeba =
 
                 logger
                 <| DebugEvent(
-                    "Optimisation", sprintf "Min %A Max %A" (min |> Tensors.Typed.itemAt dim) (max |> Tensors.Typed.itemAt dim)
+                    "Optimisation",
+                    sprintf "Min %A Max %A" (min |> Tensors.Typed.itemAt dim) (max |> Tensors.Typed.itemAt dim)
                 )
 
                 min |> Tensors.Typed.itemAt dim |> Tensors.Typed.toFloatScalar,
@@ -1817,21 +1853,31 @@ module Amoeba =
             logger <| DebugEvent("Optimisation", sprintf "Bound width: %f" boundWidth)
 
             if level > 1 && boundWidth > 0.01<``optim-space``> then
-                swarm settings rng logger (level - 1) endCondition numberOfAmoeba bounds startPoint f (List.append (Array.toList amoebaResults) oldLevels)
+                swarm
+                    settings
+                    rng
+                    logger
+                    (level - 1)
+                    endCondition
+                    numberOfAmoeba
+                    bounds
+                    startPoint
+                    f
+                    (List.append (Array.toList amoebaResults) oldLevels)
             else
                 List.append (Array.toList amoebaResults) oldLevels
 
 
     /// Optimise an objective function using a single downhill Nelder Mead simplex.
     let single settings : Optimiser =
-        InTransformedSpace <| fun random writeOut endCon domain startPoint f ->
+        InTransformedSpace
+        <| fun random writeOut endCon domain startPoint f ->
             let result = Solver.solve settings random writeOut endCon domain startPoint f
-            [{
-                Component = "Amoeba"
+
+            [ { Component = "Amoeba"
                 Stage = "None"
                 Replicate = 1
-                Results = result
-            }]
+                Results = result } ]
 
     /// Optimisation heuristic that creates a swarm of amoeba (Nelder-Mead) solvers.
     /// The swarm proceeds for `numberOfLevels` levels, constraining the starting bounds

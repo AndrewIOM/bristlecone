@@ -19,8 +19,11 @@ module Language =
         member this.Code = this |> fun (MeasureIdInner c) -> c
 
     [<NoEquality; NoComparison>]
-    type ParamId<[<Measure>] 'u> = private ParamIdInner of ShortCode.ShortCode
-        with member this.Inner = this |> fun (ParamIdInner this) -> this
+    type ParamId<[<Measure>] 'u> =
+        private
+        | ParamIdInner of ShortCode.ShortCode
+
+        member this.Inner = this |> fun (ParamIdInner this) -> this
 
     type IncludedParameter<[<Measure>] 'u> =
         { ParamId: ParamId<'u>
@@ -73,11 +76,9 @@ module Language =
             | StateObs of StateId<'s>
             | MeasureObs of MeasureId<'s>
 
-        let state (s: StateId<'u>) =
-            StateObs s
+        let state (s: StateId<'u>) = StateObs s
 
-        let measure (m: MeasureId<'u>) =
-            MeasureObs m
+        let measure (m: MeasureId<'u>) = MeasureObs m
 
     let lookup name (map: CodedMap<float>) =
         match map |> Map.tryFindBy (fun k -> k.Value = name) with
@@ -704,7 +705,13 @@ module Language =
                                 | None -> failwithf "Baseline state not available for: %s" name
                         @> }
 
-        let private tensorOpsForMeasure (pIndex: Map<string, int>) (pVar: Var) (statesVar: Var) (thisVar: Var) (tIdxVar: Var) =
+        let private tensorOpsForMeasure
+            (pIndex: Map<string, int>)
+            (pVar: Var)
+            (statesVar: Var)
+            (thisVar: Var)
+            (tIdxVar: Var)
+            =
             { constVal =
                 fun n ->
                     let tensor = mkTensor n
@@ -918,6 +925,7 @@ module Language =
 
             let statesVar =
                 Var("states", typeof<CodedMap<TypedTensor<Vector, ModelSystem.state>>>)
+
             let thisVar = Var("thisVal", typeof<TypedTensor<Scalar, ModelSystem.state>>)
 
             let tIdxVar = Var("timeIndex", typeof<int>)
@@ -1312,7 +1320,7 @@ module Language =
             let (StateIdInner name) = name
             ModelBuilder.initialiseStateWith name.Value initialiser builder
 
-        let useLikelihoodFunction (likelihoodFn:ModelSystem.Likelihood<'u>) builder =
+        let useLikelihoodFunction (likelihoodFn: ModelSystem.Likelihood<'u>) builder =
             ModelBuilder.add "likelihood" (ModelBuilder.LikelihoodFragment(fun () -> likelihoodFn)) builder
 
         let compile = ModelBuilder.compile
@@ -1414,7 +1422,7 @@ module Language =
         /// for a model + estimation engine combination. Specify
         /// a `dateMode` and associated temporal resolution and start
         /// date that are in compatible time systems.
-        let createWithTimeMode dateMode resolution startDate : TestSettings<'state,'date,'year,'timespan> =
+        let createWithTimeMode dateMode resolution startDate : TestSettings<'state, 'date, 'year, 'timespan> =
             { Resolution = resolution
               TimeSeriesLength = defaultSettings.TimeSeriesLength
               StartValues = Map.empty
@@ -1425,11 +1433,12 @@ module Language =
               RetryDataGen = 100
               DateMode = dateMode }
 
-        let private obsToCode = function
+        let private obsToCode =
+            function
             | Require.MeasureObs m -> m.Code
             | Require.StateObs s -> s.Code
 
-        let private getParam (p:IncludedParameter<'s>) pool : float<'s> =
+        let private getParam (p: IncludedParameter<'s>) pool : float<'s> =
             match Parameter.Pool.tryGetRealValue<'s> p.ParamId.Inner.Value pool with
             | Some p -> p
             | None -> failwithf "parameter %s not available." p.ParamId.Inner.Value
@@ -1453,43 +1462,77 @@ module Language =
         /// <param name="genErrorFn">A function that generates error for any point based on its value.</param>
         /// <param name="settings">Current test settings</param>
         /// <returns>Updated test settings</returns>
-        let withObservationError (obs:Require.ObsForLikelihood<'s>) genErrorFn settings =
+        let withObservationError (obs: Require.ObsForLikelihood<'s>) genErrorFn settings =
             let code = obsToCode obs
-            let fn rnd pool ts = 
+
+            let fn rnd pool ts =
                 let addNoise = genErrorFn rnd pool
                 Test.ObservationError.addNoise code addNoise ts
+
             let stackNoise rnd pool ts =
                 settings.ObservationErrorFn rnd pool ts |> fn rnd pool
-            { settings with ObservationErrorFn = stackNoise }
 
-        let withEnvironmentGen (obs:StateId<'s>) (genFn: float<'date> -> float<'s>)
-            (settings: TestSettings<'state,float<'date>,'a,'b>) =
-            let envTs =
-                Bristlecone.Time.TimeSeries.fromGen settings.DateMode settings.StartDate settings.Resolution settings.TimeSeriesLength genFn
-                |> Bristlecone.Time.TimeSeries.map(fun (v,_) -> v |> Units.retype)
-            { settings with EnvironmentalData = settings.EnvironmentalData |> Map.add obs.Code envTs }
+            { settings with
+                ObservationErrorFn = stackNoise }
 
-        let withEnvironmentGenBySpan (obs:StateId<'s>) (genFn: float<'fnTime> -> float<'s>) (gen2: 'timespan -> float<'fnTime>)
-            (settings: TestSettings<'state,'date,'yearUnit,'timespan>) =
+        let withEnvironmentGen
+            (obs: StateId<'s>)
+            (genFn: float<'date> -> float<'s>)
+            (settings: TestSettings<'state, float<'date>, 'a, 'b>)
+            =
             let envTs =
-                Bristlecone.Time.TimeSeries.fromGenBaseline settings.DateMode settings.StartDate settings.Resolution settings.TimeSeriesLength genFn gen2
-                |> Bristlecone.Time.TimeSeries.map(fun (v,_) -> v |> Units.retype)
-            { settings with EnvironmentalData = settings.EnvironmentalData |> Map.add obs.Code envTs }
+                Bristlecone.Time.TimeSeries.fromGen
+                    settings.DateMode
+                    settings.StartDate
+                    settings.Resolution
+                    settings.TimeSeriesLength
+                    genFn
+                |> Bristlecone.Time.TimeSeries.map (fun (v, _) -> v |> Units.retype)
+
+            { settings with
+                EnvironmentalData = settings.EnvironmentalData |> Map.add obs.Code envTs }
+
+        let withEnvironmentGenBySpan
+            (obs: StateId<'s>)
+            (genFn: float<'fnTime> -> float<'s>)
+            (gen2: 'timespan -> float<'fnTime>)
+            (settings: TestSettings<'state, 'date, 'yearUnit, 'timespan>)
+            =
+            let envTs =
+                Bristlecone.Time.TimeSeries.fromGenBaseline
+                    settings.DateMode
+                    settings.StartDate
+                    settings.Resolution
+                    settings.TimeSeriesLength
+                    genFn
+                    gen2
+                |> Bristlecone.Time.TimeSeries.map (fun (v, _) -> v |> Units.retype)
+
+            { settings with
+                EnvironmentalData = settings.EnvironmentalData |> Map.add obs.Code envTs }
 
         let internal withObservationErrorNormal obs sigma settings =
             withObservationError obs (Error.normal sigma) settings
 
         /// Set a start value (at t=1). If a value has already been set, it
         /// will be overwritten.
-        let t1<[<Measure>] 's, [<Measure>] 'stateUnit,'date,'yearUnit,'timespan> (obs:Require.ObsForLikelihood<'s>) (value:float<'s>) (settings: Test.TestSettings<'stateUnit,'date,'yearUnit,'timespan>) =
+        let t1<[<Measure>] 's, [<Measure>] 'stateUnit, 'date, 'yearUnit, 'timespan>
+            (obs: Require.ObsForLikelihood<'s>)
+            (value: float<'s>)
+            (settings: Test.TestSettings<'stateUnit, 'date, 'yearUnit, 'timespan>)
+            =
             let code = obsToCode obs
-            { settings with StartValues = settings.StartValues |> Map.add code (Units.retype value) }
 
-        let rule (obs:Require.ObsForLikelihood<'s>) (rule: GenerationRule<'u>) settings =
+            { settings with
+                StartValues = settings.StartValues |> Map.add code (Units.retype value) }
+
+        let rule (obs: Require.ObsForLikelihood<'s>) (rule: GenerationRule<'u>) settings =
             let code = obsToCode obs
-            { settings with GenerationRules = (code, rule) :: settings.GenerationRules }
 
-        let seriesLength n (settings: TestSettings<'stateUnit,'date,'yearUnit,'timespan>) =
+            { settings with
+                GenerationRules = (code, rule) :: settings.GenerationRules }
+
+        let seriesLength n (settings: TestSettings<'stateUnit, 'date, 'yearUnit, 'timespan>) =
             { settings with TimeSeriesLength = n }
 
         let resolution res settings = { settings with Resolution = res }

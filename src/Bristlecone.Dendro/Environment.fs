@@ -21,7 +21,7 @@ module Environment =
         /// <param name="periodDays"></param>
         /// <param name="phase">The fraction of the cycle completed at day zero.</param>
         /// <returns>A function that generates </returns>
-        let genTemperatureSeasonal mean amplitude (period:float<day>) phase =
+        let genTemperatureSeasonal mean amplitude (period: float<day>) phase =
             Synthetic.sinusoid mean amplitude period phase
 
         let genTemperatureNorthernMidLatitude mean amplitude =
@@ -31,5 +31,4 @@ module Environment =
             genTemperatureSeasonal mean amplitude 365.<day> 0.0
 
         let temperatureAnomaly phi sigma seed =
-            Synthetic.ar1 phi sigma seed
-            |> Seq.map ((*) 1.<celsius>)
+            Synthetic.ar1 phi sigma seed |> Seq.map ((*) 1.<celsius>)

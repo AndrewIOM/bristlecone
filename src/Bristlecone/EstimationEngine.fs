@@ -73,14 +73,10 @@ module ModelSystem =
           RequiredParameters: (ShortCode.ShortCode * Parameter.Pool.AnyParameter) list
           Evaluate: LikelihoodEval<'u> }
 
-        with
-            static member (+) (l1, l2) =
-                { RequiredCodes = l1.RequiredCodes @ l2.RequiredCodes
-                  RequiredParameters = l1.RequiredParameters @ l2.RequiredParameters
-                  Evaluate =
-                    fun getParam seriesMap ->
-                        l1.Evaluate getParam seriesMap
-                        + l2.Evaluate getParam seriesMap }
+        static member (+)(l1, l2) =
+            { RequiredCodes = l1.RequiredCodes @ l2.RequiredCodes
+              RequiredParameters = l1.RequiredParameters @ l2.RequiredParameters
+              Evaluate = fun getParam seriesMap -> l1.Evaluate getParam seriesMap + l2.Evaluate getParam seriesMap }
 
     /// A function that computes a measured system property given a
     /// current (time t) and previous (time t-1) system state.
@@ -112,12 +108,11 @@ module ModelSystem =
 
     type FitSeries<'date, 'timeunit, 'timespan> = TimeSeries<FitValue, 'date, 'timeunit, 'timespan>
 
-    type Trace = {
-        ComponentName: string
-        StageName: string
-        ReplicateNumber: int
-        Results: (float<``-logL``> * float<``parameter``>[]) list
-    }
+    type Trace =
+        { ComponentName: string
+          StageName: string
+          ReplicateNumber: int
+          Results: (float<``-logL``> * float<``parameter``>[]) list }
 
     /// An estimated model fit for a time-series model.
     type EstimationResult<'date, 'timeunit, 'timespan> =
@@ -265,15 +260,14 @@ module EstimationEngine =
 
     module Optimisation =
 
-        /// Represents the trace of an optimisation heuristic, 
+        /// Represents the trace of an optimisation heuristic,
         /// which may have multiple 'components' (i.e. sub-algorithms)
         /// and one or many stages within each.
-        type OptimisationTrace = {
-            Component: string
-            Stage: string
-            Replicate: int
-            Results: Solution list
-        }
+        type OptimisationTrace =
+            { Component: string
+              Stage: string
+              Replicate: int
+              Results: Solution list }
 
         type Optimise =
             Random

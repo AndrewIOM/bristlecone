@@ -740,26 +740,39 @@ module TimeSeries =
         |> Seq.scan (fun (_, t) v -> (v, t |> TimePoint.increment resolution timeUnitMode)) (data |> Seq.head, t1)
         |> fromObservations timeUnitMode
 
-    let fromGen (timeUnitMode: DateMode.DateMode<'date, 'timeunit, 'timespan>) t1 resolution
-        n (fn: 'date -> 'value) =
+    let fromGen (timeUnitMode: DateMode.DateMode<'date, 'timeunit, 'timespan>) t1 resolution n (fn: 'date -> 'value) =
         let initialValue = fn t1
+
         let obs =
-            Seq.scan (fun (_,date) _ ->
-                let date2 = date |> TimePoint.increment resolution timeUnitMode
-                // let diff = timeUnitMode.Difference date date2
-                fn date2, date2 ) (initialValue, t1) [ 1 .. n ]
+            Seq.scan
+                (fun (_, date) _ ->
+                    let date2 = date |> TimePoint.increment resolution timeUnitMode
+                    // let diff = timeUnitMode.Difference date date2
+                    fn date2, date2)
+                (initialValue, t1)
+                [ 1..n ]
+
         obs |> fromObservations timeUnitMode
-    
-    let fromGenBaseline (timeUnitMode: DateMode.DateMode<'date, 'timeunit, 'timespan>) (t1:'date) resolution
-        n (fn: 'fnTime -> 'value) (diffToTime:'timespan -> 'fnTime) =
+
+    let fromGenBaseline
+        (timeUnitMode: DateMode.DateMode<'date, 'timeunit, 'timespan>)
+        (t1: 'date)
+        resolution
+        n
+        (fn: 'fnTime -> 'value)
+        (diffToTime: 'timespan -> 'fnTime)
+        =
         let times =
-            Seq.scan (fun (date,_) _ ->
-                let date2 = date |> TimePoint.increment resolution timeUnitMode
-                let diff = timeUnitMode.Difference date date2
-                date2, diff.RealDifference ) (t1, timeUnitMode.ZeroSpan) [ 1 .. n ]
+            Seq.scan
+                (fun (date, _) _ ->
+                    let date2 = date |> TimePoint.increment resolution timeUnitMode
+                    let diff = timeUnitMode.Difference date date2
+                    date2, diff.RealDifference)
+                (t1, timeUnitMode.ZeroSpan)
+                [ 1..n ]
+
         let obs =
-            times
-            |> Seq.map(fun (date,timespan) -> timespan |> diffToTime |> fn, date)
+            times |> Seq.map (fun (date, timespan) -> timespan |> diffToTime |> fn, date)
 
         obs |> fromObservations timeUnitMode
 

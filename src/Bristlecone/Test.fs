@@ -10,13 +10,18 @@ module Test =
     /// Generate synthetic time-series using mathematical
     /// functions, for example for environmental data inputs.
     module Synthetic =
-        
-        let sinusoid<[<Measure>] 'time, [<Measure>] 'u> (mean:float<'u>) (amplitude:float<'u>) (period:float<'time>) phase =
-            fun (t:float<'time>) ->
+
+        let sinusoid<[<Measure>] 'time, [<Measure>] 'u>
+            (mean: float<'u>)
+            (amplitude: float<'u>)
+            (period: float<'time>)
+            phase
+            =
+            fun (t: float<'time>) ->
                 let x = t / period + phase
                 mean + amplitude * sin (2.0 * Math.PI * x)
 
-        let ar1 phi sigma (rnd:Random) =
+        let ar1 phi sigma (rnd: Random) =
             let rec loop prev =
                 seq {
                     let eps = sigma * (rnd.NextDouble() - 0.5)
@@ -24,6 +29,7 @@ module Test =
                     yield next
                     yield! loop next
                 }
+
             loop 0.
 
 
@@ -50,20 +56,7 @@ module Test =
             | Some ts -> ts
             | None -> failwithf "Could not add noise. Time series %s missing" series.Value
 
-        // let private tryGetParam<[<Measure>] 's> pool pCode fn =
-        //     pool
-        //     |> Parameter.Pool.tryGetRealValue pCode
-        //     |> Option.bind fn
-
-        // let private wrapAsError pCodes seriesName =
-        //     Result.ofOption (
-        //         sprintf
-        //             "Could not add noise. Are required parameters [%A] or the series '%s' is missing."
-        //             pCodes
-        //             seriesName
-        //     )
-
-        let normal rnd (sd:float<'s>) =
+        let normal rnd (sd: float<'s>) =
             let draw = Statistics.Distributions.Normal.draw rnd (Units.tagUnit<'s> 0.) sd
             fun x -> x + draw ()
 
@@ -71,53 +64,24 @@ module Test =
             let draw = Statistics.Distributions.Normal.draw rnd 0. sd
             fun x -> x * exp (draw ())
 
-        // /// Adds normally-distributed noise around each data point in the selected
-        // /// time-series.
-        // /// Returns `None` if the series or parameter does not exist.
-        // let tryAddNormal sigmaCode seriesName rnd pool data =
-        //     tryGetParam pool sigmaCode (fun sd ->
-        //         let draw = Statistics.Distributions.Normal.draw rnd 0. sd
-        //         tryAddNoise seriesName (fun x -> x + draw ()) data)
-        //     |> wrapAsError [ sigmaCode ] seriesName
-
-        // let tryAddNor sigmaCode seriesName rnd pool data =
-        //     tryGetParam pool sigmaCode (fun sd ->
-        //         let draw = Statistics.Distributions.Normal.draw rnd 0. sd
-        //         tryAddNoise seriesName (fun x -> x + draw ()) data)
-        //     |> wrapAsError [ sigmaCode ] seriesName
-
-
-        // /// Adds normally-distributed noise around each data point in the selected
-        // /// time-series.
-        // /// Returns `None` if the series or parameter does not exist.
-        // let tryAddLogNormal sigmaCode seriesName rnd pool data =
-        //     tryGetParam pool sigmaCode (fun sd ->
-        //         let draw = Statistics.Distributions.Normal.draw rnd 0. sd
-        //         tryAddNoise seriesName (fun x -> x * exp (draw ())) data)
-        //     |> wrapAsError [ sigmaCode ] seriesName
-
-
-
     type GenerationRule<[<Measure>] 's> = (seq<float<'s>> -> bool)
 
     module GenerationRules =
 
         /// Ensures that all generated values are less than i
-        let alwaysLessThan (i:float<'u>) : GenerationRule<'s> =
-            fun data -> data |> Seq.max < i
+        let alwaysLessThan (i: float<'u>) : GenerationRule<'s> = fun data -> data |> Seq.max < i
 
         /// Ensures that all generated values are greater than i
-        let alwaysMoreThan i : GenerationRule<'s> =
-            fun data -> data |> Seq.min > i
+        let alwaysMoreThan i : GenerationRule<'s> = fun data -> data |> Seq.min > i
 
         let between iLow iHi : GenerationRule<'s> =
             fun data -> Seq.min data > iLow && Seq.max data < iHi
 
-        let alwaysFinite : GenerationRule<'s> =
+        let alwaysFinite: GenerationRule<'s> =
             fun data -> data |> Seq.exists Units.isNotFinite |> not
 
         /// Ensures that there is always a positive change in values of a variable
-        let monotonicallyIncreasing : GenerationRule<'s> =
+        let monotonicallyIncreasing: GenerationRule<'s> =
             fun data ->
                 data
                 |> Seq.pairwise
@@ -140,7 +104,7 @@ module Test =
           RetryDataGen: int
           DateMode: DateMode.DateMode<'date, 'yearUnit, 'timespan> }
 
-        static member mkSettings (dateMode: DateMode.DateMode<'date,'yearType,'timespan>) startDate =
+        static member mkSettings (dateMode: DateMode.DateMode<'date, 'yearType, 'timespan>) startDate =
             { Resolution = Resolution.FixedTemporalResolution.Years (PositiveInt.create 1<year>).Value
               TimeSeriesLength = 30
               StartValues = Map.empty
@@ -152,10 +116,10 @@ module Test =
               DateMode = dateMode }
 
         static member Default: TestSettings<1, DateTime, int<year>, TimeSpan> =
-            TestSettings<_,_,_,_>.mkSettings DateMode.calendarDateMode (DateTime(1970, 01, 01))
+            TestSettings<_, _, _, _>.mkSettings DateMode.calendarDateMode (DateTime(1970, 01, 01))
 
         static member Annual: TestSettings<1, DatingMethods.Annual, int<year>, int<year>> =
-            TestSettings<_,_,_,_>.mkSettings DateMode.annualDateMode (DatingMethods.Annual 1970<year>)
+            TestSettings<_, _, _, _>.mkSettings DateMode.annualDateMode (DatingMethods.Annual 1970<year>)
 
     let defaultSettings = TestSettings<_, _, _, _>.Default
     let annualSettings = TestSettings<_, _, _, _>.Annual
@@ -320,8 +284,7 @@ module Test =
                 |> List.choose (fun (key, ruleFn) ->
                     series
                     |> Map.tryFindKey (fun k _ -> k = key)
-                    |> Option.map (fun k ->
-                        Map.find k series |> TimeSeries.toObservations |> Seq.map fst |> ruleFn))
+                    |> Option.map (fun k -> Map.find k series |> TimeSeries.toObservations |> Seq.map fst |> ruleFn))
 
             if rulesPassed |> List.contains false || rulesPassed.Length <> rules.Length then
                 if attempts = 0 then
