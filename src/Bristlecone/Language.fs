@@ -19,7 +19,11 @@ module Language =
         member this.Code = this |> fun (MeasureIdInner c) -> c
 
     [<NoEquality; NoComparison>]
-    type ParamId<[<Measure>] 'u> = private ParamIdInner of ShortCode.ShortCode
+    type ParamId<[<Measure>] 'u> =
+        private
+        | ParamIdInner of ShortCode.ShortCode
+
+        member this.Inner = this |> fun (ParamIdInner this) -> this
 
     type IncludedParameter<[<Measure>] 'u> =
         { ParamId: ParamId<'u>
@@ -58,19 +62,23 @@ module Language =
         | None -> failwithf "%i is not a positive integer" n
         | Some p -> f p
 
-    let years n = makeResolution Time.Resolution.Years n
-    let months n = makeResolution Time.Resolution.Months n
-    let days n = makeResolution Time.Resolution.Days n
+    let Yearly n = makeResolution Time.Resolution.Years n
+    let Annually n = makeResolution Time.Resolution.Years n
+    let Monthly n = makeResolution Time.Resolution.Months n
+    let Daily n = makeResolution Time.Resolution.Days n
 
-    let noConstraints = Parameter.Constraint.Unconstrained
-    let notNegative = Parameter.Constraint.PositiveOnly
+    let NoConstraints = Parameter.Constraint.Unconstrained
+    let Positive = Parameter.Constraint.PositiveOnly
 
     module Require =
-        let state (s: StateId<'u>) =
-            ModelSystem.LikelihoodRequirement.State s.Code
 
-        let measure (m: MeasureId<'u>) =
-            ModelSystem.LikelihoodRequirement.Measure m.Code
+        type ObsForLikelihood<[<Measure>] 's> =
+            | StateObs of StateId<'s>
+            | MeasureObs of MeasureId<'s>
+
+        let state (s: StateId<'u>) = StateObs s
+
+        let measure (m: MeasureId<'u>) = MeasureObs m
 
     let lookup name (map: CodedMap<float>) =
         match map |> Map.tryFindBy (fun k -> k.Value = name) with
@@ -697,7 +705,13 @@ module Language =
                                 | None -> failwithf "Baseline state not available for: %s" name
                         @> }
 
-        let private tensorOpsForMeasure (pIndex: Map<string, int>) (pVar: Var) (statesVar: Var) (tIdxVar: Var) =
+        let private tensorOpsForMeasure
+            (pIndex: Map<string, int>)
+            (pVar: Var)
+            (statesVar: Var)
+            (thisVar: Var)
+            (tIdxVar: Var)
+            =
             { constVal =
                 fun n ->
                     let tensor = mkTensor n
@@ -709,7 +723,7 @@ module Language =
               parameter = fun name -> <@ (%%Expr.Var pVar: TypedTensor<Vector, ``parameter``>).Value.[pIndex.[name]] @>
               environment = fun _ -> failwith "Environment not supported in measures"
               timeVal = <@ mkTensor (float (%%Expr.Var tIdxVar: int)) @>
-              thisVal = <@ mkTensor nan @> // not used in measures
+              thisVal = <@ (%%Expr.Var thisVar: TypedTensor<Scalar, ModelSystem.state>).Value @>
               add = tensorSum
               sub = fun (l, r) -> <@ dsharp.sub (%l, %r) @>
               mul = tensorProduct
@@ -912,14 +926,16 @@ module Language =
             let statesVar =
                 Var("states", typeof<CodedMap<TypedTensor<Vector, ModelSystem.state>>>)
 
+            let thisVar = Var("thisVal", typeof<TypedTensor<Scalar, ModelSystem.state>>)
+
             let tIdxVar = Var("timeIndex", typeof<int>)
             let pIndex = paramIndex parameters
 
             let core =
-                buildQuotationCached (tensorOpsForMeasure pIndex pVar statesVar tIdxVar) Map.empty expr
+                buildQuotationCached (tensorOpsForMeasure pIndex pVar statesVar thisVar tIdxVar) Map.empty expr
 
             <@ tryAsScalar<ModelSystem.state> %core |> Option.get @>
-            |> fun body -> Expr.Lambda(pVar, Expr.Lambda(statesVar, Expr.Lambda(tIdxVar, body)))
+            |> fun body -> Expr.Lambda(pVar, Expr.Lambda(statesVar, Expr.Lambda(thisVar, Expr.Lambda(tIdxVar, body))))
             |> LeafExpressionConverter.EvaluateQuotation
             |> unbox<ModelSystem.Measurement<'stateUnit>>
 
@@ -1036,7 +1052,7 @@ module Language =
 
         module Measurement =
             let adapt<[<Measure>] 'u> (m: ModelSystem.Measurement<'u>) : ModelSystem.Measurement<ModelSystem.state> =
-                fun p s i -> (m p s i).Value |> Tensors.tryAsScalar<ModelSystem.state> |> Option.get
+                fun p s sThis i -> (m p s sThis i).Value |> Tensors.tryAsScalar<ModelSystem.state> |> Option.get
 
         module Likelihood =
 
@@ -1044,6 +1060,7 @@ module Language =
 
             let contramap<[<Measure>] 'u> (l: ModelSystem.Likelihood<'u>) : ModelSystem.Likelihood<ModelSystem.state> =
                 { RequiredCodes = l.RequiredCodes
+                  RequiredParameters = l.RequiredParameters
                   Evaluate =
                     fun param series ->
                         let s =
@@ -1148,15 +1165,6 @@ module Language =
                     | _ -> None)
                 |> Seq.toList
 
-            let parameters =
-                m
-                |> Map.toSeq
-                |> Seq.choose (function
-                    | c, ParameterFragment p -> Some(fst c, p)
-                    | _ -> None)
-                |> Map.ofSeq
-                |> Parameter.Pool.Pool
-
             let measures =
                 m
                 |> Map.toSeq
@@ -1182,11 +1190,21 @@ module Language =
                 |> Map.ofSeq
 
             // Validate likelihoods
-            let like =
+            let likelihood =
                 match likelihoods with
                 | [ f ] -> f ()
                 | [] -> failwith "You did not specify a likelihood function."
                 | _ -> failwith "Multiple likelihoods specified."
+
+            let parameters =
+                m
+                |> Map.toSeq
+                |> Seq.choose (function
+                    | c, ParameterFragment p -> Some(fst c, p)
+                    | _ -> None)
+                |> Seq.append likelihood.RequiredParameters
+                |> Map.ofSeq
+                |> Parameter.Pool.Pool
 
             let reqs =
                 m
@@ -1237,7 +1255,7 @@ module Language =
             let measures = measures |> Map.map (fun _ (_, m) -> m parameters)
             let initialisers = initialisers |> Map.map (fun _ (_, m) -> m parameters)
 
-            { NegLogLikelihood = like
+            { NegLogLikelihood = likelihood
               Parameters = parameters
               EnvironmentKeys = envKeys
               Initialisers = initialisers
@@ -1269,20 +1287,6 @@ module Language =
             : ModelBuilder.ModelBuilder<'time> =
             let (StateIdInner name) = name
             ModelBuilder.addEquationDiscrete name expr mb
-
-        // Units preserved end-to-end: Parameter.create returns Parameter<'u>; we box to AnyParameter
-        let estimateParameterOld
-            (name: string)
-            (constraintMode: Parameter.Constraint)
-            (lower: float<'u>)
-            (upper: float<'u>)
-            (builder: ModelBuilder.ModelBuilder<'time>)
-            =
-            match Parameter.create constraintMode lower upper with
-            | Some(p: Parameter.Parameter<'u>) ->
-                let boxed = Parameter.Pool.boxParam<'u> name p
-                ModelBuilder.add name (ModelBuilder.ParameterFragment boxed) builder
-            | None -> failwithf "The bounds %A - %A cannot be used to estimate a parameter. See docs." lower upper
 
         let estimateParameter<[<Measure>] 'time, [<Measure>] 'u>
             (p: IncludedParameter<'u>)
@@ -1316,7 +1320,7 @@ module Language =
             let (StateIdInner name) = name
             ModelBuilder.initialiseStateWith name.Value initialiser builder
 
-        let useLikelihoodFunction likelihoodFn builder =
+        let useLikelihoodFunction (likelihoodFn: ModelSystem.Likelihood<'u>) builder =
             ModelBuilder.add "likelihood" (ModelBuilder.LikelihoodFragment(fun () -> likelihoodFn)) builder
 
         let compile = ModelBuilder.compile
@@ -1406,17 +1410,133 @@ module Language =
     /// Terms for designing tests for model systems.
     module Test =
 
-        let defaultSettings = Bristlecone.Test.defaultSettings
+        open Bristlecone.Test
 
-        /// If the start value has already been set, it will be overwritten with the new value.
-        let withStartValue code value (settings: Bristlecone.Test.TestSettings<'state, _, _, _>) =
-            match ShortCode.create code with
-            | Some c ->
-                { settings with
-                    StartValues = settings.StartValues |> Map.add c value }
-            | None -> failwithf "'%s' is not a valid short code" code
+        /// Start defining conditions for a new test procedure
+        /// for a model + estimation engine combination. This default
+        /// uses modern calendar time as the basis. For other date/time systems,
+        /// use `createWithTimeMode` instead.
+        let create = Test.defaultSettings
 
-        let run settings = Bristlecone.testModel
+        /// Start defining conditions for a new test procedure
+        /// for a model + estimation engine combination. Specify
+        /// a `dateMode` and associated temporal resolution and start
+        /// date that are in compatible time systems.
+        let createWithTimeMode dateMode resolution startDate : TestSettings<'state, 'date, 'year, 'timespan> =
+            { Resolution = resolution
+              TimeSeriesLength = defaultSettings.TimeSeriesLength
+              StartValues = Map.empty
+              GenerationRules = List.empty
+              ObservationErrorFn = fun _ _ ts -> ts
+              EnvironmentalData = Map.empty
+              StartDate = startDate
+              RetryDataGen = 100
+              DateMode = dateMode }
+
+        let private obsToCode =
+            function
+            | Require.MeasureObs m -> m.Code
+            | Require.StateObs s -> s.Code
+
+        let private getParam (p: IncludedParameter<'s>) pool : float<'s> =
+            match Parameter.Pool.tryGetRealValue<'s> p.ParamId.Inner.Value pool with
+            | Some p -> p
+            | None -> failwithf "parameter %s not available." p.ParamId.Inner.Value
+
+        module Error =
+
+            let normal sigma =
+                fun rnd pool ->
+                    let sigma = getParam sigma pool
+                    ObservationError.normal rnd sigma
+
+            let logNormal sigma =
+                fun rnd pool ->
+                    let sigma = getParam sigma pool
+                    ObservationError.logNormal rnd sigma
+
+
+        /// <summary>Add observation error ('noise') to a particular time-series when
+        /// generating fake time-series. Built-in noise functions are in the `Noise` module.</summary>
+        /// <param name="obs">The state or measure to add to (use Require.state or Require.measure)</param>
+        /// <param name="genErrorFn">A function that generates error for any point based on its value.</param>
+        /// <param name="settings">Current test settings</param>
+        /// <returns>Updated test settings</returns>
+        let withObservationError (obs: Require.ObsForLikelihood<'s>) genErrorFn settings =
+            let code = obsToCode obs
+
+            let fn rnd pool ts =
+                let addNoise = genErrorFn rnd pool
+                Test.ObservationError.addNoise code addNoise ts
+
+            let stackNoise rnd pool ts =
+                settings.ObservationErrorFn rnd pool ts |> fn rnd pool
+
+            { settings with
+                ObservationErrorFn = stackNoise }
+
+        let withEnvironmentGen
+            (obs: StateId<'s>)
+            (genFn: float<'date> -> float<'s>)
+            (settings: TestSettings<'state, float<'date>, 'a, 'b>)
+            =
+            let envTs =
+                Bristlecone.Time.TimeSeries.fromGen
+                    settings.DateMode
+                    settings.StartDate
+                    settings.Resolution
+                    settings.TimeSeriesLength
+                    genFn
+                |> Bristlecone.Time.TimeSeries.map (fun (v, _) -> v |> Units.retype)
+
+            { settings with
+                EnvironmentalData = settings.EnvironmentalData |> Map.add obs.Code envTs }
+
+        let withEnvironmentGenBySpan
+            (obs: StateId<'s>)
+            (genFn: float<'fnTime> -> float<'s>)
+            (gen2: 'timespan -> float<'fnTime>)
+            (settings: TestSettings<'state, 'date, 'yearUnit, 'timespan>)
+            =
+            let envTs =
+                Bristlecone.Time.TimeSeries.fromGenBaseline
+                    settings.DateMode
+                    settings.StartDate
+                    settings.Resolution
+                    settings.TimeSeriesLength
+                    genFn
+                    gen2
+                |> Bristlecone.Time.TimeSeries.map (fun (v, _) -> v |> Units.retype)
+
+            { settings with
+                EnvironmentalData = settings.EnvironmentalData |> Map.add obs.Code envTs }
+
+        let internal withObservationErrorNormal obs sigma settings =
+            withObservationError obs (Error.normal sigma) settings
+
+        /// Set a start value (at t=1). If a value has already been set, it
+        /// will be overwritten.
+        let t1<[<Measure>] 's, [<Measure>] 'stateUnit, 'date, 'yearUnit, 'timespan>
+            (obs: Require.ObsForLikelihood<'s>)
+            (value: float<'s>)
+            (settings: Test.TestSettings<'stateUnit, 'date, 'yearUnit, 'timespan>)
+            =
+            let code = obsToCode obs
+
+            { settings with
+                StartValues = settings.StartValues |> Map.add code (Units.retype value) }
+
+        let rule (obs: Require.ObsForLikelihood<'s>) (rule: GenerationRule<'u>) settings =
+            let code = obsToCode obs
+
+            { settings with
+                GenerationRules = (code, rule) :: settings.GenerationRules }
+
+        let seriesLength n (settings: TestSettings<'stateUnit, 'date, 'yearUnit, 'timespan>) =
+            { settings with TimeSeriesLength = n }
+
+        let resolution res settings = { settings with Resolution = res }
+        let startTime time settings = { settings with StartDate = time }
 
 
     module Components =

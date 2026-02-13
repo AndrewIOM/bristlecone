@@ -64,19 +64,26 @@ module ModelSystem =
     type LikelihoodEval<[<Measure>] 'u> =
         ParameterValueAccessor -> CodedMap<SeriesPair<'u>> -> TypedTensor<Scalar, ``-logL``>
 
-    type Likelihood<[<Measure>] 'u> =
-        { RequiredCodes: LikelihoodRequirement list
-          Evaluate: LikelihoodEval<'u> }
-
-    and LikelihoodRequirement =
+    type LikelihoodRequirement =
         | State of ShortCode.ShortCode
         | Measure of ShortCode.ShortCode
+
+    type Likelihood<[<Measure>] 'u> =
+        { RequiredCodes: LikelihoodRequirement list
+          RequiredParameters: (ShortCode.ShortCode * Parameter.Pool.AnyParameter) list
+          Evaluate: LikelihoodEval<'u> }
+
+        static member (+)(l1, l2) =
+            { RequiredCodes = l1.RequiredCodes @ l2.RequiredCodes
+              RequiredParameters = l1.RequiredParameters @ l2.RequiredParameters
+              Evaluate = fun getParam seriesMap -> l1.Evaluate getParam seriesMap + l2.Evaluate getParam seriesMap }
 
     /// A function that computes a measured system property given a
     /// current (time t) and previous (time t-1) system state.
     type Measurement<[<Measure>] 'u> =
         TypedTensor<Vector, ``parameter``> // current parameters
             -> CodedMap<TypedTensor<Vector, state>> // states time-series
+            -> TypedTensor<Scalar, state> // last value of this measurement
             -> int // current time index
             -> TypedTensor<Scalar, 'u>
 
@@ -101,13 +108,19 @@ module ModelSystem =
 
     type FitSeries<'date, 'timeunit, 'timespan> = TimeSeries<FitValue, 'date, 'timeunit, 'timespan>
 
+    type Trace =
+        { ComponentName: string
+          StageName: string
+          ReplicateNumber: int
+          Results: (float<``-logL``> * float<``parameter``>[]) list }
+
     /// An estimated model fit for a time-series model.
     type EstimationResult<'date, 'timeunit, 'timespan> =
         { ResultId: System.Guid
           Likelihood: float<``-logL``>
           Parameters: Parameter.Pool.ParameterPool
           Series: CodedMap<FitSeries<'date, 'timeunit, 'timespan>>
-          Trace: (float<``-logL``> * float<``parameter``>[]) list
+          Trace: Trace list
           InternalDynamics: CodedMap<float<state>[]> option }
 
 /// The estimation engine represents the method used to
@@ -247,6 +260,15 @@ module EstimationEngine =
 
     module Optimisation =
 
+        /// Represents the trace of an optimisation heuristic,
+        /// which may have multiple 'components' (i.e. sub-algorithms)
+        /// and one or many stages within each.
+        type OptimisationTrace =
+            { Component: string
+              Stage: string
+              Replicate: int
+              Results: Solution list }
+
         type Optimise =
             Random
                 -> WriteOut
@@ -254,7 +276,7 @@ module EstimationEngine =
                 -> Domain
                 -> Point option // optional starting point
                 -> Objective
-                -> Solution list
+                -> OptimisationTrace list
 
         /// An `Optimiser` is an optimisation algorithm that may work either
         /// in 'transformed' parameter space (where parameter constraints are

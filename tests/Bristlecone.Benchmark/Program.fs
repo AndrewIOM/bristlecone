@@ -101,7 +101,6 @@ let runReplicated nTimes work =
     [| 1..nTimes |] |> Array.Parallel.map (fun _ -> measureTime (fun () -> work ()))
 
 let logger = Logging.ConsoleTable.logger 1000<iteration>
-let endCondition = EndConditions.atIteration 10000<iteration> // EndConditions.Profiles.mcmc 10000<iteration> logger
 let accuracy = { absolute = 1e-3; relative = 1e-2 }
 
 type BenchmarkResult =
@@ -135,10 +134,10 @@ let summariseRuns
     trueMinima
     minVal
     (minima: float list list)
-    (results: ((EstimationEngine.Solution list * float[]) * int) seq)
+    (results: ((EstimationEngine.Optimisation.OptimisationTrace list * float[]) * int) seq)
     =
     let eachRunMinimum =
-        results |> Seq.map (fun ((r, _), _) -> r |> Seq.minBy fst)
+        results |> Seq.map (fun ((r, _), _) -> r |> Seq.map(fun r -> r.Results |> Seq.minBy fst) |> Seq.minBy fst)
 
     let distancesFromRealMinimum =
         eachRunMinimum |> Seq.map (fun o -> abs ((fst o) - minVal))
@@ -191,7 +190,7 @@ let summariseRuns
 
 let runOptimTests optimFunctions =
     optimFunctions
-    |> List.collect (fun (optimName, optimise) ->
+    |> List.collect (fun (optimName, optimise, endCondition) ->
         TestSuite.fixedDimension
         |> List.map (fun (modelName, f, domain, minVal, minima) ->
             let domain =
@@ -207,7 +206,7 @@ let runOptimTests optimFunctions =
                     |> Array.map ((*) 1.<``optim-space``>)
                     |> Tensors.Typed.ofVector
 
-                let result: list<EstimationEngine.Solution> =
+                let result: list<EstimationEngine.Optimisation.OptimisationTrace> =
                     // Using a shim to go between tensor space and float space
                     let f' point =
                         f (Tensors.Typed.toFloatArray point |> Array.map float) * 1.<``-logL``>
@@ -274,7 +273,7 @@ module Metrics =
             (sorted.[n / 2 - 1] + sorted.[n / 2]) / 2.0
 
     /// Metrics for all runs for an indiviual model/optim combination.
-    let summariseRuns likTol paramTol runs =
+    let summariseRuns likTol paramTol (runs: (Test.TestResult<'a,'b,'c,'u> * int) array) =
         let metrics = runs |> Array.map (runMetrics likTol paramTol) |> Array.toList
 
         let successPct =
@@ -299,75 +298,43 @@ module Metrics =
             |> List.map median |}
 
 
-module TimeSeriesTests =
-
-    let settings =
-        Test.annualSettings
-        |> Test.addNoise (Test.Noise.tryAddNormal "σ[y]" "predator")
-        |> Test.addNoise (Test.Noise.tryAddNormal "σ[x]" "prey")
-        |> Test.addGenerationRules
-            [ Test.GenerationRules.alwaysLessThan 100000. "predator"
-              Test.GenerationRules.alwaysMoreThan 10. "predator"
-              Test.GenerationRules.alwaysLessThan 100000. "prey"
-              Test.GenerationRules.alwaysMoreThan 10. "prey" ]
-        |> Test.withTimeSeriesLength 30
-
-    /// An engine that uses annual-based data in an
-    /// annual-based model.
-    /// Inserts a time conversion from int-based years (data) to float-based years (model).
-    let engine optimise =
-        Bristlecone.mkContinuous ()
-        |> Bristlecone.withCustomOptimisation optimise
-        |> Bristlecone.withOutput logger
-        |> Bristlecone.withTimeConversion Time.DateMode.Conversion.Annual.toYears
-
-    let runTimeSeriesTests (timeModels: ('a * ModelSystem.ModelSystem<Time.year> * 'b) list) optimFunctions =
-        List.allPairs optimFunctions timeModels
-        |> List.map (fun ((optimName: string, optimise), (modelName, modelFn, startValues)) ->
-            runReplicated Config.startPointCount (fun () ->
-                let settings = settings |> Test.addStartValues startValues
-                Bristlecone.testModel (engine optimise) settings modelFn)
-            |> fun r -> modelName, optimName, Metrics.summariseRuns Config.likTol Config.paramTol r)
-
-
 // MODELS / OPTIM Fn
 // -------
 
-let annealSettings =
-    { MonteCarlo.SimulatedAnnealing.AnnealSettings.Default with
-        BoilingAcceptanceRate = 0.85
-        HeatRamp = (fun t -> t + sqrt t)
-        TemperatureCeiling = Some 500.
-        HeatStepLength = EndConditions.atIteration 10000<iteration>
-        AnnealStepLength = fun x -> EndConditions.atIteration 10000<iteration> x }
-
 let optimFunctions =
-    [ //"amoeba single", Amoeba.single Amoeba.Solver.Default
-    //   "amoeba swarm", Amoeba.swarm 5 20 Amoeba.Solver.Default
-      //   "anneal classic", MonteCarlo.SimulatedAnnealing.classicalSimulatedAnnealing 0.01<``optim-space``> false annealSettings
-    //   "anneal cauchy", MonteCarlo.SimulatedAnnealing.fastSimulatedAnnealing 0.01<``optim-space``> false annealSettings
-      "filzbach",
-      MonteCarlo.Filzbach.filzbach
-          { TuneAfterChanges = 10000
-            MaxScaleChange = 0.5
-            MinScaleChange = 0.5
-            BurnLength = EndConditions.atIteration 100000<iteration> }
-    //   "automatic MCMC", MonteCarlo.``Automatic (Adaptive Diagnostics)``
-      //   "metropolis-gibbs", MonteCarlo.``Metropolis-within Gibbs``
-    //   "adaptive metropolis", MonteCarlo.adaptiveMetropolis 0.250 500<iteration>
-    //   "random walk MCMC", MonteCarlo.randomWalk []
-    //   "random walk w/ tuning",
-    //   MonteCarlo.randomWalk
-    //       [ { Method = MonteCarlo.TuneMethod.CovarianceWithScale 0.25
-    //           Frequency = 500<iteration>
-    //           EndCondition = EndConditions.Profiles.mcmcTuningStep 50000<iteration> logger } ] ]
+    [  "amoeba",                    Amoeba.single Amoeba.Solver.Default, EndConditions.whenNoBestValueImprovement 300<iteration>
+       "amoeba [swarm]",            Amoeba.swarm 5 20 Amoeba.Solver.Default, EndConditions.whenNoBestValueImprovement 300<iteration>
+       "sim. anneal. [classic]",    MonteCarlo.SimulatedAnnealing.classicalSimulatedAnnealing 0.01<``optim-space``> false Optimisation.MonteCarlo.SimulatedAnnealing.AnnealSettings.Default, EndConditions.atIteration 100000<iteration>
+       "sim. anneal. [fast]",       MonteCarlo.SimulatedAnnealing.fastSimulatedAnnealing 0.01<``optim-space``> false Optimisation.MonteCarlo.SimulatedAnnealing.AnnealSettings.Default, EndConditions.atIteration 100000<iteration>
+       "sim. anneal. [bristlecone]",MonteCarlo.bristleconeSampler, EndConditions.Profiles.mcmc 100000<iteration> ignore
+       "filzbach",                  MonteCarlo.Filzbach.filzbach MonteCarlo.Filzbach.FilzbachSettings.Default, EndConditions.Profiles.mcmc 100000<iteration> ignore
+       "random walk [AM burn-in]",  MonteCarlo.randomWalk [
+            { Method = MonteCarlo.TuneMethod.CovarianceWithScale 0.25
+              Frequency = 500<iteration>
+              EndCondition = EndConditions.Profiles.mcmcTuningStep 50000<iteration> logger } ],
+            EndConditions.Profiles.mcmc 100000<iteration> ignore
     ]
 
+let runTs (modelName, modelTestFn: (Logging.LogEvent -> unit) -> EstimationEngine.Optimisation.Optimiser -> EstimationEngine.EndCondition -> Result<Test.TestResult<'a,'b,'c,'u>,string>) =
+    optimFunctions
+    |> List.map (fun (optimName: string, optimise, endCondition) ->
+        runReplicated Config.startPointCount (fun () ->
+            modelTestFn logger optimise endCondition)
+        |> fun r ->
+            let ok = r |> Array.filter(fun (r,_) -> Result.isOk r) |> Array.map(fun (r,i) -> Result.forceOk r, i)
+            if r.Length = 0 then modelName, optimName, Error "no results"
+            else  modelName, optimName, Ok (Metrics.summariseRuns Config.likTol Config.paramTol ok))
+
+
 let timeModels () =
-    [ //"predator-prey", TestFunctions.Timeseries.PredatorPrey.``predator-prey`` (), [ "predator", 1.0; "prey", 1.0 ]
-      "predator-prey (noisy)",
-      TestFunctions.Timeseries.PredatorPrey.``predator-prey [with noise]`` (),
-      [ "predator", 75.; "prey", 50. ] ]
+    [ 
+      runTs ("predator-prey",             TestFunctions.Timeseries.PredatorPrey.test false)
+      runTs ("predator-prey (noisy)",     TestFunctions.Timeseries.PredatorPrey.test true)
+      runTs ("soil respiration",          TestFunctions.Timeseries.SoilCarbon.test false)
+      runTs ("soil respiration (noisy)",  TestFunctions.Timeseries.SoilCarbon.test true)
+      runTs ("soil respiration",          TestFunctions.Timeseries.RickerTemperature.test false)
+      runTs ("soil respiration (noisy)",  TestFunctions.Timeseries.RickerTemperature.test true)
+    ]
 
 module Output =
 
@@ -458,7 +425,7 @@ let main argv =
 
         System.IO.File.WriteAllText(Output.fileName, Output.markdown optimTable "")
 
-        let timeResults = TimeSeriesTests.runTimeSeriesTests (timeModels ()) optimFunctions //runOptimTests ()
+        let timeResults = timeModels () |> List.concat
 
         let timeTable =
             Output.markdownTable
@@ -471,6 +438,8 @@ let main argv =
                   "n iterations (median)"
                   "Time to solution (ms, median)" ]
                 (timeResults
+                 |> Seq.filter(fun (_,_,m) -> Result.isOk m)
+                 |> Seq.map(fun (a,b,m) -> a, b, Result.forceOk m )
                  |> Seq.map (fun (modelName, optimName, metrics) ->
                      [ modelName
                        optimName
@@ -478,7 +447,7 @@ let main argv =
                        metrics.RunN.ToString()
                        Output.threeDp metrics.MedianLikelihoodGap
                        Output.threeDp metrics.MedianParamRMSE
-                       //Output.summariseParameters metrics.MedianParamRMSE
+                    //    Output.summariseParameters metrics.MedianParamRMSE
                        metrics.MedianIterations.ToString()
                        metrics.MedianTimeMs.ToString() ]))
 

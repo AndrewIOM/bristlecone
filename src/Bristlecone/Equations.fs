@@ -1,193 +1,276 @@
 namespace Bristlecone.ModelLibrary
 
-/// <summary>Likelihood functions to represent a variety of distributions and data types.</summary>
+/// <summary>Negative log likelihood (-logL) functions to represent
+/// a variety of distributions and data types.</summary>
 ///
 /// <namespacedoc>
 ///   <summary>Pre-built model parts for use in Bristlecone</summary>
 /// </namespacedoc>
-module Likelihood =
+module NegLogLikelihood =
 
     open Bristlecone
     open Bristlecone.ModelSystem
     open Bristlecone.Tensors
+
+    /// A small helper for unit-safety when working with units-of-measure-based Language types.
+    let internal getParamValue<[<Measure>] 'u>
+        (paramAccessor: ParameterValueAccessor)
+        (par: Language.IncludedParameter<'u>)
+        : TypedTensor<Scalar, 'u> =
+        paramAccessor.Get par.ParamId.Inner.Value |> Typed.retype
+
+    let internal paramToAny<[<Measure>] 'u> (p: Language.IncludedParameter<'u>) =
+        let boxed = Parameter.Pool.boxParam<'u> p.ParamId.Inner.Value p.Parameter
+        p.ParamId.Inner, boxed
+
+    let inline internal getData<[<Measure>] 'u, [<Measure>] 'state>
+        (obsKey: Language.Require.ObsForLikelihood<'u>)
+        (pairs: CodedMap<SeriesPair<'state>>)
+        : SeriesPair<'u> =
+        let key =
+            match obsKey with
+            | Language.Require.StateObs r -> r.Code
+            | Language.Require.MeasureObs r -> r.Code
+
+        match pairs |> Map.tryFindBy (fun k -> k = key) with
+        | Some d ->
+            { Expected = d.Expected |> Typed.retype<'state, 'u, Tensors.Vector>
+              Observed = d.Observed |> Typed.retype<'state, 'u, Tensors.Vector> }
+        | None -> failwithf "Predicted data was required for the variable '%s' but did not exist." key.Value
+
+
+    let internal obsKeyToLikelihoodKey obsKey =
+        match obsKey with
+        | Language.Require.StateObs s -> LikelihoodRequirement.State s.Code
+        | Language.Require.MeasureObs s -> LikelihoodRequirement.Measure s.Code
+
+    let internal requirePositiveParam label (p: Language.IncludedParameter<'u>) =
+        if p.Parameter |> Parameter.getConstraint <> Parameter.Constraint.PositiveOnly then
+            failwithf "The specified %s parameter must be positive-only" label
+
+    let private likelihoodTag = Typed.ofScalar 1.<``-logL``>
+
 
     /// <summary>Functions representing how variance is handled
     /// within likelihood functions.</summary>
     module Variance =
 
         /// A variance function maps expected values to per-point σ
-        type VarianceFunction<[<Measure>] 'u, [<Measure>] 'v> = TypedTensor<Vector, 'v> -> TypedTensor<Vector, 'u>
+        type VarianceFunction<[<Measure>] 'sigma, [<Measure>] 'x> =
+            { Evaluate: ParameterValueAccessor -> TypedTensor<Vector, 'x> -> TypedTensor<Vector, 'sigma>
+              RequiredParameters: (ShortCode.ShortCode * Parameter.Pool.AnyParameter) list }
 
         /// Variance is constant within through time.
-        let constant sigma : VarianceFunction<'u, 'v> =
-            fun expected -> Typed.broadcastScalarToVector sigma (Typed.length expected)
+        let constant sigma : VarianceFunction<'x, 'x> =
+            { Evaluate =
+                fun accessor expected ->
+                    let sigmaVal = getParamValue accessor sigma
+                    Typed.broadcastScalarToVector sigmaVal (Typed.length expected)
+              RequiredParameters = [ paramToAny sigma ] }
 
         /// Variance is proportional to the expected value (σ = σ0 * x).
-        let proportional (sigma0: TypedTensor<Scalar, 'u / 'v>) : VarianceFunction<'u, 'v> =
-            fun (expected: TypedTensor<Vector, 'v>) -> expected * sigma0
+        let proportional (sigma0: Language.IncludedParameter<'sigma / 'x>) : VarianceFunction<'sigma, 'x> =
+            { Evaluate =
+                fun accessor expected ->
+                    let sigma0Val = getParamValue accessor sigma0
+                    expected * sigma0Val
+              RequiredParameters = [ paramToAny sigma0 ] }
 
         /// Variance is exponential to the expected value (σ = σ0 * exp(σ1 * x)),
         /// where sigma1 is the baseline variance and sigma2 is the rate of growth
         /// in variance per units of expx.
         let exponential
-            (sigma0: TypedTensor<Scalar, 'u>)
-            (sigma1: TypedTensor<Scalar, 1 / 'v>)
+            (sigma0: Language.IncludedParameter<'u>)
+            (sigma1: Language.IncludedParameter<1 / 'v>)
             : VarianceFunction<'u, 'v> =
-            fun expected -> sigma0 * Typed.expVector (sigma1 * expected)
+            { Evaluate =
+                fun accessor expected ->
+                    let sigma0Val = getParamValue accessor sigma0
+                    let sigma1Val = getParamValue accessor sigma1
+                    sigma0Val * Typed.expVector (sigma1Val * expected)
+              RequiredParameters = [ paramToAny sigma0; paramToAny sigma1 ] }
 
 
+    module Internal =
 
-    let internal getData key (pairs: CodedMap<SeriesPair<'u>>) =
-        match pairs |> Map.tryFindBy (fun k -> k.Value = key) with
-        | Some p -> p
-        | None -> failwithf "Predicted data was required for the variable '%s' but did not exist." key
+        /// Residual sum of squares. Provides a simple metric of distance between
+        /// observed data and model predictions.
+        let sumOfSquares (keys: Language.Require.ObsForLikelihood<'s> list) : Likelihood<'state> =
+            fun _ data ->
+                keys
+                |> List.map (fun k ->
+                    let d = data |> getData k
+                    let obs = Typed.tail d.Observed
+                    let exp = Typed.tail d.Expected
+                    let diff = obs - exp
+                    Typed.squareVector diff)
+                |> List.reduce (+)
+                |> Typed.sumVector
+                |> Typed.retype
+            |> fun f ->
+                { Evaluate = f
+                  RequiredCodes = List.map obsKeyToLikelihoodKey keys
+                  RequiredParameters = [] }
 
-    let internal reqToKey req =
-        match req with
-        | Measure r -> r
-        | State r -> r
+        let private one = Typed.ofScalar 1.0
+        let private two = Typed.ofScalar 2.0
+        let private half = Typed.ofScalar 0.5
+        let private twoPi = Typed.ofScalar (2.0 * System.Math.PI)
 
-    /// Residual sum of squares. Provides a simple metric of distance between
-    /// observed data and model predictions.
-    let sumOfSquares (keys: ModelSystem.LikelihoodRequirement list) : Likelihood<'u> =
-        fun _ data ->
-            keys
-            |> List.map (fun k ->
-                let d = data |> getData (reqToKey k).Value
-                let obs = Typed.tail d.Observed
-                let exp = Typed.tail d.Expected // I don't think my original did tail?
-                let diff = obs - exp
-                Typed.squareVector diff)
-            |> List.reduce (+)
-            |> Typed.sumVector
-            |> Typed.retype
-        |> fun f -> { Evaluate = f; RequiredCodes = keys }
+        /// Negative log likelihood for a bivariate normal distribution.
+        /// For two random variables with bivariate normal N(u1,u2,sigma1,sigma2,rho).
+        let internal gaussianVec
+            (sigma: TypedTensor<Vector, 'u>)
+            (obsx: TypedTensor<Vector, 'u>)
+            (expx: TypedTensor<Vector, 'u>)
+            : TypedTensor<Vector, ``-logL``> =
 
-    let private one = Typed.ofScalar 1.0
-    let private two = Typed.ofScalar 2.0
-    let private half = Typed.ofScalar 0.5
-    let private piT = Typed.ofScalar System.Math.PI
-    let private twoPi = Typed.ofScalar (2.0 * System.Math.PI)
+            let diffx = obsx - expx
 
-    /// Negative log likelihood for a bivariate normal distribution.
-    /// For two random variables with bivariate normal N(u1,u2,sigma1,sigma2,rho).
-    let internal gaussianVec
-        (varFun: Variance.VarianceFunction<'v, 'u>)
-        (obsx: TypedTensor<Vector, 'u>)
-        (expx: TypedTensor<Vector, 'u>)
-        : TypedTensor<Vector, ``-logL``> =
+            let term1Scalar = half * Typed.logScalar twoPi
+            let n = Typed.length obsx
 
-        let sigma = varFun expx
-        let diffx = obsx - expx
+            let term1 = Typed.broadcastScalarToVector term1Scalar n
+            let term2 = Typed.logVector sigma
+            let term3 = half * Typed.squareVector (diffx / sigma)
 
-        let term1Scalar = half * Typed.logScalar twoPi
-        let n = Typed.length obsx
+            (term1 + term2 + term3) * likelihoodTag
 
-        let term1 = Typed.broadcastScalarToVector term1Scalar n
-        let term2 = Typed.logVector sigma
-        let term3 = half * Typed.squareVector (diffx / sigma)
+        let internal gaussian'
+            (mkVariance: Variance.VarianceFunction<'s, 's>)
+            (key: Language.Require.ObsForLikelihood<'s>)
+            : Likelihood<'state> =
+            fun (paramAccessor: ParameterValueAccessor) data ->
+                let x = data |> getData key
+                let obsx = Typed.tail x.Observed
+                let expx = Typed.tail x.Expected
+                let sigma = mkVariance.Evaluate paramAccessor expx
 
-        term1 + term2 + term3 |> Typed.retype
+                gaussianVec sigma obsx expx |> Tensors.Typed.sumVector
+            |> fun f ->
+                { Evaluate = f
+                  RequiredParameters = mkVariance.RequiredParameters
+                  RequiredCodes = [ obsKeyToLikelihoodKey key ] }
 
-    let internal gaussian' mkVariance (key: ModelSystem.LikelihoodRequirement) : Likelihood<'u> =
-        fun (paramAccessor: ParameterValueAccessor) data ->
-            let x = data |> getData (reqToKey key).Value
-            let obsx = Typed.tail x.Observed
-            let expx = Typed.tail x.Expected
+        /// <summary>
+        /// Log likelihood function for single equation system, assuming constant (homoscedastic) Gaussian error for x.
+        /// Requires a parameter 'σ[x]' to be included in any `ModelSystem` that uses it.
+        /// </summary>
+        let gaussian (key: Language.Require.ObsForLikelihood<'s>) sigmax : Likelihood<'state> =
+            gaussian' (Variance.constant sigmax) key
 
-            gaussianVec (mkVariance paramAccessor) obsx expx |> Tensors.Typed.sumVector
-        |> fun f ->
-            { Evaluate = f
-              RequiredCodes = [ key ] }
+        /// Negative log likelihood for a bivariate normal distribution.
+        /// For two random variables with bivariate normal N(u1,u2,sigma1,sigma2,rho).
+        let internal bivariateGaussianVec
+            (sigmax: TypedTensor<Scalar, 'ux>)
+            (sigmay: TypedTensor<Scalar, 'uy>)
+            (rho: TypedTensor<Scalar, 1>)
+            (obsx: TypedTensor<Vector, 'ux>)
+            (obsy: TypedTensor<Vector, 'uy>)
+            (expx: TypedTensor<Vector, 'ux>)
+            (expy: TypedTensor<Vector, 'uy>)
+            : TypedTensor<Vector, 1> =
 
-    /// <summary>
-    /// Log likelihood function for single equation system, assuming constant (homoscedastic) Gaussian error for x.
-    /// Requires a parameter 'σ[x]' to be included in any `ModelSystem` that uses it.
-    /// </summary>
-    let gaussian (key: ModelSystem.LikelihoodRequirement) : Likelihood<'u> =
-        let variance (paramAccessor: ParameterValueAccessor) =
-            let sigmax = paramAccessor.Get "σ[x]" |> Typed.retype<parameter, 'u, Scalar>
-            Variance.constant sigmax
+            let diffx = obsx - expx
+            let diffy = obsy - expy
+            let zta1 = Typed.squareVector (diffx / sigmax)
+            let zta2 = two * rho * (diffx / sigmax) * (diffy / sigmay)
+            let zta3 = Typed.squareVector (diffy / sigmay)
 
-        gaussian' variance key
+            let q =
+                half
+                * (one / (one - Typed.square rho))
+                * (zta1 - zta2 + zta3: TypedTensor<Vector, 1>)
 
-    /// <summary>
-    /// Log likelihood function for single equation system, assuming Gaussian error for x
-    /// that increases exponentially dependent on a variance growth rate (σ1).
-    /// Requires parameters 'σ0[x]' and 'σ1[x]' to be included in any `ModelSystem` that uses it.
-    /// </summary>
-    let gaussianWithExponentialVariance key =
-        let variance (paramAccessor: ParameterValueAccessor) =
-            let sigma0 = paramAccessor.Get "σ0[x]" |> Typed.retype<parameter, 'u, Scalar>
-            let sigma1 = paramAccessor.Get "σ1[x]" |> Typed.retype<parameter, 1 / 'v, Scalar>
-            Variance.exponential sigma0 sigma1
+            let logNorm =
+                Typed.logScalar twoPi
+                + Typed.logScalar sigmax
+                + Typed.logScalar sigmay
+                + half * Typed.logScalar (one - Typed.square rho)
 
-        gaussian' variance key
+            let logNormVec = Typed.broadcastScalarToVector logNorm (Typed.length obsx)
 
-    /// <summary>
-    /// Log likelihood function for single equation system, assuming Gaussian error for x
-    /// that increases proportionally with quantity.
-    /// Requires parameter 'σ[x]' to be included in any `ModelSystem` that uses it.
-    /// </summary>
-    let gaussianWithProportionalVariance key =
-        let variance (paramAccessor: ParameterValueAccessor) =
-            let sigma0 = paramAccessor.Get "σ[x]" |> Typed.retype<parameter, 'u, Scalar>
-            Variance.proportional sigma0
+            logNormVec + q
 
-        gaussian' variance key
+        /// <summary>
+        /// Log likelihood function for dual simultaneous system, assuming Gaussian error for both x and y.
+        /// Requires parameters 'σ[x]', 'σ[y]' and 'ρ' to be defined and passed as arguments.
+        /// </summary>
+        let bivariateGaussian
+            (key1: Language.Require.ObsForLikelihood<'ux>)
+            (key2: Language.Require.ObsForLikelihood<'uy>)
+            (sigmax: Language.IncludedParameter<'ux>)
+            (sigmay: Language.IncludedParameter<'uy>)
+            (rho: Language.IncludedParameter<1>)
+            : Likelihood<'state> =
+
+            requirePositiveParam "σ[x]" sigmax
+            requirePositiveParam "σ[y]" sigmay
+
+            fun (paramAccessor: ParameterValueAccessor) (data: CodedMap<SeriesPair<'state>>) ->
+                let x = data |> getData key1
+                let y = data |> getData key2
+
+                let sigmax = getParamValue paramAccessor sigmax
+                let sigmay = getParamValue paramAccessor sigmay
+                let rho = getParamValue paramAccessor rho
+
+                let obsx = Typed.tail x.Observed
+                let obsy = Typed.tail y.Observed
+                let expx = Typed.tail x.Expected
+                let expy = Typed.tail y.Expected
+
+                bivariateGaussianVec sigmax sigmay rho obsx obsy expx expy
+                |> Typed.sumVector
+                |> (*) likelihoodTag
+            |> fun f ->
+                { Evaluate = f
+                  RequiredParameters = [ paramToAny sigmax; paramToAny sigmay; paramToAny rho ]
+                  RequiredCodes = List.map obsKeyToLikelihoodKey [ key1; key2 ] }
+
+        let internal logGaussianVec
+            (sigma: TypedTensor<Vector, 'u>)
+            (obsx: TypedTensor<Vector, 'u>)
+            (expx: TypedTensor<Vector, 1>)
+            : TypedTensor<Vector, ``-logL``> =
+
+            let logx = Typed.logVector obsx
+            let diff = logx - expx
+
+            let term1Scalar = half * Typed.logScalar twoPi
+            let n = Typed.length obsx
+
+            let term1 = Typed.broadcastScalarToVector term1Scalar n
+            let term2 = Typed.logVector sigma
+            let term3 = Typed.logVector obsx
+            let term4 = half * Typed.squareVector (diff / sigma)
+
+            (term1 + term2 + term3 + term4) * likelihoodTag
+
+        let internal logGaussian'
+            (mkVariance: Variance.VarianceFunction<1, 1>)
+            (key: Language.Require.ObsForLikelihood<1>)
+            : Likelihood<'state> =
+            fun (paramAccessor: ParameterValueAccessor) data ->
+                let x = data |> getData key
+                let obsx = Typed.tail x.Observed
+                let expx = Typed.tail x.Expected |> Typed.logVector
+                let sigma = mkVariance.Evaluate paramAccessor expx
+                logGaussianVec sigma obsx expx |> Typed.sumVector
+            |> fun f ->
+                { Evaluate = f
+                  RequiredParameters = mkVariance.RequiredParameters
+                  RequiredCodes = [ obsKeyToLikelihoodKey key ] }
+
+        let logGaussian key sigma : Likelihood<'state> =
+            logGaussian' (Variance.constant sigma) key
 
 
-    /// Negative log likelihood for a bivariate normal distribution.
-    /// For two random variables with bivariate normal N(u1,u2,sigma1,sigma2,rho).
-    let internal bivariateGaussianVec
-        (sigmax: TypedTensor<Scalar, 'u>)
-        (sigmay: TypedTensor<Scalar, 'u>)
-        (rho: TypedTensor<Scalar, 1>)
-        (obsx: TypedTensor<Vector, 'u>)
-        (obsy: TypedTensor<Vector, 'u>)
-        (expx: TypedTensor<Vector, 'u>)
-        (expy: TypedTensor<Vector, 'u>)
-        : TypedTensor<Vector, ``-logL``> =
+    let Normal obs sigma = Internal.gaussian obs sigma
+    let NormalWithVariance obs varianceFn = Internal.gaussian' varianceFn obs
+    let LogNormal obs sigma = Internal.logGaussian obs sigma
 
-        let diffx = obsx - expx
-        let diffy = obsy - expy
-        let zta1 = Typed.squareVector (diffx / sigmax)
-        let zta2 = two * rho * (diffx / sigmax) * (diffy / sigmay)
-        let zta3 = Typed.squareVector (diffy / sigmay)
+    let BivariateNormal key1 key2 sigmax sigmay rho =
+        Internal.bivariateGaussian key1 key2 sigmax sigmay rho
 
-        let vNegLog =
-            two * piT * sigmax * sigmay * Typed.sqrtScalar (one - Typed.square rho)
-
-        let vNegLogVec =
-            Typed.broadcastScalarToVector vNegLog (Typed.length obsx) |> Typed.retype
-
-        let q =
-            (one / (one - Typed.square rho)) * (zta1 - zta2 + zta3: TypedTensor<Vector, 1>)
-
-        (vNegLogVec + half * q) |> Typed.retype
-
-    /// <summary>
-    /// Log likelihood function for dual simultaneous system, assuming Gaussian error for both x and y.
-    /// Requires parameters 'σ[x]', 'σ[y]' and 'ρ' to be included in any `ModelSystem` that uses it.
-    /// </summary>
-    let bivariateGaussian
-        (key1: ModelSystem.LikelihoodRequirement)
-        (key2: ModelSystem.LikelihoodRequirement)
-        : Likelihood<'u> =
-        fun (paramAccessor: ParameterValueAccessor) data ->
-            let x = data |> getData (reqToKey key1).Value
-            let y = data |> getData (reqToKey key2).Value
-
-            let sigmax = paramAccessor.Get "σ[x]" |> Typed.retype<parameter, 'u, Scalar>
-            let sigmay = paramAccessor.Get "σ[y]" |> Typed.retype<parameter, 'u, Scalar>
-            let rho = paramAccessor.Get "ρ" |> Typed.retype<parameter, 1, Scalar>
-
-            let obsx = Typed.tail x.Observed
-            let obsy = Typed.tail y.Observed
-            let expx = Typed.tail x.Expected
-            let expy = Typed.tail y.Expected
-
-            bivariateGaussianVec sigmax sigmay rho obsx obsy expx expy |> Typed.sumVector
-        |> fun f ->
-            { Evaluate = f
-              RequiredCodes = [ key1; key2 ] }
+    let SumOfSquares obs = Internal.sumOfSquares obs

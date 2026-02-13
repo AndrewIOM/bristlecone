@@ -43,6 +43,8 @@ module Parameter =
 
     let getEstimate p = tryGetEstimate p |> Option.get
 
+    let getConstraint p = unwrap p |> fst
+
     let bounds (p: Parameter<'u>) =
         let c, est = unwrap p
 
@@ -149,7 +151,7 @@ module Parameter =
         let fromList xs = xs |> Map.ofList |> Pool
 
         /// Try to get the real value of a parameter by its ShortCode key.
-        let tryGetRealValue (name: string) (Pool p: ParameterPool) : float<'u> option =
+        let tryGetRealValue<[<Measure>] 'u> (name: string) (Pool p: ParameterPool) : float<'u> option =
             p
             |> Map.toSeq
             |> Seq.tryPick (fun (_, ap) ->

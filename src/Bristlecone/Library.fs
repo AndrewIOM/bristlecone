@@ -85,6 +85,10 @@ module Bristlecone =
         { engine with
             OptimiseWith = Optimisation.MonteCarlo.randomWalk tuning }
 
+    let withBristleconeOptimiser engine =
+        { engine with
+            OptimiseWith = Optimisation.MonteCarlo.bristleconeSampler }
+
     let withGradientDescent engine =
         { engine with
             OptimiseWith = Optimisation.Amoeba.single Optimisation.Amoeba.Solver.Default }
@@ -373,7 +377,11 @@ module Bristlecone =
                     obsDataForObjective
 
             let result = objective |> optimise
-            let lowestLikelihood, bestPoint = result |> List.minBy (fun (l, _) -> l)
+
+            let lowestLikelihood, bestPoint =
+                match result |> Optimisation.Optimiser.tryGetSolution with
+                | Some sol -> sol
+                | None -> failwith "The optimisation algorithm did not return any results."
 
             let estimatedSeries =
                 Objective.createPredictor
@@ -410,14 +418,22 @@ module Bristlecone =
             let estimatedHighResFloat =
                 estimatedHighRes |> Map.map (fun _ v -> v |> Tensors.Typed.toFloatArray) |> Some
 
-            // engine.LogTo CompleteEvent
+            engine.LogTo CompleteEvent
+
+            let trace =
+                result
+                |> List.map (fun r ->
+                    { ComponentName = r.Component
+                      StageName = r.Stage
+                      ReplicateNumber = r.Replicate
+                      Results = r.Results |> toRealSpaceSolutions optimConfig })
 
             return
                 { ResultId = resultId
                   Likelihood = lowestLikelihood
                   Parameters = bestPointPool
                   Series = paired
-                  Trace = result |> toRealSpaceSolutions optimConfig
+                  Trace = trace
                   InternalDynamics = estimatedHighResFloat }
         }
 
@@ -445,6 +461,7 @@ module Bristlecone =
     /// was successful or not.</returns>
     let tryTestModel
         (engine: EstimationEngine<'date, 'timespan, 'modelTimeUnit, 'state>)
+        endCondition
         (settings: Test.TestSettings<'state, 'date, 'timeunit, 'timespan>)
         (model: ModelSystem<'modelTimeUnit>)
         =
@@ -456,18 +473,17 @@ module Bristlecone =
             sprintf
                 "The data must comply with %i rules after %i tries."
                 settings.GenerationRules.Length
-                settings.Attempts
+                settings.RetryDataGen
         )
 
         result {
-
 
             // Validate settings and generate synthetic data
             let! settings = Test.isValidSettings model settings
 
             // Set conditioning for solver to be the custom start values
             let engine = engine |> withConditioning (Conditioning.Custom settings.StartValues)
-            let! trueData, trueParamPool = Test.Compute.tryGenerateData engine settings model settings.Attempts
+            let! trueData, trueParamPool = Test.Compute.tryGenerateData engine settings model settings.RetryDataGen
 
             // Merge dynamic + environmental data into one coded map
             let mergedData = Map.merge trueData settings.EnvironmentalData (fun dyn _env -> dyn)
@@ -482,13 +498,13 @@ module Bristlecone =
                 tryFit
                     { engine with
                         OptimiseWith = Optimisation.None.none }
-                    settings.EndCondition
+                    endCondition
                     mergedData
                     { model with
                         Parameters = Parameter.Pool.fromEstimated trueParamPool }
 
             // Fit normally (optimisation enabled)
-            let! estimated = tryFit engine settings.EndCondition mergedData model
+            let! estimated = tryFit engine endCondition mergedData model
 
             let paramDiffs: Test.ParameterTestResult list =
                 estimated.Parameters
@@ -519,11 +535,12 @@ module Bristlecone =
 
             return
                 { ErrorStructure = errorStructure
-                  IterationsRun = estimated.Trace.Length * 1<iteration>
+                  IterationsRun = (estimated.Trace |> List.sumBy (fun i -> i.Results.Length)) * 1<iteration>
                   Parameters = paramDiffs
                   Series = estimated.Series |> Seq.map (fun k -> k.Key.Value, k.Value) |> Map.ofSeq
                   RealLikelihood = realEstimate.Likelihood
-                  EstimatedLikelihood = estimated.Likelihood }
+                  EstimatedLikelihood = estimated.Likelihood
+                  Trace = estimated.Trace }
         }
 
     /// <summary>Test that the specified estimation engine can correctly
@@ -535,10 +552,11 @@ module Bristlecone =
     /// <returns>A test result that indicates differences between the expected and actual fit.</returns>
     let testModel
         (engine: EstimationEngine<'date, 'timespan, 'modelTimeUnit, 'state>)
+        endCondition
         (settings: TestSettings<'state, 'date, 'yearUnit, 'timespan>)
         (model: ModelSystem<'modelTimeUnit>)
         =
-        tryTestModel engine settings model |> Result.forceOk
+        tryTestModel engine endCondition settings model |> Result.forceOk
 
     /// <summary>Repeat a model fit many times, removing a single data point at random each time.</summary>
     /// <param name="engine">The estimation engine / fitting method</param>

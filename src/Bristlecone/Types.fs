@@ -11,6 +11,9 @@ module internal Units =
     let removeUnitFromInt (v: int<_>) = int v
     let removeUnitFromFloat (v: float<_>) = float v
 
+    let tagUnit<[<Measure>] 'u> (v: float) : float<'u> =
+        LanguagePrimitives.FloatWithMeasure<'u> v
+
     let retype (v: float<'u1>) : float<'u2> =
         v |> removeUnitFromFloat |> LanguagePrimitives.FloatWithMeasure<'u2>
 
@@ -168,6 +171,9 @@ module Map =
                 | Some items -> Map.add key (appender values items) acc
                 | None -> Map.add key values acc)
             group2
+
+    let append (map1: Map<'k, 'v>) (map2: Map<'k, 'v>) =
+        Map.fold (fun s k t -> s |> Map.add k t) map1 map2
 
     let tryFindBy (f: 'key -> bool) map =
         map |> Map.toSeq |> Seq.tryFind (fun (k, _) -> f k) |> Option.map snd

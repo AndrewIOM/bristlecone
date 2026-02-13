@@ -44,7 +44,7 @@ module Convergence =
                         c |> Seq.take nMostRecent
                     else
                         c)
-                |> Seq.map (fun r -> r.Trace |> Seq.map snd)
+                |> Seq.map (fun r -> (r.Trace |> Seq.head).Results |> Seq.map snd)
 
             let minChainLength = chains |> Seq.minBy (fun x -> x |> Seq.length) |> Seq.length
 

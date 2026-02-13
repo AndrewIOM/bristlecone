@@ -1,2 +1,2 @@
-Subject, ModelId, Iteration, AnalysisId, ParameterCode, NegativeLogLikelihood (float), ParameterValue (float)
-YUSL21A,some-id,2000,91a95ab8-6c43-45f4-9353-d507cd3a9909,a,-32.4,0.0024
+Subject, ModelId,OptimStage,OptimSubstage,Replicate,Iteration, AnalysisId, ParameterCode, NegativeLogLikelihood (float), ParameterValue (float)
+YUSL21A,some-id,some-stage,some-substage,1,2000,91a95ab8-6c43-45f4-9353-d507cd3a9909,a,-32.4,0.0024

@@ -86,6 +86,7 @@ module ProfileLikelihood =
                 { engine with
                     OptimiseWith =
                         MonteCarlo.SimulatedAnnealing.Tuning.perturb
+                            0.001
                             MonteCarlo.SimulatedAnnealing.Tuning.TuningSettings.Default
                     LogTo =
                         fun e ->
@@ -97,6 +98,8 @@ module ProfileLikelihood =
 
             let validTrace =
                 a.Trace
+                |> List.head
+                |> fun t -> t.Results
                 |> List.filter (fun (l, _) -> (l - mle) < 2.00<``-logL``> && (l - mle) > 0.00<``-logL``>)
                 |> List.distinct
 

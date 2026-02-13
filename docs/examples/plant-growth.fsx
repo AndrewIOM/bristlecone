@@ -27,13 +27,11 @@ First, we open Bristlecone core libraries.
 *)
 
 (*** condition: prepare ***)
-#nowarn "211"
 #r "nuget: DiffSharp-cpu, v=1.0.7"
 #r "nuget: MathNet.Numerics.FSharp,5.0.0"
 #r "nuget: FSharp.Data,6.6"
 #r "../../src/Bristlecone/bin/Debug/net10.0/Bristlecone.dll"
 #r "../../src/Bristlecone.Dendro/bin/Debug/net10.0/Bristlecone.Dendro.dll"
-
 #r "nuget: Plotly.NET, 4.2.0"
 
 open Bristlecone
@@ -67,13 +65,13 @@ will run in a transformed (unbounded) parameter space.
 module GrowthFunctions =
 
     // Parameters
-    let K = parameter "K" notNegative 20.0<gram> 40.0<gram> // upper asymptote
-    let β = parameter "β" notNegative 0.1 2.0
-    let L = parameter "L" notNegative 20.0<gram> 40.0<gram> // lower asymptote
+    let K = parameter "K" Positive 20.0<gram> 40.0<gram> // upper asymptote
+    let β = parameter "β" Positive 0.1 2.0
+    let L = parameter "L" Positive 20.0<gram> 40.0<gram> // lower asymptote
 
     // The meaning of r changes between models, so define it seperately
-    let rAbs = parameter "r_abs" notNegative 1.1<gram/day> 1.2<gram/day>
-    let r = parameter "r" notNegative 0.01</day> 2.00</day>
+    let rAbs = parameter "r_abs" Positive 1.1<gram/day> 1.2<gram/day>
+    let r = parameter "r" Positive 0.01</day> 2.00</day>
 
     // 7x typical model forms (ODEs)
     let linear = P rAbs
@@ -116,7 +114,6 @@ let baseDay = System.DateTime(2000, 01, 01)
 let data =
     [
         mass.Code, TimeSeries.fromNeoObservations [
-        1e-6, baseDay
         0.07, baseDay.AddDays 14
         0.44, baseDay.AddDays 35
         2.83, baseDay.AddDays 70
@@ -147,6 +144,14 @@ results and resetting the starting bounds at each level until no improvements ar
 We specify no conditioning. Here, we know that plant biomass was effectively zero at time
 zero, so we do not need to condition the time-zero value; it is known. The model fitting will
 therefore run from the first time-point in the data onwards.
+
+For the -log likelihood function, we are applying a standard gaussian function
+from the built-in selection in the `Bristlecone.ModelLibrary`. However, for
+plant growth models we likely should be using a gaussian function with heteroscedacity,
+because the associated error may increase in magnitude as biomass increases.
+We also therefore need to declare the sigma parameter required by the gaussian function.
+
+Then, we can just run all of the hypotheses.
 *)
 
 module Settings =
@@ -156,30 +161,16 @@ module Settings =
         |> Bristlecone.withCustomOptimisation (Optimisation.Amoeba.swarm 5 10 Optimisation.Amoeba.Solver.Default)
         |> Bristlecone.withConditioning Conditioning.NoConditioning
 
-    let endCond = Optimisation.EndConditions.noImprovementRecently 100<iteration>
+    let endCond = Optimisation.EndConditions.whenNoBestValueImprovement 100<iteration>
 
-(**
-For the -log likelihood function, we are applying a standard gaussian function
-from the built-in selection in the `Bristlecone.ModelLibrary`. However, for
-plant growth models we likely should be using a gaussian function with heteroscedacity,
-because the associated error may increase in magnitude as biomass increases.
-
-We need to declare the sigma parameter required by the gaussian function:
-*)
-
-let sigma = parameter "σ[x]" notNegative 0.01 0.5
-
-(**
-Then, we can just run all of the hypotheses.
-*)
+let sigma = parameter "σ[x]" Positive 0.01<gram> 0.5<gram>
 
 let results =
     GrowthFunctions.hypotheses
     |> List.map (fun h ->
             let hy =
                 snd h
-                |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.gaussian (Require.state mass))
-                |> Model.estimateParameter sigma
+                |> Model.useLikelihoodFunction (ModelLibrary.NegLogLikelihood.Normal (Require.state mass) sigma)
                 |> Model.compile
             fst h, Bristlecone.fit Settings.engine Settings.endCond data hy
     )
@@ -227,7 +218,7 @@ module Graphing =
                 |> Chart.withTitle varCode.Value
                 )
 
-        charts |> Chart.Grid(2, 1)
+        charts |> Chart.Grid(1, 1)
 
 (**
 The resultant model fits are shown in the below graph.
@@ -236,3 +227,81 @@ The resultant model fits are shown in the below graph.
 Graphing.fitPlot results
 |> Plotly.NET.GenericChart.toChartHTML
 (*** include-it-raw ***)
+
+(**
+#### Model selection
+
+As we are applying a non-bayesian model fitting approach in this example, we
+can apply Akaike weights to discren which is the most appropriate model representation
+to explain this data.
+
+A weights function exists for simple lists of competing hypotheses for a single subject,
+which in this case is the single plant biomass time-series.
+
+For more complex sets of results, use the results set functionality described
+in the model selection documentation; this takes into account the subjects, hypotheses,
+and one or more replicates for each.
+*)
+
+let weights = ModelSelection.Akaike.akaikeWeights (results |> Seq.map snd)
+
+(**
+The resultant weights are:
+
+| Model | MLE | AICc | Weight |
+| ---   | --- | ---  | ---    |
+*)
+weights 
+|> Seq.zip (results |> Seq.map fst)
+|> Seq.map(fun (m,(r,w)) ->
+    sprintf "| %s | %f | %f | %f |" m r.Likelihood w.AICc w.Weight
+    )
+|> String.concat "\n"
+(*** include-it-raw ***)
+
+(**
+The output indicates that the best model is linear, with approximately 72% support
+(this may vary as the above table is auto-generated).
+
+#### Model fit quality / uncertainty
+
+...
+*)
+
+let likelihoodProfile =
+    [results.[0]]
+    |> Seq.map(fun (name,r) ->
+
+        // Lookup the original hypothesis model using its name:
+        let h =
+            GrowthFunctions.hypotheses |> Seq.find (fun s -> fst s = name)
+            |> snd
+            |> Model.useLikelihoodFunction (ModelLibrary.NegLogLikelihood.Normal (Require.state mass) sigma)
+            |> Model.compile
+
+        // Run a profile likelihood around the Maximum Likelihood Estimate:
+        let l = 
+            Bristlecone.Confidence.ProfileLikelihood.profile
+                Bristlecone.fit
+                Settings.engine
+                data
+                h
+                1000<iteration>
+                r
+        name, l )
+    |> Seq.toList
+
+
+let sigmaBase = parameter "σ0[x]" Positive 0.01<gram> 0.5<gram>
+let sigmaGrowth = parameter "σ1[x]" Positive 0.01</gram> 0.5</gram>
+
+let results2 =
+    GrowthFunctions.hypotheses
+    |> List.map (fun h ->
+            let variance = ModelLibrary.NegLogLikelihood.Variance.exponential sigmaBase sigmaGrowth
+            let hy =
+                snd h
+                |> Model.useLikelihoodFunction (ModelLibrary.NegLogLikelihood.NormalWithVariance (Require.state mass) variance)
+                |> Model.compile
+            fst h, Bristlecone.fit Settings.engine Settings.endCond data hy
+    )

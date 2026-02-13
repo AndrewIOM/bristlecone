@@ -10,22 +10,22 @@ module TestModels =
     open Bristlecone.Language
     let rateConstant bound1 bound2 =
         let X = state "X"
-        let a = parameter "a" noConstraints (min bound1 bound2) (max bound1 bound2)        
+        let a = parameter "a" NoConstraints (min bound1 bound2) (max bound1 bound2)        
         Model.empty
         |> Model.addRateEquation X (P a)
         |> Model.estimateParameter a
-        |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ Require.state X ])
+        |> Model.useLikelihoodFunction (ModelLibrary.NegLogLikelihood.SumOfSquares [ Require.state X ])
         |> Model.compile
 
     /// Scaffold a discrete model where there is one parameter (a)
     /// setup to be estimated.
     let discreteModel bound1 bound2 =
         let X = state "X"
-        let a = parameter "a" noConstraints (min bound1 bound2) (max bound1 bound2)        
+        let a = parameter "a" NoConstraints (min bound1 bound2) (max bound1 bound2)        
         Model.discrete
         |> Model.addDiscreteEquation X (P a)
         |> Model.estimateParameter a
-        |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ Require.state X ])
+        |> Model.useLikelihoodFunction (ModelLibrary.NegLogLikelihood.SumOfSquares [ Require.state X ])
         |> Model.compile
 
     let rateTwoEquationConstant cons bound1 bound2 =
@@ -36,38 +36,38 @@ module TestModels =
         |> Model.addRateEquation X (P a)
         |> Model.addRateEquation Y (P a)
         |> Model.estimateParameter a
-        |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ Require.state X; Require.state Y ])
+        |> Model.useLikelihoodFunction (ModelLibrary.NegLogLikelihood.SumOfSquares [ Require.state X; Require.state Y ])
         |> Model.compile
 
     /// dX/dt = Temperature
     let tempDrivenModel () =
         let X = state "X"
         let temp = environment "Temp"
-        let dummy = parameter "a" noConstraints (min 0.1 0.2) (max 0.1 0.2)        
+        let dummy = parameter "a" NoConstraints (min 0.1 0.2) (max 0.1 0.2)        
         Model.empty
         |> Model.addRateEquation X (Environment temp)   // derivative of X is just the env forcing
         |> Model.estimateParameter dummy
-        |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ Require.state X ])
+        |> Model.useLikelihoodFunction (ModelLibrary.NegLogLikelihood.SumOfSquares [ Require.state X ])
         |> Model.compile
 
     let tempDrivenModelDiscrete () =
         let X = state "X"
         let temp = environment "Temp"
-        let dummy = parameter "a" noConstraints (min 0.1 0.2) (max 0.1 0.2)        
+        let dummy = parameter "a" NoConstraints (min 0.1 0.2) (max 0.1 0.2)        
         Model.discrete
         |> Model.addDiscreteEquation X (Environment temp)   // derivative of X is just the env forcing
         |> Model.estimateParameter dummy
-        |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ Require.state X ])
+        |> Model.useLikelihoodFunction (ModelLibrary.NegLogLikelihood.SumOfSquares [ Require.state X ])
         |> Model.compile
 
     let diffSingleEnv (dynCode:ShortCode.ShortCode) (envCode:ShortCode.ShortCode) =
         let X = state dynCode.Value
         let temp = environment envCode.Value
-        let dummy = parameter "a" noConstraints (min 0.1 0.2) (max 0.1 0.2)        
+        let dummy = parameter "a" NoConstraints (min 0.1 0.2) (max 0.1 0.2)        
         Model.empty<year>
         |> Model.addRateEquation X (Environment temp)   // derivative of X is just the env forcing
         |> Model.estimateParameter dummy
-        |> Model.useLikelihoodFunction (ModelLibrary.Likelihood.sumOfSquares [ Require.state X ])
+        |> Model.useLikelihoodFunction (ModelLibrary.NegLogLikelihood.SumOfSquares [ Require.state X ])
         |> Model.compile
 
 

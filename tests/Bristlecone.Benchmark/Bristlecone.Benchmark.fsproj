@@ -8,6 +8,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/Bristlecone/Bristlecone.fsproj" />
+    <ProjectReference Include="../../src/Bristlecone.Dendro/Bristlecone.Dendro.fsproj" />
     <Compile Include="TestFunctions.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
