@@ -196,7 +196,7 @@ module NegLogLikelihood =
         /// Log likelihood function for dual simultaneous system, assuming Gaussian error for both x and y.
         /// Requires parameters 'σ[x]', 'σ[y]' and 'ρ' to be defined and passed as arguments.
         /// </summary>
-        let bivariateGaussian
+        let bivariateGaussian<[<Measure>] 'ux, [<Measure>] 'uy, [<Measure>] 'state>
             (key1: Language.Require.ObsForLikelihood<'ux>)
             (key2: Language.Require.ObsForLikelihood<'uy>)
             (sigmax: Language.IncludedParameter<'ux>)
@@ -226,7 +226,7 @@ module NegLogLikelihood =
             |> fun f ->
                 { Evaluate = f
                   RequiredParameters = [ paramToAny sigmax; paramToAny sigmay; paramToAny rho ]
-                  RequiredCodes = List.map obsKeyToLikelihoodKey [ key1; key2 ] }
+                  RequiredCodes = [ obsKeyToLikelihoodKey key1; obsKeyToLikelihoodKey key2 ] }
 
         let internal logGaussianVec
             (sigma: TypedTensor<Vector, 'u>)
