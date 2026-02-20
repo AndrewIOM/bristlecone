@@ -261,10 +261,11 @@ module MLE =
 [<RequireQualifiedAccess>]
 module Metadata =
 
-    let save directory subject modelId (result:EstimationResult<'d,'a,'b>) =
+    let save directory subject modelId (result: EstimationResult<'d, 'a, 'b>) =
         let filePath =
             Config.filePath directory subject modelId result.ResultId Config.DataType.MLE
-        let txt = result.Metadata |> Seq.map(fun (k,v) -> k + "\t" + v)
+
+        let txt = result.Metadata |> Seq.map (fun (k, v) -> k + "\t" + v)
         System.IO.File.WriteAllLines(filePath, txt)
 
 

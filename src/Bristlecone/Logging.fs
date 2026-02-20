@@ -150,15 +150,16 @@ module ConsoleTable =
 
         let updateOptimState threadId phaseMsg =
             let cleanMessage = oneLine phaseMsg
+
             active.AddOrUpdate(
                 threadId,
-                {   ThreadId = threadId
-                    Phase = cleanMessage
-                    InstanceId = 1
-                    Iteration = 0<iteration>
-                    Status = ""
-                    Likelihood = nan * 1.<``-logL``>
-                    Theta = "" },
+                { ThreadId = threadId
+                  Phase = cleanMessage
+                  InstanceId = 1
+                  Iteration = 0<iteration>
+                  Status = ""
+                  Likelihood = nan * 1.<``-logL``>
+                  Theta = "" },
                 fun _ old -> { old with Phase = cleanMessage }
             )
             |> ignore
@@ -200,6 +201,7 @@ module ConsoleTable =
                                 | PhaseState.OptimComponentStarting m -> sprintf "[OPTM START] %s starting" m
                                 | PhaseState.OptimComponentEnding m -> sprintf "[OPTM END] %s ending" m
                                 | PhaseState.PhaseStarting(s, i) -> sprintf "[OPTM in PHASE] %s" s
+
                             updateOptimState threadId msg
                         | GeneralEvent s -> updateOptimState threadId s
                         | CompleteEvent ->

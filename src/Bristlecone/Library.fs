@@ -149,17 +149,28 @@ module Bristlecone =
 
     module internal Metadata =
 
-        let genMetadata (conditioned:Solver.Conditioning.Resolved<'date,'yearType,'timespan>) timeTaken =
+        let genMetadata (conditioned: Solver.Conditioning.Resolved<'date, 'yearType, 'timespan>) timeTaken =
             let version = Reflection.Assembly.GetExecutingAssembly().GetName().Version
-            [
-                "Bristlecone: version", version.ToString()
-                "Data: conditioning", conditioned.Log |> Option.defaultValue ""
-                "Model: states (observed)", conditioned.StatesObservedForSolver.Keys |> List.map(fun s -> s.Value) |> String.concat ", "
-                "Model: states (hidden)", Map.keys conditioned.StatesHiddenForSolver |> Seq.map(fun s -> s.Value) |> String.concat ", "
-                "Model: time-series used in likelihood calculation", Map.keys conditioned.StatesHiddenForSolver |> Seq.map(fun s -> s.Value) |> String.concat ", "
-                "Model: time-varying values", conditioned.ExogenousForSolver |> Option.map (fun t -> t.Keys |> List.map(fun s -> s.Value) |> String.concat ", ") |> Option.defaultValue ""
-                "Fit: time taken (seconds)", sprintf "%f" timeTaken
-            ]
+
+            [ "Bristlecone: version", version.ToString()
+              "Data: conditioning", conditioned.Log |> Option.defaultValue ""
+              "Model: states (observed)",
+              conditioned.StatesObservedForSolver.Keys
+              |> List.map (fun s -> s.Value)
+              |> String.concat ", "
+              "Model: states (hidden)",
+              Map.keys conditioned.StatesHiddenForSolver
+              |> Seq.map (fun s -> s.Value)
+              |> String.concat ", "
+              "Model: time-series used in likelihood calculation",
+              Map.keys conditioned.StatesHiddenForSolver
+              |> Seq.map (fun s -> s.Value)
+              |> String.concat ", "
+              "Model: time-varying values",
+              conditioned.ExogenousForSolver
+              |> Option.map (fun t -> t.Keys |> List.map (fun s -> s.Value) |> String.concat ", ")
+              |> Option.defaultValue ""
+              "Fit: time taken (seconds)", sprintf "%f" timeTaken ]
 
 
     // Temporary helpers until optim-space-transformed can be handled correctly:
@@ -399,8 +410,7 @@ module Bristlecone =
                     optimConfig
                     obsDataForObjective
 
-            let result, timeTaken =
-                measureTime (fun _ -> objective |> optimise)
+            let result, timeTaken = measureTime (fun _ -> objective |> optimise)
 
             let lowestLikelihood, bestPoint =
                 match result |> Optimisation.Optimiser.tryGetSolution with
@@ -453,6 +463,7 @@ module Bristlecone =
                       Results = r.Results |> toRealSpaceSolutions optimConfig })
 
             let metadata = Metadata.genMetadata conditioned timeTaken
+
             return
                 { ResultId = resultId
                   Metadata = metadata
@@ -514,12 +525,11 @@ module Bristlecone =
             // Only keep data used by likelihood function.
             let trueData =
                 model.NegLogLikelihood.RequiredCodes
-                |> List.map(fun r ->
+                |> List.map (fun r ->
                     match r with
                     | Measure m -> m
                     | State m -> m)
-                |> fun keep ->
-                    trueData |> Map.filter(fun k _ -> keep |> Seq.contains k)
+                |> fun keep -> trueData |> Map.filter (fun k _ -> keep |> Seq.contains k)
 
             // Merge dynamic + environmental data into one coded map
             let mergedData = Map.merge trueData settings.EnvironmentalData (fun dyn _env -> dyn)

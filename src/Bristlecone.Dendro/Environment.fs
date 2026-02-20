@@ -27,8 +27,9 @@ module Environment =
         let genTemperatureSouthernMidLatitude mean amplitude =
             genTemperatureSeasonal mean amplitude 365.<day> 0.0
 
-        let temperatureAnomaly phi (sigma:float<Units.celsius>) (rnd:Random) =
+        let temperatureAnomaly phi (sigma: float<Units.celsius>) (rnd: Random) =
             let series = Synthetic.ar1 phi sigma rnd |> Seq.cache
+
             fun (t: float<day>) ->
                 let i = int (floor (float t))
                 series |> Seq.item i

@@ -90,14 +90,13 @@ module Language =
 
         /// Retrieve an parameter value from the parameter pool
         /// in its original units of measure.
-        member pool.TryGet (included:IncludedParameter<'u>) =
+        member pool.TryGet(included: IncludedParameter<'u>) =
             pool |> Parameter.Pool.tryGetRealValue included.ParamId.Inner.Value
 
         /// Retrieve an parameter value from the parameter pool
         /// in its original units of measure. Fails if parameter
         /// doesn't exist or is not estimated.
-        member pool.Get (included:IncludedParameter<'u>) =
-            included |> pool.TryGet |> Option.get
+        member pool.Get(included: IncludedParameter<'u>) = included |> pool.TryGet |> Option.get
 
 
     module Untyped =
@@ -608,11 +607,12 @@ module Language =
 
 
 
-        let inverse fLambda (targetExpr:Expr<Tensor>) loExpr hiExpr tol maxIter =
+        let inverse fLambda (targetExpr: Expr<Tensor>) loExpr hiExpr tol maxIter =
             let tol = allocateTensor tol
 
             <@
-                if (%targetExpr).isnan().toBool() then penalty
+                if (%targetExpr).isnan().toBool () then
+                    penalty
                 else
                     let interval =
                         Statistics.RootFinding.Tensor.Interval.identify
