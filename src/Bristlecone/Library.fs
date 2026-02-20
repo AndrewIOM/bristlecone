@@ -147,6 +147,32 @@ module Bristlecone =
             |> Option.defaultValue engine.InterpolationGlobal
 
 
+    module internal Metadata =
+
+        let genMetadata (conditioned: Solver.Conditioning.Resolved<'date, 'yearType, 'timespan>) timeTaken =
+            let version = Reflection.Assembly.GetExecutingAssembly().GetName().Version
+
+            [ "Bristlecone: version", version.ToString()
+              "Data: conditioning", conditioned.Log |> Option.defaultValue ""
+              "Model: states (observed)",
+              conditioned.StatesObservedForSolver.Keys
+              |> List.map (fun s -> s.Value)
+              |> String.concat ", "
+              "Model: states (hidden)",
+              Map.keys conditioned.StatesHiddenForSolver
+              |> Seq.map (fun s -> s.Value)
+              |> String.concat ", "
+              "Model: time-series used in likelihood calculation",
+              Map.keys conditioned.StatesHiddenForSolver
+              |> Seq.map (fun s -> s.Value)
+              |> String.concat ", "
+              "Model: time-varying values",
+              conditioned.ExogenousForSolver
+              |> Option.map (fun t -> t.Keys |> List.map (fun s -> s.Value) |> String.concat ", ")
+              |> Option.defaultValue ""
+              "Fit: time taken (seconds)", sprintf "%f" timeTaken ]
+
+
     // Temporary helpers until optim-space-transformed can be handled correctly:
     let private unsafeEraseSpace<'space> =
         unbox<Parameter.Pool.OptimiserConfig<``optim-space``>>
@@ -211,6 +237,14 @@ module Bristlecone =
             <| sprintf
                 "Some states were not conditioned at t0: %A. If these are hidden states, a custom start may be required."
                 missing
+
+    let internal measureTime fn =
+        let watch = Diagnostics.Stopwatch.StartNew()
+        watch.Start()
+        let result = fn ()
+        watch.Stop()
+        result, watch.Elapsed.TotalSeconds
+
 
     /// <summary>
     /// Fit a time-series model to data.
@@ -376,7 +410,7 @@ module Bristlecone =
                     optimConfig
                     obsDataForObjective
 
-            let result = objective |> optimise
+            let result, timeTaken = measureTime (fun _ -> objective |> optimise)
 
             let lowestLikelihood, bestPoint =
                 match result |> Optimisation.Optimiser.tryGetSolution with
@@ -428,8 +462,11 @@ module Bristlecone =
                       ReplicateNumber = r.Replicate
                       Results = r.Results |> toRealSpaceSolutions optimConfig })
 
+            let metadata = Metadata.genMetadata conditioned timeTaken
+
             return
                 { ResultId = resultId
+                  Metadata = metadata
                   Likelihood = lowestLikelihood
                   Parameters = bestPointPool
                   Series = paired
@@ -484,6 +521,15 @@ module Bristlecone =
             // Set conditioning for solver to be the custom start values
             let engine = engine |> withConditioning (Conditioning.Custom settings.StartValues)
             let! trueData, trueParamPool = Test.Compute.tryGenerateData engine settings model settings.RetryDataGen
+
+            // Only keep data used by likelihood function.
+            let trueData =
+                model.NegLogLikelihood.RequiredCodes
+                |> List.map (fun r ->
+                    match r with
+                    | Measure m -> m
+                    | State m -> m)
+                |> fun keep -> trueData |> Map.filter (fun k _ -> keep |> Seq.contains k)
 
             // Merge dynamic + environmental data into one coded map
             let mergedData = Map.merge trueData settings.EnvironmentalData (fun dyn _env -> dyn)

@@ -86,6 +86,19 @@ module Language =
         | None -> invalidOp (sprintf "Could not find %s in the map" name)
 
 
+    type Parameter.Pool.ParameterPool with
+
+        /// Retrieve an parameter value from the parameter pool
+        /// in its original units of measure.
+        member pool.TryGet(included: IncludedParameter<'u>) =
+            pool |> Parameter.Pool.tryGetRealValue included.ParamId.Inner.Value
+
+        /// Retrieve an parameter value from the parameter pool
+        /// in its original units of measure. Fails if parameter
+        /// doesn't exist or is not estimated.
+        member pool.Get(included: IncludedParameter<'u>) = included |> pool.TryGet |> Option.get
+
+
     module Untyped =
 
         /// A model or model fragment that can be interpreted to a mathematical
@@ -563,10 +576,8 @@ module Language =
 
         let private mkTensor (v: float) = dsharp.tensor (v, dtype = Float64)
 
-        let invalidPenalty = mkTensor 1e30
+        let invalidPenalty = mkTensor 1e8
         let internal one = mkTensor 1.0
-        let internal clampLow = mkTensor -1e30
-        let internal clampHi = mkTensor 1e30
 
         let convertMask (mask: Tensor) = dsharp.cast (mask, Dtype.Float64)
 
@@ -594,31 +605,36 @@ module Language =
 
         let private penalty = allocateTensor 1e6
 
-        let inverse fLambda targetExpr loExpr hiExpr tol maxIter =
+
+
+        let inverse fLambda (targetExpr: Expr<Tensor>) loExpr hiExpr tol maxIter =
             let tol = allocateTensor tol
 
             <@
-                let interval =
-                    Statistics.RootFinding.Tensor.Interval.identify
-                        500
-                        penalty
-                        (%%fLambda: Tensor -> Tensor)
-                        %targetExpr
-                        %loExpr
-                        %hiExpr
+                if (%targetExpr).isnan().toBool () then
+                    penalty
+                else
+                    let interval =
+                        Statistics.RootFinding.Tensor.Interval.identify
+                            500
+                            penalty
+                            (%%fLambda: Tensor -> Tensor)
+                            %targetExpr
+                            %loExpr
+                            %hiExpr
 
-                let x =
-                    Statistics.RootFinding.Tensor.refinedGrid
-                        (%%fLambda: Tensor -> Tensor)
-                        %targetExpr
-                        interval.Grid
-                        interval.Values
-                        interval.Low
-                        interval.High
+                    let x =
+                        Statistics.RootFinding.Tensor.refinedGrid
+                            (%%fLambda: Tensor -> Tensor)
+                            %targetExpr
+                            interval.Grid
+                            interval.Values
+                            interval.Low
+                            interval.High
 
-                let mask = interval.InRange
-                let invMask = one - mask
-                mask * x + invMask * interval.Penalty
+                    let mask = interval.InRange
+                    let invMask = one - mask
+                    mask * x + invMask * interval.Penalty
             @>
 
         let getEnvironment eVar name =
@@ -1498,12 +1514,20 @@ module Language =
             (gen2: 'timespan -> float<'fnTime>)
             (settings: TestSettings<'state, 'date, 'yearUnit, 'timespan>)
             =
+
+            let startDate =
+                match settings.Resolution with
+                | Time.Resolution.Years y -> settings.DateMode.AddYears settings.StartDate -y.Value
+                | Time.Resolution.Months m -> settings.DateMode.AddMonths settings.StartDate -m.Value
+                | Time.Resolution.Days d -> settings.DateMode.AddDays settings.StartDate -d.Value
+                | Time.Resolution.CustomEpoch c -> settings.DateMode.SubtractTime settings.StartDate c
+
             let envTs =
                 Bristlecone.Time.TimeSeries.fromGenBaseline
                     settings.DateMode
-                    settings.StartDate
+                    startDate
                     settings.Resolution
-                    settings.TimeSeriesLength
+                    (settings.TimeSeriesLength + 1)
                     genFn
                     gen2
                 |> Bristlecone.Time.TimeSeries.map (fun (v, _) -> v |> Units.retype)

@@ -113,7 +113,7 @@ module ConsoleTable =
 
                 // Rows
                 for KeyValue(_, st) in active |> Seq.sortBy (fun kv -> kv.Key) do
-                    let stageCol = truncate st.Status 30
+                    let stageCol = truncate st.Phase 30
 
                     let fixedCols =
                         sprintf
@@ -148,6 +148,24 @@ module ConsoleTable =
             Console.WriteLine(thetaDisplay)
             Console.ResetColor()
 
+        let updateOptimState threadId phaseMsg =
+            let cleanMessage = oneLine phaseMsg
+
+            active.AddOrUpdate(
+                threadId,
+                { ThreadId = threadId
+                  Phase = cleanMessage
+                  InstanceId = 1
+                  Iteration = 0<iteration>
+                  Status = ""
+                  Likelihood = nan * 1.<``-logL``>
+                  Theta = "" },
+                fun _ old -> { old with Phase = cleanMessage }
+            )
+            |> ignore
+
+            redrawActiveTable ()
+
         // --- Agent ---
         let agent =
             MailboxProcessor.Start(fun inbox ->
@@ -177,24 +195,15 @@ module ConsoleTable =
 
                             redrawActiveTable ()
 
-                        | GeneralEvent s ->
-                            let cleanMessage = oneLine s
+                        | OptimisationPhaseEvent p ->
+                            let msg =
+                                match p with
+                                | PhaseState.OptimComponentStarting m -> sprintf "[OPTM START] %s starting" m
+                                | PhaseState.OptimComponentEnding m -> sprintf "[OPTM END] %s ending" m
+                                | PhaseState.PhaseStarting(s, i) -> sprintf "[OPTM in PHASE] %s" s
 
-                            active.AddOrUpdate(
-                                threadId,
-                                { ThreadId = threadId
-                                  Phase = cleanMessage
-                                  InstanceId = 1
-                                  Iteration = 0<iteration>
-                                  Status = ""
-                                  Likelihood = nan * 1.<``-logL``>
-                                  Theta = "" },
-                                fun _ old -> { old with Phase = cleanMessage }
-                            )
-                            |> ignore
-
-                            redrawActiveTable ()
-
+                            updateOptimState threadId msg
+                        | GeneralEvent s -> updateOptimState threadId s
                         | CompleteEvent ->
                             match active.TryRemove threadId with
                             | true, st ->

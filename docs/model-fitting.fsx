@@ -27,5 +27,14 @@ Model Fitting
 ========================
 
 
+### The Estimation Result
 
+Model-fitting returns an `EstimationResult`.
+
+#### Accessing estimated parameter values
+
+To access parameter values from an `EstimationResult`, you may use the
+`.Get` or `.TryGet` members to retrieve parameter estimates in their
+original units of measure. You must pass the original parameter as
+declared in the model to access individual values in this way.
 *)

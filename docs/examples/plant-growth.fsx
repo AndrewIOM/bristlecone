@@ -165,6 +165,7 @@ module Settings =
 
 let sigma = parameter "σ[x]" Positive 0.01<gram> 0.5<gram>
 
+(*** do-not-eval ***)
 let results =
     GrowthFunctions.hypotheses
     |> List.map (fun h ->
