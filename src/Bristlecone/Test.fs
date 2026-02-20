@@ -21,16 +21,15 @@ module Test =
                 let x = t / period + phase
                 mean + amplitude * sin (2.0 * Math.PI * x)
 
-        let ar1 phi sigma (rnd: Random) =
-            let rec loop prev =
+        let ar1<[<Measure>] 'u> phi (sigma: float<'u>) (rnd: Random) =
+            let rec loop (prev: float<'u>) =
                 seq {
-                    let eps = sigma * (rnd.NextDouble() - 0.5)
+                    let eps = sigma * (rnd.NextDouble() - 0.5 |> float)
                     let next = phi * prev + eps
                     yield next
                     yield! loop next
                 }
-
-            loop 0.
+            loop (LanguagePrimitives.FloatWithMeasure<'u> 0.)
 
 
     /// Functions for adding background variability into

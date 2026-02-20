@@ -151,14 +151,20 @@ module Timeseries =
             let settings =
                 Test.annualSettings
                 |> Test.seriesLength 30
-                |> Test.withObservationError (Require.state H) (Test.Error.normal σH)
-                |> Test.withObservationError (Require.state L) (Test.Error.normal σL)
-                |> Test.rule (Require.state H) (Test.GenerationRules.between 10. 10000.)
-                |> Test.rule (Require.state L) (Test.GenerationRules.between 10. 10000.)
-                |> Test.t1 (Require.state H) 1.0
-                |> Test.t1 (Require.state L) 1.0
+                |> Test.rule (Require.state H) (Test.GenerationRules.between 2. 10000.)
+                |> Test.rule (Require.state L) (Test.GenerationRules.between 2. 10000.)
+                |> Test.t1 (Require.state H) 75.0
+                |> Test.t1 (Require.state L) 50.0
 
-            Bristlecone.tryTestModel engine endCondition settings (if withNoise then noisy else deterministic)
+            if withNoise
+            then 
+                let settings =
+                    settings
+                    |> Test.withObservationError (Require.state H) (Test.Error.normal σH)
+                    |> Test.withObservationError (Require.state L) (Test.Error.normal σL)
+                Bristlecone.tryTestModel engine endCondition settings noisy
+            else
+                Bristlecone.tryTestModel engine endCondition settings deterministic
 
 
     /// A two-compartment soil carbon model that represents the fast turnover
@@ -252,7 +258,7 @@ module Timeseries =
     module RickerTemperature =
 
         [<Measure>] type individuals = 1
-        [<Measure>] type celsius
+        [<Measure>] type celsius = Dendro.Units.celsius
 
         let N = state<individuals> "N"
         let logN = measure "logN"
@@ -263,7 +269,7 @@ module Timeseries =
             // Parameters
             let r = parameter "r" NoConstraints 0.1 2.0 // maximum per‑capita growth rate (intrinsic growth rate)
             let K = parameter "K" Positive 50.<individuals> 500.<individuals> // carrying capacity
-            let beta = parameter "beta" Positive -1.0</celsius> 1.0</celsius> // temperature effect
+            let beta = parameter "beta" NoConstraints -1.0</celsius> 1.0</celsius> // temperature effect (TODO need new constraint 0 - 1)
 
             let ``N[t+1]``: ModelExpression<individuals> =
                 This * exp (P r * (Constant 1. - This / P K) + P beta * Environment temperatureAnomaly)
@@ -299,11 +305,18 @@ module Timeseries =
                 |> Bristlecone.withOutput logger
                 |> Bristlecone.withTimeConversion DateMode.Conversion.CalendarDates.toDays
 
+            let syntheticAnomaly = Dendro.Environment.Synthetic.temperatureAnomaly 0.8 1.<celsius> engine.Random
+
             let settings =
                 Test.create
                 |> Test.seriesLength 30
-                |> Test.withObservationError (Require.measure logN) (Test.Error.normal sigma)
                 |> Test.rule (Require.measure logN) (Test.GenerationRules.alwaysLessThan 1000.)
-                |> Test.t1 (Require.measure logN) 1.0
+                |> Test.t1 (Require.state N) 1.0
+                |> Test.withEnvironmentGenBySpan temperatureAnomaly syntheticAnomaly (fun x -> float x.Days * 1.<day>)
 
-            Bristlecone.tryTestModel engine endCondition settings (if withNoise then noisy else deterministic)
+            if withNoise
+            then
+                let settings = settings |> Test.withObservationError (Require.measure logN) (Test.Error.normal sigma)
+                Bristlecone.tryTestModel engine endCondition settings noisy
+            else 
+                Bristlecone.tryTestModel engine endCondition settings deterministic

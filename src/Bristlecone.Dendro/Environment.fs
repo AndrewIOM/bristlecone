@@ -5,9 +5,6 @@ open Bristlecone.Units
 
 module Environment =
 
-    [<Measure>]
-    type celsius
-
     /// <summary>Generate synthetic environmental data, for example for model testing.</summary>
     module Synthetic =
 
@@ -30,5 +27,8 @@ module Environment =
         let genTemperatureSouthernMidLatitude mean amplitude =
             genTemperatureSeasonal mean amplitude 365.<day> 0.0
 
-        let temperatureAnomaly phi sigma seed =
-            Synthetic.ar1 phi sigma seed |> Seq.map ((*) 1.<celsius>)
+        let temperatureAnomaly phi (sigma:float<Units.celsius>) (rnd:Random) =
+            let series = Synthetic.ar1 phi sigma rnd |> Seq.cache
+            fun (t: float<day>) ->
+                let i = int (floor (float t))
+                series |> Seq.item i

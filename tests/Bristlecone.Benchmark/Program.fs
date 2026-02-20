@@ -100,13 +100,14 @@ let measureTime fn =
 let runReplicated nTimes work =
     [| 1..nTimes |] |> Array.Parallel.map (fun _ -> measureTime (fun () -> work ()))
 
-let logger = Logging.ConsoleTable.logger 1000<iteration>
+let logger = Logging.Console.logger 1000<iteration>
 let accuracy = { absolute = 1e-3; relative = 1e-2 }
 
 type BenchmarkResult =
     { ModelName: string
       OptimMethod: string
       Runs: int
+      Failed: int
       MinimumReal: float<``-logL``>
       MinimumRealPoints: float list list
       MinimumEstimatedMedian: float<``-logL``>
@@ -134,59 +135,80 @@ let summariseRuns
     trueMinima
     minVal
     (minima: float list list)
-    (results: ((EstimationEngine.Optimisation.OptimisationTrace list * float[]) * int) seq)
+    (results: ((Result<EstimationEngine.Optimisation.OptimisationTrace list * float[],string>) * int) seq)
     =
-    let eachRunMinimum =
-        results |> Seq.map (fun ((r, _), _) -> r |> Seq.map(fun r -> r.Results |> Seq.minBy fst) |> Seq.minBy fst)
 
-    let distancesFromRealMinimum =
-        eachRunMinimum |> Seq.map (fun o -> abs ((fst o) - minVal))
+    let successes = results |> Seq.filter(fun (r, _) -> Result.isOk r) |> Seq.map(fun (r, x) -> forceOk r, x) 
 
-    let bestPointEstimate =
-        eachRunMinimum
-        |> Seq.minBy (fun o -> abs ((fst o) - minVal))
-        |> snd
-        |> Tensors.Typed.toFloatArray
+    if Seq.isEmpty successes then
+        { ModelName = modelName
+          OptimMethod = optimName
+          Failed = Seq.length results - Seq.length successes
+          Runs = results |> Seq.length
+          MinimumReal = 1.<``-logL``> * nan
+          MinimumRealPoints = trueMinima
+          MinimumEstimatedMedian = 1.<``-logL``> * nan
+          MinimumEstimatedBest = 1.<``-logL``> * nan
+          DistanceFromMinimumBest = 1.<``-logL``> * nan
+          ParameterSpaceDistanceMedian = nan |> (*) 1.<``optim-space``>
+          ParameterEstimates = []
+          TimesNearMinimum = 0
+          MillisecondsMedian = nan }
 
-    let elapsedAverage = results |> Seq.map (fun (_, t) -> float t) |> median
+    else
 
-    let dims = minima |> Seq.head |> Seq.length
+        let eachRunMinimum =
+            successes |> Seq.map (fun ((r, _), _) -> r |> Seq.map(fun r -> r.Results |> Seq.minBy fst) |> Seq.minBy fst)
 
-    let paramEstimates =
-        [ 1..dims ]
-        |> List.map (fun d ->
-            let values =
-                eachRunMinimum |> Seq.map (fun (_, v) -> (Tensors.Typed.toFloatArray v).[d - 1])
+        let distancesFromRealMinimum =
+            eachRunMinimum |> Seq.map (fun o -> abs ((fst o) - minVal))
 
-            { Best = bestPointEstimate.[d - 1] |> float
-              Median = median (values |> Seq.map float)
-              StDev = Statistics.Statistics.StandardDeviation(values |> Seq.map float) |> float })
+        let bestPointEstimate =
+            eachRunMinimum
+            |> Seq.minBy (fun o -> abs ((fst o) - minVal))
+            |> snd
+            |> Tensors.Typed.toFloatArray
 
-    let distanceToClosestParamValue =
-        eachRunMinimum
-        |> Seq.map (fun (_, v) ->
-            minima
-            |> Seq.map (fun minimum ->
-                Seq.zip minimum (Tensors.Typed.toFloatArray v)
-                |> Seq.map (fun (x, y) -> abs (x - float y))
-                |> Seq.sum)
-            |> Seq.min)
+        let elapsedAverage = successes |> Seq.map (fun (_, t) -> float t) |> median
 
-    { ModelName = modelName
-      OptimMethod = optimName
-      Runs = results |> Seq.length
-      MinimumReal = minVal
-      MinimumRealPoints = trueMinima
-      MinimumEstimatedMedian = eachRunMinimum |> Seq.map fst |> median
-      MinimumEstimatedBest = eachRunMinimum |> Seq.map fst |> Seq.min
-      DistanceFromMinimumBest = distancesFromRealMinimum |> Seq.min
-      ParameterSpaceDistanceMedian = distanceToClosestParamValue |> median |> (*) 1.<``optim-space``>
-      ParameterEstimates = paramEstimates
-      TimesNearMinimum =
-        distancesFromRealMinimum
-        |> Seq.filter (fun i -> i < 0.1<``-logL``>)
-        |> Seq.length
-      MillisecondsMedian = elapsedAverage }
+        let dims = minima |> Seq.head |> Seq.length
+
+        let paramEstimates =
+            [ 1..dims ]
+            |> List.map (fun d ->
+                let values =
+                    eachRunMinimum |> Seq.map (fun (_, v) -> (Tensors.Typed.toFloatArray v).[d - 1])
+
+                { Best = bestPointEstimate.[d - 1] |> float
+                  Median = median (values |> Seq.map float)
+                  StDev = Statistics.Statistics.StandardDeviation(values |> Seq.map float) |> float })
+
+        let distanceToClosestParamValue =
+            eachRunMinimum
+            |> Seq.map (fun (_, v) ->
+                minima
+                |> Seq.map (fun minimum ->
+                    Seq.zip minimum (Tensors.Typed.toFloatArray v)
+                    |> Seq.map (fun (x, y) -> abs (x - float y))
+                    |> Seq.sum)
+                |> Seq.min)
+
+        { ModelName = modelName
+          OptimMethod = optimName
+          Failed = Seq.length results - Seq.length successes
+          Runs = results |> Seq.length
+          MinimumReal = minVal
+          MinimumRealPoints = trueMinima
+          MinimumEstimatedMedian = eachRunMinimum |> Seq.map fst |> median
+          MinimumEstimatedBest = eachRunMinimum |> Seq.map fst |> Seq.min
+          DistanceFromMinimumBest = distancesFromRealMinimum |> Seq.min
+          ParameterSpaceDistanceMedian = distanceToClosestParamValue |> median |> (*) 1.<``optim-space``>
+          ParameterEstimates = paramEstimates
+          TimesNearMinimum =
+              distancesFromRealMinimum
+              |> Seq.filter (fun i -> i < 0.1<``-logL``>)
+              |> Seq.length
+          MillisecondsMedian = elapsedAverage }
 
 let runOptimTests optimFunctions =
     optimFunctions
@@ -206,19 +228,23 @@ let runOptimTests optimFunctions =
                     |> Array.map ((*) 1.<``optim-space``>)
                     |> Tensors.Typed.ofVector
 
-                let result: list<EstimationEngine.Optimisation.OptimisationTrace> =
-                    // Using a shim to go between tensor space and float space
-                    let f' point =
-                        f (Tensors.Typed.toFloatArray point |> Array.map float) * 1.<``-logL``>
-                        |> Tensors.Typed.ofScalar
+                try
+                    let result: list<EstimationEngine.Optimisation.OptimisationTrace> =
+                        // Using a shim to go between tensor space and float space
+                        let f' point =
+                            f (Tensors.Typed.toFloatArray point |> Array.map float) * 1.<``-logL``>
+                            |> Tensors.Typed.ofScalar
 
-                    match optimise with
-                    | EstimationEngine.Optimisation.InTransformedSpace optim ->
-                        optim Config.rng logger endCondition domain (Some startPoint) f'
-                    | EstimationEngine.Optimisation.InDetachedSpace optim ->
-                        optim Config.rng logger endCondition domain (Some startPoint) f'
-
-                result, startPoint |> Tensors.Typed.toFloatArray |> Array.map float)
+                        match optimise with
+                        | EstimationEngine.Optimisation.InTransformedSpace optim ->
+                            optim Config.rng logger endCondition domain (Some startPoint) f'
+                        | EstimationEngine.Optimisation.InDetachedSpace optim ->
+                            optim Config.rng logger endCondition domain (Some startPoint) f'
+                    logger Logging.CompleteEvent
+                    Ok(result, startPoint |> Tensors.Typed.toFloatArray |> Array.map float)
+                with
+                | e -> Error e.Message
+                )
             |> summariseRuns modelName optimName minima (minVal * 1.<``-logL``>) minima))
 
 [<Measure>]
@@ -319,10 +345,13 @@ let runTs (modelName, modelTestFn: (Logging.LogEvent -> unit) -> EstimationEngin
     optimFunctions
     |> List.map (fun (optimName: string, optimise, endCondition) ->
         runReplicated Config.startPointCount (fun () ->
-            modelTestFn logger optimise endCondition)
+            try modelTestFn logger optimise endCondition
+            with e ->
+                printfn "Error in model run (%s): %s, %s" modelName e.Message e.StackTrace
+                Error e.Message)
         |> fun r ->
             let ok = r |> Array.filter(fun (r,_) -> Result.isOk r) |> Array.map(fun (r,i) -> Result.forceOk r, i)
-            if r.Length = 0 then modelName, optimName, Error "no results"
+            if ok.Length = 0 then modelName, optimName, Error "no results"
             else  modelName, optimName, Ok (Metrics.summariseRuns Config.likTol Config.paramTol ok))
 
 
@@ -332,8 +361,8 @@ let timeModels () =
       runTs ("predator-prey (noisy)",     TestFunctions.Timeseries.PredatorPrey.test true)
       runTs ("soil respiration",          TestFunctions.Timeseries.SoilCarbon.test false)
       runTs ("soil respiration (noisy)",  TestFunctions.Timeseries.SoilCarbon.test true)
-      runTs ("soil respiration",          TestFunctions.Timeseries.RickerTemperature.test false)
-      runTs ("soil respiration (noisy)",  TestFunctions.Timeseries.RickerTemperature.test true)
+      runTs ("ricker temperature",          TestFunctions.Timeseries.RickerTemperature.test false)
+      runTs ("ricker temperature (noisy)",  TestFunctions.Timeseries.RickerTemperature.test true)
     ]
 
 module Output =
