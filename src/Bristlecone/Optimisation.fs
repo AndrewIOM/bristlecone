@@ -1123,7 +1123,7 @@ module MonteCarlo =
               AnnealStepEnd: EndCondition }
 
             static member Default =
-                { HeatStepLength = EndConditions.Profiles.SimulatedAnnealing.heating
+                { HeatStepLength = EndConditions.Profiles.SimulatedAnnealing.heatingStrict
                   HeatRamp = fun t -> t * 1.10
                   BoilingAcceptanceRate = 0.85
                   TemperatureCeiling = Some 200.
@@ -1322,6 +1322,11 @@ module MonteCarlo =
 
             writeOut <| DebugEvent("Optimisation", sprintf "Tuned = %A" tunedScale)
 
+            // Modify scales to account for single-dim jumps versus multi-dim jumps in next step:
+            let tunedScale =
+                let c = 1. / sqrt (float tunedScale.Length)
+                tunedScale |> Array.map ((*) c)
+
             // 4. Heat up
             let heatLevelTraces, boilingPoint =
                 heat
@@ -1429,6 +1434,7 @@ module MonteCarlo =
     let bristleconeSampler: Optimiser =
         let settings =
             { SimulatedAnnealing.AnnealSettings.Default with
+                HeatStepLength = EndConditions.Profiles.SimulatedAnnealing.heatingRelaxed
                 TemperatureFloor = Some 1.0 }
 
         InDetachedSpace
