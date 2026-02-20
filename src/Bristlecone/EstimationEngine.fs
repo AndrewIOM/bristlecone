@@ -121,7 +121,8 @@ module ModelSystem =
           Parameters: Parameter.Pool.ParameterPool
           Series: CodedMap<FitSeries<'date, 'timeunit, 'timespan>>
           Trace: Trace list
-          InternalDynamics: CodedMap<float<state>[]> option }
+          InternalDynamics: CodedMap<float<state>[]> option
+          Metadata: List<string * string> }
 
 /// The estimation engine represents the method used to
 /// calculate equations and optimise a likelihood function.

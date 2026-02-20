@@ -312,12 +312,23 @@ module EndConditions =
             let preTuning =
                 combineAny [ whenVarianceStabilised 500<iteration> 0.02; atIteration 1500<iteration> ]
 
-            let heating =
+            /// Requires equlibrium to be approximated within every
+            /// heating step. Better for classical SA.
+            let heatingStrict =
                 combineAny
                     [ combineAll
                           [ whenVarianceStabilised 200<iteration> 0.05
                             whenWorstValuePlateaued 200<iteration> ]
                       atIteration 1500<iteration> ]
+
+            /// Relaxed requirements that allows approximation of the
+            /// stationary distribution at each temperature, without
+            /// strict requirement.
+            let heatingRelaxed =
+                combineAny
+                    [ whenVarianceStabilised 50<iteration> 0.10
+                      whenWorstValuePlateaued 50<iteration>
+                      atIteration 500<iteration> ]
 
             /// Annealing will stop when either: there is little movement in parameter space;
             /// no improvements are being made; or acceptance rates are very low.

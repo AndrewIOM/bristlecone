@@ -23,6 +23,7 @@ module Config =
         | Intervals
         | StepAhead of steps: int
         | Components
+        | Metadata
 
     type EnsembleType =
         | Weights
@@ -36,7 +37,8 @@ module Config =
         | Series -> "series"
         | Intervals -> "ci"
         | Components -> "components"
-        | StepAhead(steps) -> sprintf "%i-step-ahead-prediction" steps
+        | StepAhead steps -> sprintf "%i-step-ahead-prediction" steps
+        | Metadata -> "metadata"
 
     let ensembleAsLabel dataType =
         match dataType with
@@ -79,6 +81,7 @@ module Config =
                 | Intervals -> "ci"
                 | Components -> "components"
                 | StepAhead(steps) -> sprintf "%istepahead" steps
+                | Metadata -> "metadata"
 
             let files = path.GetFiles(sprintf "bristlecone-%s-%s-%s-*.csv" subject modelId t)
             let regex = sprintf "bristlecone-%s-%s-%s-(%s).csv" subject modelId t regexGuid
@@ -255,6 +258,16 @@ module MLE =
         load directory subject modelSystem modelId
         |> Seq.minBy (fun (_, (mle, _)) -> mle)
 
+[<RequireQualifiedAccess>]
+module Metadata =
+
+    let save directory subject modelId (result:EstimationResult<'d,'a,'b>) =
+        let filePath =
+            Config.filePath directory subject modelId result.ResultId Config.DataType.MLE
+        let txt = result.Metadata |> Seq.map(fun (k,v) -> k + "\t" + v)
+        System.IO.File.WriteAllLines(filePath, txt)
+
+
 /// <summary>Functions for loading and saving predicted vs observed time-series for model fits</summary>
 [<RequireQualifiedAccess>]
 module Series =
@@ -332,6 +345,7 @@ module EstimationResult =
         Trace.save directory subject modelId thinTraceBy result
         MLE.save directory subject modelId result
         Series.save dateToString directory subject modelId result
+        Metadata.save directory subject modelId result
 
     /// Load an `EstimationResult` that has previously been saved as
     /// three seperate dataframes. Results will only be reconstructed
@@ -358,7 +372,8 @@ module EstimationResult =
               Parameters = p
               Series = s
               InternalDynamics = None
-              Trace = t })
+              Trace = t
+              Metadata = [] })
 
 [<RequireQualifiedAccess>]
 module Confidence =
