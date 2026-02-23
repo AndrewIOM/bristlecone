@@ -171,7 +171,7 @@ module EstimationEngine =
     /// The domain is fine to be float-based, as it is only
     /// used to initialise the optimisation routine.
     /// Represents the bounds and any constraint.
-    type Domain = (float<``optim-space``> * float<``optim-space``> * Parameter.Constraint)[]
+    type Domain = (float<``optim-space``> * float<``optim-space``> * Parameter.Constraint<``optim-space``>)[]
 
     /// Model equations for estimation may be require time to be
     /// in indexed form (i.e. common across models and data).

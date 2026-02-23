@@ -69,6 +69,10 @@ module Language =
 
     let NoConstraints = Parameter.Constraint.Unconstrained
     let Positive = Parameter.Constraint.PositiveOnly
+    let Bounded lo hi =
+        if lo = hi then failwithf "Parameter bounds were equal: %f -> %f" lo hi
+        let lo, hi = min lo hi, max lo hi
+        Parameter.Constraint.Bounded(lo, hi)
 
     module Require =
 
@@ -1596,7 +1600,7 @@ module Language =
         type SubComponentState<[<Measure>] 'u> =
             { Label: string
               Expr: ModelExpression<'u> option
-              Estimates: (string * Parameter.Constraint * float * float) list }
+              Estimates: (string * Parameter.Constraint<'u> * float * float) list }
 
         type ComponentState<[<Measure>] 'u> = { Options: SubComponentState<'u> list }
 
@@ -1616,7 +1620,7 @@ module Language =
             member _.Bind(p: Parameter.Parameter<'p>, cont: Parameter.Parameter<'p> -> SubComponentState<'u>) = cont p
 
             member _.Parameter<[<Measure>] 'p>
-                (name: string, con, lower: float<'p>, upper: float<'p>, state: SubComponentState<'u>)
+                (name: string, con, lower: float<'p>, upper: float<'p>, state: SubComponentState<'p>)
                 =
                 let p = parameter name con lower upper
 

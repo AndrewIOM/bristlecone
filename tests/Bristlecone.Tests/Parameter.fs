@@ -38,13 +38,13 @@ module Transforms =
         testList "Parameter transforms" [
 
             testCase "scalarTransformOptimSpace is identity for unconstrained" <| fun _ ->
-                let t = Parameter.ParameterTransforms.scalarTransformOptimSpace Parameter.Constraint.Unconstrained
+                let t = Parameter.ParameterTransforms.scalarTransformOptimSpace
                 let input = tensor1<``optim-space``> 42.0<``optim-space``>
                 let roundTrip = t.Inverse (t.Forward input) |> Tensors.Typed.toFloatScalar |> Units.removeUnitFromFloat
                 Expect.equal roundTrip 42. "Forward >> Inverse should be identity"
 
             testCase "scalarTransformOptimSpace is identity for positive-only" <| fun _ ->
-                let t = Parameter.ParameterTransforms.scalarTransformOptimSpace Parameter.Constraint.PositiveOnly
+                let t = Parameter.ParameterTransforms.scalarTransformOptimSpace
                 let input = tensor1<``optim-space``> 42.0<``optim-space``>
                 let roundTrip = t.Inverse (t.Forward input) |> Tensors.Typed.toFloatScalar |> Units.removeUnitFromFloat
                 Expect.equal roundTrip 42. "Forward >> Inverse should be identity"

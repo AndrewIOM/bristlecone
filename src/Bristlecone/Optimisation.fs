@@ -75,7 +75,8 @@ module Initialise =
         |> Seq.map (fun (v, c) ->
             match c with
             | Parameter.Constraint.Unconstrained -> true
-            | Parameter.Constraint.PositiveOnly -> v > 0.<``optim-space``>)
+            | Parameter.Constraint.PositiveOnly -> v > 0.<``optim-space``>
+            | Parameter.Constraint.Bounded(lo, hi) -> v > lo && v < hi)
         |> Seq.contains false
 
     /// Attempts to generate random theta based on starting bounds
@@ -117,20 +118,40 @@ module MonteCarlo =
     open Bristlecone.Statistics.Distributions
     open MathNet.Numerics.LinearAlgebra
     open Bristlecone.Tensors
-    open Bristlecone.ModelSystem
 
     [<Measure>]
     type ``jump-scale``
 
-    /// Jump in parameter space while reflecting constraints.
+    /// Reflects across boundaries infinitely within bounds. A value
+    /// outside the bounds will reflect until it is within the bounds.
+    /// If NaN, returns the centre of the bounds.
+    let rec internal reflect (value: float<'u>) (lo: float<'u>, hi: float<'u>) =
+        match value with
+        | v when System.Double.IsNaN(Units.removeUnitFromFloat v) -> (lo + hi) / 2.
+        | v when System.Double.IsInfinity(Units.removeUnitFromFloat v) -> if float value > 0. then hi else lo
+        | v when value < lo -> reflect (2. * lo - v) (lo, hi)
+        | v when value > hi -> reflect (2. * hi - v) (lo, hi)
+        | _ -> value
+
+    /// Jump in parameter space while reflecting constraints. Reflects
+    /// across any boundaries (rather than across the current value).
     let constrainJump (initial: float<``optim-space``>) (jump: float<``optim-space``>) (scaleFactor: float) c =
-        match c with
-        | Bristlecone.Parameter.Constraint.Unconstrained -> initial + (jump * scaleFactor)
-        | Bristlecone.Parameter.Constraint.PositiveOnly ->
-            if (initial + (jump * scaleFactor)) < 0.<``optim-space``> then
-                (initial - (jump * scaleFactor))
+        let proposed =
+            let prop = initial + jump * scaleFactor
+
+            if System.Double.IsNaN(Units.removeUnitFromFloat prop) then
+                initial
             else
-                (initial + (jump * scaleFactor))
+                prop
+
+        match c with
+        | Parameter.Constraint.Unconstrained -> proposed
+        | Parameter.Constraint.PositiveOnly ->
+            if proposed < 0.<``optim-space``> then
+                reflect proposed (0.<``optim-space``>, Units.retype infinity)
+            else
+                proposed
+        | Parameter.Constraint.Bounded(lo, hi) -> reflect proposed (lo, hi)
 
     /// <summary>A recursive metropolis hastings algorithm that ends when `endCondition` returns true.</summary>
     /// <param name="random">`System.Random` to be used for drawing from a uniform distribution.</param>
