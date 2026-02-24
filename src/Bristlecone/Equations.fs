@@ -45,8 +45,12 @@ module NegLogLikelihood =
         | Language.Require.MeasureObs s -> LikelihoodRequirement.Measure s.Code
 
     let internal requirePositiveParam label (p: Language.IncludedParameter<'u>) =
-        if p.Parameter |> Parameter.getConstraint <> Parameter.Constraint.PositiveOnly then
-            failwithf "The specified %s parameter must be positive-only" label
+        match p.Parameter |> Parameter.getConstraint with
+        | Parameter.Constraint.PositiveOnly -> ()
+        | Parameter.Constraint.Bounded(l,_) ->
+            if l >= Units.tagUnit<'u> 0. then () else
+                failwithf "The specified %s parameter must be positive-only" label
+        | Parameter.Constraint.Unconstrained -> failwithf "The specified %s parameter must be positive-only" label
 
     let private likelihoodTag = Typed.ofScalar 1.<``-logL``>
 

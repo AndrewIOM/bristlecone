@@ -620,7 +620,7 @@ module Language =
                 else
                     let interval =
                         Statistics.RootFinding.Tensor.Interval.identify
-                            500
+                            250
                             penalty
                             (%%fLambda: Tensor -> Tensor)
                             %targetExpr
