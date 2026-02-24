@@ -47,8 +47,10 @@ module NegLogLikelihood =
     let internal requirePositiveParam label (p: Language.IncludedParameter<'u>) =
         match p.Parameter |> Parameter.getConstraint with
         | Parameter.Constraint.PositiveOnly -> ()
-        | Parameter.Constraint.Bounded(l,_) ->
-            if l >= Units.tagUnit<'u> 0. then () else
+        | Parameter.Constraint.Bounded(l, _) ->
+            if l >= Units.tagUnit<'u> 0. then
+                ()
+            else
                 failwithf "The specified %s parameter must be positive-only" label
         | Parameter.Constraint.Unconstrained -> failwithf "The specified %s parameter must be positive-only" label
 

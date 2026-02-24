@@ -69,8 +69,11 @@ module Language =
 
     let NoConstraints = Parameter.Constraint.Unconstrained
     let Positive = Parameter.Constraint.PositiveOnly
+
     let Bounded lo hi =
-        if lo = hi then failwithf "Parameter bounds were equal: %f -> %f" lo hi
+        if lo = hi then
+            failwithf "Parameter bounds were equal: %f -> %f" lo hi
+
         let lo, hi = min lo hi, max lo hi
         Parameter.Constraint.Bounded(lo, hi)
 
@@ -1497,8 +1500,8 @@ module Language =
 
         let withEnvironmentGen
             (obs: StateId<'s>)
-            (genFn: float<'date> -> float<'s>)
-            (settings: TestSettings<'state, float<'date>, 'a, 'b>)
+            (genFn: 'date -> float<'s>)
+            (settings: TestSettings<'state, 'date, 'a, 'b>)
             =
             let envTs =
                 Bristlecone.Time.TimeSeries.fromGen

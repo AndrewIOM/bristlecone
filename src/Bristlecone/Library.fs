@@ -517,9 +517,6 @@ module Bristlecone =
 
             // Validate settings and generate synthetic data
             let! settings = Test.isValidSettings model settings
-
-            // Set conditioning for solver to be the custom start values
-            let engine = engine |> withConditioning (Conditioning.Custom settings.StartValues)
             let! trueData, trueParamPool = Test.Compute.tryGenerateData engine settings model settings.RetryDataGen
 
             // Only keep data used by likelihood function.
