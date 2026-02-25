@@ -17,6 +17,10 @@ Please follow the existing style and structure of the project. If in doubt, keep
 
 If your change affects behaviour, please add or update tests where appropriate. We prefer property tests over simple case tests where possible.
 
+## Adding features
+
+If you're adding a new public-facing feature, please  consider adding examples that can be turned into documentation. The project uses fsdocs literal scripting, so any examples placed in docs/examples/ will be executed when docs are compiled on a successful merge.
+
 ## Communication
 
 All contributions are reviewed in good faith. Please be respectful and constructive.
