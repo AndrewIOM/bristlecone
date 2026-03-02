@@ -259,7 +259,7 @@ module Language =
         let (ME e) = expExpr
         ME(Untyped.Power(b, e))
 
-    // Logarithm: only makes sense for dimensionless inputs
+    /// The natural logarithm of an expression.
     let Logarithm (expr: ModelExpression<1>) : ModelExpression<1> =
         let (ME e) = expr
         ME(Untyped.Logarithm e)
