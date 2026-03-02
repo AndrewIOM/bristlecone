@@ -1152,7 +1152,7 @@ module MonteCarlo =
               StartAtBest: bool
               AnnealStepEnd: EndCondition }
 
-            static member Default =
+            static member Classical =
                 { HeatStepLength = EndConditions.Profiles.SimulatedAnnealing.heatingStrict
                   HeatRamp = fun t -> t * 1.10
                   BoilingAcceptanceRate = 0.85
@@ -1162,6 +1162,18 @@ module MonteCarlo =
                   PreTuneEnd = EndConditions.Profiles.SimulatedAnnealing.preTuning
                   Tuning = Tuning.TuningSettings.Default
                   StartAtBest = false
+                  AnnealStepEnd = EndConditions.Profiles.SimulatedAnnealing.annealing }
+
+            static member Fast =
+                { HeatStepLength = EndConditions.Profiles.SimulatedAnnealing.heatingRelaxed
+                  HeatRamp = fun t -> t * 1.10
+                  BoilingAcceptanceRate = 0.85
+                  TemperatureCeiling = Some 200.
+                  TemperatureFloor = Some 0.75
+                  InitialTemperature = 1.00
+                  PreTuneEnd = EndConditions.Profiles.SimulatedAnnealing.preTuning
+                  Tuning = Tuning.TuningSettings.Default
+                  StartAtBest = true
                   AnnealStepEnd = EndConditions.Profiles.SimulatedAnnealing.annealing }
 
 
@@ -1479,7 +1491,7 @@ module MonteCarlo =
     /// conditions for the final end.
     let bristleconeSampler: Optimiser =
         let settings =
-            { SimulatedAnnealing.AnnealSettings.Default with
+            { SimulatedAnnealing.AnnealSettings.Fast with
                 StartAtBest = true
                 HeatStepLength = EndConditions.Profiles.SimulatedAnnealing.heatingRelaxed
                 TemperatureFloor = Some 1.0 }
