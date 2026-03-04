@@ -131,7 +131,9 @@ let hypotheses =
 The resultant constructed hypotheses are shown in the following printout:
 *)
 
-(***include-value: hypotheses ***)
+hypotheses
+|> List.map(fun h -> h.ReferenceCode, h.Components)
+(***include-it ***)
 
 (**
 For further analysis, you may choose to use the orchestration functionality to

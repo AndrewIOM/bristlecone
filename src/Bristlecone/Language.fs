@@ -97,13 +97,13 @@ module Language =
 
         /// Retrieve an parameter value from the parameter pool
         /// in its original units of measure.
-        member pool.TryGet(included: IncludedParameter<'u>) =
-            pool |> Parameter.Pool.tryGetRealValue included.ParamId.Inner.Value
+        member pool.TryGet<[<Measure>] 'u>(included: IncludedParameter<'u>) : float<'u> option =
+            pool |> Parameter.Pool.tryGetRealValue<'u> included.ParamId.Inner.Value
 
         /// Retrieve an parameter value from the parameter pool
         /// in its original units of measure. Fails if parameter
         /// doesn't exist or is not estimated.
-        member pool.Get(included: IncludedParameter<'u>) = included |> pool.TryGet |> Option.get
+        member pool.Get<[<Measure>] 'u>(included: IncludedParameter<'u>) : float<'u> = included |> pool.TryGet |> Option.get
 
 
     module Untyped =
