@@ -34,7 +34,6 @@ module ModelSystem =
     /// equations. Each are both require the same inputs, but differ in
     /// whether a solver is applied or not. Here, the DU's purpose is for
     /// additional type safety.
-    /// TODO Allow state to differ between equations.
     type ModelForm<[<Measure>] 'timeUnit> =
         | DifferenceEqs of CodedMap<StateEquation<'timeUnit>>
         | DifferentialEqs of CodedMap<RateEquation<'timeUnit>>

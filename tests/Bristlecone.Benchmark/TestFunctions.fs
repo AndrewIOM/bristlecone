@@ -269,7 +269,7 @@ module Timeseries =
             // Parameters
             let r = parameter "r" NoConstraints 0.1 2.0 // maximum per‑capita growth rate (intrinsic growth rate)
             let K = parameter "K" Positive 50.<individuals> 500.<individuals> // carrying capacity
-            let beta = parameter "beta" NoConstraints -1.0</celsius> 1.0</celsius> // temperature effect (TODO need new constraint 0 - 1)
+            let beta = parameter "beta" (Bounded -1.</celsius> 1.</celsius>)  -1.</celsius> 1.0</celsius> // temperature effect
 
             let ``N[t+1]``: ModelExpression<individuals> =
                 This * exp (P r * (Constant 1. - This / P K) + P beta * Environment temperatureAnomaly)

@@ -240,11 +240,12 @@ module TemporalIndex =
                   let diff = DateTime.totalYearsElapsed date date2
                   Expect.equal (diff % 1.<year>) 0.<year> "The year difference was not a round number"
 
-              testProperty "Months elapsed are whole numbers when same day of year"
+              testProperty "Months elapsed are whole numbers when day-of-month is preserved"
               <| fun (date: DateTime) (monthDiff: NormalFloat) ->
                   let date2 = date.AddMonths(int monthDiff.Get)
                   let diff = DateTime.totalMonthsElapsed date date2
-                  Expect.equal (diff % 1.<month>) 0.<month> "The month difference was not a round number"
+                  if date.Day = date2.Day then
+                    Expect.equal (diff % 1.<month>) 0.<month> "The month difference was not a round number"
 
               testPropertyWithConfig config "Time series of specific resolution indexes as whole numbers"
               <| fun startDate (data: float list) resolution ->

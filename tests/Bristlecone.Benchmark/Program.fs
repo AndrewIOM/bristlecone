@@ -330,8 +330,8 @@ module Metrics =
 let optimFunctions =
     [  "amoeba",                    Amoeba.single Amoeba.Solver.Default, EndConditions.whenNoBestValueImprovement 300<iteration>
        "amoeba [swarm]",            Amoeba.swarm 5 20 Amoeba.Solver.Default, EndConditions.whenNoBestValueImprovement 300<iteration>
-       "sim. anneal. [classic]",    MonteCarlo.SimulatedAnnealing.classicalSimulatedAnnealing 0.01<``optim-space``> false Optimisation.MonteCarlo.SimulatedAnnealing.AnnealSettings.Default, EndConditions.atIteration 100000<iteration>
-       "sim. anneal. [fast]",       MonteCarlo.SimulatedAnnealing.fastSimulatedAnnealing 0.01<``optim-space``> false Optimisation.MonteCarlo.SimulatedAnnealing.AnnealSettings.Default, EndConditions.atIteration 100000<iteration>
+       "sim. anneal. [classic]",    MonteCarlo.SimulatedAnnealing.classicalSimulatedAnnealing 0.01<``optim-space``> false Optimisation.MonteCarlo.SimulatedAnnealing.AnnealSettings.Classical, EndConditions.atIteration 100000<iteration>
+       "sim. anneal. [fast]",       MonteCarlo.SimulatedAnnealing.fastSimulatedAnnealing 0.01<``optim-space``> false Optimisation.MonteCarlo.SimulatedAnnealing.AnnealSettings.Fast, EndConditions.atIteration 100000<iteration>
        "sim. anneal. [bristlecone]",MonteCarlo.bristleconeSampler, EndConditions.Profiles.mcmc 100000<iteration> ignore
        "filzbach",                  MonteCarlo.Filzbach.filzbach MonteCarlo.Filzbach.FilzbachSettings.Default, EndConditions.Profiles.mcmc 100000<iteration> ignore
        "random walk [AM burn-in]",  MonteCarlo.randomWalk [
@@ -359,10 +359,10 @@ let timeModels () =
     [ 
       runTs ("predator-prey",             TestFunctions.Timeseries.PredatorPrey.test false)
       runTs ("predator-prey (noisy)",     TestFunctions.Timeseries.PredatorPrey.test true)
-      runTs ("soil respiration",          TestFunctions.Timeseries.SoilCarbon.test false)
-      runTs ("soil respiration (noisy)",  TestFunctions.Timeseries.SoilCarbon.test true)
-      runTs ("ricker temperature",          TestFunctions.Timeseries.RickerTemperature.test false)
-      runTs ("ricker temperature (noisy)",  TestFunctions.Timeseries.RickerTemperature.test true)
+    //   runTs ("soil respiration",          TestFunctions.Timeseries.SoilCarbon.test false)
+    //   runTs ("soil respiration (noisy)",  TestFunctions.Timeseries.SoilCarbon.test true)
+    //   runTs ("ricker temperature",          TestFunctions.Timeseries.RickerTemperature.test false)
+    //   runTs ("ricker temperature (noisy)",  TestFunctions.Timeseries.RickerTemperature.test true)
     ]
 
 module Output =

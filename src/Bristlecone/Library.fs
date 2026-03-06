@@ -125,7 +125,6 @@ module Bristlecone =
             | _ ->
                 match TimeFrame.tryCreate environmentSeries with
                 | Some e -> e |> Some |> Ok
-                // TODO Ensure that environment data overlaps with conditioning period?
                 | None ->
                     Error
                         "Forcing variables were specified on differing timelines. Pre-process your data to make environmental data conform to a common temporal baseline and time interval"
@@ -360,7 +359,6 @@ module Bristlecone =
                     engine.LogTo
                     <| GeneralEvent(sprintf "Common timeline (environment): %s (start at %A)" k.Value v.StartDate)))
 
-            // TODO Ensure that dynamic variables are an exact or subset of environmental variables
             let! _ = Fit.exactSubsetOf observedOnCommonTimeline exogenousOnCommonTimeline
 
             // 4. Compile solver (auto‑selects discrete/differential)

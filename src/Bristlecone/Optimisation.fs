@@ -911,7 +911,7 @@ module MonteCarlo =
                 (finalScale |> fst)
                 (finalScale |> snd)
                 (secondAdaptation |> Optimiser.tryGetSolution |> Option.get |> snd)
-                [] // TODO The phase name states adaptation required, but none configured.
+                []
                 random
                 writeOut
                 endCon

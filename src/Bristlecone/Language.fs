@@ -1320,14 +1320,6 @@ module Language =
             let boxed = Parameter.Pool.boxParam<'u> name.Value p.Parameter
             ModelBuilder.add name.Value (ModelBuilder.ParameterFragment boxed) builder
 
-        let internal addParameter<[<Measure>] 'time, [<Measure>] 'u>
-            (name: string)
-            (p: Parameter.Parameter<'u>)
-            (builder: ModelBuilder.ModelBuilder<'time>)
-            =
-            let boxed = Parameter.Pool.boxParam<'u> name p
-            ModelBuilder.add name (ModelBuilder.ParameterFragment boxed) builder
-
         let addMeasure<[<Measure>] 'time, [<Measure>] 'u>
             (name: MeasureId<'u>)
             (measure: ModelExpression<'u>)
@@ -1367,32 +1359,15 @@ module Language =
         let emptyState<[<Measure>] 'time> isDiscrete : ModelBuilderState<'time, Missing, Missing> =
             { Inner = ModelBuilder.create isDiscrete () }
 
-        let addRateEq
-            (sid: StateId<'u>)
-            (expr: ModelExpression<'stateUnit / 'timeUnit>)
-            (mb: ModelBuilderState<'time, 'E, 'L>)
-            =
-            let (StateIdInner sc) = sid
-
-            { mb with
-                Inner = ModelBuilder.addEquationRate sc expr mb.Inner }
-
-        let addDiscreteEq (sid: StateId<'u>) (expr: ModelExpression<'u>) (mb: ModelBuilderState<'time, 'E, 'L>) =
-            let (StateIdInner sc) = sid
-
-            { mb with
-                Inner = ModelBuilder.addEquationDiscrete sc expr mb.Inner }
-
         type ModelSystemBuilder<[<Measure>] 'time>(isDiscrete) =
             member _.Yield(_) = emptyState<'time> isDiscrete
             member _.Delay(f) = f ()
 
-            [<CustomOperation("parameter")>]
+            [<CustomOperation("estimate")>]
             member _.Parameter<[<Measure>] 'u, 'E, 'L>
-                (state: ModelBuilderState<'time, 'E, 'L>, configuredParameter: IncludedParameter<'u>)
+                (state: ModelBuilderState<'time, 'E, 'L>, p: IncludedParameter<'u>)
                 =
-                let (ParamIdInner sc) = configuredParameter.ParamId
-                { Inner = Model.addParameter sc.Value configuredParameter.Parameter state.Inner }
+                { Inner = Model.estimateParameter p state.Inner }
 
             [<CustomOperation("equationDiscrete")>]
             member _.EquationDiscrete
@@ -1414,6 +1389,12 @@ module Language =
                 =
                 { Inner = Model.addMeasure mid data state.Inner }
 
+            [<CustomOperation("initialise")>]
+            member _.Measure<[<Measure>] 'u, 'E, 'L>
+                (state: ModelBuilderState<'time, 'E, 'L>, sid: StateId<'u>, initFn)
+                =
+                { Inner = Model.initialiseHiddenStateWith sid initFn state.Inner }
+
             /// Add exactly one likelihood function.
             [<CustomOperation("likelihood")>]
             member _.Likelihood<'E>
@@ -1424,10 +1405,10 @@ module Language =
             member _.Run(state: ModelBuilderState<'time, Present, Present>) = ModelBuilder.compile state.Inner
 
 
-    let discreteModel<[<Measure>] 'time> : ModelSystemDsl.ModelSystemBuilder<'time> =
+    let modelDiscrete<[<Measure>] 'time> : ModelSystemDsl.ModelSystemBuilder<'time> =
         ModelSystemDsl.ModelSystemBuilder true
 
-    let continuousModel<[<Measure>] 'time> : ModelSystemDsl.ModelSystemBuilder<'time> =
+    let modelContinuous<[<Measure>] 'time> : ModelSystemDsl.ModelSystemBuilder<'time> =
         ModelSystemDsl.ModelSystemBuilder false
 
 
@@ -1677,18 +1658,6 @@ module Language =
     //     block (Components.SubComponentBuilder label)
     // let modelComponent label : Components.ComponentBuilder<'u> = Components.ComponentBuilder(label)
 
-    // let nLimitation =
-    //     modelComponent "N-limitation" {
-    //         subcomponent "Linear" {
-    //             let! a = parameter "a" notNegative 0.100 0.400
-    //             expression (
-    //                 ModelComponents.GrowthLimitation.linear
-    //                     (P a / Constant 1000.)
-    //                     (Constant 5.00)
-    //             )
-    //         }
-    //     }
-
 
     /// <summary>Types to represent a hypothesis, given that a hypothesis
     /// is a model system that contains some alternate formulations of certain
@@ -1767,30 +1736,3 @@ module Language =
                         mb
 
                 Hypothesis(Model.compile withParams, logs |> List.map fst))
-
-
-
-// type Hypotheses<'subject, 'hypothesis> =
-//     | Hypotheses of Hypothesis<'subject, 'hypothesis> seq
-
-// open Bristlecone.ModelSelection
-
-// let private unwrap (ResultSetMany m) = m
-
-// let many sets = ResultSetMany sets
-
-// let subject s sets =
-//     sets
-//     |> unwrap
-//     |> Seq.filter(fun s -> s.Subject = s)
-
-// /// <summary>Map a function over results on a per-subject and per-hypothesis basis</summary>
-// /// <param name="fn">A function to map over the subject-hypothesis groups</param>
-// /// <param name="sets">A result set (many)</param>
-// /// <returns>A transformed results set</returns>
-// let map fn (sets:ResultSetMany<'subject, 'hypothesis>) =
-//     sets
-//     |> unwrap
-//     |> Seq.groupBy(fun s -> s.Subject, s.Hypothesis)
-//     |> Seq.map(fun (s, h) -> fn s h)
-//     |> ResultSetMany

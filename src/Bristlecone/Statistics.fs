@@ -231,14 +231,6 @@ module TrendAnalysis =
 
         medianSlope
 
-// Median of the slopes determined by all pairs of sample points.
-
-// For every point
-// Calculate slope to every other point (only at other times)
-//
-
-//Take the median of the slopes defined from pairs of points that have distinct x coordinates.
-//x =
 
 /// Statistics for determining the root of non-linear equations.
 module RootFinding =
