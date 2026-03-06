@@ -11,17 +11,18 @@ index: 1
 *)
 
 (**
-In this example, we use Bristlecone to fit non-linear models of plant growth
-to some data from a plant growth experiment.
+In this example, we use Bristlecone to fit a suite of classical non‑linear
+plant‑growth models to data from a controlled growth experiment.
 
-In the paper *How to fit nonlinear plant growth models and calculate  growth rates: an update for ecologists*,
-[Paine et al (2012)](https://doi.org/10.1111%2Fj.2041-210X.2011.00155.x) explain that there are
-seven key functional forms that can be used to represent plant biomass growth over time.
+[Paine et al. (2012)](https://doi.org/10.1111%2Fj.2041-210X.2011.00155.x)
+identify seven widely used functional forms for modelling plant biomass
+through time. These models differ in their assumptions about asymptotes,
+growth rates, and curvature, and are a natural testbed for demonstrating
+Bristlecone’s model‑expression system and optimisation workflow.
 
-Here, we write the *dM/dt* forms of the seven equations in the Bristlecone model expression
-system, then fit these using Nelder-Mead (amoeba) optimisation to some sample plant growth
-data. The data is the Holcus unshaded growth experiment data as shown in the figures
-of Paine et al (2012).
+We implement the dM/dt forms of all seven models using Bristlecone’s
+declarative syntax, then fit them to the Holcus unshaded growth dataset
+from Paine et al. (2012) using Nelder–Mead optimisation.
 
 First, we open Bristlecone core libraries.
 *)
@@ -42,7 +43,7 @@ open Bristlecone.Time
 ### Defining the models
 
 For units of measure, we can choose to use built-in F# units from
-the FSharp.Data.UnitSystems.SI.UnitSymbols namespace, or declare our own.
+the `FSharp.Data.UnitSystems.SI.UnitSymbols` namespace, or declare our own.
 Similarly, time-based units (days, months, years) are available in the
 Bristlecone.Time module. Here, we use the time units from Bristlecone,
 and declare grams as a new unit type.
@@ -56,10 +57,19 @@ let mass = state<gram> "mass"
 For the growth functions, there are five different parameters
 across the seven models, which we declare. To declare parameters,
 a reasonable starting bound and a constraint are required. Often,
-parameters will be declared as `notNegative`, but can also be
-`noConstraints` for unconstrained. Parameter constraints are handled
+parameters will be declared as `Positive`, but can also be
+`NoConstraints` for unconstrained. Parameter constraints are handled
 automatically by the optimisers, such that the Nelder-Mead algorithm
 will run in a transformed (unbounded) parameter space.
+
+Each model is expressed in its differential form (dM/dt),
+which Bristlecone integrates automatically when fitting
+continuous‑time systems.
+
+The parameter r represents different biological processes across
+the seven models (absolute growth rate, proportional growth rate,
+curvature parameter, etc.), so we define rAbs and r separately
+to avoid conflating meanings.
 *)
 
 module GrowthFunctions =
@@ -101,11 +111,10 @@ module GrowthFunctions =
 Here, to keep the example simple we have defined the
 data in code, but otherwise you may load data in as you see fit.
 
-Bristlecone expects time-series to be formatted into Bristlecone's
-`TimeSeries` type. For neo-ecological data, the `TimeSeries.fromNeoObservations`
-function may be used to work in .NET DateTime space. In this case, we do this
-by defining a basal date to pin the time-series to, then pass the list of tuples
-of data value and date to the Bristlecone function.
+Bristlecone expects time‑series to be provided in Bristlecone's `TimeSeries` type.
+For ecological datasets recorded in modern calendar time, the helper
+`TimeSeries.fromNeoObservations` converts (`value`, `DateTime`) pairs into a
+typed time‑series that Bristlecone can align with the model’s time units.
 
 Lastly, Bristlecone expects a `Map` of `TimeSeries` for use in the fit function.
 *)
@@ -114,13 +123,13 @@ let baseDay = System.DateTime(2000, 01, 01)
 let data =
     [
         mass.Code, TimeSeries.fromNeoObservations [
-        0.07, baseDay.AddDays 14
-        0.44, baseDay.AddDays 35
-        2.83, baseDay.AddDays 70
-        4.47, baseDay.AddDays 98
-        8.39, baseDay.AddDays 133
-        9.00, baseDay.AddDays 161
-        6.13, baseDay.AddDays 189
+        0.05, baseDay.AddDays 14
+        0.33, baseDay.AddDays 35
+        2.43, baseDay.AddDays 70
+        3.63, baseDay.AddDays 98
+        5.81, baseDay.AddDays 133
+        7.28, baseDay.AddDays 161
+        5.87, baseDay.AddDays 189
         ]
     ]
     |> Map.ofList
@@ -128,50 +137,50 @@ let data =
 (**
 ### Model-fitting
 
-We need to define some basic settings to run the model-fitting. The
-estimation engine represents a common fixed method used to fit a model.
-The engine specified below uses the default continuous-time engine (`Bristlecone.mkContinuous`) with
-some minor changes.
+All seven growth models are naturally expressed as ODEs, so we use a
+continuous‑time estimation engine. The call to `Bristlecone.forDailyModel`
+ensures that the engine interprets the model in daily units,
+matching the temporal resolution of the dataset.
 
-The engine needs to explicitly know about the temporal resolution of the models that
-will be applied. Here, we call `Bristlecone.forDailyModel` to make the engine suitable
-for use against daily-resolution models.
+We use a simple Nelder–Mead optimiser, as the models are simple with only
+between one and three parameters. If we wanted increased robustness to local
+optima, we could choose to run a swarm-based Nelder-Mead instead.
 
-We specify to use the swarm-based Nelder-Mead algorithm for optimisation. This is more
-robust than a single simplex, as it runs ten simplex at five levels, dropping the worst
-results and resetting the starting bounds at each level until no improvements are made.
+Plant‑growth data typically exhibit heteroscedasticity: measurement error
+increases with biomass. We therefore use a Gaussian likelihood with an
+exponential variance function, parameterised by σ0 and σ1.
 
 We specify no conditioning. Here, we know that plant biomass was effectively zero at time
 zero, so we do not need to condition the time-zero value; it is known. The model fitting will
 therefore run from the first time-point in the data onwards.
 
-For the -log likelihood function, we are applying a standard gaussian function
-from the built-in selection in the `Bristlecone.ModelLibrary`. However, for
-plant growth models we likely should be using a gaussian function with heteroscedacity,
-because the associated error may increase in magnitude as biomass increases.
-We also therefore need to declare the sigma parameter required by the gaussian function.
-
 Then, we can just run all of the hypotheses.
+
+Each model is compiled before fitting. Compilation resolves the symbolic
+model expression into an executable system of equations and prepares
+the likelihood function for evaluation.
 *)
 
 module Settings =
     let engine =
         Bristlecone.mkContinuous ()
         |> Bristlecone.forDailyModel
-        |> Bristlecone.withCustomOptimisation (Optimisation.Amoeba.swarm 5 10 Optimisation.Amoeba.Solver.Default)
+        |> Bristlecone.withCustomOptimisation (Optimisation.Amoeba.single Optimisation.Amoeba.Solver.Default)
         |> Bristlecone.withConditioning Conditioning.NoConditioning
+        |> Bristlecone.withSeed 200000
 
     let endCond = Optimisation.EndConditions.whenNoBestValueImprovement 100<iteration>
 
-let sigma = parameter "σ[x]" Positive 0.01<gram> 0.5<gram>
+let sigmaBase = parameter "σ0[x]" Positive 0.01<gram> 0.5<gram>
+let sigmaGrowth = parameter "σ1[x]" Positive 0.01</gram> 0.5</gram>
+let variance = ModelLibrary.NegLogLikelihood.Variance.exponential sigmaBase sigmaGrowth
 
-(*** do-not-eval ***)
 let results =
     GrowthFunctions.hypotheses
     |> List.map (fun h ->
             let hy =
                 snd h
-                |> Model.useLikelihoodFunction (ModelLibrary.NegLogLikelihood.Normal (Require.state mass) sigma)
+                |> Model.useLikelihoodFunction (ModelLibrary.NegLogLikelihood.NormalWithVariance (Require.state mass) variance)
                 |> Model.compile
             fst h, Bristlecone.fit Settings.engine Settings.endCond data hy
     )
@@ -222,7 +231,8 @@ module Graphing =
         charts |> Chart.Grid(1, 1)
 
 (**
-The resultant model fits are shown in the below graph.
+The plot below overlays the observed biomass with the fitted trajectories
+from each model, allowing visual comparison of model performance.
 *)
 
 Graphing.fitPlot results
@@ -232,52 +242,85 @@ Graphing.fitPlot results
 (**
 #### Model selection
 
-As we are applying a non-bayesian model fitting approach in this example, we
-can apply Akaike weights to discren which is the most appropriate model representation
-to explain this data.
+Because this example uses a non‑Bayesian fitting approach
+(maximum likelihood with Nelder–Mead optimisation), we can compare
+competing growth models using constrained Akaike’s Information Criterion (AICc).  
 
-A weights function exists for simple lists of competing hypotheses for a single subject,
-which in this case is the single plant biomass time-series.
-
-For more complex sets of results, use the results set functionality described
-in the model selection documentation; this takes into account the subjects, hypotheses,
-and one or more replicates for each.
+AIC provides a balance between goodness‑of‑fit and model complexity,
+and the corresponding Akaike weights give the relative support for
+each model in the candidate set.
 *)
 
 let weights = ModelSelection.Akaike.akaikeWeights (results |> Seq.map snd)
 
 (**
-The resultant weights are:
+For more complex analyses involving multiple subjects, multiple hypotheses, or replicate fits, see the Model Selection documentation for the ResultSet‑based workflow.
 
-| Model | MLE | AICc | Weight |
-| ---   | --- | ---  | ---    |
+The resultant weights are:
 *)
 weights 
 |> Seq.zip (results |> Seq.map fst)
 |> Seq.map(fun (m,(r,w)) ->
-    sprintf "| %s | %f | %f | %f |" m r.Likelihood w.AICc w.Weight
+    sprintf "| %s | -logL: %f | AICc: %f | Weight: %f |" m r.Likelihood w.AICc w.Weight
     )
 |> String.concat "\n"
-(*** include-it-raw ***)
+(*** include-it ***)
 
 (**
-The output indicates that the best model is linear, with approximately 72% support
-(this may vary as the above table is auto-generated).
+The output indicates that the best‑supported model is the gompertz growth model,
+with approximately 99% support.
+
+The reason that the gompertz is identified as the best model, despite the fit not
+looking as good by eye as the three-parameter logistic form, is because the likelihood
+function with exponential variance penalises errors at larger biomasses less heavily.
+
+We can estimate the implied sigma for each observation, for example for the
+gompertz fit:
+*)
+
+let sigmaAt (expected: float<gram>) =
+    let s0 = (snd results.[6]).Parameters.Get sigmaBase
+    let s1 = (snd results.[6]).Parameters.Get sigmaGrowth
+    s0 * exp (s1 * expected)
+
+let diagnostics =
+    (snd results.[6]).Series
+    |> Map.find mass.Code
+    |> fun ts -> ts.Values
+    |> Seq.map (fun d ->
+        let fitted = d.Fit
+        let observed = d.Obs
+        let sigma = sigmaAt (fitted * 1.<gram/ModelSystem.state>)
+        sprintf "Fit = %f, Obs = %f, sigma = %f" fitted observed sigma
+    )
+    |> Seq.toList
+
+diagnostics
+(*** include-it ***)
+
+(**
+The sigma values are very tight for the first three time points for the gompertz
+fit, as shown above. Other models fail to predict the earlier biomasses with such
+closeness, so are heavily penalised as a result.
 
 #### Model fit quality / uncertainty
 
-...
+For maximum‑likelihood fits, Bristlecone supports profile‑likelihood confidence intervals for individual parameters.
+Profile likelihoods are robust to non‑linearity and asymmetry in the likelihood surface, making them preferable to approximate Hessian‑based intervals for ecological models.
+
+Below is an example of how to compute a profile likelihood for the parameters of a fitted model.
 *)
 
 let likelihoodProfile =
-    [results.[0]]
+    results
+    |> Seq.take 1 // just run the first only in this example
     |> Seq.map(fun (name,r) ->
 
         // Lookup the original hypothesis model using its name:
         let h =
             GrowthFunctions.hypotheses |> Seq.find (fun s -> fst s = name)
             |> snd
-            |> Model.useLikelihoodFunction (ModelLibrary.NegLogLikelihood.Normal (Require.state mass) sigma)
+            |> Model.useLikelihoodFunction (ModelLibrary.NegLogLikelihood.NormalWithVariance (Require.state mass) variance)
             |> Model.compile
 
         // Run a profile likelihood around the Maximum Likelihood Estimate:
@@ -287,22 +330,16 @@ let likelihoodProfile =
                 Settings.engine
                 data
                 h
-                1000<iteration>
+                100<iteration>
                 r
         name, l )
     |> Seq.toList
 
+(**
+The likelihood profile returns a 68% and 95% interval for each
+parameter. We can inspect them like so:
+*)
 
-let sigmaBase = parameter "σ0[x]" Positive 0.01<gram> 0.5<gram>
-let sigmaGrowth = parameter "σ1[x]" Positive 0.01</gram> 0.5</gram>
-
-let results2 =
-    GrowthFunctions.hypotheses
-    |> List.map (fun h ->
-            let variance = ModelLibrary.NegLogLikelihood.Variance.exponential sigmaBase sigmaGrowth
-            let hy =
-                snd h
-                |> Model.useLikelihoodFunction (ModelLibrary.NegLogLikelihood.NormalWithVariance (Require.state mass) variance)
-                |> Model.compile
-            fst h, Bristlecone.fit Settings.engine Settings.endCond data hy
-    )
+likelihoodProfile.Head
+|> snd
+|> Seq.map(fun kv -> sprintf "[%s] 95 CI %f - %f (estimate = %f)" kv.Key.Value kv.Value.``95%``.Lower kv.Value.``95%``.Upper kv.Value.Estimate )

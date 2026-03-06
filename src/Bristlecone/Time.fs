@@ -162,14 +162,20 @@ module DateTime =
         else
             totalYearsElapsed' d2 d1 * 1.<year>
 
-    // TODO Take account of day of month. Currently does not handle varying month lengths
+    let daysInMonth (d: DateTime) =
+        DateTime.DaysInMonth(d.Year, d.Month) * 1<day/month>
+
     /// <summary>Calculates the fractional number of total
     /// months elapsed between two dates.</summary>
     /// <param name="d1">The first date</param>
     /// <param name="d2">The second date</param>
     /// <returns>The fraction of years elapsed between the two dates</returns>
-    let totalMonthsElapsed (d1: DateTime) (d2: DateTime) =
-        (d2.Month - d1.Month) + (d2.Year - d1.Year) * 12 |> float |> (*) 1.<month>
+    let totalMonthsElapsed (d1: DateTime) (d2: DateTime) : float<month> =
+        let sign = if d2 >= d1 then 1.0 else -1.0
+        let a, b = if d2 >= d1 then d1, d2 else d2, d1
+        let wholeMonths = (b.Year * 1<year> - a.Year * 1<year>) * monthsPerYear + (b.Month * 1<month> - a.Month * 1<month>) |> Units.intToFloat
+        let dayFraction = Units.intToFloat (1<day> * b.Day - 1<day> * a.Day) / Units.intToFloat (daysInMonth a)
+        sign * (wholeMonths + dayFraction)
 
     let fractionalDifference isSigned d1 d2 =
         let d1, d2 = if d1 < d2 || isSigned then d1, d2 else d2, d1
