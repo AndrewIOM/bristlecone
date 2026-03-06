@@ -103,7 +103,8 @@ module Language =
         /// Retrieve an parameter value from the parameter pool
         /// in its original units of measure. Fails if parameter
         /// doesn't exist or is not estimated.
-        member pool.Get<[<Measure>] 'u>(included: IncludedParameter<'u>) : float<'u> = included |> pool.TryGet |> Option.get
+        member pool.Get<[<Measure>] 'u>(included: IncludedParameter<'u>) : float<'u> =
+            included |> pool.TryGet |> Option.get
 
 
     module Untyped =

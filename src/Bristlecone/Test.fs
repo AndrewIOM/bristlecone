@@ -148,7 +148,9 @@ module Test =
             | DifferentialEqs eqs -> eqs |> Map.toList |> List.map fst
 
         if
-            Set.isSubset (Set.ofList equationKeys) (Set.ofSeq (testSettings.StartValues.Keys |> Seq.append model.Initialisers.Keys))
+            Set.isSubset
+                (Set.ofList equationKeys)
+                (Set.ofSeq (testSettings.StartValues.Keys |> Seq.append model.Initialisers.Keys))
         then
             Ok testSettings
         else
@@ -226,7 +228,12 @@ module Test =
                 |> Option.get
 
             let conditioned =
-                Solver.Conditioning.resolve engine.Conditioning fakeObservedSeries envSeries (stateNames model.Equations) model.Measures.Keys
+                Solver.Conditioning.resolve
+                    engine.Conditioning
+                    fakeObservedSeries
+                    envSeries
+                    (stateNames model.Equations)
+                    model.Measures.Keys
 
             let obsTimes = conditioned.ObservedForPairing |> TimeFrame.dates
 
@@ -249,10 +256,7 @@ module Test =
             let _, thetaReal = Parameter.Pool.toTensorWithKeysReal thetaPool
 
             // Predict series
-            let timeline =
-                conditioned.ObservedForPairing
-                |> TimeFrame.dates
-                |> List.toArray
+            let timeline = conditioned.ObservedForPairing |> TimeFrame.dates |> List.toArray
 
             let predicted =
                 Objective.predict solver model.Measures thetaReal

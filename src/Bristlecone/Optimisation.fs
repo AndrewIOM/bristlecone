@@ -15,8 +15,10 @@ module Optimiser =
     let tryGetBest (trace: OptimisationTrace list) =
         trace
         |> Seq.choose (fun tr ->
-            if tr.Results.IsEmpty then None
-            else tr.Results |> Seq.minBy fst |> Some )
+            if tr.Results.IsEmpty then
+                None
+            else
+                tr.Results |> Seq.minBy fst |> Some)
         |> Seq.sortBy fst
         |> Seq.tryHead
 
@@ -1263,14 +1265,27 @@ module MonteCarlo =
                     cool
                     markov
                     (cool temperature (history |> List.length))
-                    (if startAtBest then bestAtTemperature else List.head annealLevelTrace)
+                    (if startAtBest then
+                         bestAtTemperature
+                     else
+                         List.head annealLevelTrace)
                     history
                     startAtBest
                     (iteration + 1<iteration>)
 
         /// Heat up temperature until acceptance rate of bad moves is above the threshold `endAcceptanceRate`.
         /// If it becomes impossible to propose a move during heating, then heating ends.
-        let rec heat write startAtBest ceiling endAcceptanceRate heatingSchedule markov (solution: Solution) history temperature =
+        let rec heat
+            write
+            startAtBest
+            ceiling
+            endAcceptanceRate
+            heatingSchedule
+            markov
+            (solution: Solution)
+            history
+            temperature
+            =
 
             let phaseName = sprintf "Heating (T=%f)" temperature
             write <| OptimisationPhaseEvent(PhaseStarting(phaseName, 1))
@@ -1312,9 +1327,7 @@ module MonteCarlo =
                   Replicate = 1
                   Results = chain }
 
-            let restartAt =
-                if startAtBest then chain |> Seq.minBy fst
-                else chain.Head
+            let restartAt = if startAtBest then chain |> Seq.minBy fst else chain.Head
 
             if ar < endAcceptanceRate && not aboveCeiling then
                 heat
@@ -1391,8 +1404,10 @@ module MonteCarlo =
                     settings.InitialTemperature
 
             let heatEndPosition =
-                if settings.StartAtBest then heatLevelTraces |> Optimiser.tryGetBest |> Option.get
-                else heatLevelTraces |> Optimiser.tryGetSolution |> Option.get
+                if settings.StartAtBest then
+                    heatLevelTraces |> Optimiser.tryGetBest |> Option.get
+                else
+                    heatLevelTraces |> Optimiser.tryGetSolution |> Option.get
 
             writeOut
             <| DebugEvent("Optimisation", sprintf "Heating ended at position %A" heatEndPosition)
@@ -1467,9 +1482,10 @@ module MonteCarlo =
                 writeOut
                 <| OptimisationPhaseEvent(OptimComponentStarting "Simulated annealing (fast)")
 
-                if not settings.StartAtBest then 
+                if not settings.StartAtBest then
                     writeOut
-                    <| WarningEvent "It is recommended that fast simulated annealing uses 'start at best' restarts. Check settings."
+                    <| WarningEvent
+                        "It is recommended that fast simulated annealing uses 'start at best' restarts. Check settings."
 
                 simulatedAnnealing
                     initialScale
