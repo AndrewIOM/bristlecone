@@ -21,6 +21,7 @@ index: 3
 #if IPYNB
 #r "nuget: Bristlecone,{{fsdocs-package-version}}"
 #endif // IPYNB
+
 open Bristlecone
 
 (**
@@ -64,7 +65,8 @@ Bristlecone includes a classical Runge-Kutta integrator as the default for conti
 Example:
 *)
 
-let engine = Bristlecone.mkContinuous ()
+let engine: EstimationEngine.EstimationEngine<System.DateTime,System.TimeSpan,Time.year,1> =
+    Bristlecone.mkContinuous ()
 
 (**
 
@@ -121,8 +123,6 @@ To link your model and data time, the Bristlecone builders contains a `Bristleco
 For example, the below conversion makes an estimation engine that can directly consume a model that is defined in monthly resolution, and requires data defined in standard .NET `DateTime` times.
 *)
 
-open Bristlecone
-
 let forMonthlyModel: EstimationEngine.EstimationEngine<System.DateTime,System.TimeSpan,Time.month,1> =
     Bristlecone.mkDiscrete ()
     |> Bristlecone.withTimeConversion Time.DateMode.Conversion.CalendarDates.toMonths
@@ -150,7 +150,7 @@ traces during optimisation.
 ### Example: continuous time with Nelder-Mead optimisation
 *)
 
-let engine: EstimationEngine.EstimationEngine<Time.DatingMethods.Annual,int<Time.year>,Time.year,1> =
+let engine2: EstimationEngine.EstimationEngine<Time.DatingMethods.Annual,int<Time.year>,Time.year,1> =
     Bristlecone.mkContinuous ()
     |> Bristlecone.withCustomOptimisation (Optimisation.Amoeba.swarm 10 20 Optimisation.Amoeba.Solver.Default)
     |> Bristlecone.withConditioning Conditioning.NoConditioning
