@@ -220,6 +220,7 @@ module MonteCarlo =
                 theta1, l1'
 
         let dNew = (lAccepted, thetaAccepted) :: d
+
         if endCondition dNew iteration <> Continue then
             dNew, sc
         else

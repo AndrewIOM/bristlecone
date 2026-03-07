@@ -19,12 +19,13 @@ module Parameter =
     let private unwrap (Parameter(c, e)) = c, e
 
     let internal isValid (con: Constraint<'u>) (x: float<'u>) =
-        if Units.isNotFinite x then false
+        if Units.isNotFinite x then
+            false
         else
             match con with
             | Unconstrained -> true
             | PositiveOnly -> x > Units.tagUnit 0.
-            | Bounded (lo,hi) -> x > lo && x < hi
+            | Bounded(lo, hi) -> x > lo && x < hi
 
     let create con (bound1: float<'u>) (bound2: float<'u>) =
         if isValid con bound1 && isValid con bound2 then

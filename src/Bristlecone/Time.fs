@@ -176,6 +176,7 @@ module DateTime =
 
         let whole = (b.Year - a.Year) * 12 + (b.Month - a.Month)
         let anchor = a.AddMonths whole
+
         let frac =
             if anchor = b then
                 0.0

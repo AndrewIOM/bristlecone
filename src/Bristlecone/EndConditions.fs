@@ -150,14 +150,13 @@ module EndConditions =
             if i % (fixedBin * pointsRequired) = 0<iteration> && i > 1<iteration> then
 
                 let fixedBin = Units.removeUnitFromInt fixedBin
+
                 if List.length results < fixedBin * pointsRequired then
                     Continue
                 else
 
                     let bins =
-                        results
-                        |> List.take (fixedBin * pointsRequired)
-                        |> List.chunkBySize fixedBin
+                        results |> List.take (fixedBin * pointsRequired) |> List.chunkBySize fixedBin
 
                     if bins |> List.exists List.isEmpty then
                         Continue
@@ -173,10 +172,10 @@ module EndConditions =
                                     p
                                     |> List.map Units.removeUnitFromFloat
                                     |> List.pairwise
-                                    |> List.map (fun (a,b) -> (b - a) ** 2.)
+                                    |> List.map (fun (a, b) -> (b - a) ** 2.)
                                     |> function
-                                    | [] -> nan
-                                    | xs -> List.average xs))
+                                        | [] -> nan
+                                        | xs -> List.average xs))
 
                         if msjdBins |> List.exists (List.forall Units.isNan) then
                             Continue
@@ -189,15 +188,15 @@ module EndConditions =
                                     let x = [| 1. .. float (List.length msjds) |]
                                     Statistics.Regression.slopeAndPValue x (msjds |> List.toArray))
 
-                            let valid =
-                                perParam
-                                |> List.map (fun (s,p) -> s, if Units.isNan p then 1.0 else p)
+                            let valid = perParam |> List.map (fun (s, p) -> s, if Units.isNan p then 1.0 else p)
 
-                            if valid |> List.forall (fun (s,p) -> abs s < slopeTol && p > 0.1)
-                            then Stationary
-                            else Continue
+                            if valid |> List.forall (fun (s, p) -> abs s < slopeTol && p > 0.1) then
+                                Stationary
+                            else
+                                Continue
 
-            else Continue
+            else
+                Continue
 
     /// True if there is no significant slope in mean squared jumping distances (MSJD),
     /// binned per 200 iterations and a regression of five bins.

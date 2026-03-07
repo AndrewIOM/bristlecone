@@ -1712,7 +1712,9 @@ module Language =
             (comp: Components.ModelComponent<'a>)
             (builders: Writer.Writer<'a -> 'rest, ComponentName * CodedMap<Parameter.Pool.AnyParameter>> list)
             : Writer.Writer<'rest, ComponentName * CodedMap<Parameter.Pool.AnyParameter>> list =
-            if comp.Implementations.IsEmpty then failwith "Components must have at least one implementation."
+            if comp.Implementations.IsEmpty then
+                failwith "Components must have at least one implementation."
+
             [ for sc in comp.Implementations do
                   for (Writer.AWriter(f, logs)) in builders do
                       let entry =
