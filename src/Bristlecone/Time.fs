@@ -170,20 +170,22 @@ module DateTime =
     /// <param name="d1">The first date</param>
     /// <param name="d2">The second date</param>
     /// <returns>The fraction of years elapsed between the two dates</returns>
-    let totalMonthsElapsed (d1: DateTime) (d2: DateTime) : float<month> =
-        let sign = if d2 >= d1 then 1.0 else -1.0
-        let a, b = if d2 >= d1 then d1, d2 else d2, d1
+    let totalMonthsElapsed (a: DateTime) (b: DateTime) : float<month> =
+        let sign = if b >= a then 1.0 else -1.0
+        let a, b = if b >= a then a, b else b, a
 
-        let wholeMonths =
-            (b.Year * 1<year> - a.Year * 1<year>) * monthsPerYear
-            + (b.Month * 1<month> - a.Month * 1<month>)
-            |> Units.intToFloat
+        let whole = (b.Year - a.Year) * 12 + (b.Month - a.Month)
+        let anchor = a.AddMonths whole
+        let frac =
+            if anchor = b then
+                0.0
+            else
+                let nextAnchor = anchor.AddMonths(1)
+                let span = (b - anchor).TotalDays
+                let monthSpan = (nextAnchor - anchor).TotalDays
+                span / monthSpan
 
-        let dayFraction =
-            Units.intToFloat (1<day> * b.Day - 1<day> * a.Day)
-            / Units.intToFloat (daysInMonth a)
-
-        sign * (wholeMonths + dayFraction)
+        sign * (float whole + frac) * 1.<month>
 
     let fractionalDifference isSigned d1 d2 =
         let d1, d2 = if d1 < d2 || isSigned then d1, d2 else d2, d1

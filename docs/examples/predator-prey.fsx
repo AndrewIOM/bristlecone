@@ -248,7 +248,7 @@ module Graphing =
         |> Seq.collect(fun r -> r.Results |> Seq.map snd)
         |> Seq.map Seq.toList
         |> Seq.toList
-        |> List.flip
+        |> List.transpose
         |> List.map (fun values -> Chart.Line(y = values, x = [ 1 .. values.Length ]))
         |> Chart.Grid(3, 3)
         |> Chart.withSize(800,800)
@@ -394,3 +394,6 @@ parameters should be around this range:
 * Predator growth efficiency (δ): ~0.01–0.02, reflecting conversion of prey into predator growth.
 
 *)
+
+let sigmaHFit = (result |> forceOk).Parameters.Get σH
+

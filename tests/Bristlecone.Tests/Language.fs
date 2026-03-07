@@ -51,21 +51,6 @@ open Bristlecone.Tensors
 
 let dummyParameterT = [|0.<parameter>|] |> Typed.ofVector
 
-
-[<Tests>]
-let modelExpressionsTensor =
-    testList
-        "Model expression - DSL compilation (tensors)"
-        [
-
-            // testPropertyWithConfig Config.config "Will not compile if environment key is missing"
-            // <| fun (code: ShortCode.ShortCode) pool ->
-            //     let envState = environment<Config.testModelUnit> code.Value
-            //     let f () = Environment envState |> ExpressionCompiler.compileRate pool [] |> ignore
-            //     Expect.throws f "Environmental data was not present"
-
-        ]
-
 [<Tests>]
 let inverseTests =
     testList
@@ -244,30 +229,11 @@ let modelBuilder =
 
           ]
 
-// [<Tests>]
-// let computableFragments =
-//     testList "Computable fragments" [
-
-//         testProperty "" <| fun x ->
-
-//             let someFun x t z =
-//                 x + t * 1.0 - z
-
-//             let fragment =
-//                 someFun
-//                 |> ComputableFragment.apply This
-//                 |> ComputableFragment.applyAgain Time
-//                 |> ComputableFragment.applyAgain (Environment "z")
-//                 //|> ComputableFragment.asBristleconeFunction
-
-//             let fragment2 = fragment |> ComputableFragment.asBristleconeFunction
-
-//             // Get something
-
-
-//             fragment
-
-//     ]
+let dummyBaseModel comp: ModelBuilder.ModelBuilder<Time.day> =
+    let s = state "some_random_code"
+    Model.empty
+    |> Model.addRateEquation s (comp * Constant 1.</Time.day>)
+    |> Model.useLikelihoodFunction  (ModelLibrary.NegLogLikelihood.SumOfSquares [ Require.state s ])
 
 [<Tests>]
 let hypotheses =
@@ -275,47 +241,46 @@ let hypotheses =
         "Hypotheses (nested model systems)"
         [
 
-        // testProperty "Components must have at least one implementation" <| fun baseModel components ->
-        //     if components |> List.isEmpty
-        //     then Expect.throws (fun () -> Hypotheses.createFromComponent components baseModel |> ignore) ""
+            testPropertyWithConfig Config.config "Components must have at least one implementation" <| fun (comp:Components.ModelComponent<ModelExpression<1>>) ->
+                if comp.Implementations.IsEmpty
+                then Expect.throws (fun () -> Hypotheses.createFromModel dummyBaseModel |> Hypotheses.apply comp |> ignore) ""
 
-        // testProperty "Sub-component parameters are included in final models" <| fun baseModel (name:ShortCode.ShortCode) comp ->
-        //     let h = baseModel |> Hypotheses.createFromComponent (name.Value, comp) |> Hypotheses.compile
-        //     let p =
-        //         comp
-        //         |> List.map(fun (n,p) -> p.Parameters)
-        //         |> List.zip h
-        //         |> List.map(fun ((h1,_), p2) -> h1.Parameters, p2)
-        //     Expect.all p (fun (pool,p2) -> p2 |> Map.map(fun k _ -> pool |> Parameter.Pool.toList |> Map.containsKey k) |> Map.toList |> List.map snd)
+            // testPropertyWithConfig Config.config "Sub-component parameters are included in final models" <| fun (comp:Components.ModelComponent<ModelExpression<1>>) ->
+            //     if comp.Implementations.IsEmpty then ()
+            //     else 
+            //         let h = dummyBaseModel |> Hypotheses.createFromModel |> Hypotheses.apply comp |> Hypotheses.compile
+            //         let p =
+            //             comp.Implementations
+            //             |> List.allPairs h
+            //             |> List.map(fun (h1, subC) -> h1.Model.Parameters, subC)
+            //         Expect.all p (fun (pool,subC) ->
+            //             let poolKeys = pool |> Parameter.Pool.keys
+            //             subC.Parameters |> Seq.map(fun kv -> poolKeys |> List.contains kv.Key) |> Seq.contains false |> not)
+            //             "Hypothesis did not include sub-component's parameters"
 
-        //         testProperty "Sub-components must have unique IDs" <| fun baseModel comp ->
-        //             //Expect.throws(baseModel |> Hypotheses.createFromComponent comp) ""
-        //             fail
+            // testPropertyWithConfig Config.config "The number of hypotheses generated equals the number of sub-components" <| fun (comp:Components.ModelComponent<ModelExpression<1>>) ->
+            //     if comp.Implementations.IsEmpty then true
+            //     else
+            //         let h = dummyBaseModel |> Hypotheses.createFromModel |> Hypotheses.apply comp |> Hypotheses.compile
+            //         h.Length = comp.Implementations.Length
 
-        // testProperty "The number of hypotheses generated equals the number of sub-components" <| fun baseModel comp ->
-        //     if comp |> snd |> List.isEmpty then true
-        //     else
-        //         let h = baseModel |> Hypotheses.createFromComponent comp |> fun x -> printfn "%A" x; x |> Hypotheses.compile
-        //         h.Length = (comp |> snd).Length
+            // testPropertyWithConfig Config.config "The number of hypotheses equals the product of three component lists"
+            // <| fun
+            //     (comp1:Components.ModelComponent<ModelExpression<1>>) 
+            //     (comp2:Components.ModelComponent<ModelExpression<1>>) 
+            //     (comp3:Components.ModelComponent<ModelExpression<1>>) ->
+            //     if comp1.Implementations.IsEmpty || comp2.Implementations.IsEmpty || comp3.Implementations.IsEmpty then true
+            //     else
+            //         let dummy = fun c1 c2 c3 -> dummyBaseModel (c1 * c2 * c3)
+            //         let h =
+            //             dummy
+            //             |> Hypotheses.createFromModel
+            //             |> Hypotheses.apply comp1
+            //             |> Hypotheses.apply comp2
+            //             |> Hypotheses.apply comp3
+            //             |> Hypotheses.compile
+            //         h.Length = comp1.Implementations.Length * comp2.Implementations.Length * comp3.Implementations.Length
 
-        //         testProperty "The number of hypotheses equals the product of three component lists" <| fun baseModel comp1 comp2 comp3 ->
-        //             let h =
-        //                 baseModel
-        //                 |> Hypotheses.createFromComponent comp1
-        //                 |> Hypotheses.useAnother comp2
-        //                 |> Hypotheses.useAnother comp3
-        //                 |> Hypotheses.compile
-        //             h.Length = ((snd comp1).Length * (snd comp2).Length * (snd comp3).Length)
-
-        //         testProperty "Can optionally pass component ID into model" <| fail
-
-        //         testProperty "Correctly names components included in each model" <| fun baseModel comp1 comp2 comp3 ->
-        //             let h =
-        //                 baseModel
-        //                 |> Hypotheses.createFromComponent comp1
-        //                 |> Hypotheses.useAnother comp2
-        //                 |> Hypotheses.useAnother comp3
-        //                 |> Hypotheses.compile
-        //             fail
-
+            // testProperty "Correctly names components included in each model" <| fun baseModel comp1 comp2 comp3 ->
+            // --> TODO Add test
         ]

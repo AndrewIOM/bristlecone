@@ -98,12 +98,14 @@ let parameters =
                     | None -> ()
 
                 testProperty "Only created when bounds satisfy constraint"
-                <| fun con bound1 bound2 ->
-                    match Parameter.create con bound1 bound2 with
+                <| fun cons bound1 bound2 ->
+                    match Parameter.create cons bound1 bound2 with
                     | Some _ ->
-                        match con with
+                        match cons with
                         | Parameter.Constraint.PositiveOnly -> bound1 > 0. && bound2 > 0.
                         | Parameter.Constraint.Unconstrained -> true
+                        | Parameter.Constraint.Bounded (b1,b2) ->
+                            bound1 > b1 && bound2 > b1 && bound1 < b2 && bound2 < b2
                     | None -> true ]
 
         ]

@@ -219,8 +219,9 @@ module MonteCarlo =
 
                 theta1, l1'
 
-        if endCondition d iteration <> Continue then
-            d, sc
+        let dNew = (lAccepted, thetaAccepted) :: d
+        if endCondition dNew iteration <> Continue then
+            dNew, sc
         else
             writeOut
             <| OptimisationEvent
@@ -237,7 +238,7 @@ module MonteCarlo =
                 f
                 thetaAccepted
                 (lAccepted |> Typed.ofScalar)
-                ((lAccepted, thetaAccepted) :: d)
+                dNew
                 sc
                 (iteration + 1<iteration>)
 
@@ -597,7 +598,7 @@ module MonteCarlo =
                         l
                         []
                         ()
-                        0<iteration>
+                        1<iteration>
 
                 let (lAccepted, thetaAccepted) = res |> List.head
                 let accepted = not (Typed.toFloatArray theta = Typed.toFloatArray thetaAccepted)
@@ -1668,7 +1669,7 @@ module MonteCarlo =
 
                 let newTrace = result.Value :: trace
 
-                if endWhen trace iteration <> Continue then
+                if endWhen newTrace iteration <> Continue then
                     newTrace, newTuningState |> Array.map (fun t -> t.Scale)
                 else
                     writeOut
@@ -1689,7 +1690,7 @@ module MonteCarlo =
                     settings.BurnLength
                     (l1 |> Typed.toFloatScalar, theta)
                     []
-                    0<iteration>
+                    1<iteration>
 
             writeOut
             <| OptimisationPhaseEvent(PhaseStarting("Sampling phase (homogeneous chain)", 1))
@@ -1701,7 +1702,7 @@ module MonteCarlo =
                     sampleEnd
                     (List.head burnResults)
                     []
-                    0<iteration>
+                    1<iteration>
 
             [ { Component = "Filzbach"
                 Stage = "Sampling phase (homogeneous chain)"

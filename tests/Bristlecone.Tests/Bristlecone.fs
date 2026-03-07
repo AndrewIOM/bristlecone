@@ -53,7 +53,7 @@ module TestModels =
     let tempDrivenModelDiscrete () =
         let X = state "X"
         let temp = environment "Temp"
-        let dummy = parameter "a" NoConstraints (min 0.1 0.2) (max 0.1 0.2)        
+        let dummy = parameter "dummy_a_par" NoConstraints (min 0.1 0.2) (max 0.1 0.2)        
         Model.discrete
         |> Model.addDiscreteEquation X (Environment temp)   // derivative of X is just the env forcing
         |> Model.estimateParameter dummy
@@ -63,7 +63,7 @@ module TestModels =
     let diffSingleEnv (dynCode:ShortCode.ShortCode) (envCode:ShortCode.ShortCode) =
         let X = state dynCode.Value
         let temp = environment envCode.Value
-        let dummy = parameter "a" NoConstraints (min 0.1 0.2) (max 0.1 0.2)        
+        let dummy = parameter "dummy_a_par" NoConstraints (min 0.1 0.2) (max 0.1 0.2)        
         Model.empty<year>
         |> Model.addRateEquation X (Environment temp)   // derivative of X is just the env forcing
         |> Model.estimateParameter dummy

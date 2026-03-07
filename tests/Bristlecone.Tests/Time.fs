@@ -15,7 +15,7 @@ let timeSeries =
         [
 
           testPropertyWithConfig config "Resolution is always the same as creation-time"
-          <| fun date (data: float list) resolution ->
+          <| fun date (data: float list) resolution ->              
               let resolution =
                   Resolution.map (fun (x: ObservationalTimeSpan.ObservationalTimeSpan) -> x.Value) resolution
 
