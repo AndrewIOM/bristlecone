@@ -12,6 +12,16 @@ module Optimiser =
     let tryGetSolution (trace: OptimisationTrace list) =
         trace |> Seq.tryHead |> Option.bind (fun tr -> tr.Results |> Seq.tryHead)
 
+    let tryGetBest (trace: OptimisationTrace list) =
+        trace
+        |> Seq.choose (fun tr ->
+            if tr.Results.IsEmpty then
+                None
+            else
+                tr.Results |> Seq.minBy fst |> Some)
+        |> Seq.sortBy fst
+        |> Seq.tryHead
+
     let combine (optim1: Optimise) (optim2: Optimise) =
         fun rnd logger endCond domain point objective ->
             let r1 =
@@ -75,7 +85,8 @@ module Initialise =
         |> Seq.map (fun (v, c) ->
             match c with
             | Parameter.Constraint.Unconstrained -> true
-            | Parameter.Constraint.PositiveOnly -> v > 0.<``optim-space``>)
+            | Parameter.Constraint.PositiveOnly -> v > 0.<``optim-space``>
+            | Parameter.Constraint.Bounded(lo, hi) -> v > lo && v < hi)
         |> Seq.contains false
 
     /// Attempts to generate random theta based on starting bounds
@@ -117,20 +128,40 @@ module MonteCarlo =
     open Bristlecone.Statistics.Distributions
     open MathNet.Numerics.LinearAlgebra
     open Bristlecone.Tensors
-    open Bristlecone.ModelSystem
 
     [<Measure>]
     type ``jump-scale``
 
-    /// Jump in parameter space while reflecting constraints.
+    /// Reflects across boundaries infinitely within bounds. A value
+    /// outside the bounds will reflect until it is within the bounds.
+    /// If NaN, returns the centre of the bounds.
+    let rec internal reflect (value: float<'u>) (lo: float<'u>, hi: float<'u>) =
+        match value with
+        | v when System.Double.IsNaN(Units.removeUnitFromFloat v) -> (lo + hi) / 2.
+        | v when System.Double.IsInfinity(Units.removeUnitFromFloat v) -> if float value > 0. then hi else lo
+        | v when value < lo -> reflect (2. * lo - v) (lo, hi)
+        | v when value > hi -> reflect (2. * hi - v) (lo, hi)
+        | _ -> value
+
+    /// Jump in parameter space while reflecting constraints. Reflects
+    /// across any boundaries (rather than across the current value).
     let constrainJump (initial: float<``optim-space``>) (jump: float<``optim-space``>) (scaleFactor: float) c =
-        match c with
-        | Bristlecone.Parameter.Constraint.Unconstrained -> initial + (jump * scaleFactor)
-        | Bristlecone.Parameter.Constraint.PositiveOnly ->
-            if (initial + (jump * scaleFactor)) < 0.<``optim-space``> then
-                (initial - (jump * scaleFactor))
+        let proposed =
+            let prop = initial + jump * scaleFactor
+
+            if System.Double.IsNaN(Units.removeUnitFromFloat prop) then
+                initial
             else
-                (initial + (jump * scaleFactor))
+                prop
+
+        match c with
+        | Parameter.Constraint.Unconstrained -> proposed
+        | Parameter.Constraint.PositiveOnly ->
+            if proposed < 0.<``optim-space``> then
+                reflect proposed (0.<``optim-space``>, Units.retype infinity)
+            else
+                proposed
+        | Parameter.Constraint.Bounded(lo, hi) -> reflect proposed (lo, hi)
 
     /// <summary>A recursive metropolis hastings algorithm that ends when `endCondition` returns true.</summary>
     /// <param name="random">`System.Random` to be used for drawing from a uniform distribution.</param>
@@ -188,8 +219,10 @@ module MonteCarlo =
 
                 theta1, l1'
 
-        if endCondition d iteration <> Continue then
-            d, sc
+        let dNew = (lAccepted, thetaAccepted) :: d
+
+        if endCondition dNew iteration <> Continue then
+            dNew, sc
         else
             writeOut
             <| OptimisationEvent
@@ -206,7 +239,7 @@ module MonteCarlo =
                 f
                 thetaAccepted
                 (lAccepted |> Typed.ofScalar)
-                ((lAccepted, thetaAccepted) :: d)
+                dNew
                 sc
                 (iteration + 1<iteration>)
 
@@ -566,7 +599,7 @@ module MonteCarlo =
                         l
                         []
                         ()
-                        0<iteration>
+                        1<iteration>
 
                 let (lAccepted, thetaAccepted) = res |> List.head
                 let accepted = not (Typed.toFloatArray theta = Typed.toFloatArray thetaAccepted)
@@ -880,7 +913,7 @@ module MonteCarlo =
                 (finalScale |> fst)
                 (finalScale |> snd)
                 (secondAdaptation |> Optimiser.tryGetSolution |> Option.get |> snd)
-                [] // TODO The phase name states adaptation required, but none configured.
+                []
                 random
                 writeOut
                 endCon
@@ -1120,9 +1153,10 @@ module MonteCarlo =
               InitialTemperature: float
               Tuning: Tuning.TuningSettings
               PreTuneEnd: EndCondition
+              StartAtBest: bool
               AnnealStepEnd: EndCondition }
 
-            static member Default =
+            static member Classical =
                 { HeatStepLength = EndConditions.Profiles.SimulatedAnnealing.heatingStrict
                   HeatRamp = fun t -> t * 1.10
                   BoilingAcceptanceRate = 0.85
@@ -1131,6 +1165,19 @@ module MonteCarlo =
                   InitialTemperature = 1.00
                   PreTuneEnd = EndConditions.Profiles.SimulatedAnnealing.preTuning
                   Tuning = Tuning.TuningSettings.Default
+                  StartAtBest = false
+                  AnnealStepEnd = EndConditions.Profiles.SimulatedAnnealing.annealing }
+
+            static member Fast =
+                { HeatStepLength = EndConditions.Profiles.SimulatedAnnealing.heatingRelaxed
+                  HeatRamp = fun t -> t * 1.10
+                  BoilingAcceptanceRate = 0.85
+                  TemperatureCeiling = Some 200.
+                  TemperatureFloor = Some 0.75
+                  InitialTemperature = 1.00
+                  PreTuneEnd = EndConditions.Profiles.SimulatedAnnealing.preTuning
+                  Tuning = Tuning.TuningSettings.Default
+                  StartAtBest = true
                   AnnealStepEnd = EndConditions.Profiles.SimulatedAnnealing.annealing }
 
 
@@ -1182,6 +1229,7 @@ module MonteCarlo =
             temperature
             point
             previousBests
+            startAtBest
             iteration
             =
 
@@ -1209,7 +1257,7 @@ module MonteCarlo =
 
                 writeOut
                 <| GeneralEvent(
-                    sprintf "[Annealing] Ending temperature %f at -logL %f" temperature (bestAtTemperature |> fst)
+                    sprintf "[Annealing] Ending temperature %f (best -logL = %f)" temperature (bestAtTemperature |> fst)
                 )
 
                 anneal
@@ -1219,13 +1267,27 @@ module MonteCarlo =
                     cool
                     markov
                     (cool temperature (history |> List.length))
-                    (annealLevelTrace |> List.head)
+                    (if startAtBest then
+                         bestAtTemperature
+                     else
+                         List.head annealLevelTrace)
                     history
+                    startAtBest
                     (iteration + 1<iteration>)
 
         /// Heat up temperature until acceptance rate of bad moves is above the threshold `endAcceptanceRate`.
         /// If it becomes impossible to propose a move during heating, then heating ends.
-        let rec heat write ceiling endAcceptanceRate heatingSchedule markov (solution: Solution) history temperature =
+        let rec heat
+            write
+            startAtBest
+            ceiling
+            endAcceptanceRate
+            heatingSchedule
+            markov
+            (solution: Solution)
+            history
+            temperature
+            =
 
             let phaseName = sprintf "Heating (T=%f)" temperature
             write <| OptimisationPhaseEvent(PhaseStarting(phaseName, 1))
@@ -1267,14 +1329,17 @@ module MonteCarlo =
                   Replicate = 1
                   Results = chain }
 
+            let restartAt = if startAtBest then chain |> Seq.minBy fst else chain.Head
+
             if ar < endAcceptanceRate && not aboveCeiling then
                 heat
                     write
+                    startAtBest
                     ceiling
                     endAcceptanceRate
                     heatingSchedule
                     markov
-                    chain.Head
+                    restartAt
                     (stageResult :: history)
                     (temperature |> heatingSchedule)
             else
@@ -1331,6 +1396,7 @@ module MonteCarlo =
             let heatLevelTraces, boilingPoint =
                 heat
                     writeOut
+                    settings.StartAtBest
                     settings.TemperatureCeiling
                     settings.BoilingAcceptanceRate
                     settings.HeatRamp
@@ -1339,7 +1405,11 @@ module MonteCarlo =
                     []
                     settings.InitialTemperature
 
-            let heatEndPosition = heatLevelTraces |> Optimiser.tryGetSolution |> Option.get
+            let heatEndPosition =
+                if settings.StartAtBest then
+                    heatLevelTraces |> Optimiser.tryGetBest |> Option.get
+                else
+                    heatLevelTraces |> Optimiser.tryGetSolution |> Option.get
 
             writeOut
             <| DebugEvent("Optimisation", sprintf "Heating ended at position %A" heatEndPosition)
@@ -1355,6 +1425,7 @@ module MonteCarlo =
                     boilingPoint
                     heatEndPosition
                     []
+                    settings.StartAtBest
                     1<iteration>,
                 tunedScale
 
@@ -1413,6 +1484,11 @@ module MonteCarlo =
                 writeOut
                 <| OptimisationPhaseEvent(OptimComponentStarting "Simulated annealing (fast)")
 
+                if not settings.StartAtBest then
+                    writeOut
+                    <| WarningEvent
+                        "It is recommended that fast simulated annealing uses 'start at best' restarts. Check settings."
+
                 simulatedAnnealing
                     initialScale
                     settings
@@ -1433,7 +1509,8 @@ module MonteCarlo =
     /// conditions for the final end.
     let bristleconeSampler: Optimiser =
         let settings =
-            { SimulatedAnnealing.AnnealSettings.Default with
+            { SimulatedAnnealing.AnnealSettings.Fast with
+                StartAtBest = true
                 HeatStepLength = EndConditions.Profiles.SimulatedAnnealing.heatingRelaxed
                 TemperatureFloor = Some 1.0 }
 
@@ -1458,7 +1535,7 @@ module MonteCarlo =
                     domain
                     f
 
-            let theta = saResult |> Optimiser.tryGetSolution |> Option.get |> snd
+            let theta = saResult |> Optimiser.tryGetBest |> Option.get |> snd
 
             let randomWalkCov =
                 TuningMode.covarianceFromStandardDeviations 10000 random saScales
@@ -1593,7 +1670,7 @@ module MonteCarlo =
 
                 let newTrace = result.Value :: trace
 
-                if endWhen trace iteration <> Continue then
+                if endWhen newTrace iteration <> Continue then
                     newTrace, newTuningState |> Array.map (fun t -> t.Scale)
                 else
                     writeOut
@@ -1614,7 +1691,7 @@ module MonteCarlo =
                     settings.BurnLength
                     (l1 |> Typed.toFloatScalar, theta)
                     []
-                    0<iteration>
+                    1<iteration>
 
             writeOut
             <| OptimisationPhaseEvent(PhaseStarting("Sampling phase (homogeneous chain)", 1))
@@ -1626,7 +1703,7 @@ module MonteCarlo =
                     sampleEnd
                     (List.head burnResults)
                     []
-                    0<iteration>
+                    1<iteration>
 
             [ { Component = "Filzbach"
                 Stage = "Sampling phase (homogeneous chain)"

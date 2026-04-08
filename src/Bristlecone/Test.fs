@@ -148,7 +148,9 @@ module Test =
             | DifferentialEqs eqs -> eqs |> Map.toList |> List.map fst
 
         if
-            Set.isSubset (Set.ofList equationKeys) (Set.ofList (testSettings.StartValues |> Map.toList |> List.map fst))
+            Set.isSubset
+                (Set.ofList equationKeys)
+                (Set.ofSeq (testSettings.StartValues.Keys |> Seq.append model.Initialisers.Keys))
         then
             Ok testSettings
         else
@@ -158,27 +160,38 @@ module Test =
 
     module Compute =
 
+        let stateNames eqs =
+            match eqs with
+            | DifferenceEqs e -> Map.keys e
+            | DifferentialEqs e -> Map.keys e
+
+
         let tryMakeDummySeries<[<Measure>] 'state, 'T, 'yearType, [<Measure>] 'timeunit, 'timespan when 'T: comparison>
             (startDate: 'T)
             (resolution: Resolution.FixedTemporalResolution<'timespan>)
             (length: int)
             (eqs: ModelForm<'timeunit>)
             (dateMode: DateMode.DateMode<'T, 'yearType, 'timespan>)
+            (t1: CodedMap<Tensors.TypedTensor<Tensors.Scalar, 'state>>)
             =
 
-            let ts =
+            let mkTimeSeries (t1: float<'state> option) =
                 TimeSeries.fromSeq
                     dateMode
                     startDate
                     resolution
-                    (Seq.init length (fun _ -> nan |> LanguagePrimitives.FloatWithMeasure<'state>))
+                    (Seq.init length (fun i ->
+                        if i = 0 && t1.IsSome then
+                            t1.Value
+                        else
+                            nan |> LanguagePrimitives.FloatWithMeasure<'state>))
 
-            let stateNames =
-                match eqs with
-                | DifferenceEqs e -> Map.keys e
-                | DifferentialEqs e -> Map.keys e
-
-            stateNames |> Seq.map (fun s -> s, ts) |> Map.ofSeq |> TimeFrame.tryCreate
+            t1.Keys
+            |> Seq.map (fun s ->
+                let t1 = t1 |> Map.tryFind s |> Option.map Tensors.Typed.toFloatScalar
+                s, mkTimeSeries t1)
+            |> Map.ofSeq
+            |> TimeFrame.tryCreate
 
         /// Generate time-series for a given engine and model, and
         /// for a particular point in optim-space.
@@ -198,24 +211,29 @@ module Test =
                     |> TimeSeries.map (fun (v, _) -> v |> Units.removeUnitFromFloat |> (*) 1.<environment>))
                 |> TimeFrame.tryCreate
 
-            // Setup dummy timeline for solver (all values = nan)
-            let dynSeries =
+            let t1 =
+                testSettings.StartValues
+                |> Map.map (fun _ v -> v |> Units.removeUnitFromFloat |> (*) 1.<state> |> Tensors.Typed.ofScalar)
+
+            // Setup dummy timeline for solver (all values = nan, except t1 = custom t1).
+            // Observed series are defined as those with a start value set (t1).
+            let fakeObservedSeries =
                 tryMakeDummySeries
                     testSettings.StartDate
                     testSettings.Resolution
                     testSettings.TimeSeriesLength
                     model.Equations
                     testSettings.DateMode
+                    t1
                 |> Option.get
 
-            let t0 =
-                testSettings.StartValues
-                |> Map.map (fun _ v -> v |> Units.removeUnitFromFloat |> (*) 1.<state> |> Tensors.Typed.ofScalar)
-
-            let dynamicKeys = dynSeries.Keys
-
             let conditioned =
-                Solver.Conditioning.resolve engine.Conditioning dynSeries envSeries dynamicKeys model.Measures.Keys
+                Solver.Conditioning.resolve
+                    engine.Conditioning
+                    fakeObservedSeries
+                    envSeries
+                    (stateNames model.Equations)
+                    model.Measures.Keys
 
             let obsTimes = conditioned.ObservedForPairing |> TimeFrame.dates
 
@@ -229,7 +247,7 @@ module Test =
                     (Solver.StepType.External obsTimes)
                     conditioned.StatesObservedForSolver
                     conditioned.MeasuresForSolver
-                    conditioned.StatesHiddenForSolver
+                    t1
                     model.Initialisers
                     conditioned.ExogenousForSolver
                     (fun _ -> Solver.Exact)
@@ -238,10 +256,7 @@ module Test =
             let _, thetaReal = Parameter.Pool.toTensorWithKeysReal thetaPool
 
             // Predict series
-            let timeline =
-                dynSeries.Series
-                |> Seq.head
-                |> fun kv -> kv.Value |> TimeSeries.toObservations |> Seq.map snd |> Seq.toArray
+            let timeline = conditioned.ObservedForPairing |> TimeFrame.dates |> List.toArray
 
             let predicted =
                 Objective.predict solver model.Measures thetaReal

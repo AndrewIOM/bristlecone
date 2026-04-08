@@ -47,27 +47,33 @@ module ``End Conditions`` =
                   
             ]
 
-// [<Tests>]
-// let jumpDistanceTests =
+    [<Tests>]
+    let jumpDistanceTests =
 
-//     testList "Mean Squared Jump Distance (MSJD)" [
+        testList "Mean Squared Jump Distance (MSJD)" [
 
-//         // testProperty "Always false when not enough data" <| fun nBin nPoints results ->
-//         //     let msjd = stationarySquaredJumpDistance' nBin nPoints results
-//         //     if (nBin * nPoints) <= results.Length then msjd else not msjd
+            testProperty "Always continue when not enough data" <| fun (PositiveInt nBin) (PositiveInt nPoints) (PositiveInt n) (NonEmptyArray result) ->
+                let results = List.replicate n (Tensors.Typed.ofVector result) |> List.map(fun t -> 1.<``-logL``>, t)
+                let msjd = EndConditions.stationarySquaredJumpDistance' (nBin * 1<iteration>) nPoints 1e-3 ignore results (results.Length * 1<iteration>)
+                if nBin * nPoints <= results.Length then msjd.IsContinue else true
 
-//         // testProperty "MSJD is stationary when theta is fixed through time" <| fun theta ->
-//         //     if theta |> snd |> Array.length = 0
-//         //     then true
-//         //     else
-//         //         List.init 1000 (fun _ -> theta)
-//         //         |> stationarySquaredJumpDistance
+            testProperty "Stationary when theta is fixed through time" <| fun theta ->
+                if Array.isEmpty theta || Array.exists Units.isNotFinite theta
+                then true
+                else
+                    let theta = Tensors.Typed.ofVector theta
+                    let stop = EndConditions.stationarySquaredJumpDistance ignore (List.init 1000 (fun _ -> 1.<``-logL``>, theta)) 1000<iteration>
+                    stop.IsStationary
 
-//         // testProperty "MSJD is not stationary when there is a linear trend in the data" <| fun (theta:Solution<float>) addition ->
-//         //     List.init 1000 (fun i -> theta |> fst, theta |> snd |> Array.map(fun j -> j + (addition * float i)))
-//         //     |> stationarySquaredJumpDistance
-//         //     |> not
-//     ]
+            testProperty "Not stationary when there is a non-linear trend in the data" <| fun theta (NormalFloat addition) ->
+                if Array.length theta < 2 || addition = 0.0 || Units.isNotFinite addition
+                then true
+                else
+                    let linear = List.init 1000 (fun i -> 1.<``-logL``>, theta |> Array.map(fun j -> (j + addition * 0.01 * float i * (float i)) * 1.<``optim-space``>) |> Tensors.Typed.ofVector)
+                    let stop = EndConditions.stationarySquaredJumpDistance ignore linear 1000<iteration>
+                    not stop.IsStationary
+        ]
+
 
 module Gibbs =
 

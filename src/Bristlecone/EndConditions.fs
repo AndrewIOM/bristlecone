@@ -147,47 +147,61 @@ module EndConditions =
     /// parameter sequentially: if all p-values are >0.1, then the `EndCondition` is true.
     let stationarySquaredJumpDistance' fixedBin pointsRequired slopeTol (log: LogEvent -> unit) : EndCondition =
         fun results i ->
-            if
-                i % (fixedBin * pointsRequired * 1<iteration>) = 0<iteration>
-                && i > 1<iteration>
-            then
-                let slopesAndPs =
-                    results
-                    |> List.take (fixedBin * pointsRequired)
-                    |> List.chunkBySize fixedBin
-                    |> List.map (fun bin ->
-                        bin
-                        |> List.map (snd >> Tensors.Typed.toFloatArray >> Array.toList)
-                        |> List.flip
-                        |> List.map (fun p ->
-                            p
-                            |> List.map Units.removeUnitFromFloat
-                            |> List.pairwise
-                            |> List.averageBy (fun (a, b) -> (b - a) ** 2.)))
-                    |> List.flip
-                    |> List.map (fun msjds ->
-                        let x = [| 1. .. float (List.length msjds) |]
-                        Statistics.Regression.slopeAndPValue x (msjds |> List.toArray))
+            if i % (fixedBin * pointsRequired) = 0<iteration> && i > 1<iteration> then
 
-                let valid = slopesAndPs |> List.filter (fun (_, p) -> not (System.Double.IsNaN p))
+                let fixedBin = Units.removeUnitFromInt fixedBin
 
-                let decision =
-                    if
-                        valid.Length > 0
-                        && valid |> List.forall (fun (slope, pVal) -> abs slope < slopeTol && pVal > 0.1)
-                    then
-                        Stationary
-                    else
+                if List.length results < fixedBin * pointsRequired then
+                    Continue
+                else
+
+                    let bins =
+                        results |> List.take (fixedBin * pointsRequired) |> List.chunkBySize fixedBin
+
+                    if bins |> List.exists List.isEmpty then
                         Continue
+                    else
 
-                decision
+                        let msjdBins =
+                            bins
+                            |> List.map (fun bin ->
+                                bin
+                                |> List.map (snd >> Tensors.Typed.toFloatArray >> Array.toList)
+                                |> List.transpose
+                                |> List.map (fun p ->
+                                    p
+                                    |> List.map Units.removeUnitFromFloat
+                                    |> List.pairwise
+                                    |> List.map (fun (a, b) -> (b - a) ** 2.)
+                                    |> function
+                                        | [] -> nan
+                                        | xs -> List.average xs))
+
+                        if msjdBins |> List.exists (List.forall Units.isNan) then
+                            Continue
+                        else
+
+                            let perParam =
+                                msjdBins
+                                |> List.transpose
+                                |> List.map (fun msjds ->
+                                    let x = [| 1. .. float (List.length msjds) |]
+                                    Statistics.Regression.slopeAndPValue x (msjds |> List.toArray))
+
+                            let valid = perParam |> List.map (fun (s, p) -> s, if Units.isNan p then 1.0 else p)
+
+                            if valid |> List.forall (fun (s, p) -> abs s < slopeTol && p > 0.1) then
+                                Stationary
+                            else
+                                Continue
+
             else
                 Continue
 
     /// True if there is no significant slope in mean squared jumping distances (MSJD),
     /// binned per 200 iterations and a regression of five bins.
     let stationarySquaredJumpDistance log : EndCondition =
-        stationarySquaredJumpDistance' 200 5 1e-3 log
+        stationarySquaredJumpDistance' 200<iteration> 5 1e-3 log
 
     /// Stops when acceptance rate is consistently within the
     /// defined range. Used to avoid stopping when not mixing.
@@ -302,7 +316,7 @@ module EndConditions =
                 let tuneStatus = mcmcTuningStep maxIter log results iter
 
                 if tuneStatus = Custom "Well mixed" then
-                    stationarySquaredJumpDistance' 200 5 1e-3 log results iter
+                    stationarySquaredJumpDistance' 200<iteration> 5 1e-3 log results iter
                 else
                     tuneStatus
 

@@ -38,13 +38,13 @@ module Transforms =
         testList "Parameter transforms" [
 
             testCase "scalarTransformOptimSpace is identity for unconstrained" <| fun _ ->
-                let t = Parameter.ParameterTransforms.scalarTransformOptimSpace Parameter.Constraint.Unconstrained
+                let t = Parameter.ParameterTransforms.scalarTransformOptimSpace
                 let input = tensor1<``optim-space``> 42.0<``optim-space``>
                 let roundTrip = t.Inverse (t.Forward input) |> Tensors.Typed.toFloatScalar |> Units.removeUnitFromFloat
                 Expect.equal roundTrip 42. "Forward >> Inverse should be identity"
 
             testCase "scalarTransformOptimSpace is identity for positive-only" <| fun _ ->
-                let t = Parameter.ParameterTransforms.scalarTransformOptimSpace Parameter.Constraint.PositiveOnly
+                let t = Parameter.ParameterTransforms.scalarTransformOptimSpace
                 let input = tensor1<``optim-space``> 42.0<``optim-space``>
                 let roundTrip = t.Inverse (t.Forward input) |> Tensors.Typed.toFloatScalar |> Units.removeUnitFromFloat
                 Expect.equal roundTrip 42. "Forward >> Inverse should be identity"
@@ -98,12 +98,14 @@ let parameters =
                     | None -> ()
 
                 testProperty "Only created when bounds satisfy constraint"
-                <| fun con bound1 bound2 ->
-                    match Parameter.create con bound1 bound2 with
+                <| fun cons bound1 bound2 ->
+                    match Parameter.create cons bound1 bound2 with
                     | Some _ ->
-                        match con with
+                        match cons with
                         | Parameter.Constraint.PositiveOnly -> bound1 > 0. && bound2 > 0.
                         | Parameter.Constraint.Unconstrained -> true
+                        | Parameter.Constraint.Bounded (b1,b2) ->
+                            bound1 > b1 && bound2 > b1 && bound1 < b2 && bound2 < b2
                     | None -> true ]
 
         ]

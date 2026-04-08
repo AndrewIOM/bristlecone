@@ -1,3 +1,7 @@
+#### 3.1.0 - 2026-02-23
+* FEATURE: Bounded parameter constraint
+* BUGFIX: MLE file outputs were being overwritten by metadata file
+
 #### 3.0.0 - 2026-01-31
 * FEATURE: Fast grid-based inverse for root finding
 * FEATURE: Heteroscedacity in simple likelihood functions

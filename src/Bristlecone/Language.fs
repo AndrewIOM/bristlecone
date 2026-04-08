@@ -70,6 +70,13 @@ module Language =
     let NoConstraints = Parameter.Constraint.Unconstrained
     let Positive = Parameter.Constraint.PositiveOnly
 
+    let Bounded lo hi =
+        if lo = hi then
+            failwithf "Parameter bounds were equal: %f -> %f" lo hi
+
+        let lo, hi = min lo hi, max lo hi
+        Parameter.Constraint.Bounded(lo, hi)
+
     module Require =
 
         type ObsForLikelihood<[<Measure>] 's> =
@@ -90,13 +97,14 @@ module Language =
 
         /// Retrieve an parameter value from the parameter pool
         /// in its original units of measure.
-        member pool.TryGet(included: IncludedParameter<'u>) =
-            pool |> Parameter.Pool.tryGetRealValue included.ParamId.Inner.Value
+        member pool.TryGet<[<Measure>] 'u>(included: IncludedParameter<'u>) : float<'u> option =
+            pool |> Parameter.Pool.tryGetRealValue<'u> included.ParamId.Inner.Value
 
         /// Retrieve an parameter value from the parameter pool
         /// in its original units of measure. Fails if parameter
         /// doesn't exist or is not estimated.
-        member pool.Get(included: IncludedParameter<'u>) = included |> pool.TryGet |> Option.get
+        member pool.Get<[<Measure>] 'u>(included: IncludedParameter<'u>) : float<'u> =
+            included |> pool.TryGet |> Option.get
 
 
     module Untyped =
@@ -252,7 +260,7 @@ module Language =
         let (ME e) = expExpr
         ME(Untyped.Power(b, e))
 
-    // Logarithm: only makes sense for dimensionless inputs
+    /// The natural logarithm of an expression.
     let Logarithm (expr: ModelExpression<1>) : ModelExpression<1> =
         let (ME e) = expr
         ME(Untyped.Logarithm e)
@@ -616,7 +624,7 @@ module Language =
                 else
                     let interval =
                         Statistics.RootFinding.Tensor.Interval.identify
-                            500
+                            250
                             penalty
                             (%%fLambda: Tensor -> Tensor)
                             %targetExpr
@@ -1312,14 +1320,6 @@ module Language =
             let boxed = Parameter.Pool.boxParam<'u> name.Value p.Parameter
             ModelBuilder.add name.Value (ModelBuilder.ParameterFragment boxed) builder
 
-        let internal addParameter<[<Measure>] 'time, [<Measure>] 'u>
-            (name: string)
-            (p: Parameter.Parameter<'u>)
-            (builder: ModelBuilder.ModelBuilder<'time>)
-            =
-            let boxed = Parameter.Pool.boxParam<'u> name p
-            ModelBuilder.add name (ModelBuilder.ParameterFragment boxed) builder
-
         let addMeasure<[<Measure>] 'time, [<Measure>] 'u>
             (name: MeasureId<'u>)
             (measure: ModelExpression<'u>)
@@ -1359,32 +1359,15 @@ module Language =
         let emptyState<[<Measure>] 'time> isDiscrete : ModelBuilderState<'time, Missing, Missing> =
             { Inner = ModelBuilder.create isDiscrete () }
 
-        let addRateEq
-            (sid: StateId<'u>)
-            (expr: ModelExpression<'stateUnit / 'timeUnit>)
-            (mb: ModelBuilderState<'time, 'E, 'L>)
-            =
-            let (StateIdInner sc) = sid
-
-            { mb with
-                Inner = ModelBuilder.addEquationRate sc expr mb.Inner }
-
-        let addDiscreteEq (sid: StateId<'u>) (expr: ModelExpression<'u>) (mb: ModelBuilderState<'time, 'E, 'L>) =
-            let (StateIdInner sc) = sid
-
-            { mb with
-                Inner = ModelBuilder.addEquationDiscrete sc expr mb.Inner }
-
         type ModelSystemBuilder<[<Measure>] 'time>(isDiscrete) =
             member _.Yield(_) = emptyState<'time> isDiscrete
             member _.Delay(f) = f ()
 
-            [<CustomOperation("parameter")>]
+            [<CustomOperation("estimate")>]
             member _.Parameter<[<Measure>] 'u, 'E, 'L>
-                (state: ModelBuilderState<'time, 'E, 'L>, configuredParameter: IncludedParameter<'u>)
+                (state: ModelBuilderState<'time, 'E, 'L>, p: IncludedParameter<'u>)
                 =
-                let (ParamIdInner sc) = configuredParameter.ParamId
-                { Inner = Model.addParameter sc.Value configuredParameter.Parameter state.Inner }
+                { Inner = Model.estimateParameter p state.Inner }
 
             [<CustomOperation("equationDiscrete")>]
             member _.EquationDiscrete
@@ -1406,6 +1389,12 @@ module Language =
                 =
                 { Inner = Model.addMeasure mid data state.Inner }
 
+            [<CustomOperation("initialise")>]
+            member _.Measure<[<Measure>] 'u, 'E, 'L>
+                (state: ModelBuilderState<'time, 'E, 'L>, sid: StateId<'u>, initFn)
+                =
+                { Inner = Model.initialiseHiddenStateWith sid initFn state.Inner }
+
             /// Add exactly one likelihood function.
             [<CustomOperation("likelihood")>]
             member _.Likelihood<'E>
@@ -1416,10 +1405,10 @@ module Language =
             member _.Run(state: ModelBuilderState<'time, Present, Present>) = ModelBuilder.compile state.Inner
 
 
-    let discreteModel<[<Measure>] 'time> : ModelSystemDsl.ModelSystemBuilder<'time> =
+    let modelDiscrete<[<Measure>] 'time> : ModelSystemDsl.ModelSystemBuilder<'time> =
         ModelSystemDsl.ModelSystemBuilder true
 
-    let continuousModel<[<Measure>] 'time> : ModelSystemDsl.ModelSystemBuilder<'time> =
+    let modelContinuous<[<Measure>] 'time> : ModelSystemDsl.ModelSystemBuilder<'time> =
         ModelSystemDsl.ModelSystemBuilder false
 
 
@@ -1493,8 +1482,8 @@ module Language =
 
         let withEnvironmentGen
             (obs: StateId<'s>)
-            (genFn: float<'date> -> float<'s>)
-            (settings: TestSettings<'state, float<'date>, 'a, 'b>)
+            (genFn: 'date -> float<'s>)
+            (settings: TestSettings<'state, 'date, 'a, 'b>)
             =
             let envTs =
                 Bristlecone.Time.TimeSeries.fromGen
@@ -1596,7 +1585,7 @@ module Language =
         type SubComponentState<[<Measure>] 'u> =
             { Label: string
               Expr: ModelExpression<'u> option
-              Estimates: (string * Parameter.Constraint * float * float) list }
+              Estimates: (string * Parameter.Constraint<'u> * float * float) list }
 
         type ComponentState<[<Measure>] 'u> = { Options: SubComponentState<'u> list }
 
@@ -1616,7 +1605,7 @@ module Language =
             member _.Bind(p: Parameter.Parameter<'p>, cont: Parameter.Parameter<'p> -> SubComponentState<'u>) = cont p
 
             member _.Parameter<[<Measure>] 'p>
-                (name: string, con, lower: float<'p>, upper: float<'p>, state: SubComponentState<'u>)
+                (name: string, con, lower: float<'p>, upper: float<'p>, state: SubComponentState<'p>)
                 =
                 let p = parameter name con lower upper
 
@@ -1668,18 +1657,6 @@ module Language =
     // let subcomponent<[<Measure>] 'u> label (block: Components.SubComponentBuilder<'u> -> Components.SubComponentState<'u>) =
     //     block (Components.SubComponentBuilder label)
     // let modelComponent label : Components.ComponentBuilder<'u> = Components.ComponentBuilder(label)
-
-    // let nLimitation =
-    //     modelComponent "N-limitation" {
-    //         subcomponent "Linear" {
-    //             let! a = parameter "a" notNegative 0.100 0.400
-    //             expression (
-    //                 ModelComponents.GrowthLimitation.linear
-    //                     (P a / Constant 1000.)
-    //                     (Constant 5.00)
-    //             )
-    //         }
-    //     }
 
 
     /// <summary>Types to represent a hypothesis, given that a hypothesis
@@ -1735,6 +1712,9 @@ module Language =
             (comp: Components.ModelComponent<'a>)
             (builders: Writer.Writer<'a -> 'rest, ComponentName * CodedMap<Parameter.Pool.AnyParameter>> list)
             : Writer.Writer<'rest, ComponentName * CodedMap<Parameter.Pool.AnyParameter>> list =
+            if comp.Implementations.IsEmpty then
+                failwith "Components must have at least one implementation."
+
             [ for sc in comp.Implementations do
                   for (Writer.AWriter(f, logs)) in builders do
                       let entry =
@@ -1759,30 +1739,3 @@ module Language =
                         mb
 
                 Hypothesis(Model.compile withParams, logs |> List.map fst))
-
-
-
-// type Hypotheses<'subject, 'hypothesis> =
-//     | Hypotheses of Hypothesis<'subject, 'hypothesis> seq
-
-// open Bristlecone.ModelSelection
-
-// let private unwrap (ResultSetMany m) = m
-
-// let many sets = ResultSetMany sets
-
-// let subject s sets =
-//     sets
-//     |> unwrap
-//     |> Seq.filter(fun s -> s.Subject = s)
-
-// /// <summary>Map a function over results on a per-subject and per-hypothesis basis</summary>
-// /// <param name="fn">A function to map over the subject-hypothesis groups</param>
-// /// <param name="sets">A result set (many)</param>
-// /// <returns>A transformed results set</returns>
-// let map fn (sets:ResultSetMany<'subject, 'hypothesis>) =
-//     sets
-//     |> unwrap
-//     |> Seq.groupBy(fun s -> s.Subject, s.Hypothesis)
-//     |> Seq.map(fun (s, h) -> fn s h)
-//     |> ResultSetMany

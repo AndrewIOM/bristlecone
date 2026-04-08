@@ -45,45 +45,68 @@ This example demonstrates the layout of a model when defined in Bristlecone.
 *)
 open Bristlecone // Opens Bristlecone core library and estimation engine
 open Bristlecone.Language // Open the language for writing Bristlecone models
+open Bristlecone.Time // Opens time units and time manipulation
 
-let mass = state<1> "mass"
+[<Measure>] type millimetre
+[<Measure>] type celsius
 
 let hypothesis =
 
-    // Model parameters:
-    let η = parameter "η" NoConstraints 0.50 1.50
-    let β = parameter "β" NoConstraints 0.01 1.00 // m
-    let κ = parameter "κ" NoConstraints 0.01 1.00
+    let radius = state<millimetre> "radius"
+    let T = state<celsius> "temperature"
 
-    // Likelihood parameters:
-    let sigma = parameter "σ[x]" Positive 0.01 0.10
+    // Parameters with units
+    let r_max = parameter "η" NoConstraints 0.01<millimetre/day> 1.0<millimetre/day>
+    let T_opt = parameter "η" NoConstraints 5.0<celsius> 20.0<celsius>
+    let σ = parameter "σ_radius" Positive 0.1<millimetre> 0.2<millimetre>
 
-    let vonBertalanffy = P η * This ** P β - P κ * This
+    let ``dR/dt`` =  
+      let tempDiff = Environment T - P T_opt
+      let tempResponse = Exponential ( - (tempDiff * tempDiff) / Constant 20.0<celsius ^ 2> )
+      P r_max * tempResponse
 
-    let NLL = ModelLibrary.NegLogLikelihood.Normal (Require.state mass) sigma
+    let NLL = ModelLibrary.NegLogLikelihood.Normal (Require.state radius) σ
 
     Model.empty
-    |> Model.addRateEquation mass vonBertalanffy
-    |> Model.estimateParameter η
-    |> Model.estimateParameter β
-    |> Model.estimateParameter κ
+    |> Model.addRateEquation radius ``dR/dt``
+    |> Model.estimateParameter r_max
+    |> Model.estimateParameter T_opt
+    |> Model.estimateParameter σ
     |> Model.useLikelihoodFunction NLL
     |> Model.compile
 
 // Given some data (loaded using Bristlecone functions, FSharp.Data, etc.)...
 fun data ->
-  let engine = Bristlecone.mkContinuous ()
+  let engine = Bristlecone.mkContinuous () |> Bristlecone.forDailyModel
   let endCond = Optimisation.EndConditions.atIteration 10000<iteration>
   Bristlecone.fit engine endCond data hypothesis
 
 (**
-In the above snippet, a von Bertalanffy growth model is defined as a model hypothesis.
-We then create an `EstimationEngine`, which defines the methodology for model-fitting.
-In Bristlecone, an `EstimationEngine` is created and customised using the F# forward pipe
-operator (for R users this may be familiar; this concept was adapted into the dplyr %>% operator).
+In this example, we define a simple temperature‑driven growth model using Bristlecone’s
+modelling language. The state variable `radius` represents stem radius in millimetres,
+and the environmental driver `T` represents temperature in degrees Celsius. All quantities
+carry F# units of measure, and Bristlecone ensures that every expression in the
+model is dimensionally consistent.
+
+The growth rate is defined as a Gaussian response to temperature. Because `radius` has
+units of millimetres and time is measured in days, the rate equation must produce a
+value in mm/day. This is enforced by the compiler, and cannot be run without being
+correct.
+
+To complete the model system, we add a likelihood function for observed stem radius
+that assumes Gaussian observation error (with standard deviation `σ_radius`).
+
+To confront the model with data, we create an `EstimationEngine`. An engine is a formal description
+of the method that will be used for model-fitting. Engines are built using the F# forward‑pipe (`|>`)
+operator, allowing composition of numerical integration methods, time‑conversion rules,
+conditioning behaviour, and optimisation strategies in a readable, declarative style.
 
 To apply the model to data, the `Bristlecone.fit` function can be called with an end condition
 for the optimisation routine chosen in the given engine.
+
+This pattern - define a model, setup an engine, and call fit - is the core
+workflow in Bristlecone, whether you are fitting simple growth curves or
+complex multi‑state ecological models.
 
 Samples & documentation
 -----------------------
@@ -102,6 +125,9 @@ as an F# script or Jupyter notebook using the buttons at the top of each example
  * For palaeoecology, a [sediment core example](examples/sedimentary.html) shows similar methods
    applied to sedimentary isotope and pollen time-series with uneven time-steps.
 
+ * A real research project using Bristlecone [is viewable here](https://github.com/AndrewIOM/shrub-nutrient-modelling/tree/master/src/regional).
+   The research concerns the drivers of Arctic shrubification.
+
  * The [API Reference](reference/index.html) contains automatically generated documentation for all types, modules
    and functions in the library. This includes additional brief samples on using most of the
    functions.
@@ -110,15 +136,12 @@ Contributing and copyright
 --------------------------
 
 The project is hosted on [GitHub][gh] where you can [report issues][issues], fork 
-the project and submit pull requests. If you're adding a new public API, please also 
-consider adding [samples][content] that can be turned into documentation (using fsdocs
-literal scripting).
+the project and submit pull requests.
 
 The library is available under an MIT license, which allows modification and 
 redistribution for both commercial and non-commercial purposes. For more information see the 
 [License file][license] in the GitHub repository. 
 
-  [content]: https://github.com/AndrewIOM/Bristlecone/tree/master/docs/examples
   [gh]: https://github.com/AndrewIOM/Bristlecone
   [issues]: https://github.com/AndrewIOM/Bristlecone/issues
   [license]: https://github.com/AndrewIOM/Bristlecone/blob/master/LICENSE

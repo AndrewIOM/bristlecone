@@ -4,6 +4,7 @@
 
 ![NuGet Downloads](https://img.shields.io/nuget/dt/Bristlecone?labelColor=%23E8E8E8&color=%238D6F64)
 [![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/AndrewIOM/Bristlecone/push.yml?logo=github&label=FAKE%20build%20and%20test)](https://github.com/AndrewIOM/bristlecone/actions/workflows/push.yml)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18713148.svg)](https://doi.org/10.5281/zenodo.18713148)
 
 An F# library for model-fitting model-selection (MFMS) of time-series models to observational data. Included is expressive modelling system for authoring models, which includes full F# units of measure support.
 

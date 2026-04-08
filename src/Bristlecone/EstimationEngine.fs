@@ -34,7 +34,6 @@ module ModelSystem =
     /// equations. Each are both require the same inputs, but differ in
     /// whether a solver is applied or not. Here, the DU's purpose is for
     /// additional type safety.
-    /// TODO Allow state to differ between equations.
     type ModelForm<[<Measure>] 'timeUnit> =
         | DifferenceEqs of CodedMap<StateEquation<'timeUnit>>
         | DifferentialEqs of CodedMap<RateEquation<'timeUnit>>
@@ -171,7 +170,7 @@ module EstimationEngine =
     /// The domain is fine to be float-based, as it is only
     /// used to initialise the optimisation routine.
     /// Represents the bounds and any constraint.
-    type Domain = (float<``optim-space``> * float<``optim-space``> * Parameter.Constraint)[]
+    type Domain = (float<``optim-space``> * float<``optim-space``> * Parameter.Constraint<``optim-space``>)[]
 
     /// Model equations for estimation may be require time to be
     /// in indexed form (i.e. common across models and data).

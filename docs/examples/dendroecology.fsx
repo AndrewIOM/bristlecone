@@ -92,6 +92,7 @@ let hypothesis =
     Model.empty
     |> Model.addRateEquation SP ``db/dt``
     |> Model.addRateEquation SR ``dW/dt``
+    |> Model.initialiseHiddenStateWith SP (Constant 0.36<mm>)
     |> Model.estimateParameter Ea
     |> Model.estimateParameter γB
     |> Model.estimateParameter r
@@ -241,15 +242,11 @@ let exampleShrub =
 
 We use `Bristlecone.fitDendro` as a convenience function to work with `PlantIndividual` types.
 
-One complexity is that the conditioning requires specifying the value for the internal stem
-production dynamic equation, which is effectively a hidden state
-(TODO Replace with the hidden states initialiser functions on the model system itself).
 *)
 
 (*** do-not-eval ***)
 let result =
-    let e = engine |> Bristlecone.withConditioning(Conditioning.Custom (Map.ofList [ SP.Code, 0.36; SR.Code, 0.36 ]))
-    Bristlecone.fitDendro e Settings.endWhen hypothesis Bristlecone.FittingMethod.CumulativeGrowth SR.Code exampleShrub
+    Bristlecone.fitDendro engine Settings.endWhen hypothesis Bristlecone.FittingMethod.CumulativeGrowth SR.Code exampleShrub
 
 let outputDir = __SOURCE_DIRECTORY__ + "/cached/"
 

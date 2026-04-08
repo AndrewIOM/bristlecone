@@ -348,15 +348,6 @@ module Solver =
                 if not (solverTimeline |> Array.contains t) then
                     invalidOp (sprintf "Environment variable has Exact mode but no value at solver time %A" t))
 
-        // let private buildKeepMask headSeries startDate observationRes timeline =
-        //     let observedIndices =
-        //         headSeries
-        //         |> TimeIndex.create startDate observationRes
-        //         |> Seq.map fst
-        //         |> Set.ofSeq
-
-        //     timeline |> Array.map (fun idx -> Set.contains idx observedIndices)
-
         let private stateVariableKeys (models: ModelSystem.ModelForm<'modelTimeUnit>) =
             match models with
             | ModelForm.DifferenceEqs eqs -> eqs |> Map.keys

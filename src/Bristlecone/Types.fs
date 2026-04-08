@@ -220,8 +220,9 @@ module List =
                   for z in zs do
                       yield (x, y, z) ]
 
-    // See: https://stackoverflow.com/questions/32891307/matrix-transposition-in-f
-    let flip matrix =
+    /// Transposes a list of lists.
+    /// See: https://stackoverflow.com/questions/32891307/matrix-transposition-in-f
+    let transpose matrix =
         match matrix with
         | [] -> []
         | x :: xs ->
@@ -236,6 +237,7 @@ module List =
 
             loop matrix (List.init length (fun _ -> []))
             |> List.map (fun x -> x |> List.rev)
+
 
 [<AutoOpen>]
 module Result =

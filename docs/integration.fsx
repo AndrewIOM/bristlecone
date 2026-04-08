@@ -35,30 +35,35 @@ changes in the modelled properties through time.
 
 The following integration functions are included within the `Bristlecone.Integration` namespace:
 
-| Solver | Function | Description |
-| - | - | - |
-| Runge-Kutta 4 | ``Integration.RungeKutta.rk4`` | A fourth-order Runge Kutta method to provide approximate solutions to ODE systems. |
+#### Runge-Kutta 4
+*)
+
+Bristlecone.Integration.RungeKutta.rk4
+
+(**
+A fourth-order Runge Kutta method to provide approximate solutions to ODE systems.
 
 ### Adding a custom integration method
 
 You can add a custom integration routine by wrapping your integration
 function to match the `EstimationEngine.Integration.IntegrationRoutine` type signature as follows:
-
 *)
 
 open Bristlecone
 
 let myCustomIntegrator: EstimationEngine.Integration.IntegrationRoutine =
-    fun tInitial tEnd tStep initialConditions rhs -> invalidOp "Doesn't actually do anything!"
+    fun tInitial tEnd tStep initialConditions (rhs:EstimationEngine.ParameterisedRHS) ->
+        invalidOp "Doesn't actually do anything!"
 
 let engine () =
     Bristlecone.mkContinuous () |> Bristlecone.withContinuousTime myCustomIntegrator
 
 (**
+A custom integration routine is parameterised with fixed time-stepping between
+`tInitial` and `tEnd`, with `tStep` step size. The 'rhs' function to be integrated
+is a function compiled by Bristlecone that takes two arguments: first, a scalar
+of the current time *t*; and second a vector of the current state values.
 
-When defining a custom integration routine, the argument rhs is a compiled
-internally using `Base.makeCompiledFunctionForIntegration` function from
-the `Bristlecone.Integration` namespace. This function is used to 
-compile a 'right-hand side' equation that 'bakes in' the environment
-(external forcing) data.
+Internally, if variable time-steps are required Bristlecone runs multiple
+fixed integration routines between each pair of time-points.
 *)

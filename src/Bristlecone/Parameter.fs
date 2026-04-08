@@ -5,24 +5,27 @@ open System
 [<RequireQualifiedAccess>]
 module Parameter =
 
-    type Constraint =
+    type Constraint<[<Measure>] 'u> =
         | Unconstrained
         | PositiveOnly
+        | Bounded of lower: float<'u> * upper: float<'u>
 
     type Estimation<[<Measure>] 'u> =
         | NotEstimated of lowStartingBound: float<'u> * highStartingBound: float<'u>
         | Estimated of estimate: float<'u>
 
-    type Parameter<[<Measure>] 'u> = private Parameter of Constraint * Estimation<'u>
+    type Parameter<[<Measure>] 'u> = private Parameter of Constraint<'u> * Estimation<'u>
 
     let private unwrap (Parameter(c, e)) = c, e
 
-    let internal isValid (con: Constraint) (x: float<'u>) =
-        let v = float x
-
-        not (Double.IsNaN v)
-        && not (Double.IsInfinity v)
-        && (con <> PositiveOnly || v > 0.0)
+    let internal isValid (con: Constraint<'u>) (x: float<'u>) =
+        if Units.isNotFinite x then
+            false
+        else
+            match con with
+            | Unconstrained -> true
+            | PositiveOnly -> x > Units.tagUnit 0.
+            | Bounded(lo, hi) -> x > lo && x < hi
 
     let create con (bound1: float<'u>) (bound2: float<'u>) =
         if isValid con bound1 && isValid con bound2 then
@@ -71,8 +74,8 @@ module Parameter =
             { Forward: TypedTensor<Scalar, 'space> -> TypedTensor<Scalar, ``parameter``>
               Inverse: TypedTensor<Scalar, ``parameter``> -> TypedTensor<Scalar, 'space> }
 
-        // Detached/bounded mode: identity mapping regardless of constraint
-        let scalarTransformOptimSpace (constraint_: Constraint) : OptimSpaceTransform<``optim-space``> =
+        /// Detached/bounded mode: identity mapping regardless of constraint.
+        let scalarTransformOptimSpace: OptimSpaceTransform<``optim-space``> =
             { Forward =
                 fun (z: TypedTensor<Scalar, ``optim-space``>) -> z.Value |> tryAsScalar<``parameter``> |> Option.get
               Inverse =
@@ -80,9 +83,9 @@ module Parameter =
 
         // Transformed mode: apply constraint transforms
         let scalarTransformOptimSpaceTransformed
-            (constraint_: Constraint)
+            (cons: Constraint<parameter>)
             : OptimSpaceTransform<``optim-space-transformed``> =
-            match constraint_ with
+            match cons with
             | Constraint.Unconstrained ->
                 { Forward =
                     fun (z: TypedTensor<Scalar, ``optim-space-transformed``>) ->
@@ -97,6 +100,20 @@ module Parameter =
                   Inverse =
                     fun (x: TypedTensor<Scalar, ``parameter``>) ->
                         dsharp.log x.Value |> tryAsScalar<``optim-space-transformed``> |> Option.get }
+            | Constraint.Bounded(low, hi) ->
+                let lowT = Typed.ofScalar low
+                let hiT = Typed.ofScalar hi
+                let one = Typed.ofScalar 1.
+
+                { Forward =
+                    fun (z: TypedTensor<Scalar, ``optim-space-transformed``>) ->
+                        let sigma = dsharp.sigmoid z.Value |> tryAsScalar<1> |> Option.get
+                        lowT + (hiT - lowT) * sigma
+                  Inverse =
+                    fun (x: TypedTensor<Scalar, ``parameter``>) ->
+                        let sigma = (x - lowT) / (hiT - lowT)
+                        let z = Typed.logScalar (sigma / (one - sigma))
+                        z |> Typed.retype }
 
 
     [<RequireQualifiedAccess>]
@@ -110,9 +127,15 @@ module Parameter =
                 { Name: string
                   ToTensorRealIO: unit -> Tensor
                   FromTensorRealIO: Tensor -> AnyParameter
-                  GetConstraint: unit -> Constraint
+                  GetConstraint: unit -> Constraint<parameter>
                   TryGetReal: unit -> float option
                   TryGetBounds: unit -> (float<parameter> * float<parameter>) option }
+
+        let private retypeConstraint =
+            function
+            | Unconstrained -> Unconstrained
+            | PositiveOnly -> PositiveOnly
+            | Bounded(low, hi) -> Bounded(Units.retype low, Units.retype hi)
 
         let boxParam<[<Measure>] 'u> (name: string) (p: Parameter<'u>) : AnyParameter =
             let rec make param =
@@ -129,7 +152,7 @@ module Parameter =
                         match setRealValue param x with
                         | Ok p' -> make p'
                         | Error m -> invalidOp m
-                  GetConstraint = fun () -> let (Parameter(c, _)) = param in c
+                  GetConstraint = fun () -> let (Parameter(c, _)) = param in retypeConstraint c
                   TryGetReal = fun () -> tryGetEstimate param |> Option.map float
                   TryGetBounds =
                     fun () ->
@@ -204,7 +227,7 @@ module Parameter =
         /// Compiles forward and inverse transformations between parameter-space (real units)
         /// and optimisation space.
         let internal compileTransformsWith<[<Measure>] 'space>
-            (mkScalar: Constraint -> ParameterTransforms.OptimSpaceTransform<'space>)
+            (mkScalar: Constraint<parameter> -> ParameterTransforms.OptimSpaceTransform<'space>)
             isBounded
             (Pool p)
             : CompiledTransforms<'space> =
@@ -246,7 +269,7 @@ module Parameter =
               IsBounded = isBounded }
 
         let internal compileTransformsBounded (pool: ParameterPool) =
-            compileTransformsWith<``optim-space``> ParameterTransforms.scalarTransformOptimSpace true pool
+            compileTransformsWith<``optim-space``> (fun _ -> ParameterTransforms.scalarTransformOptimSpace) true pool
 
         let internal compileTransformsTransformed (pool: ParameterPool) =
             compileTransformsWith<``optim-space-transformed``>
@@ -256,20 +279,33 @@ module Parameter =
 
 
         type OptimiserConfig<[<Measure>] 'space> =
-            { Domain: (float<'space> * float<'space> * Constraint)[]
-              Constraints: Constraint list
+            { Domain: (float<'space> * float<'space> * Constraint<'space>)[]
               Compiled: CompiledTransforms<'space> }
 
         and AnyOptimiserConfig =
             | DetachedConfig of OptimiserConfig<``optim-space``>
             | TransformedConfig of OptimiserConfig<``optim-space-transformed``>
 
+        /// Transform the units of a constraint from parameter (real) units into
+        /// optimisation space units.
+        let internal transformConstraint<[<Measure>] 'space>
+            (inv: TypedTensor<Scalar, parameter> -> TypedTensor<Scalar, 'space>)
+            (cons: Constraint<parameter>)
+            =
+            let invF f =
+                Typed.ofScalar f |> inv |> Typed.toFloatScalar
+
+            match cons with
+            | Unconstrained -> Unconstrained
+            | PositiveOnly -> PositiveOnly
+            | Bounded(low, hi) -> Bounded(invF low, invF hi)
+
         /// Builds a Domain array from the starting bounds in the pool,
         /// mapping them into optimiser space using the per-parameter scalar transforms.
         let internal buildDomainFromBounds<[<Measure>] 'space>
             (compiled: CompiledTransforms<'space>)
             (pool: ParameterPool)
-            : (float<'space> * float<'space> * Constraint)[] =
+            : (float<'space> * float<'space> * Constraint<'space>)[] =
 
             pool
             |> toList
@@ -283,7 +319,7 @@ module Parameter =
 
                     let con =
                         if compiled.IsBounded then
-                            ap.GetConstraint()
+                            ap.GetConstraint() |> transformConstraint inv
                         else
                             Unconstrained
 
@@ -297,12 +333,10 @@ module Parameter =
         /// Make a configuration for an optimiser that handles
         /// unit transforms to bounded optimisation space.
         let toOptimiserConfigBounded (pool: ParameterPool) : OptimiserConfig<``optim-space``> =
-            let constraints = pool |> toList |> List.map (fun (_, ap) -> ap.GetConstraint())
             let compiled = compileTransformsBounded pool
             let domainArray = buildDomainFromBounds compiled pool
 
             { Domain = domainArray
-              Constraints = constraints
               Compiled = compiled }
 
         /// Make a configuration for an optimiser that handles
@@ -313,7 +347,6 @@ module Parameter =
             let domainArray = buildDomainFromBounds compiled pool
 
             { Domain = domainArray
-              Constraints = []
               Compiled = compiled }
 
         /// Draw a random set of parameters in real space within their bounds.
