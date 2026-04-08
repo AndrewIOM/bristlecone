@@ -1,0 +1,967 @@
+<!DOCTYPE html>
+<html lang="en" data-root="https://acm.im/bristlecone/">
+<head>
+    <meta charset="UTF-8">
+    <meta content="IE=edge" http-equiv="X-UA-Compatible">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+    <meta content="Andrew Martin" name="author">
+    <!-- Opengraph properties (https://ogp.me/) -->
+    <meta property="og:site_name" content="bristlecone">
+    <meta property="og:title" content="Simple plant growth models" />
+    <meta property="og:url" content="https://acm.im/bristlecone/examples/plant-growth.html">
+    <meta property="og:type" content="website" />
+    <!-- Twitter cards (https://developer.twitter.com/en/docs/twitter-for-websites/cards/overview/summary-card-with-large-image) -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:site" content="https://acm.im/bristlecone/">
+    <meta name="twitter:title" content="Simple plant growth models">
+    
+    <title>Simple plant growth models | bristlecone</title>
+    <link href="https://fonts.googleapis.com" rel="preconnect">
+    <link crossorigin href="https://fonts.gstatic.com" rel="preconnect">
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code&display=swap" rel="stylesheet">
+    <script src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js"></script>
+    <link href="https://acm.im/bristlecone/img/favicon.ico" rel="icon" sizes="32x32" type="image/png"/>
+    <script type="application/javascript" src="https://acm.im/bristlecone/content/fsdocs-theme-set-dark.js"></script>
+    <script type="application/javascript" src="https://acm.im/bristlecone/content/fsdocs-details-set-expanded.js"></script>
+    <link href="https://acm.im/bristlecone/content/fsdocs-default.css" rel="stylesheet" type="text/css"/>
+    <link href="https://acm.im/bristlecone/content/fsdocs-theme.css" rel="stylesheet" type="text/css"/>
+    <script src="https://cdn.plot.ly/plotly-2.21.0.min.js"></script>
+    
+</head>
+<body class="content">
+<header>
+    <div class="start">
+        <div id="menu-toggle">
+            <iconify-icon class="icon closed" height="22" icon="eva:menu-fill" width="22"></iconify-icon>
+            <iconify-icon class="icon open" height="22" icon="mi:close" width="22"></iconify-icon>
+            <input type="checkbox" name="mobile-menu" />
+            <ul class="menu">
+                <li class="nav-header">Links</li>
+                <li class="license-menu-item builtin-menu-item nav-item"><a class="nav-link" href="https://github.com/AndrewIOM/bristlecone/blob/master/LICENSE">License</a>
+                </li>
+                <li class="release-notes-menu-item builtin-menu-item nav-item"><a class="nav-link"
+                                        href="https://github.com/AndrewIOM/bristlecone/blob/master/RELEASE_NOTES.MD">Release
+                    Notes</a></li>
+                <li class="repository-menu-item builtin-menu-item nav-item"><a class="nav-link" href="https://github.com/AndrewIOM/bristlecone/">Source
+                    Repository</a></li>
+                <li class="nav-header ">
+  The Bristlecone Language
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/language.html">
+    Writing Models
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model.html">
+    Defining a Hypothesis (or Model System)
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/estimation-engine.html">
+    Defining a Model-Fitting Method (Estimation Engine)
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/composing-models.html">
+    Composing models into many hypotheses
+  </a>
+</li>             
+<li class="nav-header ">
+  Techniques
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model-fitting.html">
+    Model Fitting
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model-selection.html">
+    Model Selection
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/workflow.html">
+    Ensembles and Parallel Processing
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/confidence-intervals.html">
+    Calculating Confidence Intervals
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/diagnostics.html">
+    Diagnostics
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/data.html">
+    Loading and Saving Data
+  </a>
+</li>             
+<li class="nav-header ">
+  Bristlecone.Dendro
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/dendro.html">
+    Dendroecology
+  </a>
+</li>             
+<li class="nav-header active">
+  Examples
+</li>             
+<li class="nav-item active">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/plant-growth.html">
+    Simple plant growth models
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/predator-prey.html">
+    Predator-Prey Dynamics
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/dendroecology.html">
+    Wood rings: investigating plant-environment interactions
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/sedimentary.html">
+    The long-term ecological detective: Holocene ecosystem functioning
+  </a>
+</li>             
+<li class="nav-header ">
+  Components
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/optimisation.html">
+    Optimisation
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/time-series.html">
+    Time-Series and Time-Frames
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/integration.html">
+    Integration
+  </a>
+</li>             
+<li class="nav-header ">
+  Other
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/data/dendro/readme.html">
+    readme
+  </a>
+</li>
+                <li class="nav-header">
+  API Reference
+</li>             
+<li class="nav-item">
+  <a class="nav-link" href="https://acm.im/bristlecone/reference/index.html">
+    All Namespaces
+  </a>
+</li>
+            </ul>
+        </div>
+        <a href="https://acm.im/bristlecone/">
+            <img alt="Header menu logo" src="https://acm.im/bristlecone//img/logo.png">
+            <strong>bristlecone</strong>
+        </a>
+    </div>
+    <div class="end">
+        <a href="https://github.com/AndrewIOM/bristlecone/" target="_blank">
+            <iconify-icon icon="uil:github" width="26" height="26"></iconify-icon>
+        </a>
+        <iconify-icon id="search-btn" icon="carbon:search" class="search" width="24" height="24"></iconify-icon>
+        <fsdocs-theme-toggle></fsdocs-theme-toggle>
+    </div>
+</header>
+<aside id="fsdocs-main-menu">
+    <ul class="menu">
+        <li class="nav-header">Links</li>
+        <li class="license-menu-item builtin-menu-item nav-item"><a class="nav-link" href="https://github.com/AndrewIOM/bristlecone/blob/master/LICENSE">License</a>
+        </li>
+        <li class="release-notes-menu-item builtin-menu-item nav-item"><a class="nav-link"
+                                href="https://github.com/AndrewIOM/bristlecone/blob/master/RELEASE_NOTES.MD">Release
+            Notes</a></li>
+        <li class="repository-menu-item builtin-menu-item nav-item"><a class="nav-link" href="https://github.com/AndrewIOM/bristlecone/">Source
+            Repository</a></li>
+        <li class="nav-header ">
+  The Bristlecone Language
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/language.html">
+    Writing Models
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model.html">
+    Defining a Hypothesis (or Model System)
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/estimation-engine.html">
+    Defining a Model-Fitting Method (Estimation Engine)
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/composing-models.html">
+    Composing models into many hypotheses
+  </a>
+</li>             
+<li class="nav-header ">
+  Techniques
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model-fitting.html">
+    Model Fitting
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/model-selection.html">
+    Model Selection
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/workflow.html">
+    Ensembles and Parallel Processing
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/confidence-intervals.html">
+    Calculating Confidence Intervals
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/diagnostics.html">
+    Diagnostics
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/data.html">
+    Loading and Saving Data
+  </a>
+</li>             
+<li class="nav-header ">
+  Bristlecone.Dendro
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/dendro.html">
+    Dendroecology
+  </a>
+</li>             
+<li class="nav-header active">
+  Examples
+</li>             
+<li class="nav-item active">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/plant-growth.html">
+    Simple plant growth models
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/predator-prey.html">
+    Predator-Prey Dynamics
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/dendroecology.html">
+    Wood rings: investigating plant-environment interactions
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/sedimentary.html">
+    The long-term ecological detective: Holocene ecosystem functioning
+  </a>
+</li>             
+<li class="nav-header ">
+  Components
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/optimisation.html">
+    Optimisation
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/time-series.html">
+    Time-Series and Time-Frames
+  </a>
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/integration.html">
+    Integration
+  </a>
+</li>             
+<li class="nav-header ">
+  Other
+</li>             
+<li class="nav-item ">
+  <a class="nav-link" href="https://acm.im/bristlecone/examples/data/dendro/readme.html">
+    readme
+  </a>
+</li>
+        <li class="nav-header">
+  API Reference
+</li>             
+<li class="nav-item">
+  <a class="nav-link" href="https://acm.im/bristlecone/reference/index.html">
+    All Namespaces
+  </a>
+</li>
+    </ul>
+</aside>
+<main>
+    <div id="content">
+        
+<p><a href="https://acm.im/bristlecone//examples/plant-growth.fsx"><img src="https://acm.im/bristlecone//img/badge-script.svg" alt="Script" /></a>&emsp;
+<a href="https://acm.im/bristlecone//examples/plant-growth.ipynb"><img src="https://acm.im/bristlecone//img/badge-notebook.svg" alt="Notebook" /></a></p>
+<p>In this example, we use Bristlecone to fit a suite of classical non‑linear
+plant‑growth models to data from a controlled growth experiment.</p>
+<p><a href="https://doi.org/10.1111%2Fj.2041-210X.2011.00155.x">Paine et al. (2012)</a>
+identify seven widely used functional forms for modelling plant biomass
+through time. These models differ in their assumptions about asymptotes,
+growth rates, and curvature, and are a natural testbed for demonstrating
+Bristlecone’s model‑expression system and optimisation workflow.</p>
+<p>We implement the dM/dt forms of all seven models using Bristlecone’s
+declarative syntax, then fit them to the Holcus unshaded growth dataset
+from Paine et al. (2012) using Nelder–Mead optimisation.</p>
+<p>First, we open Bristlecone core libraries.</p>
+<h3><a name="Defining-the-models" class="anchor" href="#Defining-the-models">Defining the models</a></h3>
+<p>For units of measure, we can choose to use built-in F# units from
+the <code>FSharp.Data.UnitSystems.SI.UnitSymbols</code> namespace, or declare our own.
+Similarly, time-based units (days, months, years) are available in the
+Bristlecone.Time module. Here, we use the time units from Bristlecone,
+and declare grams as a new unit type.</p>
+<pre class="fssnip highlighted"><code lang="fsharp"><span class="pn">[&lt;</span><span onmouseout="hideTip(event, 'fs4', 6)" onmouseover="showTip(event, 'fs4', 6)" class="rt">Measure</span><span class="pn">&gt;]</span> <span class="k">type</span> <span onmouseout="hideTip(event, 'fs5', 7)" onmouseover="showTip(event, 'fs5', 7)" class="rt">gram</span>
+
+<span class="k">let</span> <span onmouseout="hideTip(event, 'fs6', 8)" onmouseover="showTip(event, 'fs6', 8)" class="id">mass</span> <span class="o">=</span> <span onmouseout="hideTip(event, 'fs7', 9)" onmouseover="showTip(event, 'fs7', 9)" class="fn">state</span><span class="pn">&lt;</span><span onmouseout="hideTip(event, 'fs5', 10)" onmouseover="showTip(event, 'fs5', 10)" class="rt">gram</span><span class="pn">&gt;</span> <span class="s">&quot;mass&quot;</span>
+</code></pre>
+<p>For the growth functions, there are five different parameters
+across the seven models, which we declare. To declare parameters,
+a reasonable starting bound and a constraint are required. Often,
+parameters will be declared as <code>Positive</code>, but can also be
+<code>NoConstraints</code> for unconstrained. Parameter constraints are handled
+automatically by the optimisers, such that the Nelder-Mead algorithm
+will run in a transformed (unbounded) parameter space.</p>
+<p>Each model is expressed in its differential form (dM/dt),
+which Bristlecone integrates automatically when fitting
+continuous‑time systems.</p>
+<p>The parameter r represents different biological processes across
+the seven models (absolute growth rate, proportional growth rate,
+curvature parameter, etc.), so we define rAbs and r separately
+to avoid conflating meanings.</p>
+<pre class="fssnip highlighted"><code lang="fsharp"><span class="k">module</span> <span class="m">GrowthFunctions</span> <span class="o">=</span>
+
+    <span class="c">// Parameters</span>
+    <span class="k">let</span> <span onmouseout="hideTip(event, 'fs8', 11)" onmouseover="showTip(event, 'fs8', 11)" class="id">K</span> <span class="o">=</span> <span onmouseout="hideTip(event, 'fs9', 12)" onmouseover="showTip(event, 'fs9', 12)" class="fn">parameter</span> <span class="s">&quot;K&quot;</span> <span onmouseout="hideTip(event, 'fs10', 13)" onmouseover="showTip(event, 'fs10', 13)" class="id">Positive</span> <span class="n">20.0</span><span class="pn">&lt;</span><span onmouseout="hideTip(event, 'fs5', 14)" onmouseover="showTip(event, 'fs5', 14)" class="rt">gram</span><span class="pn">&gt;</span> <span class="n">40.0</span><span class="pn">&lt;</span><span onmouseout="hideTip(event, 'fs5', 15)" onmouseover="showTip(event, 'fs5', 15)" class="rt">gram</span><span class="pn">&gt;</span> <span class="c">// upper asymptote</span>
+    <span class="k">let</span> <span onmouseout="hideTip(event, 'fs11', 16)" onmouseover="showTip(event, 'fs11', 16)" class="id">β</span> <span class="o">=</span> <span onmouseout="hideTip(event, 'fs9', 17)" onmouseover="showTip(event, 'fs9', 17)" class="fn">parameter</span> <span class="s">&quot;β&quot;</span> <span onmouseout="hideTip(event, 'fs10', 18)" onmouseover="showTip(event, 'fs10', 18)" class="id">Positive</span> <span class="n">0.1</span> <span class="n">2.0</span>
+    <span class="k">let</span> <span onmouseout="hideTip(event, 'fs12', 19)" onmouseover="showTip(event, 'fs12', 19)" class="id">L</span> <span class="o">=</span> <span onmouseout="hideTip(event, 'fs9', 20)" onmouseover="showTip(event, 'fs9', 20)" class="fn">parameter</span> <span class="s">&quot;L&quot;</span> <span onmouseout="hideTip(event, 'fs10', 21)" onmouseover="showTip(event, 'fs10', 21)" class="id">Positive</span> <span class="n">20.0</span><span class="pn">&lt;</span><span onmouseout="hideTip(event, 'fs5', 22)" onmouseover="showTip(event, 'fs5', 22)" class="rt">gram</span><span class="pn">&gt;</span> <span class="n">40.0</span><span class="pn">&lt;</span><span onmouseout="hideTip(event, 'fs5', 23)" onmouseover="showTip(event, 'fs5', 23)" class="rt">gram</span><span class="pn">&gt;</span> <span class="c">// lower asymptote</span>
+
+    <span class="c">// The meaning of r changes between models, so define it seperately</span>
+    <span class="k">let</span> <span onmouseout="hideTip(event, 'fs13', 24)" onmouseover="showTip(event, 'fs13', 24)" class="id">rAbs</span> <span class="o">=</span> <span onmouseout="hideTip(event, 'fs9', 25)" onmouseover="showTip(event, 'fs9', 25)" class="fn">parameter</span> <span class="s">&quot;r_abs&quot;</span> <span onmouseout="hideTip(event, 'fs10', 26)" onmouseover="showTip(event, 'fs10', 26)" class="id">Positive</span> <span class="n">1.1</span><span class="pn">&lt;</span><span onmouseout="hideTip(event, 'fs5', 27)" onmouseover="showTip(event, 'fs5', 27)" class="rt">gram</span><span class="o">/</span><span onmouseout="hideTip(event, 'fs14', 28)" onmouseover="showTip(event, 'fs14', 28)" class="rt">day</span><span class="pn">&gt;</span> <span class="n">1.2</span><span class="pn">&lt;</span><span onmouseout="hideTip(event, 'fs5', 29)" onmouseover="showTip(event, 'fs5', 29)" class="rt">gram</span><span class="o">/</span><span onmouseout="hideTip(event, 'fs14', 30)" onmouseover="showTip(event, 'fs14', 30)" class="rt">day</span><span class="pn">&gt;</span>
+    <span class="k">let</span> <span onmouseout="hideTip(event, 'fs15', 31)" onmouseover="showTip(event, 'fs15', 31)" class="id">r</span> <span class="o">=</span> <span onmouseout="hideTip(event, 'fs9', 32)" onmouseover="showTip(event, 'fs9', 32)" class="fn">parameter</span> <span class="s">&quot;r&quot;</span> <span onmouseout="hideTip(event, 'fs10', 33)" onmouseover="showTip(event, 'fs10', 33)" class="id">Positive</span> <span class="n">0.01</span><span class="o">&lt;/</span><span onmouseout="hideTip(event, 'fs14', 34)" onmouseover="showTip(event, 'fs14', 34)" class="rt">day</span><span class="pn">&gt;</span> <span class="n">2.00</span><span class="o">&lt;/</span><span onmouseout="hideTip(event, 'fs14', 35)" onmouseover="showTip(event, 'fs14', 35)" class="rt">day</span><span class="pn">&gt;</span>
+
+    <span class="c">// 7x typical model forms (ODEs)</span>
+    <span class="k">let</span> <span onmouseout="hideTip(event, 'fs16', 36)" onmouseover="showTip(event, 'fs16', 36)" class="id">linear</span> <span class="o">=</span> <span onmouseout="hideTip(event, 'fs17', 37)" onmouseover="showTip(event, 'fs17', 37)" class="fn">P</span> <span onmouseout="hideTip(event, 'fs13', 38)" onmouseover="showTip(event, 'fs13', 38)" class="id">rAbs</span>
+    <span class="k">let</span> <span onmouseout="hideTip(event, 'fs18', 39)" onmouseover="showTip(event, 'fs18', 39)" class="id">exponential</span> <span class="o">=</span> <span onmouseout="hideTip(event, 'fs17', 40)" onmouseover="showTip(event, 'fs17', 40)" class="fn">P</span> <span onmouseout="hideTip(event, 'fs15', 41)" onmouseover="showTip(event, 'fs15', 41)" class="id">r</span> <span class="o">*</span> <span onmouseout="hideTip(event, 'fs19', 42)" onmouseover="showTip(event, 'fs19', 42)" class="id">This</span><span class="pn">&lt;</span><span onmouseout="hideTip(event, 'fs5', 43)" onmouseover="showTip(event, 'fs5', 43)" class="rt">gram</span><span class="pn">&gt;</span>
+    <span class="k">let</span> <span onmouseout="hideTip(event, 'fs20', 44)" onmouseover="showTip(event, 'fs20', 44)" class="id">powerLaw</span> <span class="o">=</span> <span onmouseout="hideTip(event, 'fs17', 45)" onmouseover="showTip(event, 'fs17', 45)" class="fn">P</span> <span onmouseout="hideTip(event, 'fs15', 46)" onmouseover="showTip(event, 'fs15', 46)" class="id">r</span> <span class="o">*</span> <span onmouseout="hideTip(event, 'fs19', 47)" onmouseover="showTip(event, 'fs19', 47)" class="id">This</span><span class="pn">&lt;</span><span onmouseout="hideTip(event, 'fs5', 48)" onmouseover="showTip(event, 'fs5', 48)" class="rt">gram</span><span class="pn">&gt;</span> <span class="o">**</span> <span onmouseout="hideTip(event, 'fs17', 49)" onmouseover="showTip(event, 'fs17', 49)" class="fn">P</span> <span onmouseout="hideTip(event, 'fs11', 50)" onmouseover="showTip(event, 'fs11', 50)" class="id">β</span>
+    <span class="k">let</span> <span onmouseout="hideTip(event, 'fs21', 51)" onmouseover="showTip(event, 'fs21', 51)" class="id">monomolecular</span> <span class="o">=</span> <span onmouseout="hideTip(event, 'fs17', 52)" onmouseover="showTip(event, 'fs17', 52)" class="fn">P</span> <span onmouseout="hideTip(event, 'fs15', 53)" onmouseover="showTip(event, 'fs15', 53)" class="id">r</span> <span class="o">*</span> <span class="pn">(</span><span onmouseout="hideTip(event, 'fs17', 54)" onmouseover="showTip(event, 'fs17', 54)" class="fn">P</span> <span onmouseout="hideTip(event, 'fs8', 55)" onmouseover="showTip(event, 'fs8', 55)" class="id">K</span> <span class="o">-</span> <span onmouseout="hideTip(event, 'fs19', 56)" onmouseover="showTip(event, 'fs19', 56)" class="id">This</span><span class="pn">&lt;</span><span onmouseout="hideTip(event, 'fs5', 57)" onmouseover="showTip(event, 'fs5', 57)" class="rt">gram</span><span class="pn">&gt;</span><span class="pn">)</span>
+    <span class="k">let</span> <span onmouseout="hideTip(event, 'fs22', 58)" onmouseover="showTip(event, 'fs22', 58)" class="id">logistic</span> <span class="o">=</span> <span onmouseout="hideTip(event, 'fs17', 59)" onmouseover="showTip(event, 'fs17', 59)" class="fn">P</span> <span onmouseout="hideTip(event, 'fs15', 60)" onmouseover="showTip(event, 'fs15', 60)" class="id">r</span> <span class="o">*</span> <span onmouseout="hideTip(event, 'fs19', 61)" onmouseover="showTip(event, 'fs19', 61)" class="id">This</span><span class="pn">&lt;</span><span onmouseout="hideTip(event, 'fs5', 62)" onmouseover="showTip(event, 'fs5', 62)" class="rt">gram</span><span class="pn">&gt;</span> <span class="o">*</span> <span class="pn">(</span><span onmouseout="hideTip(event, 'fs23', 63)" onmouseover="showTip(event, 'fs23', 63)" class="fn">Constant</span> <span class="n">1.</span> <span class="o">-</span> <span onmouseout="hideTip(event, 'fs19', 64)" onmouseover="showTip(event, 'fs19', 64)" class="id">This</span> <span class="o">/</span> <span onmouseout="hideTip(event, 'fs17', 65)" onmouseover="showTip(event, 'fs17', 65)" class="fn">P</span> <span onmouseout="hideTip(event, 'fs8', 66)" onmouseover="showTip(event, 'fs8', 66)" class="id">K</span><span class="pn">)</span>
+    <span class="k">let</span> <span onmouseout="hideTip(event, 'fs24', 67)" onmouseover="showTip(event, 'fs24', 67)" class="id">logisticFour</span> <span class="o">=</span> <span onmouseout="hideTip(event, 'fs17', 68)" onmouseover="showTip(event, 'fs17', 68)" class="fn">P</span> <span onmouseout="hideTip(event, 'fs15', 69)" onmouseover="showTip(event, 'fs15', 69)" class="id">r</span> <span class="o">*</span> <span class="pn">(</span><span onmouseout="hideTip(event, 'fs19', 70)" onmouseover="showTip(event, 'fs19', 70)" class="id">This</span><span class="pn">&lt;</span><span onmouseout="hideTip(event, 'fs5', 71)" onmouseover="showTip(event, 'fs5', 71)" class="rt">gram</span><span class="pn">&gt;</span> <span class="o">-</span> <span onmouseout="hideTip(event, 'fs17', 72)" onmouseover="showTip(event, 'fs17', 72)" class="fn">P</span> <span onmouseout="hideTip(event, 'fs12', 73)" onmouseover="showTip(event, 'fs12', 73)" class="id">L</span><span class="pn">)</span> <span class="o">*</span> <span class="pn">(</span><span class="pn">(</span><span onmouseout="hideTip(event, 'fs17', 74)" onmouseover="showTip(event, 'fs17', 74)" class="fn">P</span> <span onmouseout="hideTip(event, 'fs8', 75)" onmouseover="showTip(event, 'fs8', 75)" class="id">K</span> <span class="o">-</span> <span onmouseout="hideTip(event, 'fs19', 76)" onmouseover="showTip(event, 'fs19', 76)" class="id">This</span><span class="pn">)</span> <span class="o">/</span> <span class="pn">(</span><span onmouseout="hideTip(event, 'fs17', 77)" onmouseover="showTip(event, 'fs17', 77)" class="fn">P</span> <span onmouseout="hideTip(event, 'fs8', 78)" onmouseover="showTip(event, 'fs8', 78)" class="id">K</span> <span class="o">-</span> <span onmouseout="hideTip(event, 'fs17', 79)" onmouseover="showTip(event, 'fs17', 79)" class="fn">P</span> <span onmouseout="hideTip(event, 'fs12', 80)" onmouseover="showTip(event, 'fs12', 80)" class="id">L</span><span class="pn">)</span><span class="pn">)</span>
+    <span class="k">let</span> <span onmouseout="hideTip(event, 'fs25', 81)" onmouseover="showTip(event, 'fs25', 81)" class="id">gompertz</span> <span class="o">=</span> <span onmouseout="hideTip(event, 'fs17', 82)" onmouseover="showTip(event, 'fs17', 82)" class="fn">P</span> <span onmouseout="hideTip(event, 'fs15', 83)" onmouseover="showTip(event, 'fs15', 83)" class="id">r</span> <span class="o">*</span> <span onmouseout="hideTip(event, 'fs19', 84)" onmouseover="showTip(event, 'fs19', 84)" class="id">This</span><span class="pn">&lt;</span><span onmouseout="hideTip(event, 'fs5', 85)" onmouseover="showTip(event, 'fs5', 85)" class="rt">gram</span><span class="pn">&gt;</span> <span class="o">*</span> <span onmouseout="hideTip(event, 'fs26', 86)" onmouseover="showTip(event, 'fs26', 86)" class="fn">Logarithm</span> <span class="pn">(</span><span onmouseout="hideTip(event, 'fs17', 87)" onmouseover="showTip(event, 'fs17', 87)" class="fn">P</span> <span onmouseout="hideTip(event, 'fs8', 88)" onmouseover="showTip(event, 'fs8', 88)" class="id">K</span> <span class="o">/</span> <span onmouseout="hideTip(event, 'fs19', 89)" onmouseover="showTip(event, 'fs19', 89)" class="id">This</span><span class="pn">)</span>
+
+    <span class="c">// Scaffold into a list of plausable hypotheses:        </span>
+    <span class="k">let</span> <span onmouseout="hideTip(event, 'fs27', 90)" onmouseover="showTip(event, 'fs27', 90)" class="id">hypotheses</span> <span class="o">=</span>
+        <span class="k">let</span> <span onmouseout="hideTip(event, 'fs28', 91)" onmouseover="showTip(event, 'fs28', 91)" class="fn">mkModel</span> <span onmouseout="hideTip(event, 'fs29', 92)" onmouseover="showTip(event, 'fs29', 92)" class="fn">ode</span> <span class="o">=</span> <span onmouseout="hideTip(event, 'fs30', 93)" onmouseover="showTip(event, 'fs30', 93)" class="m">Model</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs31', 94)" onmouseover="showTip(event, 'fs31', 94)" class="id">empty</span> <span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs30', 95)" onmouseover="showTip(event, 'fs30', 95)" class="m">Model</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs32', 96)" onmouseover="showTip(event, 'fs32', 96)" class="id">addRateEquation</span> <span onmouseout="hideTip(event, 'fs6', 97)" onmouseover="showTip(event, 'fs6', 97)" class="id">mass</span> <span onmouseout="hideTip(event, 'fs29', 98)" onmouseover="showTip(event, 'fs29', 98)" class="fn">ode</span>
+        <span class="pn">[</span>
+            <span class="s">&quot;linear&quot;</span><span class="pn">,</span> <span onmouseout="hideTip(event, 'fs28', 99)" onmouseover="showTip(event, 'fs28', 99)" class="fn">mkModel</span> <span onmouseout="hideTip(event, 'fs16', 100)" onmouseover="showTip(event, 'fs16', 100)" class="id">linear</span> <span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs30', 101)" onmouseover="showTip(event, 'fs30', 101)" class="m">Model</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs33', 102)" onmouseover="showTip(event, 'fs33', 102)" class="id">estimateParameter</span> <span onmouseout="hideTip(event, 'fs13', 103)" onmouseover="showTip(event, 'fs13', 103)" class="id">rAbs</span>
+            <span class="s">&quot;exponential&quot;</span><span class="pn">,</span> <span onmouseout="hideTip(event, 'fs28', 104)" onmouseover="showTip(event, 'fs28', 104)" class="fn">mkModel</span> <span onmouseout="hideTip(event, 'fs18', 105)" onmouseover="showTip(event, 'fs18', 105)" class="id">exponential</span> <span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs30', 106)" onmouseover="showTip(event, 'fs30', 106)" class="m">Model</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs33', 107)" onmouseover="showTip(event, 'fs33', 107)" class="id">estimateParameter</span> <span onmouseout="hideTip(event, 'fs15', 108)" onmouseover="showTip(event, 'fs15', 108)" class="id">r</span>
+            <span class="s">&quot;power&quot;</span><span class="pn">,</span> <span onmouseout="hideTip(event, 'fs28', 109)" onmouseover="showTip(event, 'fs28', 109)" class="fn">mkModel</span> <span onmouseout="hideTip(event, 'fs20', 110)" onmouseover="showTip(event, 'fs20', 110)" class="id">powerLaw</span> <span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs30', 111)" onmouseover="showTip(event, 'fs30', 111)" class="m">Model</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs33', 112)" onmouseover="showTip(event, 'fs33', 112)" class="id">estimateParameter</span> <span onmouseout="hideTip(event, 'fs15', 113)" onmouseover="showTip(event, 'fs15', 113)" class="id">r</span> <span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs30', 114)" onmouseover="showTip(event, 'fs30', 114)" class="m">Model</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs33', 115)" onmouseover="showTip(event, 'fs33', 115)" class="id">estimateParameter</span> <span onmouseout="hideTip(event, 'fs11', 116)" onmouseover="showTip(event, 'fs11', 116)" class="id">β</span>
+            <span class="s">&quot;monomolecular&quot;</span><span class="pn">,</span> <span onmouseout="hideTip(event, 'fs28', 117)" onmouseover="showTip(event, 'fs28', 117)" class="fn">mkModel</span> <span onmouseout="hideTip(event, 'fs21', 118)" onmouseover="showTip(event, 'fs21', 118)" class="id">monomolecular</span> <span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs30', 119)" onmouseover="showTip(event, 'fs30', 119)" class="m">Model</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs33', 120)" onmouseover="showTip(event, 'fs33', 120)" class="id">estimateParameter</span> <span onmouseout="hideTip(event, 'fs15', 121)" onmouseover="showTip(event, 'fs15', 121)" class="id">r</span> <span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs30', 122)" onmouseover="showTip(event, 'fs30', 122)" class="m">Model</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs33', 123)" onmouseover="showTip(event, 'fs33', 123)" class="id">estimateParameter</span> <span onmouseout="hideTip(event, 'fs8', 124)" onmouseover="showTip(event, 'fs8', 124)" class="id">K</span>
+            <span class="s">&quot;logistic (3-par)&quot;</span><span class="pn">,</span> <span onmouseout="hideTip(event, 'fs28', 125)" onmouseover="showTip(event, 'fs28', 125)" class="fn">mkModel</span> <span onmouseout="hideTip(event, 'fs22', 126)" onmouseover="showTip(event, 'fs22', 126)" class="id">logistic</span> <span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs30', 127)" onmouseover="showTip(event, 'fs30', 127)" class="m">Model</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs33', 128)" onmouseover="showTip(event, 'fs33', 128)" class="id">estimateParameter</span> <span onmouseout="hideTip(event, 'fs15', 129)" onmouseover="showTip(event, 'fs15', 129)" class="id">r</span> <span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs30', 130)" onmouseover="showTip(event, 'fs30', 130)" class="m">Model</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs33', 131)" onmouseover="showTip(event, 'fs33', 131)" class="id">estimateParameter</span> <span onmouseout="hideTip(event, 'fs8', 132)" onmouseover="showTip(event, 'fs8', 132)" class="id">K</span>
+            <span class="s">&quot;logistic (4-par)&quot;</span><span class="pn">,</span> <span onmouseout="hideTip(event, 'fs28', 133)" onmouseover="showTip(event, 'fs28', 133)" class="fn">mkModel</span> <span onmouseout="hideTip(event, 'fs24', 134)" onmouseover="showTip(event, 'fs24', 134)" class="id">logisticFour</span> <span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs30', 135)" onmouseover="showTip(event, 'fs30', 135)" class="m">Model</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs33', 136)" onmouseover="showTip(event, 'fs33', 136)" class="id">estimateParameter</span> <span onmouseout="hideTip(event, 'fs15', 137)" onmouseover="showTip(event, 'fs15', 137)" class="id">r</span> <span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs30', 138)" onmouseover="showTip(event, 'fs30', 138)" class="m">Model</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs33', 139)" onmouseover="showTip(event, 'fs33', 139)" class="id">estimateParameter</span> <span onmouseout="hideTip(event, 'fs8', 140)" onmouseover="showTip(event, 'fs8', 140)" class="id">K</span> <span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs30', 141)" onmouseover="showTip(event, 'fs30', 141)" class="m">Model</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs33', 142)" onmouseover="showTip(event, 'fs33', 142)" class="id">estimateParameter</span> <span onmouseout="hideTip(event, 'fs12', 143)" onmouseover="showTip(event, 'fs12', 143)" class="id">L</span>
+            <span class="s">&quot;gompertz&quot;</span><span class="pn">,</span> <span onmouseout="hideTip(event, 'fs28', 144)" onmouseover="showTip(event, 'fs28', 144)" class="fn">mkModel</span> <span onmouseout="hideTip(event, 'fs25', 145)" onmouseover="showTip(event, 'fs25', 145)" class="id">gompertz</span> <span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs30', 146)" onmouseover="showTip(event, 'fs30', 146)" class="m">Model</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs33', 147)" onmouseover="showTip(event, 'fs33', 147)" class="id">estimateParameter</span> <span onmouseout="hideTip(event, 'fs15', 148)" onmouseover="showTip(event, 'fs15', 148)" class="id">r</span> <span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs30', 149)" onmouseover="showTip(event, 'fs30', 149)" class="m">Model</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs33', 150)" onmouseover="showTip(event, 'fs33', 150)" class="id">estimateParameter</span> <span onmouseout="hideTip(event, 'fs8', 151)" onmouseover="showTip(event, 'fs8', 151)" class="id">K</span>
+        <span class="pn">]</span>
+</code></pre>
+<h3><a name="Load-the-dataset" class="anchor" href="#Load-the-dataset">Load the dataset</a></h3>
+<p>Here, to keep the example simple we have defined the
+data in code, but otherwise you may load data in as you see fit.</p>
+<p>Bristlecone expects time‑series to be provided in Bristlecone's <code>TimeSeries</code> type.
+For ecological datasets recorded in modern calendar time, the helper
+<code>TimeSeries.fromNeoObservations</code> converts (<code>value</code>, <code>DateTime</code>) pairs into a
+typed time‑series that Bristlecone can align with the model’s time units.</p>
+<p>Lastly, Bristlecone expects a <code>Map</code> of <code>TimeSeries</code> for use in the fit function.</p>
+<pre class="fssnip highlighted"><code lang="fsharp"><span class="k">let</span> <span onmouseout="hideTip(event, 'fs34', 152)" onmouseover="showTip(event, 'fs34', 152)" class="id">baseDay</span> <span class="o">=</span> <span onmouseout="hideTip(event, 'fs35', 153)" onmouseover="showTip(event, 'fs35', 153)" class="id">System</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs36', 154)" onmouseover="showTip(event, 'fs36', 154)" class="id">DateTime</span><span class="pn">(</span><span class="n">2000</span><span class="pn">,</span> <span class="n">01</span><span class="pn">,</span> <span class="n">01</span><span class="pn">)</span>
+<span class="k">let</span> <span onmouseout="hideTip(event, 'fs37', 155)" onmouseover="showTip(event, 'fs37', 155)" class="id">data</span> <span class="o">=</span>
+    <span class="pn">[</span>
+        <span onmouseout="hideTip(event, 'fs6', 156)" onmouseover="showTip(event, 'fs6', 156)" class="id">mass</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs38', 157)" onmouseover="showTip(event, 'fs38', 157)" class="id">Code</span><span class="pn">,</span> <span onmouseout="hideTip(event, 'fs39', 158)" onmouseover="showTip(event, 'fs39', 158)" class="m">TimeSeries</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs40', 159)" onmouseover="showTip(event, 'fs40', 159)" class="id">fromNeoObservations</span> <span class="pn">[</span>
+        <span class="n">0.05</span><span class="pn">,</span> <span onmouseout="hideTip(event, 'fs34', 160)" onmouseover="showTip(event, 'fs34', 160)" class="id">baseDay</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs41', 161)" onmouseover="showTip(event, 'fs41', 161)" class="id">AddDays</span> <span class="n">14</span>
+        <span class="n">0.33</span><span class="pn">,</span> <span onmouseout="hideTip(event, 'fs34', 162)" onmouseover="showTip(event, 'fs34', 162)" class="id">baseDay</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs41', 163)" onmouseover="showTip(event, 'fs41', 163)" class="id">AddDays</span> <span class="n">35</span>
+        <span class="n">2.43</span><span class="pn">,</span> <span onmouseout="hideTip(event, 'fs34', 164)" onmouseover="showTip(event, 'fs34', 164)" class="id">baseDay</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs41', 165)" onmouseover="showTip(event, 'fs41', 165)" class="id">AddDays</span> <span class="n">70</span>
+        <span class="n">3.63</span><span class="pn">,</span> <span onmouseout="hideTip(event, 'fs34', 166)" onmouseover="showTip(event, 'fs34', 166)" class="id">baseDay</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs41', 167)" onmouseover="showTip(event, 'fs41', 167)" class="id">AddDays</span> <span class="n">98</span>
+        <span class="n">5.81</span><span class="pn">,</span> <span onmouseout="hideTip(event, 'fs34', 168)" onmouseover="showTip(event, 'fs34', 168)" class="id">baseDay</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs41', 169)" onmouseover="showTip(event, 'fs41', 169)" class="id">AddDays</span> <span class="n">133</span>
+        <span class="n">7.28</span><span class="pn">,</span> <span onmouseout="hideTip(event, 'fs34', 170)" onmouseover="showTip(event, 'fs34', 170)" class="id">baseDay</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs41', 171)" onmouseover="showTip(event, 'fs41', 171)" class="id">AddDays</span> <span class="n">161</span>
+        <span class="n">5.87</span><span class="pn">,</span> <span onmouseout="hideTip(event, 'fs34', 172)" onmouseover="showTip(event, 'fs34', 172)" class="id">baseDay</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs41', 173)" onmouseover="showTip(event, 'fs41', 173)" class="id">AddDays</span> <span class="n">189</span>
+        <span class="pn">]</span>
+    <span class="pn">]</span>
+    <span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs42', 174)" onmouseover="showTip(event, 'fs42', 174)" class="m">Map</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs43', 175)" onmouseover="showTip(event, 'fs43', 175)" class="id">ofList</span>
+</code></pre>
+<h3><a name="Model-fitting" class="anchor" href="#Model-fitting">Model-fitting</a></h3>
+<p>All seven growth models are naturally expressed as ODEs, so we use a
+continuous‑time estimation engine. The call to <code>Bristlecone.forDailyModel</code>
+ensures that the engine interprets the model in daily units,
+matching the temporal resolution of the dataset.</p>
+<p>We use a simple Nelder–Mead optimiser, as the models are simple with only
+between one and three parameters. If we wanted increased robustness to local
+optima, we could choose to run a swarm-based Nelder-Mead instead.</p>
+<p>Plant‑growth data typically exhibit heteroscedasticity: measurement error
+increases with biomass. We therefore use a Gaussian likelihood with an
+exponential variance function, parameterised by σ0 and σ1.</p>
+<p>We specify no conditioning. Here, we know that plant biomass was effectively zero at time
+zero, so we do not need to condition the time-zero value; it is known. The model fitting will
+therefore run from the first time-point in the data onwards.</p>
+<p>Then, we can just run all of the hypotheses.</p>
+<p>Each model is compiled before fitting. Compilation resolves the symbolic
+model expression into an executable system of equations and prepares
+the likelihood function for evaluation.</p>
+<pre class="fssnip highlighted"><code lang="fsharp"><span class="k">module</span> <span class="m">Settings</span> <span class="o">=</span>
+    <span class="k">let</span> <span onmouseout="hideTip(event, 'fs44', 176)" onmouseover="showTip(event, 'fs44', 176)" class="id">engine</span> <span class="o">=</span>
+        <span onmouseout="hideTip(event, 'fs1', 177)" onmouseover="showTip(event, 'fs1', 177)" class="m">Bristlecone</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs45', 178)" onmouseover="showTip(event, 'fs45', 178)" class="id">mkContinuous</span> <span class="pn">(</span><span class="pn">)</span>
+        <span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs1', 179)" onmouseover="showTip(event, 'fs1', 179)" class="m">Bristlecone</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs46', 180)" onmouseover="showTip(event, 'fs46', 180)" class="id">forDailyModel</span>
+        <span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs1', 181)" onmouseover="showTip(event, 'fs1', 181)" class="m">Bristlecone</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs47', 182)" onmouseover="showTip(event, 'fs47', 182)" class="id">withCustomOptimisation</span> <span class="pn">(</span><span onmouseout="hideTip(event, 'fs48', 183)" onmouseover="showTip(event, 'fs48', 183)" class="id">Optimisation</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs49', 184)" onmouseover="showTip(event, 'fs49', 184)" class="m">Amoeba</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs50', 185)" onmouseover="showTip(event, 'fs50', 185)" class="id">single</span> <span onmouseout="hideTip(event, 'fs48', 186)" onmouseover="showTip(event, 'fs48', 186)" class="id">Optimisation</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs49', 187)" onmouseover="showTip(event, 'fs49', 187)" class="m">Amoeba</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs51', 188)" onmouseover="showTip(event, 'fs51', 188)" class="m">Solver</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs52', 189)" onmouseover="showTip(event, 'fs52', 189)" class="id">Default</span><span class="pn">)</span>
+        <span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs1', 190)" onmouseover="showTip(event, 'fs1', 190)" class="m">Bristlecone</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs53', 191)" onmouseover="showTip(event, 'fs53', 191)" class="id">withConditioning</span> <span onmouseout="hideTip(event, 'fs54', 192)" onmouseover="showTip(event, 'fs54', 192)" class="m">Conditioning</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs55', 193)" onmouseover="showTip(event, 'fs55', 193)" class="id">NoConditioning</span>
+        <span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs1', 194)" onmouseover="showTip(event, 'fs1', 194)" class="m">Bristlecone</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs56', 195)" onmouseover="showTip(event, 'fs56', 195)" class="id">withSeed</span> <span class="n">200000</span>
+
+    <span class="k">let</span> <span onmouseout="hideTip(event, 'fs57', 196)" onmouseover="showTip(event, 'fs57', 196)" class="fn">endCond</span> <span class="o">=</span> <span onmouseout="hideTip(event, 'fs48', 197)" onmouseover="showTip(event, 'fs48', 197)" class="id">Optimisation</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs58', 198)" onmouseover="showTip(event, 'fs58', 198)" class="m">EndConditions</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs59', 199)" onmouseover="showTip(event, 'fs59', 199)" class="id">whenNoBestValueImprovement</span> <span class="n">100</span><span class="pn">&lt;</span><span onmouseout="hideTip(event, 'fs60', 200)" onmouseover="showTip(event, 'fs60', 200)" class="rt">iteration</span><span class="pn">&gt;</span>
+
+<span class="k">let</span> <span onmouseout="hideTip(event, 'fs61', 201)" onmouseover="showTip(event, 'fs61', 201)" class="id">sigmaBase</span> <span class="o">=</span> <span onmouseout="hideTip(event, 'fs9', 202)" onmouseover="showTip(event, 'fs9', 202)" class="fn">parameter</span> <span class="s">&quot;σ0[x]&quot;</span> <span onmouseout="hideTip(event, 'fs10', 203)" onmouseover="showTip(event, 'fs10', 203)" class="id">Positive</span> <span class="n">0.01</span><span class="pn">&lt;</span><span onmouseout="hideTip(event, 'fs5', 204)" onmouseover="showTip(event, 'fs5', 204)" class="rt">gram</span><span class="pn">&gt;</span> <span class="n">0.5</span><span class="pn">&lt;</span><span onmouseout="hideTip(event, 'fs5', 205)" onmouseover="showTip(event, 'fs5', 205)" class="rt">gram</span><span class="pn">&gt;</span>
+<span class="k">let</span> <span onmouseout="hideTip(event, 'fs62', 206)" onmouseover="showTip(event, 'fs62', 206)" class="id">sigmaGrowth</span> <span class="o">=</span> <span onmouseout="hideTip(event, 'fs9', 207)" onmouseover="showTip(event, 'fs9', 207)" class="fn">parameter</span> <span class="s">&quot;σ1[x]&quot;</span> <span onmouseout="hideTip(event, 'fs10', 208)" onmouseover="showTip(event, 'fs10', 208)" class="id">Positive</span> <span class="n">0.01</span><span class="o">&lt;/</span><span onmouseout="hideTip(event, 'fs5', 209)" onmouseover="showTip(event, 'fs5', 209)" class="rt">gram</span><span class="pn">&gt;</span> <span class="n">0.5</span><span class="o">&lt;/</span><span onmouseout="hideTip(event, 'fs5', 210)" onmouseover="showTip(event, 'fs5', 210)" class="rt">gram</span><span class="pn">&gt;</span>
+<span class="k">let</span> <span onmouseout="hideTip(event, 'fs63', 211)" onmouseover="showTip(event, 'fs63', 211)" class="id">variance</span> <span class="o">=</span> <span onmouseout="hideTip(event, 'fs64', 212)" onmouseover="showTip(event, 'fs64', 212)" class="id">ModelLibrary</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs65', 213)" onmouseover="showTip(event, 'fs65', 213)" class="m">NegLogLikelihood</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs66', 214)" onmouseover="showTip(event, 'fs66', 214)" class="m">Variance</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs67', 215)" onmouseover="showTip(event, 'fs67', 215)" class="id">exponential</span> <span onmouseout="hideTip(event, 'fs61', 216)" onmouseover="showTip(event, 'fs61', 216)" class="id">sigmaBase</span> <span onmouseout="hideTip(event, 'fs62', 217)" onmouseover="showTip(event, 'fs62', 217)" class="id">sigmaGrowth</span>
+
+<span class="k">let</span> <span onmouseout="hideTip(event, 'fs68', 218)" onmouseover="showTip(event, 'fs68', 218)" class="id">results</span> <span class="o">=</span>
+    <span onmouseout="hideTip(event, 'fs69', 219)" onmouseover="showTip(event, 'fs69', 219)" class="m">GrowthFunctions</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs27', 220)" onmouseover="showTip(event, 'fs27', 220)" class="id">hypotheses</span>
+    <span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs70', 221)" onmouseover="showTip(event, 'fs70', 221)" class="m">List</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs71', 222)" onmouseover="showTip(event, 'fs71', 222)" class="id">map</span> <span class="pn">(</span><span class="k">fun</span> <span onmouseout="hideTip(event, 'fs72', 223)" onmouseover="showTip(event, 'fs72', 223)" class="fn">h</span> <span class="k">-&gt;</span>
+            <span class="k">let</span> <span onmouseout="hideTip(event, 'fs73', 224)" onmouseover="showTip(event, 'fs73', 224)" class="fn">hy</span> <span class="o">=</span>
+                <span onmouseout="hideTip(event, 'fs74', 225)" onmouseover="showTip(event, 'fs74', 225)" class="fn">snd</span> <span onmouseout="hideTip(event, 'fs72', 226)" onmouseover="showTip(event, 'fs72', 226)" class="fn">h</span>
+                <span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs30', 227)" onmouseover="showTip(event, 'fs30', 227)" class="m">Model</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs75', 228)" onmouseover="showTip(event, 'fs75', 228)" class="id">useLikelihoodFunction</span> <span class="pn">(</span><span onmouseout="hideTip(event, 'fs64', 229)" onmouseover="showTip(event, 'fs64', 229)" class="id">ModelLibrary</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs65', 230)" onmouseover="showTip(event, 'fs65', 230)" class="m">NegLogLikelihood</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs76', 231)" onmouseover="showTip(event, 'fs76', 231)" class="id">NormalWithVariance</span> <span class="pn">(</span><span onmouseout="hideTip(event, 'fs77', 232)" onmouseover="showTip(event, 'fs77', 232)" class="m">Require</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs78', 233)" onmouseover="showTip(event, 'fs78', 233)" class="id">state</span> <span onmouseout="hideTip(event, 'fs6', 234)" onmouseover="showTip(event, 'fs6', 234)" class="id">mass</span><span class="pn">)</span> <span onmouseout="hideTip(event, 'fs63', 235)" onmouseover="showTip(event, 'fs63', 235)" class="id">variance</span><span class="pn">)</span>
+                <span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs30', 236)" onmouseover="showTip(event, 'fs30', 236)" class="m">Model</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs79', 237)" onmouseover="showTip(event, 'fs79', 237)" class="id">compile</span>
+            <span onmouseout="hideTip(event, 'fs80', 238)" onmouseover="showTip(event, 'fs80', 238)" class="fn">fst</span> <span onmouseout="hideTip(event, 'fs72', 239)" onmouseover="showTip(event, 'fs72', 239)" class="fn">h</span><span class="pn">,</span> <span onmouseout="hideTip(event, 'fs1', 240)" onmouseover="showTip(event, 'fs1', 240)" class="m">Bristlecone</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs81', 241)" onmouseover="showTip(event, 'fs81', 241)" class="id">fit</span> <span onmouseout="hideTip(event, 'fs82', 242)" onmouseover="showTip(event, 'fs82', 242)" class="m">Settings</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs44', 243)" onmouseover="showTip(event, 'fs44', 243)" class="id">engine</span> <span onmouseout="hideTip(event, 'fs82', 244)" onmouseover="showTip(event, 'fs82', 244)" class="m">Settings</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs57', 245)" onmouseover="showTip(event, 'fs57', 245)" class="id">endCond</span> <span onmouseout="hideTip(event, 'fs37', 246)" onmouseover="showTip(event, 'fs37', 246)" class="id">data</span> <span onmouseout="hideTip(event, 'fs73', 247)" onmouseover="showTip(event, 'fs73', 247)" class="fn">hy</span>
+    <span class="pn">)</span>
+</code></pre>
+<p>The plot below overlays the observed biomass with the fitted trajectories
+from each model, allowing visual comparison of model performance.</p>
+<pre class="fssnip highlighted"><code lang="fsharp"><span onmouseout="hideTip(event, 'fs134', 369)" onmouseover="showTip(event, 'fs134', 369)" class="m">Graphing</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs135', 370)" onmouseover="showTip(event, 'fs135', 370)" class="id">fitPlot</span> <span onmouseout="hideTip(event, 'fs68', 371)" onmouseover="showTip(event, 'fs68', 371)" class="id">results</span>
+<span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs83', 372)" onmouseover="showTip(event, 'fs83', 372)" class="id">Plotly</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs84', 373)" onmouseover="showTip(event, 'fs84', 373)" class="id">NET</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs136', 374)" onmouseover="showTip(event, 'fs136', 374)" class="m">GenericChart</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs137', 375)" onmouseover="showTip(event, 'fs137', 375)" class="id">toChartHTML</span>
+</code></pre>
+<div><div id="58119db6-b0f4-4e8d-bc38-677c266ed0e5"><!-- Plotly chart will be drawn inside this DIV --></div><script type="text/javascript">var renderPlotly_58119db6b0f44e8dbc38677c266ed0e5 = function() {
+    var data = [{"type":"scatter","name":"Observed","mode":"markers","x":["2000-02-05T00:00:00","2000-03-11T00:00:00","2000-04-08T00:00:00","2000-05-13T00:00:00","2000-06-10T00:00:00","2000-07-08T00:00:00"],"y":[0.33,2.43,3.63,5.81,7.28,5.87],"marker":{},"line":{},"xaxis":"x","yaxis":"y"},{"type":"scatter","name":"linear","mode":"lines","x":["2000-02-05T00:00:00","2000-03-11T00:00:00","2000-04-08T00:00:00","2000-05-13T00:00:00","2000-06-10T00:00:00","2000-07-08T00:00:00"],"y":[0.9425466906789058,2.430124508477082,3.6201867627156235,5.1077645805138,6.297826834752342,7.487889088990883],"marker":{},"line":{},"xaxis":"x","yaxis":"y"},{"type":"scatter","name":"exponential","mode":"lines","x":["2000-02-05T00:00:00","2000-03-11T00:00:00","2000-04-08T00:00:00","2000-05-13T00:00:00","2000-06-10T00:00:00","2000-07-08T00:00:00"],"y":[0.09198060001034036,0.25322579361095154,0.57024754071823,1.5699113295285496,3.5353352517664884,7.961338393637937],"marker":{},"line":{},"xaxis":"x","yaxis":"y"},{"type":"scatter","name":"power","mode":"lines","x":["2000-02-05T00:00:00","2000-03-11T00:00:00","2000-04-08T00:00:00","2000-05-13T00:00:00","2000-06-10T00:00:00","2000-07-08T00:00:00"],"y":[0.9366385037597734,2.43,3.630000003151392,5.133996596010654,6.339550390325179,7.54676227772745],"marker":{},"line":{},"xaxis":"x","yaxis":"y"},{"type":"scatter","name":"monomolecular","mode":"lines","x":["2000-02-05T00:00:00","2000-03-11T00:00:00","2000-04-08T00:00:00","2000-05-13T00:00:00","2000-06-10T00:00:00","2000-07-08T00:00:00"],"y":[0.9425466907598459,2.4301245086927143,3.6201867630388223,5.107764580971223,6.297826835316957,7.487889089662524],"marker":{},"line":{},"xaxis":"x","yaxis":"y"},{"type":"scatter","name":"logistic (3-par)","mode":"lines","x":["2000-02-05T00:00:00","2000-03-11T00:00:00","2000-04-08T00:00:00","2000-05-13T00:00:00","2000-06-10T00:00:00","2000-07-08T00:00:00"],"y":[0.19045955268206327,1.4130267950453899,4.105211465356286,5.938386407634697,6.376177284535502,6.497762562558152],"marker":{},"line":{},"xaxis":"x","yaxis":"y"},{"type":"scatter","name":"logistic (4-par)","mode":"lines","x":["2000-02-05T00:00:00","2000-03-11T00:00:00","2000-04-08T00:00:00","2000-05-13T00:00:00","2000-06-10T00:00:00","2000-07-08T00:00:00"],"y":[1.0345680036444016,2.470329441944631,3.466840754925061,4.558793972962677,5.330153739070274,6.02523807582702],"marker":{},"line":{},"xaxis":"x","yaxis":"y"},{"type":"scatter","name":"gompertz","mode":"lines","x":["2000-02-05T00:00:00","2000-03-11T00:00:00","2000-04-08T00:00:00","2000-05-13T00:00:00","2000-06-10T00:00:00","2000-07-08T00:00:00"],"y":[0.5154724264059161,2.43,3.6299686437677945,4.280808351188267,4.474744921864767,4.549554979724581],"marker":{},"line":{},"xaxis":"x","yaxis":"y"}];
+    var layout = {"width":600,"height":600,"template":{"layout":{"title":{"x":0.05},"font":{"color":"rgba(42, 63, 95, 1.0)"},"paper_bgcolor":"rgba(255, 255, 255, 1.0)","plot_bgcolor":"rgba(229, 236, 246, 1.0)","autotypenumbers":"strict","colorscale":{"diverging":[[0.0,"#8e0152"],[0.1,"#c51b7d"],[0.2,"#de77ae"],[0.3,"#f1b6da"],[0.4,"#fde0ef"],[0.5,"#f7f7f7"],[0.6,"#e6f5d0"],[0.7,"#b8e186"],[0.8,"#7fbc41"],[0.9,"#4d9221"],[1.0,"#276419"]],"sequential":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"sequentialminus":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]},"hovermode":"closest","hoverlabel":{"align":"left"},"coloraxis":{"colorbar":{"outlinewidth":0.0,"ticks":""}},"geo":{"showland":true,"landcolor":"rgba(229, 236, 246, 1.0)","showlakes":true,"lakecolor":"rgba(255, 255, 255, 1.0)","subunitcolor":"rgba(255, 255, 255, 1.0)","bgcolor":"rgba(255, 255, 255, 1.0)"},"mapbox":{"style":"light"},"polar":{"bgcolor":"rgba(229, 236, 246, 1.0)","radialaxis":{"linecolor":"rgba(255, 255, 255, 1.0)","gridcolor":"rgba(255, 255, 255, 1.0)","ticks":""},"angularaxis":{"linecolor":"rgba(255, 255, 255, 1.0)","gridcolor":"rgba(255, 255, 255, 1.0)","ticks":""}},"scene":{"xaxis":{"ticks":"","linecolor":"rgba(255, 255, 255, 1.0)","gridcolor":"rgba(255, 255, 255, 1.0)","gridwidth":2.0,"zerolinecolor":"rgba(255, 255, 255, 1.0)","backgroundcolor":"rgba(229, 236, 246, 1.0)","showbackground":true},"yaxis":{"ticks":"","linecolor":"rgba(255, 255, 255, 1.0)","gridcolor":"rgba(255, 255, 255, 1.0)","gridwidth":2.0,"zerolinecolor":"rgba(255, 255, 255, 1.0)","backgroundcolor":"rgba(229, 236, 246, 1.0)","showbackground":true},"zaxis":{"ticks":"","linecolor":"rgba(255, 255, 255, 1.0)","gridcolor":"rgba(255, 255, 255, 1.0)","gridwidth":2.0,"zerolinecolor":"rgba(255, 255, 255, 1.0)","backgroundcolor":"rgba(229, 236, 246, 1.0)","showbackground":true}},"ternary":{"aaxis":{"ticks":"","linecolor":"rgba(255, 255, 255, 1.0)","gridcolor":"rgba(255, 255, 255, 1.0)"},"baxis":{"ticks":"","linecolor":"rgba(255, 255, 255, 1.0)","gridcolor":"rgba(255, 255, 255, 1.0)"},"caxis":{"ticks":"","linecolor":"rgba(255, 255, 255, 1.0)","gridcolor":"rgba(255, 255, 255, 1.0)"},"bgcolor":"rgba(229, 236, 246, 1.0)"},"xaxis":{"title":{"standoff":15},"ticks":"","automargin":"height+width+left+right+top+bottom","linecolor":"rgba(255, 255, 255, 1.0)","gridcolor":"rgba(255, 255, 255, 1.0)","zerolinecolor":"rgba(255, 255, 255, 1.0)","zerolinewidth":2.0},"yaxis":{"title":{"standoff":15},"ticks":"","automargin":"height+width+left+right+top+bottom","linecolor":"rgba(255, 255, 255, 1.0)","gridcolor":"rgba(255, 255, 255, 1.0)","zerolinecolor":"rgba(255, 255, 255, 1.0)","zerolinewidth":2.0},"annotationdefaults":{"arrowcolor":"#2a3f5f","arrowhead":0,"arrowwidth":1},"shapedefaults":{"line":{"color":"rgba(42, 63, 95, 1.0)"}},"colorway":["rgba(99, 110, 250, 1.0)","rgba(239, 85, 59, 1.0)","rgba(0, 204, 150, 1.0)","rgba(171, 99, 250, 1.0)","rgba(255, 161, 90, 1.0)","rgba(25, 211, 243, 1.0)","rgba(255, 102, 146, 1.0)","rgba(182, 232, 128, 1.0)","rgba(255, 151, 255, 1.0)","rgba(254, 203, 82, 1.0)"]},"data":{"bar":[{"marker":{"line":{"color":"rgba(229, 236, 246, 1.0)","width":0.5},"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"error_x":{"color":"rgba(42, 63, 95, 1.0)"},"error_y":{"color":"rgba(42, 63, 95, 1.0)"}}],"barpolar":[{"marker":{"line":{"color":"rgba(229, 236, 246, 1.0)","width":0.5},"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}}}],"carpet":[{"aaxis":{"linecolor":"rgba(255, 255, 255, 1.0)","gridcolor":"rgba(255, 255, 255, 1.0)","endlinecolor":"rgba(42, 63, 95, 1.0)","minorgridcolor":"rgba(255, 255, 255, 1.0)","startlinecolor":"rgba(42, 63, 95, 1.0)"},"baxis":{"linecolor":"rgba(255, 255, 255, 1.0)","gridcolor":"rgba(255, 255, 255, 1.0)","endlinecolor":"rgba(42, 63, 95, 1.0)","minorgridcolor":"rgba(255, 255, 255, 1.0)","startlinecolor":"rgba(42, 63, 95, 1.0)"}}],"choropleth":[{"colorbar":{"outlinewidth":0.0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"contour":[{"colorbar":{"outlinewidth":0.0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"contourcarpet":[{"colorbar":{"outlinewidth":0.0,"ticks":""}}],"heatmap":[{"colorbar":{"outlinewidth":0.0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"heatmapgl":[{"colorbar":{"outlinewidth":0.0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"histogram":[{"marker":{"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}}}],"histogram2d":[{"colorbar":{"outlinewidth":0.0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"histogram2dcontour":[{"colorbar":{"outlinewidth":0.0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"mesh3d":[{"colorbar":{"outlinewidth":0.0,"ticks":""}}],"parcoords":[{"line":{"colorbar":{"outlinewidth":0.0,"ticks":""}}}],"pie":[{"automargin":true}],"scatter":[{"marker":{"colorbar":{"outlinewidth":0.0,"ticks":""}}}],"scatter3d":[{"marker":{"colorbar":{"outlinewidth":0.0,"ticks":""}},"line":{"colorbar":{"outlinewidth":0.0,"ticks":""}}}],"scattercarpet":[{"marker":{"colorbar":{"outlinewidth":0.0,"ticks":""}}}],"scattergeo":[{"marker":{"colorbar":{"outlinewidth":0.0,"ticks":""}}}],"scattergl":[{"marker":{"colorbar":{"outlinewidth":0.0,"ticks":""}}}],"scattermapbox":[{"marker":{"colorbar":{"outlinewidth":0.0,"ticks":""}}}],"scatterpolar":[{"marker":{"colorbar":{"outlinewidth":0.0,"ticks":""}}}],"scatterpolargl":[{"marker":{"colorbar":{"outlinewidth":0.0,"ticks":""}}}],"scatterternary":[{"marker":{"colorbar":{"outlinewidth":0.0,"ticks":""}}}],"surface":[{"colorbar":{"outlinewidth":0.0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"table":[{"cells":{"fill":{"color":"rgba(235, 240, 248, 1.0)"},"line":{"color":"rgba(255, 255, 255, 1.0)"}},"header":{"fill":{"color":"rgba(200, 212, 227, 1.0)"},"line":{"color":"rgba(255, 255, 255, 1.0)"}}}]}},"title":{"text":"mass"},"xaxis":{},"yaxis":{},"grid":{"rows":1,"columns":1,"pattern":"independent"}};
+    var config = {"responsive":true};
+    Plotly.newPlot('58119db6-b0f4-4e8d-bc38-677c266ed0e5', data, layout, config);
+};
+renderPlotly_58119db6b0f44e8dbc38677c266ed0e5();
+</script></div>
+<h4><a name="Model-selection" class="anchor" href="#Model-selection">Model selection</a></h4>
+<p>Because this example uses a non‑Bayesian fitting approach
+(maximum likelihood with Nelder–Mead optimisation), we can compare
+competing growth models using constrained Akaike’s Information Criterion (AICc).</p>
+<p>AIC provides a balance between goodness‑of‑fit and model complexity,
+and the corresponding Akaike weights give the relative support for
+each model in the candidate set.</p>
+<pre class="fssnip highlighted"><code lang="fsharp"><span class="k">let</span> <span onmouseout="hideTip(event, 'fs138', 376)" onmouseover="showTip(event, 'fs138', 376)" class="id">weights</span> <span class="o">=</span> <span onmouseout="hideTip(event, 'fs139', 377)" onmouseover="showTip(event, 'fs139', 377)" class="m">ModelSelection</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs140', 378)" onmouseover="showTip(event, 'fs140', 378)" class="m">Akaike</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs141', 379)" onmouseover="showTip(event, 'fs141', 379)" class="id">akaikeWeights</span> <span class="pn">(</span><span onmouseout="hideTip(event, 'fs68', 380)" onmouseover="showTip(event, 'fs68', 380)" class="id">results</span> <span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs95', 381)" onmouseover="showTip(event, 'fs95', 381)" class="m">Seq</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs100', 382)" onmouseover="showTip(event, 'fs100', 382)" class="id">map</span> <span onmouseout="hideTip(event, 'fs74', 383)" onmouseover="showTip(event, 'fs74', 383)" class="fn">snd</span><span class="pn">)</span>
+</code></pre>
+<p>For more complex analyses involving multiple subjects, multiple hypotheses, or replicate fits, see the Model Selection documentation for the ResultSet‑based workflow.</p>
+<p>The resultant weights are:</p>
+<pre class="fssnip highlighted"><code lang="fsharp"><span onmouseout="hideTip(event, 'fs138', 384)" onmouseover="showTip(event, 'fs138', 384)" class="id">weights</span> 
+<span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs95', 385)" onmouseover="showTip(event, 'fs95', 385)" class="m">Seq</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs142', 386)" onmouseover="showTip(event, 'fs142', 386)" class="id">zip</span> <span class="pn">(</span><span onmouseout="hideTip(event, 'fs68', 387)" onmouseover="showTip(event, 'fs68', 387)" class="id">results</span> <span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs95', 388)" onmouseover="showTip(event, 'fs95', 388)" class="m">Seq</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs100', 389)" onmouseover="showTip(event, 'fs100', 389)" class="id">map</span> <span onmouseout="hideTip(event, 'fs80', 390)" onmouseover="showTip(event, 'fs80', 390)" class="fn">fst</span><span class="pn">)</span>
+<span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs95', 391)" onmouseover="showTip(event, 'fs95', 391)" class="m">Seq</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs100', 392)" onmouseover="showTip(event, 'fs100', 392)" class="id">map</span><span class="pn">(</span><span class="k">fun</span> <span class="pn">(</span><span onmouseout="hideTip(event, 'fs143', 393)" onmouseover="showTip(event, 'fs143', 393)" class="fn">m</span><span class="pn">,</span><span class="pn">(</span><span onmouseout="hideTip(event, 'fs144', 394)" onmouseover="showTip(event, 'fs144', 394)" class="id">r</span><span class="pn">,</span><span onmouseout="hideTip(event, 'fs145', 395)" onmouseover="showTip(event, 'fs145', 395)" class="fn">w</span><span class="pn">)</span><span class="pn">)</span> <span class="k">-&gt;</span>
+    <span onmouseout="hideTip(event, 'fs146', 396)" onmouseover="showTip(event, 'fs146', 396)" class="fn">sprintf</span> <span class="s">&quot;| </span><span class="pf">%s</span><span class="s"> | -logL: </span><span class="pf">%f</span><span class="s"> | AICc: </span><span class="pf">%f</span><span class="s"> | Weight: </span><span class="pf">%f</span><span class="s"> |&quot;</span> <span onmouseout="hideTip(event, 'fs143', 397)" onmouseover="showTip(event, 'fs143', 397)" class="fn">m</span> <span onmouseout="hideTip(event, 'fs144', 398)" onmouseover="showTip(event, 'fs144', 398)" class="fn">r</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs147', 399)" onmouseover="showTip(event, 'fs147', 399)" class="id">Likelihood</span> <span onmouseout="hideTip(event, 'fs145', 400)" onmouseover="showTip(event, 'fs145', 400)" class="fn">w</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs148', 401)" onmouseover="showTip(event, 'fs148', 401)" class="id">AICc</span> <span onmouseout="hideTip(event, 'fs145', 402)" onmouseover="showTip(event, 'fs145', 402)" class="fn">w</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs149', 403)" onmouseover="showTip(event, 'fs149', 403)" class="id">Weight</span>
+    <span class="pn">)</span>
+<span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs150', 404)" onmouseover="showTip(event, 'fs150', 404)" class="m">String</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs151', 405)" onmouseover="showTip(event, 'fs151', 405)" class="id">concat</span> <span class="s">&quot;\n&quot;</span>
+</code></pre>
+<table class="pre"><tr><td><pre><code>"| linear | -logL: 0.329993 | AICc: 18.659986 | Weight: 0.000006 |
+| exponential | -logL: 12.874793 | AICc: 43.749586 | Weight: 0.000000 |
+| power | -logL: -5.599349 | AICc: 36.801302 | Weight: 0.000000 |
+| monomolecular | -logL: 0.329993 | AICc: 48.659986 | Weight: 0.000000 |
+| logistic (3-par) | -logL: 5.349318 | AICc: 58.698637 | Weight: 0.000000 |
+| logistic (4-par) | -logL: 4.494261 | AICc: Infinity | Weight: 0.000000 |
+| gompertz | -logL: -26.620829 | AICc: -5.241659 | Weight: 0.999994 |"</code></pre></td></tr></table>
+<p>The output indicates that the best‑supported model is the gompertz growth model,
+with approximately 99% support.</p>
+<p>The reason that the gompertz is identified as the best model, despite the fit not
+looking as good by eye as the three-parameter logistic form, is because the likelihood
+function with exponential variance penalises errors at larger biomasses less heavily.</p>
+<p>We can estimate the implied sigma for each observation, for example for the
+gompertz fit:</p>
+<pre class="fssnip highlighted"><code lang="fsharp"><span class="k">let</span> <span onmouseout="hideTip(event, 'fs152', 406)" onmouseover="showTip(event, 'fs152', 406)" class="fn">sigmaAt</span> <span class="pn">(</span><span onmouseout="hideTip(event, 'fs153', 407)" onmouseover="showTip(event, 'fs153', 407)" class="fn">expected</span><span class="pn">:</span> <span onmouseout="hideTip(event, 'fs154', 408)" onmouseover="showTip(event, 'fs154', 408)" class="vt">float</span><span class="pn">&lt;</span><span onmouseout="hideTip(event, 'fs5', 409)" onmouseover="showTip(event, 'fs5', 409)" class="rt">gram</span><span class="pn">&gt;</span><span class="pn">)</span> <span class="o">=</span>
+    <span class="k">let</span> <span onmouseout="hideTip(event, 'fs155', 410)" onmouseover="showTip(event, 'fs155', 410)" class="fn">s0</span> <span class="o">=</span> <span class="fn">(</span><span onmouseout="hideTip(event, 'fs74', 411)" onmouseover="showTip(event, 'fs74', 411)" class="fn">snd</span> <span onmouseout="hideTip(event, 'fs68', 412)" onmouseover="showTip(event, 'fs68', 412)" class="id">results</span><span class="pn">.</span><span class="pn">[</span><span class="n">6</span><span class="pn">]</span><span class="pn">)</span><span class="pn">.</span><span class="prop">Parameters</span><span class="pn">.</span><span class="id">Get</span> <span onmouseout="hideTip(event, 'fs61', 413)" onmouseover="showTip(event, 'fs61', 413)" class="id">sigmaBase</span>
+    <span class="k">let</span> <span onmouseout="hideTip(event, 'fs156', 414)" onmouseover="showTip(event, 'fs156', 414)" class="fn">s1</span> <span class="o">=</span> <span class="fn">(</span><span onmouseout="hideTip(event, 'fs74', 415)" onmouseover="showTip(event, 'fs74', 415)" class="fn">snd</span> <span onmouseout="hideTip(event, 'fs68', 416)" onmouseover="showTip(event, 'fs68', 416)" class="id">results</span><span class="pn">.</span><span class="pn">[</span><span class="n">6</span><span class="pn">]</span><span class="pn">)</span><span class="pn">.</span><span class="prop">Parameters</span><span class="pn">.</span><span class="id">Get</span> <span onmouseout="hideTip(event, 'fs62', 417)" onmouseover="showTip(event, 'fs62', 417)" class="id">sigmaGrowth</span>
+    <span onmouseout="hideTip(event, 'fs155', 418)" onmouseover="showTip(event, 'fs155', 418)" class="fn">s0</span> <span class="o">*</span> <span onmouseout="hideTip(event, 'fs157', 419)" onmouseover="showTip(event, 'fs157', 419)" class="fn">exp</span> <span class="pn">(</span><span onmouseout="hideTip(event, 'fs156', 420)" onmouseover="showTip(event, 'fs156', 420)" class="fn">s1</span> <span class="o">*</span> <span onmouseout="hideTip(event, 'fs153', 421)" onmouseover="showTip(event, 'fs153', 421)" class="fn">expected</span><span class="pn">)</span>
+
+<span class="k">let</span> <span onmouseout="hideTip(event, 'fs158', 422)" onmouseover="showTip(event, 'fs158', 422)" class="id">diagnostics</span> <span class="o">=</span>
+    <span class="prop">(</span><span onmouseout="hideTip(event, 'fs74', 423)" onmouseover="showTip(event, 'fs74', 423)" class="fn">snd</span> <span onmouseout="hideTip(event, 'fs68', 424)" onmouseover="showTip(event, 'fs68', 424)" class="id">results</span><span class="pn">.</span><span class="pn">[</span><span class="n">6</span><span class="pn">]</span><span class="pn">)</span><span class="pn">.</span><span class="id">Series</span>
+    <span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs42', 425)" onmouseover="showTip(event, 'fs42', 425)" class="m">Map</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs159', 426)" onmouseover="showTip(event, 'fs159', 426)" class="id">find</span> <span onmouseout="hideTip(event, 'fs6', 427)" onmouseover="showTip(event, 'fs6', 427)" class="id">mass</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs38', 428)" onmouseover="showTip(event, 'fs38', 428)" class="id">Code</span>
+    <span class="o">|&gt;</span> <span class="k">fun</span> <span onmouseout="hideTip(event, 'fs160', 429)" onmouseover="showTip(event, 'fs160', 429)" class="fn">ts</span> <span class="k">-&gt;</span> <span onmouseout="hideTip(event, 'fs160', 430)" onmouseover="showTip(event, 'fs160', 430)" class="fn">ts</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs161', 431)" onmouseover="showTip(event, 'fs161', 431)" class="id">Values</span>
+    <span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs95', 432)" onmouseover="showTip(event, 'fs95', 432)" class="m">Seq</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs100', 433)" onmouseover="showTip(event, 'fs100', 433)" class="id">map</span> <span class="pn">(</span><span class="k">fun</span> <span onmouseout="hideTip(event, 'fs111', 434)" onmouseover="showTip(event, 'fs111', 434)" class="fn">d</span> <span class="k">-&gt;</span>
+        <span class="k">let</span> <span onmouseout="hideTip(event, 'fs162', 435)" onmouseover="showTip(event, 'fs162', 435)" class="fn">fitted</span> <span class="o">=</span> <span onmouseout="hideTip(event, 'fs111', 436)" onmouseover="showTip(event, 'fs111', 436)" class="fn">d</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs121', 437)" onmouseover="showTip(event, 'fs121', 437)" class="id">Fit</span>
+        <span class="k">let</span> <span onmouseout="hideTip(event, 'fs163', 438)" onmouseover="showTip(event, 'fs163', 438)" class="fn">observed</span> <span class="o">=</span> <span onmouseout="hideTip(event, 'fs111', 439)" onmouseover="showTip(event, 'fs111', 439)" class="fn">d</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs113', 440)" onmouseover="showTip(event, 'fs113', 440)" class="id">Obs</span>
+        <span class="k">let</span> <span onmouseout="hideTip(event, 'fs164', 441)" onmouseover="showTip(event, 'fs164', 441)" class="fn">sigma</span> <span class="o">=</span> <span onmouseout="hideTip(event, 'fs152', 442)" onmouseover="showTip(event, 'fs152', 442)" class="fn">sigmaAt</span> <span class="pn">(</span><span onmouseout="hideTip(event, 'fs162', 443)" onmouseover="showTip(event, 'fs162', 443)" class="fn">fitted</span> <span class="o">*</span> <span class="n">1.</span><span class="pn">&lt;</span><span onmouseout="hideTip(event, 'fs5', 444)" onmouseover="showTip(event, 'fs5', 444)" class="rt">gram</span><span class="o">/</span><span onmouseout="hideTip(event, 'fs88', 445)" onmouseover="showTip(event, 'fs88', 445)" class="m">ModelSystem</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs165', 446)" onmouseover="showTip(event, 'fs165', 446)" class="id">state</span><span class="pn">&gt;</span><span class="pn">)</span>
+        <span onmouseout="hideTip(event, 'fs146', 447)" onmouseover="showTip(event, 'fs146', 447)" class="fn">sprintf</span> <span class="s">&quot;Fit = </span><span class="pf">%f</span><span class="s">, Obs = </span><span class="pf">%f</span><span class="s">, sigma = </span><span class="pf">%f</span><span class="s">&quot;</span> <span onmouseout="hideTip(event, 'fs162', 448)" onmouseover="showTip(event, 'fs162', 448)" class="fn">fitted</span> <span onmouseout="hideTip(event, 'fs163', 449)" onmouseover="showTip(event, 'fs163', 449)" class="fn">observed</span> <span onmouseout="hideTip(event, 'fs164', 450)" onmouseover="showTip(event, 'fs164', 450)" class="fn">sigma</span>
+    <span class="pn">)</span>
+    <span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs95', 451)" onmouseover="showTip(event, 'fs95', 451)" class="m">Seq</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs114', 452)" onmouseover="showTip(event, 'fs114', 452)" class="id">toList</span>
+
+<span onmouseout="hideTip(event, 'fs158', 453)" onmouseover="showTip(event, 'fs158', 453)" class="id">diagnostics</span>
+</code></pre>
+<table class="pre"><tr><td><pre><code>["Fit = 0.515472, Obs = 0.330000, sigma = 0.000000";
+ "Fit = 2.430000, Obs = 2.430000, sigma = 0.000000";
+ "Fit = 3.629969, Obs = 3.630000, sigma = 0.000025";
+ "Fit = 4.280808, Obs = 5.810000, sigma = 0.962549";
+ "Fit = 4.474745, Obs = 7.280000, sigma = 22.391603";
+ "Fit = 4.549555, Obs = 5.870000, sigma = 75.382107"]</code></pre></td></tr></table>
+<p>The sigma values are very tight for the first three time points for the gompertz
+fit, as shown above. Other models fail to predict the earlier biomasses with such
+closeness, so are heavily penalised as a result.</p>
+<h4><a name="Model-fit-quality-uncertainty" class="anchor" href="#Model-fit-quality-uncertainty">Model fit quality / uncertainty</a></h4>
+<p>For maximum‑likelihood fits, Bristlecone supports profile‑likelihood confidence intervals for individual parameters.
+Profile likelihoods are robust to non‑linearity and asymmetry in the likelihood surface, making them preferable to approximate Hessian‑based intervals for ecological models.</p>
+<p>Below is an example of how to compute a profile likelihood for the parameters of a fitted model.</p>
+<pre class="fssnip highlighted"><code lang="fsharp"><span class="k">let</span> <span onmouseout="hideTip(event, 'fs166', 454)" onmouseover="showTip(event, 'fs166', 454)" class="id">likelihoodProfile</span> <span class="o">=</span>
+    <span onmouseout="hideTip(event, 'fs68', 455)" onmouseover="showTip(event, 'fs68', 455)" class="id">results</span>
+    <span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs95', 456)" onmouseover="showTip(event, 'fs95', 456)" class="m">Seq</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs167', 457)" onmouseover="showTip(event, 'fs167', 457)" class="id">take</span> <span class="n">1</span> <span class="c">// just run the first only in this example</span>
+    <span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs95', 458)" onmouseover="showTip(event, 'fs95', 458)" class="m">Seq</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs100', 459)" onmouseover="showTip(event, 'fs100', 459)" class="id">map</span><span class="pn">(</span><span class="k">fun</span> <span class="pn">(</span><span onmouseout="hideTip(event, 'fs97', 460)" onmouseover="showTip(event, 'fs97', 460)" class="fn">name</span><span class="pn">,</span><span onmouseout="hideTip(event, 'fs144', 461)" onmouseover="showTip(event, 'fs144', 461)" class="fn">r</span><span class="pn">)</span> <span class="k">-&gt;</span>
+
+        <span class="c">// Lookup the original hypothesis model using its name:</span>
+        <span class="k">let</span> <span onmouseout="hideTip(event, 'fs168', 462)" onmouseover="showTip(event, 'fs168', 462)" class="fn">h</span> <span class="o">=</span>
+            <span onmouseout="hideTip(event, 'fs69', 463)" onmouseover="showTip(event, 'fs69', 463)" class="m">GrowthFunctions</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs27', 464)" onmouseover="showTip(event, 'fs27', 464)" class="id">hypotheses</span> <span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs95', 465)" onmouseover="showTip(event, 'fs95', 465)" class="m">Seq</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs169', 466)" onmouseover="showTip(event, 'fs169', 466)" class="id">find</span> <span class="pn">(</span><span class="k">fun</span> <span onmouseout="hideTip(event, 'fs170', 467)" onmouseover="showTip(event, 'fs170', 467)" class="fn">s</span> <span class="k">-&gt;</span> <span onmouseout="hideTip(event, 'fs80', 468)" onmouseover="showTip(event, 'fs80', 468)" class="fn">fst</span> <span onmouseout="hideTip(event, 'fs170', 469)" onmouseover="showTip(event, 'fs170', 469)" class="fn">s</span> <span class="o">=</span> <span onmouseout="hideTip(event, 'fs97', 470)" onmouseover="showTip(event, 'fs97', 470)" class="fn">name</span><span class="pn">)</span>
+            <span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs74', 471)" onmouseover="showTip(event, 'fs74', 471)" class="fn">snd</span>
+            <span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs30', 472)" onmouseover="showTip(event, 'fs30', 472)" class="m">Model</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs75', 473)" onmouseover="showTip(event, 'fs75', 473)" class="id">useLikelihoodFunction</span> <span class="pn">(</span><span onmouseout="hideTip(event, 'fs64', 474)" onmouseover="showTip(event, 'fs64', 474)" class="id">ModelLibrary</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs65', 475)" onmouseover="showTip(event, 'fs65', 475)" class="m">NegLogLikelihood</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs76', 476)" onmouseover="showTip(event, 'fs76', 476)" class="id">NormalWithVariance</span> <span class="pn">(</span><span onmouseout="hideTip(event, 'fs77', 477)" onmouseover="showTip(event, 'fs77', 477)" class="m">Require</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs78', 478)" onmouseover="showTip(event, 'fs78', 478)" class="id">state</span> <span onmouseout="hideTip(event, 'fs6', 479)" onmouseover="showTip(event, 'fs6', 479)" class="id">mass</span><span class="pn">)</span> <span onmouseout="hideTip(event, 'fs63', 480)" onmouseover="showTip(event, 'fs63', 480)" class="id">variance</span><span class="pn">)</span>
+            <span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs30', 481)" onmouseover="showTip(event, 'fs30', 481)" class="m">Model</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs79', 482)" onmouseover="showTip(event, 'fs79', 482)" class="id">compile</span>
+
+        <span class="c">// Run a profile likelihood around the Maximum Likelihood Estimate:</span>
+        <span class="k">let</span> <span onmouseout="hideTip(event, 'fs171', 483)" onmouseover="showTip(event, 'fs171', 483)" class="fn">l</span> <span class="o">=</span> 
+            <span onmouseout="hideTip(event, 'fs1', 484)" onmouseover="showTip(event, 'fs1', 484)" class="id">Bristlecone</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs172', 485)" onmouseover="showTip(event, 'fs172', 485)" class="id">Confidence</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs173', 486)" onmouseover="showTip(event, 'fs173', 486)" class="m">ProfileLikelihood</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs174', 487)" onmouseover="showTip(event, 'fs174', 487)" class="id">profile</span>
+                <span onmouseout="hideTip(event, 'fs1', 488)" onmouseover="showTip(event, 'fs1', 488)" class="m">Bristlecone</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs81', 489)" onmouseover="showTip(event, 'fs81', 489)" class="id">fit</span>
+                <span onmouseout="hideTip(event, 'fs82', 490)" onmouseover="showTip(event, 'fs82', 490)" class="m">Settings</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs44', 491)" onmouseover="showTip(event, 'fs44', 491)" class="id">engine</span>
+                <span onmouseout="hideTip(event, 'fs37', 492)" onmouseover="showTip(event, 'fs37', 492)" class="id">data</span>
+                <span onmouseout="hideTip(event, 'fs168', 493)" onmouseover="showTip(event, 'fs168', 493)" class="fn">h</span>
+                <span class="n">100</span><span class="pn">&lt;</span><span onmouseout="hideTip(event, 'fs60', 494)" onmouseover="showTip(event, 'fs60', 494)" class="rt">iteration</span><span class="pn">&gt;</span>
+                <span onmouseout="hideTip(event, 'fs144', 495)" onmouseover="showTip(event, 'fs144', 495)" class="fn">r</span>
+        <span onmouseout="hideTip(event, 'fs97', 496)" onmouseover="showTip(event, 'fs97', 496)" class="fn">name</span><span class="pn">,</span> <span onmouseout="hideTip(event, 'fs171', 497)" onmouseover="showTip(event, 'fs171', 497)" class="fn">l</span> <span class="pn">)</span>
+    <span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs95', 498)" onmouseover="showTip(event, 'fs95', 498)" class="m">Seq</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs114', 499)" onmouseover="showTip(event, 'fs114', 499)" class="id">toList</span>
+</code></pre>
+<p>The likelihood profile returns a 68% and 95% interval for each
+parameter. We can inspect them like so:</p>
+<pre class="fssnip highlighted"><code lang="fsharp"><span onmouseout="hideTip(event, 'fs166', 500)" onmouseover="showTip(event, 'fs166', 500)" class="id">likelihoodProfile</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs175', 501)" onmouseover="showTip(event, 'fs175', 501)" class="id">Head</span>
+<span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs74', 502)" onmouseover="showTip(event, 'fs74', 502)" class="fn">snd</span>
+<span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs95', 503)" onmouseover="showTip(event, 'fs95', 503)" class="m">Seq</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs100', 504)" onmouseover="showTip(event, 'fs100', 504)" class="id">map</span><span class="pn">(</span><span class="k">fun</span> <span onmouseout="hideTip(event, 'fs176', 505)" onmouseover="showTip(event, 'fs176', 505)" class="fn">kv</span> <span class="k">-&gt;</span> <span onmouseout="hideTip(event, 'fs146', 506)" onmouseover="showTip(event, 'fs146', 506)" class="fn">sprintf</span> <span class="s">&quot;[</span><span class="pf">%s</span><span class="s">] 95 CI </span><span class="pf">%f</span><span class="s"> - </span><span class="pf">%f</span><span class="s"> (estimate = </span><span class="pf">%f</span><span class="s">)&quot;</span> <span onmouseout="hideTip(event, 'fs176', 507)" onmouseover="showTip(event, 'fs176', 507)" class="fn">kv</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs102', 508)" onmouseover="showTip(event, 'fs102', 508)" class="prop">Key</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs132', 509)" onmouseover="showTip(event, 'fs132', 509)" class="id">Value</span> <span onmouseout="hideTip(event, 'fs176', 510)" onmouseover="showTip(event, 'fs176', 510)" class="fn">kv</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs177', 511)" onmouseover="showTip(event, 'fs177', 511)" class="prop">Value</span><span class="pn">.</span><span class="prop">``95%``</span><span class="pn">.</span><span class="id">Lower</span> <span onmouseout="hideTip(event, 'fs176', 512)" onmouseover="showTip(event, 'fs176', 512)" class="fn">kv</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs177', 513)" onmouseover="showTip(event, 'fs177', 513)" class="prop">Value</span><span class="pn">.</span><span class="prop">``95%``</span><span class="pn">.</span><span class="id">Upper</span> <span onmouseout="hideTip(event, 'fs176', 514)" onmouseover="showTip(event, 'fs176', 514)" class="fn">kv</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs177', 515)" onmouseover="showTip(event, 'fs177', 515)" class="prop">Value</span><span class="pn">.</span><span onmouseout="hideTip(event, 'fs178', 516)" onmouseover="showTip(event, 'fs178', 516)" class="id">Estimate</span> <span class="pn">)</span>
+</code></pre>
+
+        <div class="fsdocs-tip" id="fs1">Multiple items<br />module Bristlecone
+
+from Bristlecone<br /><br />--------------------<br />namespace Bristlecone</div>
+<div class="fsdocs-tip" id="fs2">module Language
+
+from Bristlecone<br /><em>&lt;summary&gt;
+ An F# Domain Specific Language (DSL) for scripting with
+ Bristlecone.
+&lt;/summary&gt;</em></div>
+<div class="fsdocs-tip" id="fs3">module Time
+
+from Bristlecone</div>
+<div class="fsdocs-tip" id="fs4">Multiple items<br />val Measure: sId: MeasureId&lt;&#39;u&gt; -&gt; ModelExpression&lt;&#39;u&gt;<br /><br />--------------------<br />type MeasureAttribute =
+  inherit Attribute
+  new: unit -&gt; MeasureAttribute<br /><br />--------------------<br />new: unit -&gt; MeasureAttribute</div>
+<div class="fsdocs-tip" id="fs5">[&lt;Measure&gt;]
+type gram</div>
+<div class="fsdocs-tip" id="fs6">val mass: StateId&lt;gram&gt;</div>
+<div class="fsdocs-tip" id="fs7">val state: name: string -&gt; StateId&lt;&#39;u&gt;</div>
+<div class="fsdocs-tip" id="fs8">val K: IncludedParameter&lt;gram&gt;</div>
+<div class="fsdocs-tip" id="fs9">Multiple items<br />val parameter: code: string -&gt; con: Parameter.Constraint&lt;&#39;u&gt; -&gt; lower: float&lt;&#39;u&gt; -&gt; upper: float&lt;&#39;u&gt; -&gt; IncludedParameter&lt;&#39;u&gt;<br /><em>&lt;summary&gt;
+ Define an estimatable parameter for a Bristlecone model.
+&lt;/summary&gt;</em><br /><br />--------------------<br />[&lt;Measure&gt;]
+type parameter</div>
+<div class="fsdocs-tip" id="fs10">val Positive: Parameter.Constraint&lt;&#39;u&gt;</div>
+<div class="fsdocs-tip" id="fs11">val β: IncludedParameter&lt;1&gt;</div>
+<div class="fsdocs-tip" id="fs12">val L: IncludedParameter&lt;gram&gt;</div>
+<div class="fsdocs-tip" id="fs13">val rAbs: IncludedParameter&lt;gram/day&gt;</div>
+<div class="fsdocs-tip" id="fs14">[&lt;Measure&gt;]
+type day</div>
+<div class="fsdocs-tip" id="fs15">val r: IncludedParameter&lt;/day&gt;</div>
+<div class="fsdocs-tip" id="fs16">val linear: ModelExpression&lt;gram/day&gt;</div>
+<div class="fsdocs-tip" id="fs17">val P: name: IncludedParameter&lt;&#39;u&gt; -&gt; ModelExpression&lt;&#39;u&gt;</div>
+<div class="fsdocs-tip" id="fs18">val exponential: ModelExpression&lt;gram/day&gt;</div>
+<div class="fsdocs-tip" id="fs19">val This&lt;&#39;u&gt; : ModelExpression&lt;&#39;u&gt;</div>
+<div class="fsdocs-tip" id="fs20">val powerLaw: ModelExpression&lt;gram/day&gt;</div>
+<div class="fsdocs-tip" id="fs21">val monomolecular: ModelExpression&lt;gram/day&gt;</div>
+<div class="fsdocs-tip" id="fs22">val logistic: ModelExpression&lt;gram/day&gt;</div>
+<div class="fsdocs-tip" id="fs23">val Constant: x: float&lt;&#39;u&gt; -&gt; ModelExpression&lt;&#39;u&gt;</div>
+<div class="fsdocs-tip" id="fs24">val logisticFour: ModelExpression&lt;gram/day&gt;</div>
+<div class="fsdocs-tip" id="fs25">val gompertz: ModelExpression&lt;gram/day&gt;</div>
+<div class="fsdocs-tip" id="fs26">val Logarithm: expr: ModelExpression&lt;1&gt; -&gt; ModelExpression&lt;1&gt;<br /><em>&lt;summary&gt;
+ The natural logarithm of an expression.
+&lt;/summary&gt;</em></div>
+<div class="fsdocs-tip" id="fs27">val hypotheses: (string * ModelBuilder.ModelBuilder&lt;day&gt;) list</div>
+<div class="fsdocs-tip" id="fs28">val mkModel: ode: ModelExpression&lt;&#39;u&gt; -&gt; ModelBuilder.ModelBuilder&lt;gram/&#39;u&gt;</div>
+<div class="fsdocs-tip" id="fs29">val ode: ModelExpression&lt;&#39;u&gt;</div>
+<div class="fsdocs-tip" id="fs30">module Model
+
+from Bristlecone.Language<br /><em>&lt;summary&gt;
+ Terms for scaffolding a model system for use with Bristlecone.
+&lt;/summary&gt;</em></div>
+<div class="fsdocs-tip" id="fs31">val empty&lt;&#39;time&gt; : ModelBuilder.ModelBuilder&lt;&#39;time&gt;</div>
+<div class="fsdocs-tip" id="fs32">val addRateEquation: name: StateId&lt;&#39;state&gt; -&gt; expr: ModelExpression&lt;&#39;state/&#39;time&gt; -&gt; mb: ModelBuilder.ModelBuilder&lt;&#39;time&gt; -&gt; ModelBuilder.ModelBuilder&lt;&#39;time&gt;</div>
+<div class="fsdocs-tip" id="fs33">val estimateParameter: p: IncludedParameter&lt;&#39;u&gt; -&gt; builder: ModelBuilder.ModelBuilder&lt;&#39;time&gt; -&gt; ModelBuilder.ModelBuilder&lt;&#39;time&gt;</div>
+<div class="fsdocs-tip" id="fs34">val baseDay: System.DateTime</div>
+<div class="fsdocs-tip" id="fs35">namespace System</div>
+<div class="fsdocs-tip" id="fs36">Multiple items<br />[&lt;Struct&gt;]
+type DateTime =
+  new: date: DateOnly * time: TimeOnly -&gt; unit + 16 overloads
+  member Add: value: TimeSpan -&gt; DateTime
+  member AddDays: value: float -&gt; DateTime
+  member AddHours: value: float -&gt; DateTime
+  member AddMicroseconds: value: float -&gt; DateTime
+  member AddMilliseconds: value: float -&gt; DateTime
+  member AddMinutes: value: float -&gt; DateTime
+  member AddMonths: months: int -&gt; DateTime
+  member AddSeconds: value: float -&gt; DateTime
+  member AddTicks: value: int64 -&gt; DateTime
+  ...<br /><em>&lt;summary&gt;Represents an instant in time, typically expressed as a date and time of day.&lt;/summary&gt;</em><br /><br />--------------------<br />System.DateTime ()<br />&#160;&#160;&#160;<em>(+0 other overloads)</em><br />System.DateTime(ticks: int64) : System.DateTime<br />&#160;&#160;&#160;<em>(+0 other overloads)</em><br />System.DateTime(date: System.DateOnly, time: System.TimeOnly) : System.DateTime<br />&#160;&#160;&#160;<em>(+0 other overloads)</em><br />System.DateTime(ticks: int64, kind: System.DateTimeKind) : System.DateTime<br />&#160;&#160;&#160;<em>(+0 other overloads)</em><br />System.DateTime(date: System.DateOnly, time: System.TimeOnly, kind: System.DateTimeKind) : System.DateTime<br />&#160;&#160;&#160;<em>(+0 other overloads)</em><br />System.DateTime(year: int, month: int, day: int) : System.DateTime<br />&#160;&#160;&#160;<em>(+0 other overloads)</em><br />System.DateTime(year: int, month: int, day: int, calendar: System.Globalization.Calendar) : System.DateTime<br />&#160;&#160;&#160;<em>(+0 other overloads)</em><br />System.DateTime(year: int, month: int, day: int, hour: int, minute: int, second: int) : System.DateTime<br />&#160;&#160;&#160;<em>(+0 other overloads)</em><br />System.DateTime(year: int, month: int, day: int, hour: int, minute: int, second: int, kind: System.DateTimeKind) : System.DateTime<br />&#160;&#160;&#160;<em>(+0 other overloads)</em><br />System.DateTime(year: int, month: int, day: int, hour: int, minute: int, second: int, calendar: System.Globalization.Calendar) : System.DateTime<br />&#160;&#160;&#160;<em>(+0 other overloads)</em></div>
+<div class="fsdocs-tip" id="fs37">val data: Map&lt;ShortCode.ShortCode,TimeSeries.TimeSeries&lt;float,System.DateTime,int&lt;year&gt;,System.TimeSpan&gt;&gt;</div>
+<div class="fsdocs-tip" id="fs38">property StateId.Code: ShortCode.ShortCode with get</div>
+<div class="fsdocs-tip" id="fs39">Multiple items<br />module TimeSeries
+
+from Bristlecone.Time<br /><em>&lt;summary&gt;Contains functions and types to create and manipulate
+ `TimeSeries` values, which represent observations ordered in time.&lt;/summary&gt;</em><br /><br />--------------------<br />type TimeSeries&lt;&#39;T,&#39;date,&#39;timeunit,&#39;timespan&gt; = TimeSeries.TimeSeries&lt;&#39;T,&#39;date,&#39;timeunit,&#39;timespan&gt;</div>
+<div class="fsdocs-tip" id="fs40">val fromNeoObservations: dataset: TimeSeries.Observation&lt;&#39;a,System.DateTime&gt; seq -&gt; TimeSeries.TimeSeries&lt;&#39;a,System.DateTime,int&lt;year&gt;,System.TimeSpan&gt;<br /><em>&lt;summary&gt;Create a time-series where time is represented by standard
+ (modern) calendars and dates and times through the built-in .NET
+ DateTime type.&lt;/summary&gt;<br />&lt;param name=&quot;dataset&quot;&gt;A sequence of observations, which consist of data and dates / times&lt;/param&gt;<br />&lt;typeparam name=&quot;&#39;a&quot;&gt;The type of the data in the series&lt;/typeparam&gt;<br />&lt;returns&gt;A time-series of DateTime observations ordered oldest to newest.&lt;/returns&gt;</em></div>
+<div class="fsdocs-tip" id="fs41">System.DateTime.AddDays(value: float) : System.DateTime</div>
+<div class="fsdocs-tip" id="fs42">Multiple items<br />module Map
+
+from Bristlecone<br /><br />--------------------<br />module Map
+
+from Microsoft.FSharp.Collections<br /><br />--------------------<br />type Map&lt;&#39;Key,&#39;Value (requires comparison)&gt; =
+  interface IReadOnlyDictionary&lt;&#39;Key,&#39;Value&gt;
+  interface IReadOnlyCollection&lt;KeyValuePair&lt;&#39;Key,&#39;Value&gt;&gt;
+  interface IEnumerable
+  interface IStructuralEquatable
+  interface IComparable
+  interface IEnumerable&lt;KeyValuePair&lt;&#39;Key,&#39;Value&gt;&gt;
+  interface ICollection&lt;KeyValuePair&lt;&#39;Key,&#39;Value&gt;&gt;
+  interface IDictionary&lt;&#39;Key,&#39;Value&gt;
+  new: elements: (&#39;Key * &#39;Value) seq -&gt; Map&lt;&#39;Key,&#39;Value&gt;
+  member Add: key: &#39;Key * value: &#39;Value -&gt; Map&lt;&#39;Key,&#39;Value&gt;
+  ...<br /><br />--------------------<br />new: elements: (&#39;Key * &#39;Value) seq -&gt; Map&lt;&#39;Key,&#39;Value&gt;</div>
+<div class="fsdocs-tip" id="fs43">val ofList: elements: (&#39;Key * &#39;T) list -&gt; Map&lt;&#39;Key,&#39;T&gt; (requires comparison)</div>
+<div class="fsdocs-tip" id="fs44">val engine: EstimationEngine.EstimationEngine&lt;System.DateTime,System.TimeSpan,day,1&gt;</div>
+<div class="fsdocs-tip" id="fs45">val mkContinuous: unit -&gt; EstimationEngine.EstimationEngine&lt;System.DateTime,System.TimeSpan,year,&#39;u&gt;<br /><em>&lt;summary&gt;A basic estimation engine for ordinary differential equations, using a Nelder-Mead optimiser.&lt;/summary&gt;</em></div>
+<div class="fsdocs-tip" id="fs46">val forDailyModel: engine: EstimationEngine.EstimationEngine&lt;&#39;a,&#39;b,&#39;u,&#39;v&gt; -&gt; EstimationEngine.EstimationEngine&lt;System.DateTime,System.TimeSpan,day,&#39;v&gt;</div>
+<div class="fsdocs-tip" id="fs47">val withCustomOptimisation: optim: EstimationEngine.Optimisation.Optimiser -&gt; engine: EstimationEngine.EstimationEngine&lt;&#39;a,&#39;b,&#39;u,&#39;v&gt; -&gt; EstimationEngine.EstimationEngine&lt;&#39;a,&#39;b,&#39;u,&#39;v&gt;</div>
+<div class="fsdocs-tip" id="fs48">namespace Bristlecone.Optimisation</div>
+<div class="fsdocs-tip" id="fs49">module Amoeba
+
+from Bristlecone.Optimisation<br /><em>&lt;summary&gt;
+ Nelder Mead implementation
+ Adapted from original at: https://github.com/mathias-brandewinder/Amoeba
+&lt;/summary&gt;</em></div>
+<div class="fsdocs-tip" id="fs50">val single: settings: Optimisation.Amoeba.Solver.Settings -&gt; EstimationEngine.Optimisation.Optimiser<br /><em>&lt;summary&gt;
+ Optimise an objective function using a single downhill Nelder Mead simplex.
+&lt;/summary&gt;</em></div>
+<div class="fsdocs-tip" id="fs51">module Solver
+
+from Bristlecone.Optimisation.Amoeba<br /><em>&lt;summary&gt;
+ Nelder–Mead downhill simplex
+&lt;/summary&gt;</em></div>
+<div class="fsdocs-tip" id="fs52">val Default: Optimisation.Amoeba.Solver.Settings</div>
+<div class="fsdocs-tip" id="fs53">val withConditioning: c: Conditioning.Conditioning&lt;&#39;u&gt; -&gt; engine: EstimationEngine.EstimationEngine&lt;&#39;a,&#39;b,&#39;v,&#39;u&gt; -&gt; EstimationEngine.EstimationEngine&lt;&#39;a,&#39;b,&#39;v,&#39;u&gt;<br /><em>&lt;summary&gt;
+ Choose how the start point is chosen when solving the model system
+&lt;/summary&gt;</em></div>
+<div class="fsdocs-tip" id="fs54">module Conditioning
+
+from Bristlecone</div>
+<div class="fsdocs-tip" id="fs55">union case Conditioning.Conditioning.NoConditioning: Conditioning.Conditioning&lt;&#39;u&gt;</div>
+<div class="fsdocs-tip" id="fs56">val withSeed: seed: int -&gt; engine: EstimationEngine.EstimationEngine&lt;&#39;a,&#39;b,&#39;u,&#39;v&gt; -&gt; EstimationEngine.EstimationEngine&lt;&#39;a,&#39;b,&#39;u,&#39;v&gt;<br /><em>&lt;summary&gt;
+ Use a mersenne twister random number generator
+ with a specific seed.
+&lt;/summary&gt;</em></div>
+<div class="fsdocs-tip" id="fs57">val endCond: EstimationEngine.EndCondition</div>
+<div class="fsdocs-tip" id="fs58">module EndConditions
+
+from Bristlecone.Optimisation<br /><em>&lt;summary&gt;Composable end conditions to specify when optimisation
+ routines should end.&lt;/summary&gt;</em></div>
+<div class="fsdocs-tip" id="fs59">val whenNoBestValueImprovement: window: int&lt;iteration&gt; -&gt; results: EstimationEngine.Solution list -&gt; iteration: int&lt;iteration&gt; -&gt; EstimationEngine.OptimStopReason<br /><em>&lt;summary&gt;
+ Given a list of solutions, which are ordered most recent first,
+ returns `true` if there are at least `window` recent results, and
+ the change within the recent results is no more than `tolerance`.
+&lt;/summary&gt;</em></div>
+<div class="fsdocs-tip" id="fs60">[&lt;Measure&gt;]
+type iteration</div>
+<div class="fsdocs-tip" id="fs61">val sigmaBase: IncludedParameter&lt;gram&gt;</div>
+<div class="fsdocs-tip" id="fs62">val sigmaGrowth: IncludedParameter&lt;/gram&gt;</div>
+<div class="fsdocs-tip" id="fs63">val variance: ModelLibrary.NegLogLikelihood.Variance.VarianceFunction&lt;gram,gram&gt;</div>
+<div class="fsdocs-tip" id="fs64">namespace Bristlecone.ModelLibrary</div>
+<div class="fsdocs-tip" id="fs65">module NegLogLikelihood
+
+from Bristlecone.ModelLibrary<br /><em>&lt;summary&gt;Negative log likelihood (-logL) functions to represent
+ a variety of distributions and data types.&lt;/summary&gt;<br />&lt;namespacedoc&gt;&lt;summary&gt;Pre-built model parts for use in Bristlecone&lt;/summary&gt;&lt;/namespacedoc&gt;</em></div>
+<div class="fsdocs-tip" id="fs66">module Variance
+
+from Bristlecone.ModelLibrary.NegLogLikelihood<br /><em>&lt;summary&gt;Functions representing how variance is handled
+ within likelihood functions.&lt;/summary&gt;</em></div>
+<div class="fsdocs-tip" id="fs67">val exponential: sigma0: IncludedParameter&lt;&#39;u&gt; -&gt; sigma1: IncludedParameter&lt;&#39;v&gt; -&gt; ModelLibrary.NegLogLikelihood.Variance.VarianceFunction&lt;&#39;u,/&#39;v&gt;<br /><em>&lt;summary&gt;
+ Variance is exponential to the expected value (σ = σ0 * exp(σ1 * x)),
+ where sigma1 is the baseline variance and sigma2 is the rate of growth
+ in variance per units of expx.
+&lt;/summary&gt;</em></div>
+<div class="fsdocs-tip" id="fs68">val results: (string * ModelSystem.EstimationResult&lt;System.DateTime,int&lt;year&gt;,System.TimeSpan&gt;) list</div>
+<div class="fsdocs-tip" id="fs69">module GrowthFunctions
+
+from Plant-growth</div>
+<div class="fsdocs-tip" id="fs70">Multiple items<br />module List
+
+from Bristlecone<br /><br />--------------------<br />module List
+
+from Microsoft.FSharp.Collections<br /><br />--------------------<br />type List&lt;&#39;T&gt; =
+  | op_Nil
+  | op_ColonColon of Head: &#39;T * Tail: &#39;T list
+  interface IReadOnlyList&lt;&#39;T&gt;
+  interface IReadOnlyCollection&lt;&#39;T&gt;
+  interface IEnumerable
+  interface IEnumerable&lt;&#39;T&gt;
+  member GetReverseIndex: rank: int * offset: int -&gt; int
+  member GetSlice: startIndex: int option * endIndex: int option -&gt; &#39;T list
+  static member Cons: head: &#39;T * tail: &#39;T list -&gt; &#39;T list
+  member Head: &#39;T with get
+  member IsEmpty: bool with get
+  member Item: index: int -&gt; &#39;T with get
+  ...</div>
+<div class="fsdocs-tip" id="fs71">val map: mapping: (&#39;T -&gt; &#39;U) -&gt; list: &#39;T list -&gt; &#39;U list</div>
+<div class="fsdocs-tip" id="fs72">val h: string * ModelBuilder.ModelBuilder&lt;day&gt;</div>
+<div class="fsdocs-tip" id="fs73">val hy: ModelSystem.ModelSystem&lt;day&gt;</div>
+<div class="fsdocs-tip" id="fs74">val snd: tuple: (&#39;T1 * &#39;T2) -&gt; &#39;T2</div>
+<div class="fsdocs-tip" id="fs75">val useLikelihoodFunction: likelihoodFn: ModelSystem.Likelihood&lt;ModelSystem.state&gt; -&gt; builder: ModelBuilder.ModelBuilder&lt;&#39;u&gt; -&gt; ModelBuilder.ModelBuilder&lt;&#39;u&gt;</div>
+<div class="fsdocs-tip" id="fs76">val NormalWithVariance: obs: Require.ObsForLikelihood&lt;&#39;u&gt; -&gt; varianceFn: ModelLibrary.NegLogLikelihood.Variance.VarianceFunction&lt;&#39;u,&#39;u&gt; -&gt; ModelSystem.Likelihood&lt;&#39;v&gt;</div>
+<div class="fsdocs-tip" id="fs77">module Require
+
+from Bristlecone.Language</div>
+<div class="fsdocs-tip" id="fs78">val state: s: StateId&lt;&#39;u&gt; -&gt; Require.ObsForLikelihood&lt;&#39;u&gt;</div>
+<div class="fsdocs-tip" id="fs79">val compile: (ModelBuilder.ModelBuilder&lt;&#39;u&gt; -&gt; ModelSystem.ModelSystem&lt;&#39;u&gt;)</div>
+<div class="fsdocs-tip" id="fs80">val fst: tuple: (&#39;T1 * &#39;T2) -&gt; &#39;T1</div>
+<div class="fsdocs-tip" id="fs81">val fit: engine: EstimationEngine.EstimationEngine&lt;&#39;a,&#39;b,&#39;modelTimeUnit,&#39;u&gt; -&gt; endCondition: EstimationEngine.EndCondition -&gt; timeSeriesData: CodedMap&lt;TimeSeries&lt;float&lt;&#39;u&gt;,&#39;a,&#39;c,&#39;b&gt;&gt; -&gt; model: ModelSystem.ModelSystem&lt;&#39;modelTimeUnit&gt; -&gt; ModelSystem.EstimationResult&lt;&#39;a,&#39;c,&#39;b&gt; (requires comparison and comparison)<br /><em>&lt;summary&gt;Fit a time-series model to data.&lt;/summary&gt;<br />&lt;param name=&quot;engine&quot;&gt;An estimation engine configured and tested for the given model.&lt;/param&gt;<br />&lt;param name=&quot;endCondition&quot;&gt;The condition at which optimisation should cease.&lt;/param&gt;<br />&lt;param name=&quot;timeSeriesData&quot;&gt;Time-series dataset that contains a series for each equation in the model system.&lt;/param&gt;<br />&lt;param name=&quot;model&quot;&gt;A model system of equations, likelihood function, estimatible parameters, and optional measures.&lt;/param&gt;<br />&lt;returns&gt;The result of the model-fitting procedure. If an error occurs, throws an exception.&lt;/returns&gt;</em></div>
+<div class="fsdocs-tip" id="fs82">module Settings
+
+from Plant-growth</div>
+<div class="fsdocs-tip" id="fs83">namespace Plotly</div>
+<div class="fsdocs-tip" id="fs84">namespace Plotly.NET</div>
+<div class="fsdocs-tip" id="fs85">val fitPlot: r: (string * ModelSystem.EstimationResult&lt;System.DateTime,int&lt;year&gt;,System.TimeSpan&gt;) seq -&gt; GenericChart.GenericChart</div>
+<div class="fsdocs-tip" id="fs86">val r: (string * ModelSystem.EstimationResult&lt;System.DateTime,int&lt;year&gt;,System.TimeSpan&gt;) seq</div>
+<div class="fsdocs-tip" id="fs87">Multiple items<br />val string: value: &#39;T -&gt; string<br /><br />--------------------<br />type string = System.String</div>
+<div class="fsdocs-tip" id="fs88">module ModelSystem
+
+from Bristlecone<br /><em>&lt;summary&gt;
+ Represents an ordinary differential equation model system and
+ its likelihood as an objective function that may be optimised.
+&lt;/summary&gt;</em></div>
+<div class="fsdocs-tip" id="fs89">type EstimationResult&lt;&#39;date,&#39;timeunit,&#39;timespan&gt; =
+  {
+    ResultId: Guid
+    Likelihood: float&lt;-logL&gt;
+    Parameters: ParameterPool
+    Series: CodedMap&lt;FitSeries&lt;&#39;date,&#39;timeunit,&#39;timespan&gt;&gt;
+    Trace: Trace list
+    InternalDynamics: CodedMap&lt;float&lt;state&gt; array&gt; option
+    Metadata: List&lt;string * string&gt;
+  }<br /><em>&lt;summary&gt;
+ An estimated model fit for a time-series model.
+&lt;/summary&gt;</em></div>
+<div class="fsdocs-tip" id="fs90">Multiple items<br />val int: value: &#39;T -&gt; int (requires member op_Explicit)<br /><br />--------------------<br />type int = int32<br /><br />--------------------<br />type int&lt;&#39;Measure&gt; =
+  int</div>
+<div class="fsdocs-tip" id="fs91">[&lt;Measure&gt;]
+type year</div>
+<div class="fsdocs-tip" id="fs92">Multiple items<br />[&lt;Struct&gt;]
+type TimeSpan =
+  new: hours: int * minutes: int * seconds: int -&gt; unit + 4 overloads
+  member Add: ts: TimeSpan -&gt; TimeSpan
+  member CompareTo: value: obj -&gt; int + 1 overload
+  member Divide: divisor: float -&gt; TimeSpan + 1 overload
+  member Duration: unit -&gt; TimeSpan
+  member Equals: value: obj -&gt; bool + 2 overloads
+  member GetHashCode: unit -&gt; int
+  member Multiply: factor: float -&gt; TimeSpan
+  member Negate: unit -&gt; TimeSpan
+  member Subtract: ts: TimeSpan -&gt; TimeSpan
+  ...<br /><em>&lt;summary&gt;Represents a time interval.&lt;/summary&gt;</em><br /><br />--------------------<br />System.TimeSpan ()<br />System.TimeSpan(ticks: int64) : System.TimeSpan<br />System.TimeSpan(hours: int, minutes: int, seconds: int) : System.TimeSpan<br />System.TimeSpan(days: int, hours: int, minutes: int, seconds: int) : System.TimeSpan<br />System.TimeSpan(days: int, hours: int, minutes: int, seconds: int, milliseconds: int) : System.TimeSpan<br />System.TimeSpan(days: int, hours: int, minutes: int, seconds: int, milliseconds: int, microseconds: int) : System.TimeSpan</div>
+<div class="fsdocs-tip" id="fs93">Multiple items<br />val seq: sequence: &#39;T seq -&gt; &#39;T seq<br /><br />--------------------<br />type &#39;T seq = System.Collections.Generic.IEnumerable&lt;&#39;T&gt;</div>
+<div class="fsdocs-tip" id="fs94">val variables: (ShortCode.ShortCode * (ShortCode.ShortCode * (string * ModelSystem.FitSeries&lt;System.DateTime,int&lt;year&gt;,System.TimeSpan&gt;)) seq) seq</div>
+<div class="fsdocs-tip" id="fs95">Multiple items<br />module Seq
+
+from Bristlecone<br /><br />--------------------<br />module Seq
+
+from Microsoft.FSharp.Collections</div>
+<div class="fsdocs-tip" id="fs96">val collect: mapping: (&#39;T -&gt; #(&#39;U seq)) -&gt; source: &#39;T seq -&gt; &#39;U seq</div>
+<div class="fsdocs-tip" id="fs97">val name: string</div>
+<div class="fsdocs-tip" id="fs98">val res: ModelSystem.EstimationResult&lt;System.DateTime,int&lt;year&gt;,System.TimeSpan&gt;</div>
+<div class="fsdocs-tip" id="fs99">ModelSystem.EstimationResult.Series: CodedMap&lt;ModelSystem.FitSeries&lt;System.DateTime,int&lt;year&gt;,System.TimeSpan&gt;&gt;</div>
+<div class="fsdocs-tip" id="fs100">val map: mapping: (&#39;T -&gt; &#39;U) -&gt; source: &#39;T seq -&gt; &#39;U seq</div>
+<div class="fsdocs-tip" id="fs101">val kv: System.Collections.Generic.KeyValuePair&lt;ShortCode.ShortCode,ModelSystem.FitSeries&lt;System.DateTime,int&lt;year&gt;,System.TimeSpan&gt;&gt;</div>
+<div class="fsdocs-tip" id="fs102">property System.Collections.Generic.KeyValuePair.Key: ShortCode.ShortCode with get<br /><em>&lt;summary&gt;Gets the key in the key/value pair.&lt;/summary&gt;<br />&lt;returns&gt;A &lt;typeparamref name=&quot;TKey&quot; /&gt; that is the key of the &lt;see cref=&quot;T:System.Collections.Generic.KeyValuePair`2&quot; /&gt;.&lt;/returns&gt;</em></div>
+<div class="fsdocs-tip" id="fs103">property System.Collections.Generic.KeyValuePair.Value: ModelSystem.FitSeries&lt;System.DateTime,int&lt;year&gt;,System.TimeSpan&gt; with get<br /><em>&lt;summary&gt;Gets the value in the key/value pair.&lt;/summary&gt;<br />&lt;returns&gt;A &lt;typeparamref name=&quot;TValue&quot; /&gt; that is the value of the &lt;see cref=&quot;T:System.Collections.Generic.KeyValuePair`2&quot; /&gt;.&lt;/returns&gt;</em></div>
+<div class="fsdocs-tip" id="fs104">val groupBy: projection: (&#39;T -&gt; &#39;Key) -&gt; source: &#39;T seq -&gt; (&#39;Key * &#39;T seq) seq (requires equality)</div>
+<div class="fsdocs-tip" id="fs105">val charts: GenericChart.GenericChart seq</div>
+<div class="fsdocs-tip" id="fs106">val varCode: ShortCode.ShortCode</div>
+<div class="fsdocs-tip" id="fs107">val modelFits: (ShortCode.ShortCode * (string * ModelSystem.FitSeries&lt;System.DateTime,int&lt;year&gt;,System.TimeSpan&gt;)) seq</div>
+<div class="fsdocs-tip" id="fs108">val obsLine: GenericChart.GenericChart</div>
+<div class="fsdocs-tip" id="fs109">val head: source: &#39;T seq -&gt; &#39;T</div>
+<div class="fsdocs-tip" id="fs110">val toObservations: series: TimeSeries.TimeSeries&lt;&#39;a,&#39;b,&#39;c,&#39;d&gt; -&gt; (&#39;a * &#39;b) seq<br /><em>&lt;summary&gt;Turn a time series into a sequence of observations&lt;/summary&gt;<br />&lt;param name=&quot;series&quot;&gt;A time-series&lt;/param&gt;<br />&lt;typeparam name=&quot;&#39;a&quot;&gt;The underlying data type&lt;/typeparam&gt;<br />&lt;typeparam name=&quot;&#39;b&quot;&gt;The date/time representation&lt;/typeparam&gt;<br />&lt;returns&gt;&lt;/returns&gt;</em></div>
+<div class="fsdocs-tip" id="fs111">val d: ModelSystem.FitValue</div>
+<div class="fsdocs-tip" id="fs112">val v: System.DateTime</div>
+<div class="fsdocs-tip" id="fs113">ModelSystem.FitValue.Obs: float&lt;ModelSystem.state&gt;</div>
+<div class="fsdocs-tip" id="fs114">val toList: source: &#39;T seq -&gt; &#39;T list</div>
+<div class="fsdocs-tip" id="fs115">val l: (System.DateTime * float&lt;ModelSystem.state&gt;) list</div>
+<div class="fsdocs-tip" id="fs116">type Chart =
+  static member AnnotatedHeatmap: zData: #(&#39;a1 seq) seq * annotationText: #(string seq) seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Name: string * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?ShowLegend: bool * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Opacity: float * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?X: &#39;a3 seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiX: &#39;a3 seq seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?XGap: int * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Y: &#39;a4 seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiY: &#39;a4 seq seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?YGap: int * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Text: &#39;a5 * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiText: &#39;a5 seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?ColorBar: ColorBar * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?ColorScale: Colorscale * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?ShowScale: bool * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?ReverseScale: bool * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?ZSmooth: SmoothAlg * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Transpose: bool * [&lt;Optional; DefaultParameterValue ((false :&gt; obj))&gt;] ?UseWebGL: bool * [&lt;Optional; DefaultParameterValue ((false :&gt; obj))&gt;] ?ReverseYAxis: bool * [&lt;Optional; DefaultParameterValue ((true :&gt; obj))&gt;] ?UseDefaults: bool -&gt; GenericChart (requires &#39;a1 :&gt; IConvertible and &#39;a3 :&gt; IConvertible and &#39;a4 :&gt; IConvertible and &#39;a5 :&gt; IConvertible) + 1 overload
+  static member Area: x: #IConvertible seq * y: #IConvertible seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?ShowMarkers: bool * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Name: string * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?ShowLegend: bool * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Opacity: float * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiOpacity: float seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Text: &#39;a2 * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiText: &#39;a2 seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?TextPosition: TextPosition * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiTextPosition: TextPosition seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MarkerColor: Color * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MarkerColorScale: Colorscale * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MarkerOutline: Line * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MarkerSymbol: MarkerSymbol * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiMarkerSymbol: MarkerSymbol seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Marker: Marker * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?LineColor: Color * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?LineColorScale: Colorscale * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?LineWidth: float * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?LineDash: DrawingStyle * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Line: Line * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?AlignmentGroup: string * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?OffsetGroup: string * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?StackGroup: string * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Orientation: Orientation * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?GroupNorm: GroupNorm * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?FillColor: Color * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?FillPatternShape: PatternShape * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?FillPattern: Pattern * [&lt;Optional; DefaultParameterValue ((false :&gt; obj))&gt;] ?UseWebGL: bool * [&lt;Optional; DefaultParameterValue ((true :&gt; obj))&gt;] ?UseDefaults: bool -&gt; GenericChart (requires &#39;a2 :&gt; IConvertible) + 1 overload
+  static member Bar: values: #IConvertible seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Keys: &#39;a1 seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiKeys: &#39;a1 seq seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Name: string * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?ShowLegend: bool * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Opacity: float * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiOpacity: float seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Text: &#39;a2 * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiText: &#39;a2 seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MarkerColor: Color * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MarkerColorScale: Colorscale * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MarkerOutline: Line * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MarkerPatternShape: PatternShape * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiMarkerPatternShape: PatternShape seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MarkerPattern: Pattern * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Marker: Marker * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Base: #IConvertible * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Width: &#39;a4 * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiWidth: &#39;a4 seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?TextPosition: TextPosition * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiTextPosition: TextPosition seq * [&lt;Optional; DefaultParameterValue ((true :&gt; obj))&gt;] ?UseDefaults: bool -&gt; GenericChart (requires &#39;a1 :&gt; IConvertible and &#39;a2 :&gt; IConvertible and &#39;a4 :&gt; IConvertible) + 1 overload
+  static member BoxPlot: [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?X: &#39;a0 seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiX: &#39;a0 seq seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Y: &#39;a1 seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiY: &#39;a1 seq seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Name: string * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?ShowLegend: bool * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Text: &#39;a2 * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiText: &#39;a2 seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?FillColor: Color * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MarkerColor: Color * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Marker: Marker * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Opacity: float * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?WhiskerWidth: float * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?BoxPoints: BoxPoints * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?BoxMean: BoxMean * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Jitter: float * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?PointPos: float * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Orientation: Orientation * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?OutlineColor: Color * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?OutlineWidth: float * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Outline: Line * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?AlignmentGroup: string * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?OffsetGroup: string * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Notched: bool * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?NotchWidth: float * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?QuartileMethod: QuartileMethod * [&lt;Optional; DefaultParameterValue ((true :&gt; obj))&gt;] ?UseDefaults: bool -&gt; GenericChart (requires &#39;a0 :&gt; IConvertible and &#39;a1 :&gt; IConvertible and &#39;a2 :&gt; IConvertible) + 2 overloads
+  static member Bubble: x: #IConvertible seq * y: #IConvertible seq * sizes: int seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Name: string * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?ShowLegend: bool * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Opacity: float * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiOpacity: float seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Text: &#39;a2 * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiText: &#39;a2 seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?TextPosition: TextPosition * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiTextPosition: TextPosition seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MarkerColor: Color * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MarkerColorScale: Colorscale * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MarkerOutline: Line * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MarkerSymbol: MarkerSymbol * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiMarkerSymbol: MarkerSymbol seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Marker: Marker * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?LineColor: Color * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?LineColorScale: Colorscale * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?LineWidth: float * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?LineDash: DrawingStyle * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Line: Line * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?AlignmentGroup: string * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?OffsetGroup: string * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?StackGroup: string * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Orientation: Orientation * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?GroupNorm: GroupNorm * [&lt;Optional; DefaultParameterValue ((false :&gt; obj))&gt;] ?UseWebGL: bool * [&lt;Optional; DefaultParameterValue ((true :&gt; obj))&gt;] ?UseDefaults: bool -&gt; GenericChart (requires &#39;a2 :&gt; IConvertible) + 1 overload
+  static member Candlestick: ``open`` : #IConvertible seq * high: #IConvertible seq * low: #IConvertible seq * close: #IConvertible seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?X: &#39;a4 seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiX: &#39;a4 seq seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Name: string * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?ShowLegend: bool * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Opacity: float * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Text: &#39;a5 * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiText: &#39;a5 seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Line: Line * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?IncreasingColor: Color * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Increasing: FinanceMarker * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?DecreasingColor: Color * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Decreasing: FinanceMarker * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?WhiskerWidth: float * [&lt;Optional; DefaultParameterValue ((true :&gt; obj))&gt;] ?ShowXAxisRangeSlider: bool * [&lt;Optional; DefaultParameterValue ((true :&gt; obj))&gt;] ?UseDefaults: bool -&gt; GenericChart (requires &#39;a4 :&gt; IConvertible and &#39;a5 :&gt; IConvertible) + 2 overloads
+  static member Column: values: #IConvertible seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Keys: &#39;a1 seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiKeys: &#39;a1 seq seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Name: string * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?ShowLegend: bool * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Opacity: float * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiOpacity: float seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Text: &#39;a2 * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiText: &#39;a2 seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MarkerColor: Color * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MarkerColorScale: Colorscale * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MarkerOutline: Line * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MarkerPatternShape: PatternShape * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiMarkerPatternShape: PatternShape seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MarkerPattern: Pattern * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Marker: Marker * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Base: #IConvertible * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Width: &#39;a4 * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiWidth: &#39;a4 seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?TextPosition: TextPosition * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiTextPosition: TextPosition seq * [&lt;Optional; DefaultParameterValue ((true :&gt; obj))&gt;] ?UseDefaults: bool -&gt; GenericChart (requires &#39;a1 :&gt; IConvertible and &#39;a2 :&gt; IConvertible and &#39;a4 :&gt; IConvertible) + 1 overload
+  static member Contour: zData: #(&#39;a1 seq) seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Name: string * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?ShowLegend: bool * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Opacity: float * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?X: &#39;a2 seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiX: &#39;a2 seq seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Y: &#39;a3 seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiY: &#39;a3 seq seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Text: &#39;a4 * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiText: &#39;a4 seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?ColorBar: ColorBar * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?ColorScale: Colorscale * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?ShowScale: bool * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?ReverseScale: bool * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Transpose: bool * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?ContourLineColor: Color * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?ContourLineDash: DrawingStyle * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?ContourLineSmoothing: float * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?ContourLine: Line * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?ContoursColoring: ContourColoring * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?ContoursOperation: ConstraintOperation * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?ContoursType: ContourType * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?ShowContourLabels: bool * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?ContourLabelFont: Font * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Contours: Contours * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?FillColor: Color * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?NContours: int * [&lt;Optional; DefaultParameterValue ((true :&gt; obj))&gt;] ?UseDefaults: bool -&gt; GenericChart (requires &#39;a1 :&gt; IConvertible and &#39;a2 :&gt; IConvertible and &#39;a3 :&gt; IConvertible and &#39;a4 :&gt; IConvertible)
+  static member Funnel: x: #IConvertible seq * y: #IConvertible seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Name: string * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?ShowLegend: bool * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Opacity: float * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Width: float * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Offset: float * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Text: &#39;a2 * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiText: &#39;a2 seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?TextPosition: TextPosition * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiTextPosition: TextPosition seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Orientation: Orientation * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?AlignmentGroup: string * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?OffsetGroup: string * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MarkerColor: Color * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MarkerOutline: Line * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Marker: Marker * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?TextInfo: TextInfo * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?ConnectorLineColor: Color * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?ConnectorLineStyle: DrawingStyle * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?ConnectorFillColor: Color * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?ConnectorLine: Line * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Connector: FunnelConnector * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?InsideTextFont: Font * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?OutsideTextFont: Font * [&lt;Optional; DefaultParameterValue ((true :&gt; obj))&gt;] ?UseDefaults: bool -&gt; GenericChart (requires &#39;a2 :&gt; IConvertible)
+  static member Heatmap: zData: #(&#39;a1 seq) seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?X: &#39;a2 seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiX: &#39;a2 seq seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Y: &#39;a3 seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiY: &#39;a3 seq seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Name: string * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?ShowLegend: bool * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Opacity: float * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?XGap: int * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?YGap: int * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Text: &#39;a4 * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiText: &#39;a4 seq * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?ColorBar: ColorBar * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?ColorScale: Colorscale * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?ShowScale: bool * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?ReverseScale: bool * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?ZSmooth: SmoothAlg * [&lt;Optional; DefaultParameterValue ((null :&gt; obj))&gt;] ?Transpose: bool * [&lt;Optional; DefaultParameterValue ((false :&gt; obj))&gt;] ?UseWebGL: bool * [&lt;Optional; DefaultParameterValue ((false :&gt; obj))&gt;] ?ReverseYAxis: bool * [&lt;Optional; DefaultParameterValue ((true :&gt; obj))&gt;] ?UseDefaults: bool -&gt; GenericChart (requires &#39;a1 :&gt; IConvertible and &#39;a2 :&gt; IConvertible and &#39;a3 :&gt; IConvertible and &#39;a4 :&gt; IConvertible) + 1 overload
+  ...</div>
+<div class="fsdocs-tip" id="fs117">static member Chart.Point: xy: (#System.IConvertible * #System.IConvertible) seq * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?Name: string * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?ShowLegend: bool * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?Opacity: float * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiOpacity: float seq * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?Text: &#39;c * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiText: &#39;c seq * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?TextPosition: StyleParam.TextPosition * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiTextPosition: StyleParam.TextPosition seq * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?MarkerColor: Color * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?MarkerColorScale: StyleParam.Colorscale * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?MarkerOutline: Line * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?MarkerSymbol: StyleParam.MarkerSymbol * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiMarkerSymbol: StyleParam.MarkerSymbol seq * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?Marker: TraceObjects.Marker * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?AlignmentGroup: string * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?OffsetGroup: string * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?StackGroup: string * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?Orientation: StyleParam.Orientation * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?GroupNorm: StyleParam.GroupNorm * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((false :&gt; obj))&gt;] ?UseWebGL: bool * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((true :&gt; obj))&gt;] ?UseDefaults: bool -&gt; GenericChart.GenericChart (requires &#39;c :&gt; System.IConvertible)<br />static member Chart.Point: x: #System.IConvertible seq * y: #System.IConvertible seq * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?Name: string * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?ShowLegend: bool * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?Opacity: float * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiOpacity: float seq * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?Text: &#39;a2 * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiText: &#39;a2 seq * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?TextPosition: StyleParam.TextPosition * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiTextPosition: StyleParam.TextPosition seq * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?MarkerColor: Color * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?MarkerColorScale: StyleParam.Colorscale * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?MarkerOutline: Line * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?MarkerSymbol: StyleParam.MarkerSymbol * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiMarkerSymbol: StyleParam.MarkerSymbol seq * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?Marker: TraceObjects.Marker * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?AlignmentGroup: string * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?OffsetGroup: string * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?StackGroup: string * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?Orientation: StyleParam.Orientation * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?GroupNorm: StyleParam.GroupNorm * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((false :&gt; obj))&gt;] ?UseWebGL: bool * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((true :&gt; obj))&gt;] ?UseDefaults: bool -&gt; GenericChart.GenericChart (requires &#39;a2 :&gt; System.IConvertible)</div>
+<div class="fsdocs-tip" id="fs118">val lines: GenericChart.GenericChart seq</div>
+<div class="fsdocs-tip" id="fs119">val modelName: string</div>
+<div class="fsdocs-tip" id="fs120">val fit: ModelSystem.FitSeries&lt;System.DateTime,int&lt;year&gt;,System.TimeSpan&gt;</div>
+<div class="fsdocs-tip" id="fs121">ModelSystem.FitValue.Fit: float&lt;ModelSystem.state&gt;</div>
+<div class="fsdocs-tip" id="fs122">val x: string</div>
+<div class="fsdocs-tip" id="fs123">val s: (System.DateTime * string * float&lt;ModelSystem.state&gt;) seq</div>
+<div class="fsdocs-tip" id="fs124">val x: System.DateTime</div>
+<div class="fsdocs-tip" id="fs125">val y: float&lt;ModelSystem.state&gt;</div>
+<div class="fsdocs-tip" id="fs126">val l: (System.DateTime * float&lt;ModelSystem.state&gt;) seq list</div>
+<div class="fsdocs-tip" id="fs127">static member Chart.Line: xy: (#System.IConvertible * #System.IConvertible) seq * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?ShowMarkers: bool * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?Name: string * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?ShowLegend: bool * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?Opacity: float * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiOpacity: float seq * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?Text: &#39;c * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiText: &#39;c seq * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?TextPosition: StyleParam.TextPosition * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiTextPosition: StyleParam.TextPosition seq * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?MarkerColor: Color * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?MarkerColorScale: StyleParam.Colorscale * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?MarkerOutline: Line * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?MarkerSymbol: StyleParam.MarkerSymbol * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiMarkerSymbol: StyleParam.MarkerSymbol seq * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?Marker: TraceObjects.Marker * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?LineColor: Color * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?LineColorScale: StyleParam.Colorscale * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?LineWidth: float * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?LineDash: StyleParam.DrawingStyle * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?Line: Line * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?AlignmentGroup: string * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?OffsetGroup: string * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?StackGroup: string * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?Orientation: StyleParam.Orientation * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?GroupNorm: StyleParam.GroupNorm * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?Fill: StyleParam.Fill * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?FillColor: Color * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?FillPattern: TraceObjects.Pattern * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((false :&gt; obj))&gt;] ?UseWebGL: bool * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((true :&gt; obj))&gt;] ?UseDefaults: bool -&gt; GenericChart.GenericChart (requires &#39;c :&gt; System.IConvertible)<br />static member Chart.Line: x: #System.IConvertible seq * y: #System.IConvertible seq * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?ShowMarkers: bool * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?Name: string * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?ShowLegend: bool * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?Opacity: float * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiOpacity: float seq * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?Text: &#39;a2 * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiText: &#39;a2 seq * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?TextPosition: StyleParam.TextPosition * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiTextPosition: StyleParam.TextPosition seq * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?MarkerColor: Color * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?MarkerColorScale: StyleParam.Colorscale * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?MarkerOutline: Line * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?MarkerSymbol: StyleParam.MarkerSymbol * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?MultiMarkerSymbol: StyleParam.MarkerSymbol seq * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?Marker: TraceObjects.Marker * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?LineColor: Color * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?LineColorScale: StyleParam.Colorscale * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?LineWidth: float * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?LineDash: StyleParam.DrawingStyle * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?Line: Line * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?AlignmentGroup: string * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?OffsetGroup: string * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?StackGroup: string * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?Orientation: StyleParam.Orientation * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?GroupNorm: StyleParam.GroupNorm * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?Fill: StyleParam.Fill * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?FillColor: Color * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?FillPattern: TraceObjects.Pattern * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((false :&gt; obj))&gt;] ?UseWebGL: bool * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((true :&gt; obj))&gt;] ?UseDefaults: bool -&gt; GenericChart.GenericChart (requires &#39;a2 :&gt; System.IConvertible)</div>
+<div class="fsdocs-tip" id="fs128">property List.Head: (System.DateTime * float&lt;ModelSystem.state&gt;) seq with get</div>
+<div class="fsdocs-tip" id="fs129">val append: source1: &#39;T seq -&gt; source2: &#39;T seq -&gt; &#39;T seq</div>
+<div class="fsdocs-tip" id="fs130">static member Chart.combine: gCharts: GenericChart.GenericChart seq -&gt; GenericChart.GenericChart</div>
+<div class="fsdocs-tip" id="fs131">static member Chart.withTitle: title: Title -&gt; (GenericChart.GenericChart -&gt; GenericChart.GenericChart)<br />static member Chart.withTitle: title: string * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?TitleFont: Font -&gt; (GenericChart.GenericChart -&gt; GenericChart.GenericChart)</div>
+<div class="fsdocs-tip" id="fs132">property ShortCode.ShortCode.Value: string with get</div>
+<div class="fsdocs-tip" id="fs133">static member Chart.Grid: [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?SubPlots: (StyleParam.LinearAxisId * StyleParam.LinearAxisId) array array * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?XAxes: StyleParam.LinearAxisId array * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?YAxes: StyleParam.LinearAxisId array * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?RowOrder: StyleParam.LayoutGridRowOrder * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?Pattern: StyleParam.LayoutGridPattern * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?XGap: float * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?YGap: float * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?Domain: LayoutObjects.Domain * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?XSide: StyleParam.LayoutGridXSide * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?YSide: StyleParam.LayoutGridYSide -&gt; (#(&#39;a1 seq) -&gt; GenericChart.GenericChart) (requires &#39;a1 :&gt; GenericChart.GenericChart seq)<br />static member Chart.Grid: nRows: int * nCols: int * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?SubPlots: (StyleParam.LinearAxisId * StyleParam.LinearAxisId) array array * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?XAxes: StyleParam.LinearAxisId array * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?YAxes: StyleParam.LinearAxisId array * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?RowOrder: StyleParam.LayoutGridRowOrder * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?Pattern: StyleParam.LayoutGridPattern * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?XGap: float * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?YGap: float * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?Domain: LayoutObjects.Domain * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?XSide: StyleParam.LayoutGridXSide * [&lt;System.Runtime.InteropServices.Optional; System.Runtime.InteropServices.DefaultParameterValue ((null :&gt; obj))&gt;] ?YSide: StyleParam.LayoutGridYSide -&gt; (#(GenericChart.GenericChart seq) -&gt; GenericChart.GenericChart)</div>
+<div class="fsdocs-tip" id="fs134">module Graphing
+
+from Plant-growth</div>
+<div class="fsdocs-tip" id="fs135">val fitPlot: r: (string * ModelSystem.EstimationResult&lt;System.DateTime,int&lt;year&gt;,System.TimeSpan&gt;) seq -&gt; Plotly.NET.GenericChart.GenericChart</div>
+<div class="fsdocs-tip" id="fs136">module GenericChart
+
+from Plotly.NET<br /><em>&lt;summary&gt;
+ Module to represent a GenericChart
+&lt;/summary&gt;</em></div>
+<div class="fsdocs-tip" id="fs137">val toChartHTML: gChart: Plotly.NET.GenericChart.GenericChart -&gt; string</div>
+<div class="fsdocs-tip" id="fs138">val weights: (ModelSystem.EstimationResult&lt;System.DateTime,int&lt;year&gt;,System.TimeSpan&gt; * ModelSelection.Akaike.AkaikeWeight) seq</div>
+<div class="fsdocs-tip" id="fs139">module ModelSelection
+
+from Bristlecone<br /><em>&lt;summary&gt;Contains tools for conducting Model Selection across
+ individual subjects and hypotheses.&lt;/summary&gt;</em></div>
+<div class="fsdocs-tip" id="fs140">module Akaike
+
+from Bristlecone.ModelSelection<br /><em>&lt;summary&gt;Functions for conducting Akaike Information Criterion (AIC).&lt;/summary&gt;</em></div>
+<div class="fsdocs-tip" id="fs141">val akaikeWeights: models: ModelSystem.EstimationResult&lt;&#39;date,&#39;timeunit,&#39;timespan&gt; seq -&gt; (ModelSystem.EstimationResult&lt;&#39;date,&#39;timeunit,&#39;timespan&gt; * ModelSelection.Akaike.AkaikeWeight) seq<br /><em>&lt;summary&gt;Akaike weights for a sequence of `EstimationResult`s.&lt;/summary&gt;<br />&lt;param name=&quot;models&quot;&gt;The input model results&lt;/param&gt;<br />&lt;returns&gt;An (EstimationResult * float) sequence of estimation results paired to their Akaike weights.&lt;/returns&gt;<br />&lt;exception name=&quot;ArgumentException&quot;&gt;Occurs when there are no observations within an estimation result.&lt;/exception&gt;</em></div>
+<div class="fsdocs-tip" id="fs142">val zip: source1: &#39;T1 seq -&gt; source2: &#39;T2 seq -&gt; (&#39;T1 * &#39;T2) seq</div>
+<div class="fsdocs-tip" id="fs143">val m: string</div>
+<div class="fsdocs-tip" id="fs144">val r: ModelSystem.EstimationResult&lt;System.DateTime,int&lt;year&gt;,System.TimeSpan&gt;</div>
+<div class="fsdocs-tip" id="fs145">val w: ModelSelection.Akaike.AkaikeWeight</div>
+<div class="fsdocs-tip" id="fs146">val sprintf: format: Printf.StringFormat&lt;&#39;T&gt; -&gt; &#39;T</div>
+<div class="fsdocs-tip" id="fs147">ModelSystem.EstimationResult.Likelihood: float&lt;-logL&gt;</div>
+<div class="fsdocs-tip" id="fs148">ModelSelection.Akaike.AkaikeWeight.AICc: float</div>
+<div class="fsdocs-tip" id="fs149">ModelSelection.Akaike.AkaikeWeight.Weight: float</div>
+<div class="fsdocs-tip" id="fs150">module String
+
+from Microsoft.FSharp.Core</div>
+<div class="fsdocs-tip" id="fs151">val concat: sep: string -&gt; strings: string seq -&gt; string</div>
+<div class="fsdocs-tip" id="fs152">val sigmaAt: expected: float&lt;gram&gt; -&gt; float&lt;gram&gt;</div>
+<div class="fsdocs-tip" id="fs153">val expected: float&lt;gram&gt;</div>
+<div class="fsdocs-tip" id="fs154">Multiple items<br />val float: value: &#39;T -&gt; float (requires member op_Explicit)<br /><br />--------------------<br />type float = System.Double<br /><br />--------------------<br />type float&lt;&#39;Measure&gt; =
+  float</div>
+<div class="fsdocs-tip" id="fs155">val s0: float&lt;gram&gt;</div>
+<div class="fsdocs-tip" id="fs156">val s1: float&lt;/gram&gt;</div>
+<div class="fsdocs-tip" id="fs157">val exp: value: &#39;T -&gt; &#39;T (requires member Exp)</div>
+<div class="fsdocs-tip" id="fs158">val diagnostics: string list</div>
+<div class="fsdocs-tip" id="fs159">val find: key: &#39;Key -&gt; table: Map&lt;&#39;Key,&#39;T&gt; -&gt; &#39;T (requires comparison)</div>
+<div class="fsdocs-tip" id="fs160">val ts: ModelSystem.FitSeries&lt;System.DateTime,int&lt;year&gt;,System.TimeSpan&gt;</div>
+<div class="fsdocs-tip" id="fs161">property TimeSeries.TimeSeries.Values: ModelSystem.FitValue seq with get</div>
+<div class="fsdocs-tip" id="fs162">val fitted: float&lt;ModelSystem.state&gt;</div>
+<div class="fsdocs-tip" id="fs163">val observed: float&lt;ModelSystem.state&gt;</div>
+<div class="fsdocs-tip" id="fs164">val sigma: float&lt;gram&gt;</div>
+<div class="fsdocs-tip" id="fs165">[&lt;Measure&gt;]
+type state</div>
+<div class="fsdocs-tip" id="fs166">val likelihoodProfile: (string * Map&lt;ShortCode.ShortCode,Confidence.ConfidenceInterval&gt;) list</div>
+<div class="fsdocs-tip" id="fs167">val take: count: int -&gt; source: &#39;T seq -&gt; &#39;T seq</div>
+<div class="fsdocs-tip" id="fs168">val h: ModelSystem.ModelSystem&lt;day&gt;</div>
+<div class="fsdocs-tip" id="fs169">val find: predicate: (&#39;T -&gt; bool) -&gt; source: &#39;T seq -&gt; &#39;T</div>
+<div class="fsdocs-tip" id="fs170">val s: string * ModelBuilder.ModelBuilder&lt;day&gt;</div>
+<div class="fsdocs-tip" id="fs171">val l: Map&lt;ShortCode.ShortCode,Confidence.ConfidenceInterval&gt;</div>
+<div class="fsdocs-tip" id="fs172">namespace Bristlecone.Confidence</div>
+<div class="fsdocs-tip" id="fs173">module ProfileLikelihood
+
+from Bristlecone.Confidence<br /><em>&lt;summary&gt;Given a maximum likelihood estimate (MLE), the profile likelihood method
+ runs a Monte Carlo algorithm that samples around the MLE.&lt;/summary&gt;<br />&lt;remarks&gt;The range for each parameter is discovered at 95% and 68%
+ confidence based on a chi squared distribution.&lt;/remarks&gt;</em></div>
+<div class="fsdocs-tip" id="fs174">val profile: fit: (EstimationEngine.EstimationEngine&lt;&#39;a,&#39;b,&#39;u,&#39;v&gt; -&gt; EstimationEngine.EndCondition -&gt; &#39;c -&gt; ModelSystem.ModelSystem&lt;&#39;modelTimeUnit&gt; -&gt; ModelSystem.EstimationResult&lt;&#39;d,&#39;e,&#39;f&gt;) -&gt; engine: EstimationEngine.EstimationEngine&lt;&#39;a,&#39;b,&#39;u,&#39;v&gt; -&gt; subject: &#39;c -&gt; hypothesis: ModelSystem.ModelSystem&lt;&#39;modelTimeUnit&gt; -&gt; n: int&lt;iteration&gt; -&gt; result: ModelSystem.EstimationResult&lt;&#39;g,&#39;h,&#39;i&gt; -&gt; Map&lt;ShortCode.ShortCode,Confidence.ConfidenceInterval&gt;<br /><em>&lt;summary&gt;
+ The profile likelihood method samples the likelihood space
+ around the Maximum Likelihood Estimate
+&lt;/summary&gt;</em></div>
+<div class="fsdocs-tip" id="fs175">property List.Head: string * Map&lt;ShortCode.ShortCode,Confidence.ConfidenceInterval&gt; with get</div>
+<div class="fsdocs-tip" id="fs176">val kv: System.Collections.Generic.KeyValuePair&lt;ShortCode.ShortCode,Confidence.ConfidenceInterval&gt;</div>
+<div class="fsdocs-tip" id="fs177">property System.Collections.Generic.KeyValuePair.Value: Confidence.ConfidenceInterval with get<br /><em>&lt;summary&gt;Gets the value in the key/value pair.&lt;/summary&gt;<br />&lt;returns&gt;A &lt;typeparamref name=&quot;TValue&quot; /&gt; that is the value of the &lt;see cref=&quot;T:System.Collections.Generic.KeyValuePair`2&quot; /&gt;.&lt;/returns&gt;</em></div>
+<div class="fsdocs-tip" id="fs178">Confidence.ConfidenceInterval.Estimate: float</div>
+
+    </div>
+</main>
+<aside id="fsdocs-page-menu">
+    <p id="on-this-page">On this page</p>
+    <ul>
+  <li class="level-3">
+    <a href="#Defining-the-models">
+      Defining the models
+    </a>
+  </li>
+  <li class="level-3">
+    <a href="#Load-the-dataset">
+      Load the dataset
+    </a>
+  </li>
+  <li class="level-3">
+    <a href="#Model-fitting">
+      Model-fitting
+    </a>
+  </li>
+  <li class="level-4">
+    <a href="#Model-selection">
+      Model selection
+    </a>
+  </li>
+  <li class="level-4">
+    <a href="#Model-fit-quality-uncertainty">
+      Model fit quality / uncertainty
+    </a>
+  </li>
+</ul>
+</aside>
+<dialog>
+    <input type="search" placeholder="Search docs" />
+    <div class="results">
+        <ul></ul>
+        <p class="empty">Type something to start searching.</p>
+    </div>
+</dialog>
+<script type="module" src="https://acm.im/bristlecone/content/fsdocs-tips.js"></script>
+<script type="module" src="https://acm.im/bristlecone/content/fsdocs-theme-toggle.js"></script>
+<script type="module" src="https://acm.im/bristlecone/content/fsdocs-details-toggle.js"></script>
+<script type="module" src="https://acm.im/bristlecone/content/fsdocs-theme.js"></script>
+<script type="module" src="https://acm.im/bristlecone/content/fsdocs-search.js"></script>
+
+</body>
+</html>
