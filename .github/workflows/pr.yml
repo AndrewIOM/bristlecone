@@ -38,7 +38,7 @@ jobs:
          fi
       shell: bash
     - name: Install R package dependencies
-      run: Rscript -e "install.packages(c('ggplot2', 'zoo'), repos = 'http://cran.us.r-project.org')"
+      run: Rscript -e "install.packages(c('ggplot2', 'zoo'), repos = 'https://cran.r-project.org')"
       shell: bash
     - name: Setup .NET
       uses: actions/setup-dotnet@v1
