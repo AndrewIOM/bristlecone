@@ -143,7 +143,7 @@ Some of the most efficient optimisation approaches require function gradients th
 
 AI has not been used to write this manuscript.
 
-Within the codebase, no AI tools were used prior to August 2025. From then, Microsoft Copilot was used as an external tool to the development environment to suggest refactoring, reorganisation and code modifications that could support the 3.0 and 3.1 releases of *Bristlecone*. Any suggestions made were critically examined and only implemented within the codebase manually after human oversight.
+Within the codebase, no AI tools were used prior to August 2025. From then, the Microsoft Copilot macOS app was used as an external tool to the development environment to suggest approaches to refactoring existing code snippets and potential approaches to support proposed features for version 3.0 and 3.1 of *Bristlecone*. Any code suggestions were critically examined and only implemented within the codebase manually after human oversight. No agents operated directly on the codebase.
 
 ## Acknowledgements
 
