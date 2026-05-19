@@ -1671,6 +1671,7 @@ module Language =
             |> Seq.map (Seq.truncate n >> Seq.toArray >> System.String)
             |> String.concat ""
             |> fun s -> s.ToUpper()
+            |> fun s -> System.Text.RegularExpressions.Regex.Replace(s, "[^A-Z0-9_]", "")
 
         /// <summary>Represents the name of a swappable component in a model
         /// and the name of its implementation in a specific case.</summary>
