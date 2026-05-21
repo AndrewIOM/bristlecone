@@ -9,7 +9,6 @@
 open Bristlecone
 open Bristlecone.Language
 open Bristlecone.Time
-open FSharp.Data.UnitSystems.SI
 
 [<Measure>] type ton // imperial ton
 [<Measure>] type hour
@@ -48,7 +47,7 @@ module Schaefer =
         |> Model.compile
 
 
-let data =
+let cpueData, catchData =
     [
         1965, 1.78, 94
         1966, 1.31, 212
@@ -76,13 +75,20 @@ let data =
     ]
     |> List.map(fun (y, cpue, catch) ->
         let time = DatingMethods.Annual (y * 1<year>)
-        (cpue * 1.<ton/hour>, time), (catch * 1000<ton>, time))
+        (cpue, time), (float catch, time))
     |> List.unzip
+
+let ts = 
+    [
+        Schaefer.I.Code, cpueData |> TimeSeries.fromObservations DateMode.annualDateMode
+        Schaefer.C.Code, catchData |> TimeSeries.fromObservations DateMode.annualDateMode
+    ] |> Map.ofList
 
 let engine =
     Bristlecone.mkDiscrete ()
     |> Bristlecone.withTimeConversion DateMode.Conversion.Annual.toYears
 
+(*** do-not-eval ***)
 let r =
-    Bristlecone.fit engine (Optimisation.EndConditions.atIteration 1000<iteration>) data Schaefer.model
+    Bristlecone.fit engine (Optimisation.EndConditions.atIteration 1000<iteration>) ts Schaefer.model
 
