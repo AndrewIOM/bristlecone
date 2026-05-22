@@ -300,7 +300,7 @@ module EndConditions =
                     MaxIterations
                 else if
                     whenStableAcceptanceRate 0.15 0.5 regularity 3 log results iter = Custom "Stable"
-                    && whenStuck 1e-6<``-logL``> regularity results iter = Continue // not stuck
+                    && whenStuck 1e-6<``-logL``> regularity results iter = Continue
                 then
                     log (GeneralEvent(sprintf "[EndCondition] Well mixed"))
                     Custom "Well mixed"

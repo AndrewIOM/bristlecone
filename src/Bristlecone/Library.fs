@@ -330,8 +330,8 @@ module Bristlecone =
 
             engine.LogTo
             <| GeneralEvent(
-                if conditioned.StatesObservedForSolver.Keys.IsEmpty
-                then sprintf "No states were observed (no stated conditioned with data)."
+                if conditioned.StatesObservedForSolver.Keys.IsEmpty then
+                    sprintf "No states were observed (no stated conditioned with data)."
                 else
                     sprintf
                         "Time-series (conditioned) start at %A with resolution %A."
@@ -403,8 +403,7 @@ module Bristlecone =
 
             let obsTimes = conditioned.ObservedForPairing |> TimeFrame.dates
 
-            engine.LogTo
-            <| GeneralEvent(sprintf "Observation times: %A." obsTimes)
+            engine.LogTo <| GeneralEvent(sprintf "Observation times: %A." obsTimes)
 
             let objective =
                 Objective.create

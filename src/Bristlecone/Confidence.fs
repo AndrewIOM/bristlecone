@@ -86,15 +86,15 @@ module ProfileLikelihood =
                     OptimiseWith =
                         MonteCarlo.SimulatedAnnealing.Tuning.perturb
                             0.01
-                            { MonteCarlo.SimulatedAnnealing.Tuning.TuningSettings.Default with MinTuneLength = n * 2<iteration> }
-                }
+                            { MonteCarlo.SimulatedAnnealing.Tuning.TuningSettings.Default with
+                                MinTuneLength = n * 2<iteration> } }
 
         let rec fit' currentTrace =
             let a = customFit (EndConditions.atIteration 100<iteration>) subject hypothesisMle
 
             let validTrace =
                 a.Trace
-                |> List.map(fun t -> t.Results)
+                |> List.map (fun t -> t.Results)
                 |> List.concat
                 |> List.filter (fun (l, _) -> l - mle < 2.00<``-logL``> && l - mle > 0.00<``-logL``>)
                 |> List.distinct
@@ -103,7 +103,11 @@ module ProfileLikelihood =
             <| GeneralEvent(sprintf "Profiling efficiency: %f/1.0." ((validTrace |> List.length |> float) / (float n)))
 
             let updatedTrace = List.append currentTrace validTrace
-            if updatedTrace.Length > n then updatedTrace else fit' updatedTrace
+
+            if updatedTrace.Length > n then
+                updatedTrace
+            else
+                fit' updatedTrace
 
         let trace = fit' []
 

@@ -647,14 +647,15 @@ module Language =
 
         let getEnvironment eVar name =
             <@
-                let map = (%%Expr.Var eVar: CodedMap<TypedTensor<Scalar, ModelSystem.``environment``>>)
+                let map =
+                    (%%Expr.Var eVar: CodedMap<TypedTensor<Scalar, ModelSystem.``environment``>>)
+
                 map
                 |> Map.tryFindBy (fun k -> k.Value = name)
                 |> fun o ->
                     match o with
                     | Some o -> o.Value
-                    | None ->
-                        failwithf "State / environment %s was not available. Available: %A" name map.Keys
+                    | None -> failwithf "State / environment %s was not available. Available: %A" name map.Keys
             @>
 
 
@@ -678,14 +679,18 @@ module Language =
                 fun one n ->
                     let tensor = mkTensor n
                     <@ %one * tensor @>
-              parameter = fun name ->
-                let pIdx =
-                    match Map.tryFind name pIndex with
-                    | Some i -> i
-                    | None ->
-                        let available = pIndex |> Map.toList |> List.map fst |> String.concat ", "
-                        invalidOp $"Parameter '{name}' was referenced in the model but not provided as an estimatable parameter. Available parameters: {available}"
-                <@ (%%Expr.Var pVar: TypedTensor<Vector, ``parameter``>).Value.[pIdx] @>
+              parameter =
+                fun name ->
+                    let pIdx =
+                        match Map.tryFind name pIndex with
+                        | Some i -> i
+                        | None ->
+                            let available = pIndex |> Map.toList |> List.map fst |> String.concat ", "
+
+                            invalidOp
+                                $"Parameter '{name}' was referenced in the model but not provided as an estimatable parameter. Available parameters: {available}"
+
+                    <@ (%%Expr.Var pVar: TypedTensor<Vector, ``parameter``>).Value.[pIdx] @>
               environment = fun name -> getEnvironment eVar name
               state = fun name -> getEnvironment eVar name // Currently, state and environment are intermingled
               timeVal = <@ (%%Expr.Var tVar: TypedTensor<Scalar, 'timeUnit>).Value @>

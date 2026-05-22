@@ -140,7 +140,13 @@ module Solver =
                         else
                             // Advance once from previous state to this time, then record
                             let t = Typed.ofScalar tiVal
-                            let env = Map.fold (fun acc k v -> Map.add k v acc) envStream.[i] (state |> Map.map(fun _ v -> Tensors.Typed.retype v))
+
+                            let env =
+                                Map.fold
+                                    (fun acc k v -> Map.add k v acc)
+                                    envStream.[i]
+                                    (state |> Map.map (fun _ v -> Tensors.Typed.retype v))
+
                             let nextState = stepOnce eqs pars env t state
                             let acc' = acc |> Map.map (fun k vs -> (tiVal, nextState.[k]) :: vs)
                             (nextState, acc'))
