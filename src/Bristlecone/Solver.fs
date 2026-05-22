@@ -140,7 +140,7 @@ module Solver =
                         else
                             // Advance once from previous state to this time, then record
                             let t = Typed.ofScalar tiVal
-                            let env = envStream.[i]
+                            let env = Map.fold (fun acc k v -> Map.add k v acc) envStream.[i] (state |> Map.map(fun _ v -> Tensors.Typed.retype v))
                             let nextState = stepOnce eqs pars env t state
                             let acc' = acc |> Map.map (fun k vs -> (tiVal, nextState.[k]) :: vs)
                             (nextState, acc'))
@@ -581,7 +581,7 @@ module Solver =
                 nonMeasures
                 |> Map.filter (fun k _ -> equationKeys |> Seq.contains k && not (observedTF.Keys |> Seq.contains k))
 
-            { StatesObservedForSolver = toEquationStatesOnly equationKeys dynamicForSolver
+            { StatesObservedForSolver = dynamicForSolver //toEquationStatesOnly equationKeys dynamicForSolver
               StatesHiddenForSolver = hiddenT0
               MeasuresForSolver = measuresT0
               ObservedForPairing = observedTF
@@ -604,7 +604,7 @@ module Solver =
                 let t0 = t0FromFirstObs observedTF
                 let trimmedDyn = TimeFrame.dropFirstObservation observedTF
 
-                { StatesObservedForSolver = toEquationStatesOnly equationKeys observedTF
+                { StatesObservedForSolver = observedTF // toEquationStatesOnly equationKeys observedTF
                   StatesHiddenForSolver = Map.empty // No conditioning for hidden states. They must be set using initialisers if present.
                   MeasuresForSolver = t0 |> Map.filter (fun k _ -> measureKeys |> Seq.contains k)
                   ObservedForPairing = trimmedDyn

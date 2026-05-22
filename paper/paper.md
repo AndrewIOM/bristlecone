@@ -57,25 +57,23 @@ I sought to include all key concepts of the ‘ecological detective’ workflow 
 A core requirement was that model definitions should make full use of F# type safety and units of measure to ensure that (a) all equations are dimensionally consistent, and (b) model composition is also dimensionally consistent. To this aim, a DSL was designed that is based on unit-typed ‘model expressions’ that are composed using mathematical operators and as F# values and functions. The user may declare states, parameters, and external environmental forcings (e.g. air temperature, precipitation sum) with their ecologically meaningful units and insert these into the model expression structures to ensure that any proposed model system is dimensionally consistent.
 
 ```fsharp
-/// The Schaefer model of fishing 
+/// The Schaefer model of fishing (discrete time formulation)
 module Schaefer =
 
-    let B = state<ton> "biomass"
+    let B = state<kton> "biomass"
     let I = measure<1> "CPUE" // Catch per unit effort
-    let C = environment<ton> "catch"
+    let C = environment<kton> "catch"
 
-    // Intrinsic growth rate
-    let r = parameter "r" NoConstraints 0.01</year> 1.0</year>
-    // Carrying capacity
-    let K = parameter "K" NoConstraints 0.01<ton> 1.0<ton>
-    // Catchability coefficient
-    let q = parameter "q" NoConstraints 1e-6<1/ton> 1e-2<1/ton>
-    // Biomass at time zero. Assumes stock unfished at start time
-    let B0 = P K
+    let r = parameter "r" Positive 0.01</year> 1.0</year> // Intrinsic growth rate
+    let K = parameter "K" Positive 100.<kton> 2000.<kton> // Carrying capacity
+    let q = parameter "q" Positive 1e-6<1/kton> 1e-2<1/kton> // Catchability coefficient
+    let B0 = P K // Biomass at time zero. Assumes stock unfished at start time
 
     let dt = Constant 1.<year>
     let ``B_est[t+1]`` =
-        State B + P r * State B * (Constant 1. - State B / P K) * dt - Environment C
+        let n = State B + P r * State B * (Constant 1. - State B / P K) * dt - Environment C
+        Conditional (n .> Constant 0.<kton>) n (Constant 0.<kton>)
+
     let It = P q * State B
 
     let sigma = parameter "sigma_v" NoConstraints 0.01 1.0
@@ -86,7 +84,11 @@ module Schaefer =
         |> Model.addDiscreteEquation B ``B_est[t+1]``
         |> Model.addMeasure I It
         |> Model.initialiseHiddenStateWith B B0
+        |> Model.estimateParameter r
+        |> Model.estimateParameter K
+        |> Model.estimateParameter q
         |> Model.useLikelihoodFunction NLL
+        |> Model.compile
 ```
 
 The above simple example is a discrete-time model from *The Ecological Detective*. It demonstrates the enforcement of dimensional consistency in the model expression system: catch per unit efficiency must be dimensionless to work with lognormal observation error, for example.

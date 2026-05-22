@@ -330,10 +330,13 @@ module Bristlecone =
 
             engine.LogTo
             <| GeneralEvent(
-                sprintf
-                    "Time-series (conditioned) start at %A with resolution %A."
-                    conditioned.StatesObservedForSolver.StartDate
-                    (conditioned.StatesObservedForSolver |> TimeFrame.resolution)
+                if conditioned.StatesObservedForSolver.Keys.IsEmpty
+                then sprintf "No states were observed (no stated conditioned with data)."
+                else
+                    sprintf
+                        "Time-series (conditioned) start at %A with resolution %A."
+                        conditioned.StatesObservedForSolver.StartDate
+                        (conditioned.StatesObservedForSolver |> TimeFrame.resolution)
             )
 
             // Log out variables
@@ -399,6 +402,9 @@ module Bristlecone =
             <| GeneralEvent(sprintf "Time-series used within objective: %A." (Map.keys obsDataForObjective))
 
             let obsTimes = conditioned.ObservedForPairing |> TimeFrame.dates
+
+            engine.LogTo
+            <| GeneralEvent(sprintf "Observation times: %A." obsTimes)
 
             let objective =
                 Objective.create
