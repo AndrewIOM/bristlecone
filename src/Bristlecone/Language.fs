@@ -647,12 +647,15 @@ module Language =
 
         let getEnvironment eVar name =
             <@
-                (%%Expr.Var eVar: CodedMap<TypedTensor<Scalar, ModelSystem.``environment``>>)
+                let map =
+                    (%%Expr.Var eVar: CodedMap<TypedTensor<Scalar, ModelSystem.``environment``>>)
+
+                map
                 |> Map.tryFindBy (fun k -> k.Value = name)
                 |> fun o ->
                     match o with
                     | Some o -> o.Value
-                    | None -> failwithf "Environmental data not available: %s" name
+                    | None -> failwithf "State / environment %s was not available. Available: %A" name map.Keys
             @>
 
 
@@ -676,7 +679,18 @@ module Language =
                 fun one n ->
                     let tensor = mkTensor n
                     <@ %one * tensor @>
-              parameter = fun name -> <@ (%%Expr.Var pVar: TypedTensor<Vector, ``parameter``>).Value.[pIndex.[name]] @>
+              parameter =
+                fun name ->
+                    let pIdx =
+                        match Map.tryFind name pIndex with
+                        | Some i -> i
+                        | None ->
+                            let available = pIndex |> Map.toList |> List.map fst |> String.concat ", "
+
+                            invalidOp
+                                $"Parameter '{name}' was referenced in the model but not provided as an estimatable parameter. Available parameters: {available}"
+
+                    <@ (%%Expr.Var pVar: TypedTensor<Vector, ``parameter``>).Value.[pIdx] @>
               environment = fun name -> getEnvironment eVar name
               state = fun name -> getEnvironment eVar name // Currently, state and environment are intermingled
               timeVal = <@ (%%Expr.Var tVar: TypedTensor<Scalar, 'timeUnit>).Value @>
@@ -1671,6 +1685,7 @@ module Language =
             |> Seq.map (Seq.truncate n >> Seq.toArray >> System.String)
             |> String.concat ""
             |> fun s -> s.ToUpper()
+            |> fun s -> System.Text.RegularExpressions.Regex.Replace(s, "[^A-Z0-9_]", "")
 
         /// <summary>Represents the name of a swappable component in a model
         /// and the name of its implementation in a specific case.</summary>

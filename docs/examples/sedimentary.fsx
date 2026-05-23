@@ -26,9 +26,7 @@ The long-term ecological detective: Holocene ecosystem functioning
 Analysis of microfossils and inorganic compounds from lake sediment
 cores and peat cores can provide rich information on past biodiversity
 and environmental conditions.
-
-[Jeffers et al (2011)](https://nph.onlinelibrary.wiley.com/doi/full/10.1111/j.1469-8137.2011.03907.x)
-identified ...
+This example implements the modelling method shown in [Jeffers et al (2011)](https://nph.onlinelibrary.wiley.com/doi/full/10.1111/j.1469-8137.2011.03907.x).
 
 To get started, we first load and open the Bristlecone library in
 an F# script file (.fsx):

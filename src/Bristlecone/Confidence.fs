@@ -60,9 +60,9 @@ module ProfileLikelihood =
 
     let interval nParam mle limit (trace: (float<``-logL``> * float<parameter> array) list) =
         trace
-        |> List.filter (fun (l, p) -> (l - mle) < limit)
+        |> List.filter (fun (l, _) -> l - mle < limit)
         |> List.fold
-            (fun best (l, p) -> best |> Array.zip p |> Array.map (fun (v, (mn, mx)) -> ((min v mn), (max v mx))))
+            (fun best (_, p) -> best |> Array.zip p |> Array.map (fun (v, (mn, mx)) -> ((min v mn), (max v mx))))
             (Array.init nParam (fun _ ->
                 (System.Double.MaxValue |> LanguagePrimitives.FloatWithMeasure<parameter>,
                  System.Double.MinValue |> LanguagePrimitives.FloatWithMeasure<parameter>)))
@@ -77,7 +77,6 @@ module ProfileLikelihood =
                 Parameters = Parameter.Pool.fromEstimated result.Parameters }
 
         // Perturb and re‑fit locally around the MLE
-        let results = OptimisationEventStash()
         let mle = result.Likelihood
         let transforms = Parameter.Pool.compileTransformsBounded result.Parameters
 
@@ -86,39 +85,31 @@ module ProfileLikelihood =
                 { engine with
                     OptimiseWith =
                         MonteCarlo.SimulatedAnnealing.Tuning.perturb
-                            0.001
-                            MonteCarlo.SimulatedAnnealing.Tuning.TuningSettings.Default
-                    LogTo =
-                        fun e ->
-                            engine.LogTo e
-                            results.SaveEvent e }
+                            0.01
+                            { MonteCarlo.SimulatedAnnealing.Tuning.TuningSettings.Default with
+                                MinTuneLength = n * 2<iteration> } }
 
         let rec fit' currentTrace =
-            let a = customFit (EndConditions.atIteration n) subject hypothesisMle
+            let a = customFit (EndConditions.atIteration 100<iteration>) subject hypothesisMle
 
             let validTrace =
                 a.Trace
-                |> List.head
-                |> fun t -> t.Results
-                |> List.filter (fun (l, _) -> (l - mle) < 2.00<``-logL``> && (l - mle) > 0.00<``-logL``>)
+                |> List.map (fun t -> t.Results)
+                |> List.concat
+                |> List.filter (fun (l, _) -> l - mle < 2.00<``-logL``> && l - mle > 0.00<``-logL``>)
                 |> List.distinct
 
             engine.LogTo
             <| GeneralEvent(sprintf "Profiling efficiency: %f/1.0." ((validTrace |> List.length |> float) / (float n)))
 
-            currentTrace |> List.append validTrace
+            let updatedTrace = List.append currentTrace validTrace
 
-        fit' [] |> ignore
+            if updatedTrace.Length > n then
+                updatedTrace
+            else
+                fit' updatedTrace
 
-        let trace =
-            results.GetAll()
-            |> List.map (fun s ->
-                (s.Likelihood,
-                 s.Theta
-                 |> Seq.toArray
-                 |> Tensors.Typed.ofVector
-                 |> transforms.Forward
-                 |> Tensors.Typed.toFloatArray))
+        let trace = fit' []
 
         // 3. Calculate min and max at the specified limit for each parameter
         let lowerInterval =

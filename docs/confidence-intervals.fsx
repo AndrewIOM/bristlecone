@@ -43,8 +43,8 @@ fun engine dataset hypothesis result ->
     // advanced scenario is usually Bristlecone.fit
     let fitFn = Bristlecone.fit
 
-    // The number of jumps to perform in parameter space
-    let n = 10000<iteration>
+    // The number of samples to collect from the confidence interval region
+    let n = 10000
 
     let ci =
         Confidence.ProfileLikelihood.profile fitFn engine dataset hypothesis n result
