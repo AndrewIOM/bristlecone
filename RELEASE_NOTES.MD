@@ -1,3 +1,6 @@
+#### 3.1.1 - 2026-05-23
+* BUGFIX: discrete-time models correctly handle computed initial state
+
 #### 3.1.0 - 2026-02-23
 * FEATURE: Bounded parameter constraint
 * BUGFIX: MLE file outputs were being overwritten by metadata file
