@@ -330,13 +330,10 @@ module Bristlecone =
 
             engine.LogTo
             <| GeneralEvent(
-                if conditioned.StatesObservedForSolver.Keys.IsEmpty then
-                    sprintf "No states were observed (no stated conditioned with data)."
-                else
-                    sprintf
-                        "Time-series (conditioned) start at %A with resolution %A."
-                        conditioned.StatesObservedForSolver.StartDate
-                        (conditioned.StatesObservedForSolver |> TimeFrame.resolution)
+                sprintf
+                    "Time-series (conditioned) start at %A with resolution %A."
+                    conditioned.StatesObservedForSolver.StartDate
+                    (conditioned.StatesObservedForSolver |> TimeFrame.resolution)
             )
 
             // Log out variables
@@ -402,8 +399,6 @@ module Bristlecone =
             <| GeneralEvent(sprintf "Time-series used within objective: %A." (Map.keys obsDataForObjective))
 
             let obsTimes = conditioned.ObservedForPairing |> TimeFrame.dates
-
-            engine.LogTo <| GeneralEvent(sprintf "Observation times: %A." obsTimes)
 
             let objective =
                 Objective.create
@@ -485,6 +480,67 @@ module Bristlecone =
     /// <returns>The result of the model-fitting procedure. If an error occurs, throws an exception.</returns>
     let fit engine endCondition timeSeriesData (model: ModelSystem<'modelTimeUnit>) =
         tryFit engine endCondition timeSeriesData model |> Result.forceOk
+
+    /// Simulate a model given the specified parameters.
+    /// If unestimated, draws parameters from the distribution.
+    let simulate
+        (engine: SimulationEngine)
+        (model: ModelSystem<'modelTimeUnit>)
+        (envData: CodedMap<TimeIndex.TimeIndex<float<``environment``>, 'date, 'timeunit, 'timespan, 'modelTime>>)
+        =
+
+        // Make a runner that does a single step in time, either
+        // continuous or discrete time.
+        let runner =
+            match engine.TimeHandling with
+            | Discrete -> 
+                match model.Equations with
+                | DifferenceEqs eqs ->
+                    fun t ->
+                        // get env data for this time point (t).
+                        let tEnv = envData |> Map.map(fun _ ts -> ts.Item t)
+                        
+                        // Model time vs time index?
+                        Solver.SolverRunners.DiscreteTime.stepOnce
+                            eqs
+                            model.Parameters
+                            tEnv
+                            t
+                            currentState
+                | _ -> failwith "Mismatch between model time and "
+            | Continuous i ->
+
+                match model.Equations with
+                | DifferentialEqs eqs ->
+
+                    fun t ->
+
+                        // Problem: the RHS builds-in the environment data. The
+                        // integration routines take a compiled RHS. So, cannot
+                        // do with current contract (have environment data vary).
+
+                        // Should environment be able to be updated during inference,
+                        // as a shared feature?
+
+                        let timeline = [| t; t |]
+
+                        let output =
+                            Solver.SolverRunners.DifferentialTime.fixedRunner
+                                eqs
+                                i
+                                timeline
+                                envData
+                                (fun _ -> )
+                                params
+
+                        match output with
+                        | Solver.Paired p -> p
+                        | Solver.Unpaired (t,p) -> p
+
+                | _ -> failwith "Mismatch of engine vs model time mode (differential vs discrete time)."
+
+        runner
+
 
     open Test
 

@@ -299,3 +299,9 @@ module EstimationEngine =
           InterpolationGlobal: Solver.InterpolationMode
           InterpolationPerVariable: CodedMap<Solver.InterpolationMode>
           Random: Random }
+
+    type SimulationEngine = {
+        TimeHandling: TimeMode
+        LogTo: WriteOut
+        Random: Random
+    }
