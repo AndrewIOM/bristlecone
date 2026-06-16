@@ -486,8 +486,25 @@ module Bristlecone =
     let simulate
         (engine: SimulationEngine)
         (model: ModelSystem<'modelTimeUnit>)
+        (resolution: Resolution.FixedTemporalResolution<'timespan>)
         (envData: CodedMap<TimeIndex.TimeIndex<float<``environment``>, 'date, 'timeunit, 'timespan, 'modelTime>>)
         =
+
+        // For any time step, take:
+        // - External (forcing) values relevant to the step (including current up to desired step)
+        // - 
+
+        // What is environment data for our stepper?
+        // - External forcings (which may change between steps)
+        // - ...
+
+        // Assumes not estimated yet.
+        let paramValues =
+            model.Parameters
+            |> Parameter.Pool.toOptimiserConfigBounded
+            |> fun o -> o.Domain
+            |> Array.map(fun (mi,ma,_) -> mi * 1.<``parameter``/``optim-space``>) // TODO Somehow sample from domain.
+            |> Tensors.Typed.ofVector
 
         // Make a runner that does a single step in time, either
         // continuous or discrete time.
@@ -496,24 +513,24 @@ module Bristlecone =
             | Discrete -> 
                 match model.Equations with
                 | DifferenceEqs eqs ->
-                    fun t ->
+                    fun state t ->
                         // get env data for this time point (t).
-                        let tEnv = envData |> Map.map(fun _ ts -> ts.Item t)
+                        let tEnv = envData |> Map.map(fun _ ts -> ts.Item t |> Tensors.Typed.ofScalar)
                         
                         // Model time vs time index?
                         Solver.SolverRunners.DiscreteTime.stepOnce
                             eqs
-                            model.Parameters
+                            paramValues
                             tEnv
-                            t
-                            currentState
+                            (t |> Tensors.Typed.ofScalar)
+                            state
                 | _ -> failwith "Mismatch between model time and "
             | Continuous i ->
 
                 match model.Equations with
                 | DifferentialEqs eqs ->
 
-                    fun t ->
+                    fun state t ->
 
                         // Problem: the RHS builds-in the environment data. The
                         // integration routines take a compiled RHS. So, cannot
@@ -531,7 +548,7 @@ module Bristlecone =
                                 timeline
                                 envData
                                 (fun _ -> )
-                                params
+                                paramValues
 
                         match output with
                         | Solver.Paired p -> p
