@@ -482,21 +482,14 @@ module Bristlecone =
         tryFit engine endCondition timeSeriesData model |> Result.forceOk
 
     /// Simulate a model given the specified parameters.
+    /// Given a time, current state, and forcing data, will step
+    /// one time increment.
     /// If unestimated, draws parameters from the distribution.
     let simulate
         (engine: SimulationEngine)
-        (model: ModelSystem<'modelTimeUnit>)
-        (resolution: Resolution.FixedTemporalResolution<'timespan>)
-        (envData: CodedMap<TimeIndex.TimeIndex<float<``environment``>, 'date, 'timeunit, 'timespan, 'modelTime>>)
+        (model: ModelSystem<'modelTime>)
+        (envData: TimeFrame.TimeFrame<float<``environment``>, 'date, 'timeunit, 'timespan> option)
         =
-
-        // For any time step, take:
-        // - External (forcing) values relevant to the step (including current up to desired step)
-        // - 
-
-        // What is environment data for our stepper?
-        // - External forcings (which may change between steps)
-        // - ...
 
         // Assumes not estimated yet.
         let paramValues =
@@ -506,31 +499,64 @@ module Bristlecone =
             |> Array.map(fun (mi,ma,_) -> mi * 1.<``parameter``/``optim-space``>) // TODO Somehow sample from domain.
             |> Tensors.Typed.ofVector
 
+        // Simulations run on model time = internal time index
+        let factor = LanguagePrimitives.FloatWithMeasure<'modelTime/``time index``> 1.
+        let eqs = Solver.TimeWrapping.wrapModelForm factor model.Equations
+
+        // Setup environment data
+        let getInteroplateMode key =
+            engine.InteroplateModeFor
+            |> Map.tryFind key
+            |> Option.defaultValue engine.InterpolateMode
+
         // Make a runner that does a single step in time, either
         // continuous or discrete time.
         let runner =
             match engine.TimeHandling with
             | Discrete -> 
-                match model.Equations with
-                | DifferenceEqs eqs ->
-                    fun state t ->
-                        // get env data for this time point (t).
-                        let tEnv = envData |> Map.map(fun _ ts -> ts.Item t |> Tensors.Typed.ofScalar)
-                        
+                match eqs with
+                | DifferenceEqs (eqs: CodedMap<StateEquation<``time index``>>) ->
+                    fun state (t:float<Time.year>) ->
+
+                        let interpFunction =
+                            function
+                            | Solver.Exact -> TimeIndex.IndexMode.Exact
+                            | Solver.Lower -> TimeIndex.IndexMode.Interpolate Statistics.Interpolate.lower
+                            | Solver.Linear -> TimeIndex.IndexMode.Interpolate Statistics.Interpolate.bilinear
+
+                        let build =
+                            envData
+                            |> Option.map (fun f ->
+                                f.Series
+                                |> Map.map (fun sc v ->
+                                    let mode = sc |> getInteroplateMode |> interpFunction
+                                    TimeIndex.TimeIndex(startDate, dataTimeToIndexTime, mode, v)))
+                            |> Option.defaultValue Map.empty
+
+
+                        // get env data for this time point (t).                        
+                        let envIndex =
+                            Solver.SolverCompiler.buildEnvIndex
+                                getInteroplateMode
+                                startDate
+                                DateMode.Conversion.CalendarDates.toMonths
+                                envData
+                        let tEnv = envIndex |> Map.map(fun _ ts -> ts.Item t |> Tensors.Typed.ofScalar)
+
                         // Model time vs time index?
                         Solver.SolverRunners.DiscreteTime.stepOnce
                             eqs
                             paramValues
                             tEnv
-                            (t |> Tensors.Typed.ofScalar)
+                            (t * factor |> Tensors.Typed.ofScalar)
                             state
                 | _ -> failwith "Mismatch between model time and "
             | Continuous i ->
 
-                match model.Equations with
+                match eqs with
                 | DifferentialEqs eqs ->
 
-                    fun state t ->
+                    fun state (t:float<'modelTime>) ->
 
                         // Problem: the RHS builds-in the environment data. The
                         // integration routines take a compiled RHS. So, cannot

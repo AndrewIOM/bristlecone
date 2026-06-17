@@ -304,4 +304,6 @@ module EstimationEngine =
         TimeHandling: TimeMode
         LogTo: WriteOut
         Random: Random
+        InterpolateMode: Solver.InterpolationMode
+        InteroplateModeFor: CodedMap<Solver.InterpolationMode>
     }
