@@ -300,10 +300,11 @@ module EstimationEngine =
           InterpolationPerVariable: CodedMap<Solver.InterpolationMode>
           Random: Random }
 
-    type SimulationEngine = {
+    type SimulationEngine<'date, 'timespan, [<Measure>] 'modelTimeUnit> = {
         TimeHandling: TimeMode
         LogTo: WriteOut
         Random: Random
+        ResolutionToModelUnits: DateMode.Conversion.ResolutionToModelUnits<'date, 'timespan, 'modelTimeUnit>
         InterpolateMode: Solver.InterpolationMode
         InteroplateModeFor: CodedMap<Solver.InterpolationMode>
     }

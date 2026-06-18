@@ -46,7 +46,7 @@ module Bristlecone =
     /// <typeparam name="'a"></typeparam>
     /// <typeparam name="'b"></typeparam>
     /// <returns></returns>
-    let withOutput out engine = { engine with LogTo = out }
+    let withOutput out (engine: EstimationEngine<'date,'timespan,'modelTimeUnit,'state>) = { engine with LogTo = out }
 
     let withTimeConversion<'d, 'd2, 'timespan, 'timespan2, [<Measure>] 'modelTimeUnit, 'o1, [<Measure>] 'o2, [<Measure>] 'u>
         (fn: DateMode.Conversion.ResolutionToModelUnits<'d2, 'timespan2, 'modelTimeUnit>)
@@ -69,12 +69,12 @@ module Bristlecone =
 
     /// Use a mersenne twister random number generator
     /// with a specific seed.
-    let withSeed seed engine =
+    let withSeed seed (engine: EstimationEngine<'date,'timespan,'modelTimeUnit,'state>) =
         { engine with
             Random = MathNet.Numerics.Random.MersenneTwister(seed, true) }
 
     /// Use a custom integration method
-    let withContinuousTime t engine =
+    let withContinuousTime t (engine: EstimationEngine<'date,'timespan,'modelTimeUnit,'state>) =
         { engine with
             TimeHandling = Continuous t }
 
@@ -486,12 +486,13 @@ module Bristlecone =
     /// one time increment.
     /// If unestimated, draws parameters from the distribution.
     let simulate
-        (engine: SimulationEngine)
-        (model: ModelSystem<'modelTime>)
+        (simulationEngine: SimulationEngine<'date,'timespan,'modelUnit>)
+        (model: ModelSystem<'modelUnit>)
+        (startDate: 'date)
         (envData: TimeFrame.TimeFrame<float<``environment``>, 'date, 'timeunit, 'timespan> option)
         =
 
-        // Assumes not estimated yet.
+        // Parameters are assumed to be unestimated.
         let paramValues =
             model.Parameters
             |> Parameter.Pool.toOptimiserConfigBounded
@@ -500,85 +501,82 @@ module Bristlecone =
             |> Tensors.Typed.ofVector
 
         // Simulations run on model time = internal time index
-        let factor = LanguagePrimitives.FloatWithMeasure<'modelTime/``time index``> 1.
-        let eqs = Solver.TimeWrapping.wrapModelForm factor model.Equations
+        let factorToIndex = LanguagePrimitives.FloatWithMeasure<'modelUnit/``time index``> 1.
+        let factorFromIndex = LanguagePrimitives.FloatWithMeasure<``time index``/'modelUnit> 1.
+        let eqs = Solver.TimeWrapping.wrapModelForm factorToIndex model.Equations
 
         // Setup environment data
         let getInteroplateMode key =
-            engine.InteroplateModeFor
+            simulationEngine.InteroplateModeFor
             |> Map.tryFind key
-            |> Option.defaultValue engine.InterpolateMode
+            |> Option.defaultValue simulationEngine.InterpolateMode
+
+        let interpFunction =
+            function
+            | Solver.Exact -> TimeIndex.IndexMode.Exact
+            | Solver.Lower -> TimeIndex.IndexMode.Interpolate Statistics.Interpolate.lower
+            | Solver.Linear -> TimeIndex.IndexMode.Interpolate Statistics.Interpolate.bilinear
+
+        let eraseModelUnit (x: float<'modelTimeUnit>) : float<1> = Units.retype x
+
+        let envIndex =
+            envData
+            |> Option.map (fun f ->
+                f.Series
+                |> Map.map (fun sc v ->
+                    let mode = sc |> getInteroplateMode |> interpFunction
+                    TimeIndex.TimeIndex(startDate, simulationEngine.ResolutionToModelUnits >> eraseModelUnit, mode, v)))
+            |> Option.defaultValue Map.empty
 
         // Make a runner that does a single step in time, either
         // continuous or discrete time.
         let runner =
-            match engine.TimeHandling with
+            match simulationEngine.TimeHandling with
             | Discrete -> 
                 match eqs with
                 | DifferenceEqs (eqs: CodedMap<StateEquation<``time index``>>) ->
-                    fun state (t:float<Time.year>) ->
+                    fun state (t:float<'modelUnit>) ->
+                        // t = time of current state in units since baseline (i.e. 0 for first step).
+                        // This is so the environment can be looked up, and t is correct if used.
 
-                        let interpFunction =
-                            function
-                            | Solver.Exact -> TimeIndex.IndexMode.Exact
-                            | Solver.Lower -> TimeIndex.IndexMode.Interpolate Statistics.Interpolate.lower
-                            | Solver.Linear -> TimeIndex.IndexMode.Interpolate Statistics.Interpolate.bilinear
-
-                        let build =
-                            envData
-                            |> Option.map (fun f ->
-                                f.Series
-                                |> Map.map (fun sc v ->
-                                    let mode = sc |> getInteroplateMode |> interpFunction
-                                    TimeIndex.TimeIndex(startDate, dataTimeToIndexTime, mode, v)))
-                            |> Option.defaultValue Map.empty
-
-
-                        // get env data for this time point (t).                        
-                        let envIndex =
-                            Solver.SolverCompiler.buildEnvIndex
-                                getInteroplateMode
-                                startDate
-                                DateMode.Conversion.CalendarDates.toMonths
-                                envData
-                        let tEnv = envIndex |> Map.map(fun _ ts -> ts.Item t |> Tensors.Typed.ofScalar)
-
-                        // Model time vs time index?
-                        Solver.SolverRunners.DiscreteTime.stepOnce
-                            eqs
-                            paramValues
-                            tEnv
-                            (t * factor |> Tensors.Typed.ofScalar)
-                            state
+                        let tIndex : float<``time index``> = t * factorFromIndex
+                        let tEnv = envIndex |> Map.map(fun _ ts -> ts.Item tIndex |> Tensors.Typed.ofScalar)
+                        let result =
+                            Solver.SolverRunners.DiscreteTime.stepOnce
+                                eqs
+                                paramValues
+                                tEnv
+                                (t * factorFromIndex |> Tensors.Typed.ofScalar)
+                                state
+                        result, t + LanguagePrimitives.FloatWithMeasure<'modelTime> 1.
                 | _ -> failwith "Mismatch between model time and "
             | Continuous i ->
 
                 match eqs with
                 | DifferentialEqs eqs ->
 
-                    fun state (t:float<'modelTime>) ->
+                    fun state (t:float<'modelUnit>) -> // Time since baseline?
 
-                        // Problem: the RHS builds-in the environment data. The
-                        // integration routines take a compiled RHS. So, cannot
-                        // do with current contract (have environment data vary).
-
-                        // Should environment be able to be updated during inference,
-                        // as a shared feature?
-
-                        let timeline = [| t; t |]
+                        let newTime = t + LanguagePrimitives.FloatWithMeasure<'modelTime> 1.
+                        let timeline = [| t * factorFromIndex; newTime * factorFromIndex |]
 
                         let output =
                             Solver.SolverRunners.DifferentialTime.fixedRunner
                                 eqs
                                 i
                                 timeline
-                                envData
-                                (fun _ -> )
+                                envIndex
+                                (fun _ -> state)
                                 paramValues
 
                         match output with
-                        | Solver.Paired p -> p
-                        | Solver.Unpaired (t,p) -> p
+                        | Solver.Paired p ->
+                            let lastState = p |> Map.map(fun _ v -> v |> Array.last |> snd)
+                            lastState, newTime
+                        
+                        | Solver.Unpaired (t,p) ->
+                            let lastState = p |> Map.map(fun _ v -> v |> Tensors.Typed.itemAt (t.Length - 1))
+                            lastState, newTime
 
                 | _ -> failwith "Mismatch of engine vs model time mode (differential vs discrete time)."
 
