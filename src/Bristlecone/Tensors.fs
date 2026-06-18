@@ -12,6 +12,20 @@ module Tensors =
     type Vector = private Vector of unit
     type Matrix = private Matrix of unit
 
+    let private dtype = Dtype.Float64
+
+    let private liftFloatToBatch (batch:int) (k:float) =
+        if batch = 1 then dsharp.scalar(k, dtype = dtype)
+        else dsharp.full([| batch |], k)
+
+    /// Ensure that two tensors have matching replication counts, or
+    /// that one of the tensors is unreplicated and is to be broadcast.
+    let private ensureBroadcastable (a:Tensor) (b:Tensor) =
+        let ba = a.shape.[0]
+        let bb = b.shape.[0]
+        if ba <> 1 && bb <> 1 && ba <> bb then
+            invalidOp $"Replicate count mismatch: {ba} vs {bb}"
+
     /// 'Shape = Scalar | Vector | Matrix
     /// 'U = unit of measure for element type (or float for no UoM)
     [<NoEquality; NoComparison>]
@@ -21,68 +35,89 @@ module Tensors =
 
         member this.Value = this.Inner
 
+        /// Any tensor may have multiple replicates within it, which
+        /// is encoded internally as the leading dimension.
+        member this.ReplicateSize = this.Inner.shape.[0]
+
         // Scalar–Scalar arithmetic
         static member (+)(a: TypedTensor<Scalar, 'u>, b: TypedTensor<Scalar, 'u>) : TypedTensor<Scalar, 'u> =
+            ensureBroadcastable a.Value b.Value
             { Inner = a.Value + b.Value }
 
         static member (-)(a: TypedTensor<Scalar, 'u>, b: TypedTensor<Scalar, 'u>) : TypedTensor<Scalar, 'u> =
+            ensureBroadcastable a.Value b.Value
             { Inner = a.Value - b.Value }
 
         static member (*)(a: TypedTensor<Scalar, 'u>, b: TypedTensor<Scalar, 'v>) : TypedTensor<Scalar, 'u * 'v> =
+            ensureBroadcastable a.Value b.Value
             { Inner = a.Value * b.Value }
 
         static member (/)(a: TypedTensor<Scalar, 'u>, b: TypedTensor<Scalar, 'v>) : TypedTensor<Scalar, 'u / 'v> =
+            ensureBroadcastable a.Value b.Value
             { Inner = a.Value / b.Value }
 
         // Allow float * scalar and scalar * float
-        static member (*)(k: float, a: TypedTensor<Scalar, 'u>) = { Inner = dsharp.scalar k * a.Value }
+        static member (*)(k: float, a: TypedTensor<Scalar, 'u>) =
+            let kTensor = liftFloatToBatch a.ReplicateSize k
+            { Inner = kTensor * a.Value }
 
-        static member (*)(a: TypedTensor<Scalar, 'u>, k: float) = { Inner = a.Value * dsharp.scalar k }
+        static member (*)(a: TypedTensor<Scalar, 'u>, k: float) =
+            let kTensor = liftFloatToBatch a.ReplicateSize k
+            { Inner = a.Value * kTensor }
 
         // Vector–Vector elementwise
-        static member (+)(a: TypedTensor<Vector, 'u>, b: TypedTensor<Vector, 'u>) = { Inner = a.Value + b.Value }
+        static member (+)(a: TypedTensor<Vector, 'u>, b: TypedTensor<Vector, 'u>) =
+            ensureBroadcastable a.Value b.Value
+            { Inner = a.Value + b.Value }
 
         static member (-)(a: TypedTensor<Vector, 'u>, b: TypedTensor<Vector, 'u>) : TypedTensor<Vector, 'u> =
+            ensureBroadcastable a.Value b.Value
             { Inner = a.Value - b.Value }
 
         static member (*)(a: TypedTensor<Vector, 'u>, b: TypedTensor<Vector, 'v>) : TypedTensor<Vector, 'u * 'v> =
+            ensureBroadcastable a.Value b.Value
             { Inner = dsharp.mul (a.Value, b.Value) }
 
         static member (/)(a: TypedTensor<Vector, 'u>, b: TypedTensor<Vector, 'v>) : TypedTensor<Vector, 'u / 'v> =
+            ensureBroadcastable a.Value b.Value
             { Inner = a.Value / b.Value }
 
         // Vector–Scalar broadcast
         static member (*)(v: TypedTensor<Vector, 'u>, s: TypedTensor<Scalar, 'v>) : TypedTensor<Vector, 'u * 'v> =
+            ensureBroadcastable v.Value s.Value
             { Inner = v.Value * s.Value }
 
         static member (+)(v: TypedTensor<Vector, 'u>, s: TypedTensor<Scalar, 'u>) : TypedTensor<Vector, 'u> =
+            ensureBroadcastable v.Value s.Value
             { Inner = dsharp.add (v.Value, s.Value) }
 
         static member (*)(s: TypedTensor<Scalar, 'u>, v: TypedTensor<Vector, 'v>) : TypedTensor<Vector, 'u * 'v> =
+            ensureBroadcastable v.Value s.Value
             { Inner = s.Value * v.Value }
 
         static member (/)(v: TypedTensor<Vector, 'u>, s: TypedTensor<Scalar, 'v>) : TypedTensor<Vector, 'u / 'v> =
+            ensureBroadcastable v.Value s.Value
             { Inner = v.Value / s.Value }
 
         // Vector–float exponent
         static member ( ** )(v: TypedTensor<Vector, 'u>, p: float) = { Inner = v.Value ** p }
 
 
-
     module Typed =
 
-        // Constructors
+        /// Creates a scalar (with no replication).
         let ofScalar (value: float<'u>) : TypedTensor<Scalar, 'u> =
-            { Inner = dsharp.scalar (float value, dtype = Dtype.Float64) }
+            { Inner = dsharp.tensor(float value, dtype = dtype).unsqueeze 0 }
 
+        /// Creates a vector (with no replication).
         let ofVector (data: float<'u>[]) : TypedTensor<Vector, 'u> =
             if Array.isEmpty data then
                 invalidArg "data" "Cannot create a TypedTensor<Vector,_> from an empty array."
+            { Inner = dsharp.tensor(data |> Array.map float, dtype = dtype).unsqueeze 0 }
 
-            { Inner = dsharp.tensor (data |> Array.map float, dtype = Dtype.Float64) }
-
+        /// Creates a matrix (with no replication).
         let ofMatrix (data: float<'u>[,]) : TypedTensor<Matrix, 'u> =
-            { Inner = dsharp.tensor (data |> Array2D.map float, dtype = Dtype.Float64) }
+            { Inner = dsharp.tensor(data |> Array2D.map float, dtype = dtype).unsqueeze 0 }
 
         let addScalar (a: TypedTensor<Scalar, 'u>) (b: TypedTensor<Scalar, 'u>) : TypedTensor<Scalar, 'u> =
             { Inner = a.Inner + b.Inner }
@@ -118,15 +153,19 @@ module Tensors =
         let sqrtScalar (x: TypedTensor<Scalar, 'u^2>) : TypedTensor<Scalar, 'u> = { Inner = x.Value.sqrt () }
 
         let dot (a: TypedTensor<Vector, 'u>) (b: TypedTensor<Vector, 'u>) : TypedTensor<Scalar, 'u^2> =
+            ensureBroadcastable a.Value b.Value
             { Inner = a.Inner.dot b.Inner }
 
         let scale (s: TypedTensor<Scalar, 'a>) (v: TypedTensor<Vector, 'b>) : TypedTensor<Vector, 'a * 'b> =
+            ensureBroadcastable s.Value v.Value
             { Inner = s.Value * v.Value }
 
         let addVector (a: TypedTensor<Vector, 'u>) (b: TypedTensor<Vector, 'u>) : TypedTensor<Vector, 'u> =
+            ensureBroadcastable a.Value b.Value
             { Inner = a.Value + b.Value }
 
         let subVector (a: TypedTensor<Vector, 'u>) (b: TypedTensor<Vector, 'u>) : TypedTensor<Vector, 'u> =
+            ensureBroadcastable a.Value b.Value
             { Inner = a.Value - b.Value }
 
         let sumVector (a: TypedTensor<Vector, 'u>) : TypedTensor<Scalar, 'u> = { Inner = a.Value.sum () }
