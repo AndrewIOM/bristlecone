@@ -37,9 +37,9 @@ In contemporary ecology (‘*neo-ecology*’), a key approach for causal inferen
 
 ## State of the field
 
-The ecological community predominantly works within R, with long-term ecological research focusing on purely statistical methods. Key approaches include canonical correspondence analysis, generalised additive models, and transfer functions for reconstructing past environments from microfossil assemblages. Some proxy-specific mechanistic approaches have been applied; for pollen, the landscape model REVEALS [@Sugita_2007] and local extension LOVE [@Sugita_2007_2] integrate contemporary datasets on pollen productivity with models of lake basin pollen capture to simulate taxon-specific biomass from pollen fluxes. However, research that infers mechanism from long-term ecological time-series is of limited example (e.g., @Jeffers_Bonsall_Watson_Willis_2011). In tree-ring research, mechanistic and semi-mechanistic approaches are more broadly applied, including using VS-Lite – a model based on Liebig’s law of the minimum – to infer moisture and temperature limiting effects on tree growth [@TolwinskiWard_2011].
+The ecological community predominantly works within R. For LTE, key statistical approaches include transfer functions for reconstructing past environments from microfossil assemblages, generalised additive models, and canonical correspondence analyses. Proxy-specific mechanistic approaches have also been applied; for pollen, the landscape model REVEALS [@Sugita_2007] and local extension LOVE [@Sugita_2007_2] simulate taxon-specific biomass from pollen fluxes. However, research that infers mechanism from long-term ecological time-series is limited (e.g., @Jeffers_Bonsall_Watson_Willis_2011). In tree-ring research, (semi-)mechanistic approaches are more broadly applied, such as VS-Lite for inferring moisture and temperature limiting effects on tree growth [@TolwinskiWard_2011].
 
-*Bristlecone* provides two unique contributions over existing libraries. First, it integrates the workflow of the ecological detective into a single conceptual framework. Second, no other existing library within the field provides the ecological and mathematical correctness that *Bristlecone*’s language provides. *Bristlecone* makes use of F#’s strong typing, meta-programming capabilities, and units of measure to require that ecological models are human readable and dimensionally correct. *Bristlecone* models therefore increase the transparency of ecological modelling research by having human readable model structures in supplementary code, clear declarations of the key methodological considerations applied, and reproducible analyses.
+*Bristlecone* provides two unique contributions over existing libraries. First, it integrates the workflow of the ecological detective into a single conceptual framework. Second, no other existing library provides the mathematical correctness and ecological clarity of *Bristlecone*’s language. *Bristlecone* makes use of F#’s strong typing, meta-programming capabilities, and units of measure to require that ecological models are human readable and dimensionally correct. *Bristlecone* models therefore increase transparency of ecological modelling research by having human readable model structures in supplementary code, clear declarations of the key methodological considerations applied, and reproducible analyses.
 
 The core design of *Bristlecone* mandated a strongly typed language with compile-time errors, making R suboptimal. As a result, *Bristlecone* was designed as a new project to supply the grammar and conceptual framework; however, it applies a compositional approach whereby other underlying components, such as optimisation and integration routines, may be plugged into *Bristlecone* to support existing alternatives. For example, for optimisation and inference ecologists often write models in R and pass to an optimiser. The RProvider F# type provider provides programmatic access to R functions from F# [@RProvider] and presents an avenue for further integration between R routines and Bristlecone.
 
@@ -47,16 +47,14 @@ The core design of *Bristlecone* mandated a strongly typed language with compile
 
 ## Software design
 
-Although F# is uncommon in ecological research, I judged that I could use its meta-programming capabilities to create a domain-specific language that would be intuitive for use by ecologists whose previous experience was with R. By doing so, I have been able to make full use of unique F# features, such as units of measure. The existence of *RProvider* was also a consideration, as it enables typed integration with familiar R packages (e.g. for visualisation).
-
-I sought to include all seven key stages of the ‘ecological detective’ workflow in *Bristlecone*: (1) definition of time-series models and plausible alternative components; (2) definition of an estimation engine (which describes the model-fitting approach); (3) composition of alternative model hypotheses; (4) testing identifiability of the model given the estimation engine; (5) model-fitting; (6) model-selection; and (7) diagnostics.
+Although F# is uncommon in ecological research, I considered that I could apply it's meta-programming capabilities to create a domain-specific language that would be intuitive for use by ecologists whose previous experience was in R. To improve familiarity, I considered connections to R package via *RProvider* where appropriate (e.g. visualisation). I sought to include all seven key stages of the ‘ecological detective’ workflow in *Bristlecone*: (1) definition of time-series models; (2) specifying model-fitting methods ("estimation enigne"); (3) composition of alternative model hypotheses; (4) identifiability testing; (5) model-fitting; (6) model-selection; and (7) diagnostics.
 
 ![Figure 1](figure-1.png)
-*Figure 1 Conceptual framework of Bristlecone. The numbered green circles indicate the stage of analysis. Box colours: brown = Bristlecone core functions; black = user-defined elements using the Domain Specific Language; blue = user-supplied data; white = functions external to Bristlecone’s framework.*
+*Figure 1 Conceptual framework. Green circles indicate stage of analysis. Box colours: brown = Bristlecone core functions; black = user-defined elements using the Domain Specific Language; blue = user-supplied data; white = external functions.*
 
-A core requirement was that ecological models should make full use of F# type safety and units of measure to ensure that (a) all equations are dimensionally consistent, and (b) model composition is also dimensionally consistent. To this aim, a DSL was designed that is based on unit-typed ‘model expressions’ that are composed using mathematical operators. The user may declare states, parameters, and external environmental forcings (e.g. air temperature) with their ecologically meaningful units to ensure that any ecological model system is dimensionally consistent.
+A core requirement was that ecological models should make full use of F# type safety and units of measure to ensure that (a) all equations are dimensionally consistent, and (b) model composition is also dimensionally consistent. To this aim, a DSL was created, based on unit-typed ‘model expressions’. States, parameters, and external environmental forcings (e.g. air temperature) with their ecologically meaningful units may be included, while always ensuring dimensional consistency.
 
-To demonstrate, the Schaefer model of fishing (as shown in *The Ecological Detective*) may be defined as:
+To demonstrate, the Schaefer model (see: *The Ecological Detective*, Chapter 10) may be defined as:
 
 ```fsharp
 module Schaefer =
@@ -68,7 +66,7 @@ module Schaefer =
     let r = parameter "r" Positive 0.01</year> 1.0</year> // Intrinsic growth rate
     let K = parameter "K" Positive 100.<kton> 2000.<kton> // Carrying capacity
     let q = parameter "q" Positive 1e-6<1/kton> 1e-2<1/kton> // Catchability coefficient
-    let B0 = P K // Biomass at time zero. Assumes stock unfished at start time
+    let B0 = P K // Biomass at time zero.
 
     let dt = Constant 1.<year>
     let ``B_est[t+1]`` =
@@ -92,7 +90,9 @@ module Schaefer =
         |> Model.compile
 ```
 
-Here, the discrete time model demonstrates enforcement of dimensional consistency: catch per unit efficiency must be dimensionless to work with lognormal observation error, and ``B_est[t+1]`` must be in `kton` units. If the model was continuous-time, it would require ``kton/year``. All components - state initialisers, likelihoods, measures, etc. - are unit-aware, preventing many model definition errors at compile-time.
+Here, catch per unit efficiency must be dimensionless as required by lognormal observation error, and ``B_est[t+1]`` must result in `kton`. If the model was continuous-time, it would require ``kton/year``. All components - state initialisers, likelihoods, measures, etc. - are unit-aware, preventing many model definition errors at compile-time.
+
+
 
 I designed Bristlecone's *estimation engine* so that users may combine models and data of different temporal properties, with the engine knowing how to translate time concepts and ensuring dimensional consistency at compile-time. 
 
