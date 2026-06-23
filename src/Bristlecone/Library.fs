@@ -582,6 +582,25 @@ module Bristlecone =
 
         runner
 
+    /// <summary>Run a model simulation from time zero until endTime.</summary>
+    let simulateAll
+        (endTime: float<'modelUnit>)
+        initialState
+        (simulationEngine: SimulationEngine<'date,'timespan,'modelUnit>)
+        (model: ModelSystem<'modelUnit>)
+        (startDate: 'date)
+        (envData: TimeFrame.TimeFrame<float<``environment``>, 'date, 'timeunit, 'timespan> option) =
+        
+        let run = simulate simulationEngine model startDate envData
+        let t0 = LanguagePrimitives.FloatWithMeasure<'modelUnit> 0.
+        let one = LanguagePrimitives.FloatWithMeasure<'modelUnit> 1.
+        let timeline = [ t0 .. one .. endTime - one ]
+
+        List.scan(fun (state,_) currentTime ->
+            run state ( (currentTime |> float) * one))
+            (initialState, t0) timeline
+        |> List.tail
+
 
     open Test
 
