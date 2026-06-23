@@ -125,6 +125,7 @@ module Language =
             | Divide of ModelExpressionUntyped * ModelExpressionUntyped
             | Mod of ModelExpressionUntyped * ModelExpressionUntyped
             | Power of ModelExpressionUntyped * ModelExpressionUntyped
+            | Sqrt of ModelExpressionUntyped
             | Logarithm of ModelExpressionUntyped
             | Exponential of ModelExpressionUntyped
             | Conditional of
@@ -185,6 +186,9 @@ module Language =
 
         static member Pow(ME a: ModelExpression<'u>, ME p: ModelExpression<1>) : ModelExpression<'u> =
             ME(Untyped.Power(a, p))
+
+        static member Sqrt(ME a: ModelExpression<'u>) : ModelExpression<'u^(1/2)> =
+            ME(Untyped.Sqrt a)
 
         static member Log(ME a: ModelExpression<1>) : ModelExpression<1> = ME(Untyped.Logarithm a)
 
@@ -259,6 +263,10 @@ module Language =
         let (ME b) = baseExpr
         let (ME e) = expExpr
         ME(Untyped.Power(b, e))
+
+    let Sqrt<[<Measure>] 'u> (baseExpr: ModelExpression<'u>) : ModelExpression<'u^(1/2)> =
+        let (ME b) = baseExpr
+        ME(Untyped.Sqrt b)
 
     /// The natural logarithm of an expression.
     let Logarithm (expr: ModelExpression<1>) : ModelExpression<1> =
