@@ -47,12 +47,12 @@ The core design of *Bristlecone* mandated a strongly typed language with compile
 
 ## Software design
 
-Although F# is uncommon in ecological research, I considered that I could apply it's meta-programming capabilities to create a domain-specific language that would be intuitive for use by ecologists whose previous experience was in R. To improve familiarity, I considered connections to R package via *RProvider* where appropriate (e.g. visualisation). I sought to include all seven key stages of the ‘ecological detective’ workflow in *Bristlecone*: (1) definition of time-series models; (2) specifying model-fitting methods ("estimation enigne"); (3) composition of alternative model hypotheses; (4) identifiability testing; (5) model-fitting; (6) model-selection; and (7) diagnostics.
+Although F# is uncommon in ecological research, I considered that I could apply it's meta-programming capabilities to create a domain-specific language that would be intuitive for use by ecologists whose previous experience is with R. To improve familiarity, I considered connections to R package via *RProvider* where appropriate (e.g. visualisation). I sought to include the seven key stages of the ‘ecological detective’ workflow in *Bristlecone*: (1) definition of time-series models; (2) specifying model-fitting methods ("estimation enigne"); (3) composition of alternative model hypotheses; (4) identifiability testing; (5) model-fitting; (6) model-selection; and (7) diagnostics.
 
 ![Figure 1](figure-1.png)
 *Figure 1 Conceptual framework. Green circles indicate stage of analysis. Box colours: brown = Bristlecone core functions; black = user-defined elements using the Domain Specific Language; blue = user-supplied data; white = external functions.*
 
-A core requirement was that ecological models should make full use of F# type safety and units of measure to ensure that (a) all equations are dimensionally consistent, and (b) model composition is also dimensionally consistent. To this aim, a DSL was created, based on unit-typed ‘model expressions’. States, parameters, and external environmental forcings (e.g. air temperature) with their ecologically meaningful units may be included, while always ensuring dimensional consistency.
+A core requirement was that ecological models should make full use of F# type safety and units of measure to ensure that all equations, model composition, and model-fitting are dimensionally consistent. I created a DSL that expresses arithmetic, states, parameters, and external environmental forcings (e.g. air temperature) with their ecologically meaningful units. Dimensional consistency is always ensured.
 
 To demonstrate, the Schaefer model (see: *The Ecological Detective*, Chapter 10) may be defined as:
 
@@ -90,30 +90,11 @@ module Schaefer =
         |> Model.compile
 ```
 
-Here, catch per unit efficiency must be dimensionless as required by lognormal observation error, and ``B_est[t+1]`` must result in `kton`. If the model was continuous-time, it would require ``kton/year``. All components - state initialisers, likelihoods, measures, etc. - are unit-aware, preventing many model definition errors at compile-time.
+Here, catch per unit efficiency must be dimensionless as required by lognormal observation error, and ``B_est[t+1]`` must result in `kton`. If the model was continuous-time, it would require ``kton/year``. The entire model pipeline - state initialisers, likelihoods, measures - are unit-aware, preventing many model definition errors at compile-time.
 
+I designed Bristlecone's *estimation engine* so that users may combine models and data of different temporal properties, with the engine configured to translate time concepts, which ensures temporal consistency at compile-time. Radiocarbon, modern calendar, and AD/BC dated time-series may all be applied or combined with models of various resolutions; the only requirement is that the appropriate temporal conversions are applied to the engine. As such, the same ecological models may be confronted with different sources of proxy data and dating methods; such an approach may be applied to compare the strength and importance of mechanisms over different timescales. For example, a monthly plant growth model may be combined with annual wood ring and monthly climate data, but requires a translation function from annual to monthly time (e.g., by  growing season end date).
 
-
-I designed Bristlecone's *estimation engine* so that users may combine models and data of different temporal properties, with the engine knowing how to translate time concepts and ensuring dimensional consistency at compile-time. 
-
-Radiocarbon dates, modern calendar dates, and low-resolution time-series (e.g. annual) may all be applied or combined, so long as 
-
-For example, if a plant growth model is specified at monthly resolution but annual growth rings are used as a proxy measure, then the estimation engine will encode the relationship between the annual data and the monthly model. Further, if a model is confronted with different sources of data that use different dating methods, the *Bristlecone* system explicitly handles the complexity of the temporal domain.
-
-It also allows common ecological models to be confronted with different sources of (proxy) data that use different dating methods.
-
-```fsharp
-let engine =
-    Bristlecone.mkContinuous ()
-    |> Bristlecone.withBristleconeOptimiser
-    |> Bristlecone.withConditioning Conditioning.RepeatFirstDataPoint
-    |> Bristlecone.withSeed 1500
-    |> Bristlecone.withTimeConversion DateMode.Conversion.Annual.toYears
-```
-
-The above definition of an estimation engine connects a model defined in annual time with an annually resolved time-series dataset. It applies the default optimiser (a combination of fast simulated annealing and a homogeneous MCMC chain) and conditioning of the first time point.
-
-For model composition, a simple pipe-based workflow was included that automatically scaffolds nested model systems into a list of hypotheses and assigns reference codes to each hypothesis. For example, the below indicates what model composition looks like for a model designed to investigate environmental controls to plant growth.
+For model composition, I designed a pipe-based workflow that turns nested model systems into a list of hypotheses (ensuring dimensional consistency) and assigns reference codes to each hypothesis:
 
 ```fsharp
 let hypotheses =
@@ -126,21 +107,15 @@ let hypotheses =
     |> Hypotheses.compile
 ```
 
-The above example scaffolds a list of model hypotheses that are defined in the temporal resolution of the base model, with a declarative form that is human readable.
-
-Identifiability testing is an essential stage in the ecological detective workflow for holding confidence in inference results. A testing module using a similar pipeline approach was included. Using the module, tests may be constructed using synthetic data with defined error structures to understand the ability of the estimation engine and hypotheses to correctly infer parameters for different hypothetical time-series data.
-
-For model-fitting, an orchestrator and multi-threaded loggers were included such that multiple hypotheses may be fit in parallel. For model-selection, I included constrained AIC and Akaike weights, as the framework currently focuses on information theoretic approaches. Model selection statistics are generated from the list of hypotheses given the resultant fits. Finally, root mean square error (RMSE) and n-step predictions were included as key diagnostics, to indicate goodness-of-fit. For further analysis, the DSL enables estimated parameters to be retrieved from results in their original units of measure, so that unit consistency crosses the boundary into onward analyses.
+Identifiability testing - assessing if the engine and model can infer known parameters - is essential for valid inference. I designed a pipeline-based testing suite where user-specified rules for generating synthetic time-series data can be applied to engine-model combinations to test identifiability, covering common scenarios for LTE data. For model-fitting, an orchestrator and multi-threaded loggers were included such that multiple hypotheses may be fit in parallel. For model-selection, I included constrained AIC and Akaike weights, as *Bristlecone* currently focuses on information theoretic approaches. Finally, root mean square error (RMSE) and n-step predictions were included as key diagnostics, to indicate goodness-of-fit. For further analysis, the DSL causes estimated parameters to be retrieved in original units of measure, so that unit consistency crosses the boundary into onward analyses.
 
 Through *Bristlecone*’s design and implementation, I sought to provide a framework that is understandable to long-term ecologists and supports the scientific process by raising compile-time errors during model prototyping. I also sought to make these models able to be interrogated intuitively when using time-series proxy data and explored for performance and identifiability.
 
-### Pluggable routines and integration with other libraries
+### Integration with other libraries
 
-I designed *Bristlecone* as a high-level layer for conducting an ecological detective workflow. As a high-level structure, I thus designed the system to be extensible such that most underlying components and routines may be swapped with implementations from other libraries or ecosystems as required. Two key components that may be swapped are the integration and optimisation routines. For integration, only Runge-Kutta 4 algorithms are currently included.
+I designed *Bristlecone* as a high-level layer for conducting an ecological detective workflow; it is thus extensible such that underlying components may be swapped with other implementations as required. Two key components that are replacable within estimation engines are the integration and optimisation routines.
 
-The performance of optimisation routines is integral to successful model-fitting. The included optimisation routines aimed to yield acceptable performance and accuracy for a broad suite of ecological time-series model structures, while recognising that other alternatives with differing strengths and weaknesses are available. I included three classes: amoeba-based, simulated annealing, and broader MCMC based methods. First, amoeba-based methods have been applied to palaeoecological model-fitting and model selection [@Jeffers_Bonsall_Watson_Willis_2011] but are suited to simpler likelihood surfaces of less than ten parameters and are more prone to local minima. Second, I included Classical and Fast Simulated Annealing [@Lee_2015][@Szu_Hartley_1987]. Fast simulated annealing is more performant at consistently identifying global minima; Bristlecone's implementation has been applied in dendroecological modelling [@Martin_MaciasFauria_Bonsall_Forbes_Zetterberg_Jeffers_2021]. Third, I included basic Monte Carlo samplers such as adaptive metropolis, as well as Filzbach. Filzbach is a Monte Carlo-based optimisation and sampling routine specifically designed and previously used for fitting high-dimensional ecological models [@Purves_2016], previously used by Microsoft Research. As the existing Filzbach library is not actively developed, and F# math libraries also lacked SA implementations, new F# implementations for both were included here.
-
-Some of the most efficient optimisation approaches require function gradients through automatic differentiation. To support, this the internals of *Bristlecone* use DiffSharp tensors [@baydin2015diffsharpautomaticdifferentiationlibrary]. Consequently, the model DSL enforces model designs as required for gradient-based methods.
+The performance of optimisation routines is integral to successful inference. To support gradient-based methods, the internals of *Bristlecone* run using DiffSharp tensors [@baydin2015diffsharpautomaticdifferentiationlibrary]. Consequently, the model DSL enforces model designs as required for gradient-based methods. A suite of optimisation routines broadly suited to ecological time-series was included, while recognising that alternatives exist. The suite includes amoeba, simulated annealing, and MCMC-based methods. First, amoeba-based methods have been applied to palaeoecological model-fitting and model selection [@Jeffers_Bonsall_Watson_Willis_2011] but are best suited to simpler likelihood surfaces. Second, I included Classical and Fast Simulated Annealing [@Lee_2015][@Szu_Hartley_1987]. Fast simulated annealing is more performant at consistently identifying global minima; Bristlecone's implementation has been applied in dendroecological modelling [@Martin_MaciasFauria_Bonsall_Forbes_Zetterberg_Jeffers_2021]. Third, I included Filzbach, a Monte Carlo-based optimisation and sampling routine designed for fitting high-dimensional ecological models [@Purves_2016]. As the existing Filzbach library is not actively developed, and F# math libraries also lacked SA implementations, I included new implementations in *Bristlecone*.
 
 ## Research impact statement
 
