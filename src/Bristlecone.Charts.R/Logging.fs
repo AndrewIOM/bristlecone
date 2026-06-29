@@ -6,9 +6,11 @@ type Device =
 
 module RHelper =
 
-    open RProvider
+    open RProvider.ggplot2
+    open RProvider.Abstractions
 
-    let (>!>) (plot1: RDotNet.SymbolicExpression) (plot2: RDotNet.SymbolicExpression) = R.``+`` (plot1, plot2)
+    let (>!>) (plot1: RExpr) (plot2: RExpr) = R.add__gg(plot1, plot2)
+
 
 module RealTimeTrace =
 
@@ -18,6 +20,11 @@ module RealTimeTrace =
     open RProvider.ggplot2
     open RProvider.grDevices
     open RHelper
+
+//     R.ggplot(df, R.aes(x = R.as_symbol "x", y = R.as_symbol "y"))
+// ++ R.geom__point() 
+// |> RExpr.printToString
+
 
     let decompose (state: ModelFitState) =
         let likelihood =
@@ -45,13 +52,12 @@ module RealTimeTrace =
     let facetedTrace data =
         let df = data |> Map.toList |> convertToDataFrame
 
-        R.ggplot (
-            namedParams
-                [ "data", box df
-                  "mapping", box (R.aes__string (x = "Iteration", y = "Value")) ]
-        )
-        >!> R.geom__line (R.aes__string (namedParams [ "color", "ChainId" ]))
-        >!> R.facet__grid (namedParams [ "facets", "Parameter~."; "scales", "free" ])
+        R.ggplot [
+            "data", box df
+            "mapping", box (R.aes__string (x = "Iteration", y = "Value"))
+        ]
+        >!> R.geom__line (R.aes__string [ "color", "ChainId" ])
+        >!> R.facet__grid [ "facets", "Parameter~."; "scales", "free" ]
 
 
     type TraceGraph(graphicsDevice: Device, refreshRate: int, maxTraceItems) =
@@ -97,6 +103,6 @@ module RealTimeTrace =
         let consolePost = Bristlecone.Logging.Console.logger refreshRate
         let graphLog = TraceGraph(Device.X11, refreshRate |> int, maxData)
 
-        (fun event ->
+        fun event ->
             consolePost event
-            graphLog.Log event)
+            graphLog.Log event
