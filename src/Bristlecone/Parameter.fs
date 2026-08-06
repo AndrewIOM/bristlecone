@@ -67,19 +67,18 @@ module Parameter =
     [<RequireQualifiedAccess>]
     module ParameterTransforms =
 
-        open DiffSharp
         open Tensors
 
         type OptimSpaceTransform<[<Measure>] 'space> =
-            { Forward: TypedTensor<Scalar, 'space> -> TypedTensor<Scalar, ``parameter``>
-              Inverse: TypedTensor<Scalar, ``parameter``> -> TypedTensor<Scalar, 'space> }
+            { Forward: TypedScalar<'space> -> TypedScalar<``parameter``>
+              Inverse: TypedScalar<``parameter``> -> TypedScalar<'space> }
 
         /// Detached/bounded mode: identity mapping regardless of constraint.
         let scalarTransformOptimSpace: OptimSpaceTransform<``optim-space``> =
             { Forward =
-                fun (z: TypedTensor<Scalar, ``optim-space``>) -> z.Value |> tryAsScalar<``parameter``> |> Option.get
+                fun (z: TypedScalar<``optim-space``>) -> z |> Typed.retypeScalar
               Inverse =
-                fun (x: TypedTensor<Scalar, ``parameter``>) -> x.Value |> tryAsScalar<``optim-space``> |> Option.get }
+                fun (x: TypedScalar<``parameter``>) -> x |> Typed.retypeScalar }
 
         // Transformed mode: apply constraint transforms
         let scalarTransformOptimSpaceTransformed
@@ -88,32 +87,30 @@ module Parameter =
             match cons with
             | Constraint.Unconstrained ->
                 { Forward =
-                    fun (z: TypedTensor<Scalar, ``optim-space-transformed``>) ->
-                        z.Value |> tryAsScalar<``parameter``> |> Option.get
+                    fun (z: TypedScalar<``optim-space-transformed``>) -> z |> Typed.retypeScalar
                   Inverse =
-                    fun (x: TypedTensor<Scalar, ``parameter``>) ->
-                        x.Value |> tryAsScalar<``optim-space-transformed``> |> Option.get }
+                    fun (x: TypedScalar<``parameter``>) -> x |> Typed.retypeScalar }
             | Constraint.PositiveOnly ->
                 { Forward =
-                    fun (z: TypedTensor<Scalar, ``optim-space-transformed``>) ->
-                        dsharp.exp z.Value |> tryAsScalar<``parameter``> |> Option.get
+                    fun (z: TypedScalar<``optim-space-transformed``>) ->
+                        z |> Typed.retypeScalar |> Typed.exp |> Typed.retypeScalar
                   Inverse =
-                    fun (x: TypedTensor<Scalar, ``parameter``>) ->
-                        dsharp.log x.Value |> tryAsScalar<``optim-space-transformed``> |> Option.get }
+                    fun (x: TypedScalar<``parameter``>) ->
+                        x |> Typed.logScalar |> Typed.retypeScalar }
             | Constraint.Bounded(low, hi) ->
                 let lowT = Typed.ofScalar low
                 let hiT = Typed.ofScalar hi
                 let one = Typed.ofScalar 1.
 
                 { Forward =
-                    fun (z: TypedTensor<Scalar, ``optim-space-transformed``>) ->
-                        let sigma = dsharp.sigmoid z.Value |> tryAsScalar<1> |> Option.get
+                    fun (z: TypedScalar<``optim-space-transformed``>) ->
+                        let sigma = Typed.sigmoid (Typed.retypeScalar z)
                         lowT + (hiT - lowT) * sigma
                   Inverse =
-                    fun (x: TypedTensor<Scalar, ``parameter``>) ->
+                    fun (x: TypedScalar<``parameter``>) ->
                         let sigma = (x - lowT) / (hiT - lowT)
                         let z = Typed.logScalar (sigma / (one - sigma))
-                        z |> Typed.retype }
+                        z |> Typed.retypeScalar }
 
 
     [<RequireQualifiedAccess>]
@@ -125,8 +122,8 @@ module Parameter =
         type AnyParameter =
             private
                 { Name: string
-                  ToTensorRealIO: unit -> Tensor
-                  FromTensorRealIO: Tensor -> AnyParameter
+                  ToTensorRealIO: unit -> TypedScalar<parameter>
+                  FromTensorRealIO: TypedScalar<parameter> -> AnyParameter
                   GetConstraint: unit -> Constraint<parameter>
                   TryGetReal: unit -> float option
                   TryGetBounds: unit -> (float<parameter> * float<parameter>) option }
@@ -143,13 +140,11 @@ module Parameter =
                   ToTensorRealIO =
                     fun () ->
                         match tryGetEstimate param with
-                        | Some r -> Tensors.allocateTensor (float r)
+                        | Some r -> Typed.ofScalar r |> Typed.retypeScalar
                         | None -> invalidOp $"Parameter '{name}' has no real estimate"
                   FromTensorRealIO =
                     fun t ->
-                        let x = LanguagePrimitives.FloatWithMeasure<'u>(float t)
-
-                        match setRealValue param x with
+                        match setRealValue param (t |> Typed.toFloatScalar) with
                         | Ok p' -> make p'
                         | Error m -> invalidOp m
                   GetConstraint = fun () -> let (Parameter(c, _)) = param in retypeConstraint c
@@ -186,21 +181,19 @@ module Parameter =
 
         /// Given a real-space parameter vector and an existing pool,
         /// return a new pool with each parameter's estimate set to the corresponding value.
-        let fromRealVector (realVec: TypedTensor<Vector, ``parameter``>) (Pool p: ParameterPool) : ParameterPool =
+        let fromRealVector (realVec: TypedVector<``parameter``>) (Pool p: ParameterPool) : ParameterPool =
             let updated =
                 p
                 |> Map.toList
                 |> List.mapi (fun i (sc, ap) ->
-                    let value =
-                        realVec.Value.[i] |> float |> LanguagePrimitives.FloatWithMeasure<parameter>
-
-                    let newAp = ap.FromTensorRealIO(Tensors.allocateTensor (float value))
+                    let value = Typed.itemAt i realVec
+                    let newAp = ap.FromTensorRealIO value
                     sc, newAp)
                 |> Map.ofList
 
             Pool updated
 
-        let toTensorWithKeysReal (Pool p) : ShortCode.ShortCode[] * TypedTensor<Vector, ``parameter``> =
+        let toTensorWithKeysReal (Pool p) : ShortCode.ShortCode[] * TypedVector<``parameter``> =
             let keys, scalars =
                 p
                 |> Map.toList
@@ -209,9 +202,8 @@ module Parameter =
 
             let vec =
                 scalars
-                |> dsharp.stack
-                |> tryAsVector<``parameter``>
-                |> Option.defaultWith (fun () -> invalidOp "Pool was not a vector tensor")
+                |> Array.ofList
+                |> Typed.stack1D
 
             keys |> List.toArray, vec
 
@@ -219,8 +211,8 @@ module Parameter =
         type CompiledTransforms<[<Measure>] 'space> =
             { Keys: ShortCode.ShortCode[]
               IndexByName: Map<string, int>
-              Forward: TypedTensor<Vector, 'space> -> TypedTensor<Vector, ``parameter``>
-              Inverse: TypedTensor<Vector, ``parameter``> -> TypedTensor<Vector, 'space>
+              Forward: TypedVector<'space> -> TypedVector<``parameter``>
+              Inverse: TypedVector<``parameter``> -> TypedVector<'space>
               ScalarTransforms: ParameterTransforms.OptimSpaceTransform<'space>[]
               IsBounded: bool }
 
@@ -241,25 +233,19 @@ module Parameter =
                 |> List.map (fun (_, ap) -> mkScalar (ap.GetConstraint()))
                 |> List.toArray
 
-            let forwardVec (thetaOpt: TypedTensor<Vector, 'space>) =
+            let forwardVec (thetaOpt: TypedVector<'space>) =
                 trans
                 |> Array.mapi (fun i t ->
-                    let zi = asScalar<'space> thetaOpt.Value.[i]
-                    let xi = t.Forward zi
-                    xi.Value)
-                |> dsharp.stack
-                |> tryAsVector<``parameter``>
-                |> Option.defaultWith (fun () -> invalidOp "Forward produced non-vector")
+                    let zi = Typed.itemAt i thetaOpt
+                    t.Forward zi)
+                |> Typed.stack1D
 
-            let inverseVec (thetaReal: TypedTensor<Vector, ``parameter``>) =
+            let inverseVec (thetaReal: TypedVector<``parameter``>) =
                 trans
                 |> Array.mapi (fun i t ->
-                    let xi = asScalar<``parameter``> thetaReal.Value.[i]
-                    let zi = t.Inverse xi
-                    zi.Value)
-                |> dsharp.stack
-                |> tryAsVector<'space>
-                |> Option.defaultWith (fun () -> invalidOp "Inverse produced non-vector")
+                    let xi = Typed.itemAt i thetaReal
+                    t.Inverse xi)
+                |> Typed.stack1D
 
             { Keys = keys
               IndexByName = index
@@ -289,7 +275,7 @@ module Parameter =
         /// Transform the units of a constraint from parameter (real) units into
         /// optimisation space units.
         let internal transformConstraint<[<Measure>] 'space>
-            (inv: TypedTensor<Scalar, parameter> -> TypedTensor<Scalar, 'space>)
+            (inv: TypedScalar<parameter> -> TypedScalar<'space>)
             (cons: Constraint<parameter>)
             =
             let invF f =
@@ -359,7 +345,7 @@ module Parameter =
                     // Draw uniformly between lo and hi (already float<parameter>)
                     let draw = Statistics.Distributions.ContinuousUniform.draw rnd lo hi ()
                     // Set the drawn value back into the AnyParameter
-                    ap.FromTensorRealIO(dsharp.scalar (float draw))
+                    ap.FromTensorRealIO(Typed.ofScalar draw)
                 | None -> failwithf "Parameter '%s' has no bounds to draw from" ap.Name)
             |> Pool
 

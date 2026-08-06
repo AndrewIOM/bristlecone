@@ -177,7 +177,7 @@ module Bristlecone =
         unbox<Parameter.Pool.OptimiserConfig<``optim-space``>>
 
     let private unsafeEraseSpaceForward<'space> =
-        unbox<Tensors.TypedTensor<Tensors.Vector, ``optim-space-transformed``>>
+        unbox<Tensors.TypedVector<``optim-space-transformed``>>
 
     let private dynamicVariableKeys (models: ModelSystem.ModelForm<'modelTimeUnit>) =
         match models with

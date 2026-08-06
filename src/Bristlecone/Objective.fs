@@ -11,13 +11,13 @@ module Objective =
 
     let accessorFromRealVector
         (compiled: Parameter.Pool.CompiledTransforms<'space>)
-        (thetaReal: TypedTensor<Vector, ``parameter``>)
+        (thetaReal: TypedVector<``parameter``>)
         : ModelSystem.ParameterValueAccessor =
         let idx = compiled.IndexByName
 
         ParameterValueAccessor(fun name ->
             match Map.tryFind name idx with
-            | Some i -> asScalar<``parameter``> thetaReal.Value.[i]
+            | Some i -> Typed.itemAt i thetaReal
             | None -> invalidOp $"Parameter '{name}' not found")
 
     let prependInitialConditions initial expected =
@@ -33,10 +33,10 @@ module Objective =
     /// of the predictions to enable previous value lookup where needed.
     let measure
         (measures: CodedMap<Measurement<state>>)
-        (parameters: TypedTensor<Vector, ``parameter``>)
-        (expectedDynamic: CodedMap<TypedTensor<Vector, state>>)
-        (initialConditions: CodedMap<TypedTensor<Scalar, state>>)
-        : CodedMap<TypedTensor<Vector, state>> =
+        (parameters: TypedVector<``parameter``>)
+        (expectedDynamic: CodedMap<TypedVector<state>>)
+        (initialConditions: CodedMap<TypedScalar<state>>)
+        : CodedMap<TypedVector<state>> =
 
         let expectedWithT0 = prependInitialConditions initialConditions expectedDynamic
         let length = expectedWithT0 |> Seq.head |> (fun kv -> kv.Value |> Typed.length)

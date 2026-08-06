@@ -5,318 +5,284 @@ namespace Bristlecone
 /// Bristlecone functions.
 module Tensors =
 
-    open DiffSharp
+    open DiffSharp.AD.Float64
 
-    // Phantom markers for shape categories only
-    type Scalar = private Scalar of unit
-    type Vector = private Vector of unit
-    type Matrix = private Matrix of unit
-
-    let private dtype = Dtype.Float64
-
-    let private liftFloatToBatch (batch:int) (k:float) =
-        if batch = 1 then dsharp.scalar(k, dtype = dtype)
-        else dsharp.full([| batch |], k)
-
-    /// Ensure that two tensors have matching replication counts, or
-    /// that one of the tensors is unreplicated and is to be broadcast.
-    let private ensureBroadcastable (a:Tensor) (b:Tensor) =
-        let ba = a.shape.[0]
-        let bb = b.shape.[0]
-        if ba <> 1 && bb <> 1 && ba <> bb then
-            invalidOp $"Replicate count mismatch: {ba} vs {bb}"
-
-    /// 'Shape = Scalar | Vector | Matrix
-    /// 'U = unit of measure for element type (or float for no UoM)
     [<NoEquality; NoComparison>]
-    type TypedTensor<'Shape, [<Measure>] 'u> =
-        private
-            { Inner: Tensor }
+    type TypedScalar<[<Measure>] 'u> =
+        private { Inner: D }
 
-        member this.Value = this.Inner
+        static member inline (+)(a: TypedScalar<'u>, b: TypedScalar<'u>) : TypedScalar<'u> = { Inner = a.Inner + b.Inner }
+        static member inline (-)(a: TypedScalar<'u>, b: TypedScalar<'u>) : TypedScalar<'u> = { Inner = a.Inner - b.Inner }
+        static member inline (*)(a: TypedScalar<'u>, b: TypedScalar<'v>) : TypedScalar<'u * 'v> = { Inner = a.Inner * b.Inner }
+        static member inline (/)(a: TypedScalar<'u>, b: TypedScalar<'v>) : TypedScalar<'u / 'v> = { Inner = a.Inner / b.Inner }
 
-        /// Any tensor may have multiple replicates within it, which
-        /// is encoded internally as the leading dimension.
-        member this.ReplicateSize = this.Inner.shape.[0]
+        static member inline (*)(k: float, a: TypedScalar<'u>) = { Inner = D k * a.Inner }
+        static member inline (*)(a: TypedScalar<'u>, k: float) = { Inner = a.Inner * D k }
 
-        // Scalar–Scalar arithmetic
-        static member (+)(a: TypedTensor<Scalar, 'u>, b: TypedTensor<Scalar, 'u>) : TypedTensor<Scalar, 'u> =
-            ensureBroadcastable a.Value b.Value
-            { Inner = a.Value + b.Value }
 
-        static member (-)(a: TypedTensor<Scalar, 'u>, b: TypedTensor<Scalar, 'u>) : TypedTensor<Scalar, 'u> =
-            ensureBroadcastable a.Value b.Value
-            { Inner = a.Value - b.Value }
-
-        static member (*)(a: TypedTensor<Scalar, 'u>, b: TypedTensor<Scalar, 'v>) : TypedTensor<Scalar, 'u * 'v> =
-            ensureBroadcastable a.Value b.Value
-            { Inner = a.Value * b.Value }
-
-        static member (/)(a: TypedTensor<Scalar, 'u>, b: TypedTensor<Scalar, 'v>) : TypedTensor<Scalar, 'u / 'v> =
-            ensureBroadcastable a.Value b.Value
-            { Inner = a.Value / b.Value }
-
-        // Allow float * scalar and scalar * float
-        static member (*)(k: float, a: TypedTensor<Scalar, 'u>) =
-            let kTensor = liftFloatToBatch a.ReplicateSize k
-            { Inner = kTensor * a.Value }
-
-        static member (*)(a: TypedTensor<Scalar, 'u>, k: float) =
-            let kTensor = liftFloatToBatch a.ReplicateSize k
-            { Inner = a.Value * kTensor }
+    [<NoEquality; NoComparison>]
+    type TypedVector<[<Measure>] 'u> =
+        private { Inner: DV }
 
         // Vector–Vector elementwise
-        static member (+)(a: TypedTensor<Vector, 'u>, b: TypedTensor<Vector, 'u>) =
-            ensureBroadcastable a.Value b.Value
-            { Inner = a.Value + b.Value }
-
-        static member (-)(a: TypedTensor<Vector, 'u>, b: TypedTensor<Vector, 'u>) : TypedTensor<Vector, 'u> =
-            ensureBroadcastable a.Value b.Value
-            { Inner = a.Value - b.Value }
-
-        static member (*)(a: TypedTensor<Vector, 'u>, b: TypedTensor<Vector, 'v>) : TypedTensor<Vector, 'u * 'v> =
-            ensureBroadcastable a.Value b.Value
-            { Inner = dsharp.mul (a.Value, b.Value) }
-
-        static member (/)(a: TypedTensor<Vector, 'u>, b: TypedTensor<Vector, 'v>) : TypedTensor<Vector, 'u / 'v> =
-            ensureBroadcastable a.Value b.Value
-            { Inner = a.Value / b.Value }
+        static member inline (+)(a: TypedVector< 'u>, b: TypedVector< 'u>) = { Inner = a.Inner + b.Inner }
+        static member inline (-)(a: TypedVector< 'u>, b: TypedVector< 'u>) : TypedVector< 'u> = { Inner = a.Inner - b.Inner }
+        static member inline (*)(a: TypedVector< 'u>, b: TypedVector< 'v>) : TypedVector< 'u * 'v> = { Inner = a.Inner * b.Inner }
+        static member inline (/)(a: TypedVector< 'u>, b: TypedVector< 'v>) : TypedVector< 'u / 'v> = { Inner = a.Inner / b.Inner }
 
         // Vector–Scalar broadcast
-        static member (*)(v: TypedTensor<Vector, 'u>, s: TypedTensor<Scalar, 'v>) : TypedTensor<Vector, 'u * 'v> =
-            ensureBroadcastable v.Value s.Value
-            { Inner = v.Value * s.Value }
+        static member (*)(v: TypedVector< 'u>, s: TypedScalar<'v>) : TypedVector< 'u * 'v> =
+            { Inner = v.Inner * s.Inner }
 
-        static member (+)(v: TypedTensor<Vector, 'u>, s: TypedTensor<Scalar, 'u>) : TypedTensor<Vector, 'u> =
-            ensureBroadcastable v.Value s.Value
-            { Inner = dsharp.add (v.Value, s.Value) }
+        static member (+)(v: TypedVector< 'u>, s: TypedScalar<'u>) : TypedVector< 'u> =
+            { Inner = v.Inner + s.Inner }
 
-        static member (*)(s: TypedTensor<Scalar, 'u>, v: TypedTensor<Vector, 'v>) : TypedTensor<Vector, 'u * 'v> =
-            ensureBroadcastable v.Value s.Value
-            { Inner = s.Value * v.Value }
+        static member (*)(s: TypedScalar<'u>, v: TypedVector< 'v>) : TypedVector< 'u * 'v> =
+            { Inner = s.Inner * v.Inner }
 
-        static member (/)(v: TypedTensor<Vector, 'u>, s: TypedTensor<Scalar, 'v>) : TypedTensor<Vector, 'u / 'v> =
-            ensureBroadcastable v.Value s.Value
-            { Inner = v.Value / s.Value }
+        static member (/)(v: TypedVector< 'u>, s: TypedScalar<'v>) : TypedVector< 'u / 'v> =
+            { Inner = v.Inner / s.Inner }
 
         // Vector–float exponent
-        static member ( ** )(v: TypedTensor<Vector, 'u>, p: float) = { Inner = v.Value ** p }
+        static member ( ** )(v: TypedVector< 'u>, p: float) = { Inner = v.Inner ** p }
 
+
+
+    [<NoEquality; NoComparison>]
+    type TypedMatrix<[<Measure>] 'u> =
+        private { Inner: DM }
+
+    [<NoEquality; NoComparison>]
+    type TypedBoolScalar =
+        private { Inner: D }
+
+        with
+            member this.AsTensor () : TypedScalar<1> = { Inner = this.Inner }
+            member this.AsBool () : bool = this.Inner |> float = 1.0
+        
 
     module Typed =
 
-        /// Creates a scalar (with no replication).
-        let ofScalar (value: float<'u>) : TypedTensor<Scalar, 'u> =
-            { Inner = dsharp.tensor(float value, dtype = dtype).unsqueeze 0 }
+        // Constructors
+        let ofScalar (Inner: float<'u>) : TypedScalar<'u> =
+            { Inner = D (float Inner) }
 
-        /// Creates a vector (with no replication).
-        let ofVector (data: float<'u>[]) : TypedTensor<Vector, 'u> =
+        let ofVector (data: float<'u>[]) : TypedVector< 'u> =
             if Array.isEmpty data then
-                invalidArg "data" "Cannot create a TypedTensor<Vector,_> from an empty array."
-            { Inner = dsharp.tensor(data |> Array.map float, dtype = dtype).unsqueeze 0 }
+                invalidArg "data" "Cannot create a TypedVector<_> from an empty array."
 
-        /// Creates a matrix (with no replication).
-        let ofMatrix (data: float<'u>[,]) : TypedTensor<Matrix, 'u> =
-            { Inner = dsharp.tensor(data |> Array2D.map float, dtype = dtype).unsqueeze 0 }
+            { Inner = DV (data |> Array.map float) }
 
-        let addScalar (a: TypedTensor<Scalar, 'u>) (b: TypedTensor<Scalar, 'u>) : TypedTensor<Scalar, 'u> =
+        let ofMatrix (data: float<'u>[,]) : TypedMatrix<'u> =
+            { Inner = DM (data |> Array2D.map float) }
+
+
+        module internal Constants =
+            let invalidPenalty = ofScalar 1e8
+            let penalty = ofScalar 1e6
+            let absTol = ofScalar 1e-8
+            let relTol = ofScalar 1e-6
+            let nan = ofScalar nan
+
+            let zero = ofScalar 0.
+            let half = ofScalar 0.5
+            let one = ofScalar 1.0
+            let two = ofScalar 2.0
+
+
+        let grad (fn: TypedScalar<'u> -> TypedScalar<'v>) (x:TypedScalar<'u>) : TypedScalar<'v / 'u> =
+            let fnRaw (rawX: D) : D =
+                let boxedX : TypedScalar<'u> = { Inner = rawX }
+                let boxedY = fn boxedX
+                boxedY.Inner            
+            let result = grad fnRaw x.Inner
+            { Inner = result }
+
+        let addScalar (a: TypedScalar<'u>) (b: TypedScalar<'u>) : TypedScalar<'u> =
             { Inner = a.Inner + b.Inner }
 
-        let minusScalar (a: TypedTensor<Scalar, 'u>) (b: TypedTensor<Scalar, 'u>) : TypedTensor<Scalar, 'u> =
+        let minusScalar (a: TypedScalar<'u>) (b: TypedScalar<'u>) : TypedScalar<'u> =
             { Inner = a.Inner - b.Inner }
 
-        let mulScalar (a: TypedTensor<Scalar, 'u>) (b: TypedTensor<Scalar, 'v>) : TypedTensor<Scalar, 'u * 'v> =
-            { Inner = a.Value * b.Value }
+        let mulScalar (a: TypedScalar<'u>) (b: TypedScalar<'v>) : TypedScalar<'u * 'v> =
+            { Inner = a.Inner * b.Inner }
 
-        let divScalar (a: TypedTensor<Scalar, 'u>) (b: TypedTensor<Scalar, 'v>) : TypedTensor<Scalar, 'u / 'v> =
-            { Inner = a.Value / b.Value }
+        let divScalar (a: TypedScalar<'u>) (b: TypedScalar<'v>) : TypedScalar<'u / 'v> =
+            { Inner = a.Inner / b.Inner }
 
-        let divVectorByScalar (v: TypedTensor<Vector, 'u>) (s: TypedTensor<Scalar, 'v>) : TypedTensor<Vector, 'u / 'v> =
-            { Inner = v.Value / s.Value }
+        let isNan (scalar: TypedScalar<'u>) : TypedBoolScalar =
+            let absDiff = D.Abs(scalar.Inner - scalar.Inner)
+            { Inner = D.ReLU (D.Sign absDiff) }
 
-        let logScalar (a: TypedTensor<Scalar, 'u>) : TypedTensor<Scalar, 1> = { Inner = a.Value.log () }
+        let isInf (scalar: TypedScalar<'u>) : TypedBoolScalar =
+            let invAbs = divScalar Constants.one { Inner = D.Abs scalar.Inner}
+            let isZero = minusScalar Constants.one { Inner = D.ReLU (D.Sign invAbs.Inner)}
+            { Inner = isZero.Inner }
 
-        let logVector (a: TypedTensor<Vector, 'u>) : TypedTensor<Vector, 1> = { Inner = a.Value.log () }
+        let isFinite (x: TypedScalar<'u>) : TypedBoolScalar =
+            let nanMask = isNan x
+            let infMask = isInf x
+            let badMask = D.Max(nanMask.AsTensor().Inner, infMask.AsTensor().Inner)
+            { Inner = Constants.one.Inner - badMask }
 
-        let expVector (a: TypedTensor<Vector, 1>) : TypedTensor<Vector, 1> = { Inner = a.Value.exp () }
+        let gt (l: TypedScalar<'u>) (r: TypedScalar<'u>) : TypedBoolScalar =
+            { Inner = D.ReLU (D.Sign(l.Inner - r.Inner)) }
+            
+        let lt (l: TypedScalar<'u>) (r: TypedScalar<'u>) : TypedBoolScalar =
+            { Inner = D.ReLU (D.Sign(r.Inner - l.Inner)) }
 
-        let square (x: TypedTensor<Scalar, 'u>) : TypedTensor<Scalar, 'u^2> = { Inner = x.Value ** 2.0 }
+        let eq (l: TypedScalar<'u>) (r: TypedScalar<'u>) =
+            let absDiff = D.Abs(l.Inner - r.Inner)
+            let diffMask = D.ReLU (D.Sign absDiff)
+            { Inner = Constants.one.Inner - diffMask }
 
-        let squareVector (x: TypedTensor<Vector, 'u>) : TypedTensor<Vector, 'u^2> = { Inner = x.Value ** 2.0 }
+        let clamp (v:TypedScalar<'a>) (low: TypedScalar<'a>) (high: TypedScalar<'a>) : TypedScalar<'a> =
+            { Inner = D.Min(high.Inner, D.Max(low.Inner, v.Inner))}
+
+        let max (v:TypedScalar<'a>) (v2: TypedScalar<'a>) : TypedScalar<'a> =
+            { Inner = D.Max(v.Inner, v2.Inner) }
+
+        let min (v:TypedScalar<'a>) (v2: TypedScalar<'a>) : TypedScalar<'a> =
+            { Inner = D.Min(v.Inner, v2.Inner) }
+
+        /// TODO Check this works. Return type in DV.init?
+        let linspace (start: TypedScalar<'u>) (stop: TypedScalar<'u>) (num: int) : TypedVector<'u> =
+            if num <= 1 then failwith "Cannot space less than two points along a line"
+            let steps = ofScalar (float (num - 1))
+            let stepSize = (stop - start) / steps
+            let rawVector = DV.init num (fun i -> 
+                let idx = ofScalar (float i)
+                start + idx * stepSize
+            )
+            
+            { Inner = rawVector }
+
+        let divVectorByScalar (v: TypedVector< 'u>) (s: TypedScalar<'v>) : TypedVector< 'u / 'v> =
+            { Inner = v.Inner / s.Inner }
+
+        let logScalar (a: TypedScalar<'u>) : TypedScalar<1> = { Inner = D.Log a.Inner }
+
+        let logVector (a: TypedVector< 'u>) : TypedVector< 1> = { Inner = DV.Log a.Inner }
+
+        let pow (a: TypedScalar<'u>) (p: TypedScalar<'u>) : TypedScalar<'u> = { Inner = D.Pow(a.Inner, p.Inner) }
+
+        let exp (a: TypedScalar< 1>) : TypedScalar< 1> = { Inner = D.Exp a.Inner }
+        let expVector (a: TypedVector< 1>) : TypedVector< 1> = { Inner = DV.Exp a.Inner }
+
+        let floor (a: TypedScalar<'u>) : TypedScalar<'u> = { Inner = D.Floor a.Inner }
+
+        let square (x: TypedScalar<'u>) : TypedScalar<'u^2> = { Inner = x.Inner ** 2.0 }
+
+        let squareVector (x: TypedVector< 'u>) : TypedVector< 'u^2> = { Inner = x.Inner ** 2.0 }
+
+        let sigmoid (s: TypedScalar<1>) : TypedScalar<1> = { Inner = D.Sigmoid s.Inner }
 
         /// Squared Euclidean length of a vector.
-        let squaredLength (v: TypedTensor<Vector, 'u>) : TypedTensor<Scalar, 'u^2> =
-            let inner = v.Value
-            let sq = dsharp.sum (dsharp.mul (inner, inner))
-            { Inner = sq }
+        let squaredLength (v: TypedVector< 'u>) : TypedScalar<'u^2> =
+            { Inner = DV.L2NormSq v.Inner }
 
-        let sqrtScalar (x: TypedTensor<Scalar, 'u^2>) : TypedTensor<Scalar, 'u> = { Inner = x.Value.sqrt () }
+        let sqrtScalar (x: TypedScalar<'u^2>) : TypedScalar<'u> = { Inner = D.Sqrt x.Inner }
 
-        let dot (a: TypedTensor<Vector, 'u>) (b: TypedTensor<Vector, 'u>) : TypedTensor<Scalar, 'u^2> =
-            ensureBroadcastable a.Value b.Value
-            { Inner = a.Inner.dot b.Inner }
+        let dot (a: TypedVector< 'u>) (b: TypedVector< 'u>) : TypedScalar<'u^2> =
+            { Inner = a.Inner * b.Inner }
 
-        let scale (s: TypedTensor<Scalar, 'a>) (v: TypedTensor<Vector, 'b>) : TypedTensor<Vector, 'a * 'b> =
-            ensureBroadcastable s.Value v.Value
-            { Inner = s.Value * v.Value }
+        let scale (s: TypedScalar<'a>) (v: TypedVector< 'b>) : TypedVector< 'a * 'b> =
+            { Inner = s.Inner * v.Inner }
 
-        let addVector (a: TypedTensor<Vector, 'u>) (b: TypedTensor<Vector, 'u>) : TypedTensor<Vector, 'u> =
-            ensureBroadcastable a.Value b.Value
-            { Inner = a.Value + b.Value }
+        let addVector (a: TypedVector< 'u>) (b: TypedVector< 'u>) : TypedVector< 'u> =
+            { Inner = a.Inner + b.Inner }
 
-        let subVector (a: TypedTensor<Vector, 'u>) (b: TypedTensor<Vector, 'u>) : TypedTensor<Vector, 'u> =
-            ensureBroadcastable a.Value b.Value
-            { Inner = a.Value - b.Value }
+        let subVector (a: TypedVector< 'u>) (b: TypedVector< 'u>) : TypedVector< 'u> =
+            { Inner = a.Inner - b.Inner }
 
-        let sumVector (a: TypedTensor<Vector, 'u>) : TypedTensor<Scalar, 'u> = { Inner = a.Value.sum () }
+        let sumVector (a: TypedVector< 'u>) : TypedScalar<'u> = { Inner = DV.sum a.Inner }
 
-        let tail (v: TypedTensor<Vector, 'u>) : TypedTensor<Vector, 'u> =
-            let len = v.Value.shape.[0]
+        let signVector (v: TypedVector< 'u>) : TypedVector<1> = { Inner = DV.Sign v.Inner }
+
+        let tail (v: TypedVector< 'u>) : TypedVector< 'u> =
+            let len = v.Inner.Length
 
             if len < 2 then
                 invalidArg "v" "Vector must have at least two elements to take tail."
             else
-                // Use range slicing to preserve the 1‑D shape
-                { Inner = v.Value.[1..] }
+                { Inner = v.Inner.[1..] }
 
-        let stack1D (items: TypedTensor<Scalar, 'u>[]) : TypedTensor<Vector, 'u> =
+        let stack1D (items: TypedScalar<'u>[]) : TypedVector< 'u> =
             if Array.isEmpty items then
                 invalidArg "items" "Cannot stack an empty array of scalars into a vector."
 
-            let rawTensors = items |> Array.map (fun t -> t.Value)
-            let stacked = dsharp.stack (rawTensors, dim = 0)
-            { Inner = stacked }
+            let rawTensors = items |> Array.map (fun t -> t.Inner)
+            { Inner = DV.ofArray rawTensors }
+
+        let stack2D (items: TypedVector<'u> seq) : TypedMatrix<'u> =
+            failwith "not implemented!"
+
+        let unstack2D (matrix: TypedMatrix<'u>) : TypedVector<'u>[] =
+            failwith "not implemented!"
+
 
         /// Prepend a scalar to the front of a vector, keeping it differentiable
-        let prepend1D (head: TypedTensor<Scalar, 'u>) (tail: TypedTensor<Vector, 'u>) : TypedTensor<Vector, 'u> =
-            let headTensor = head.Value.unsqueeze (0)
-            let concatenated = dsharp.cat ([ headTensor; tail.Value ], dim = 0)
+        let prepend1D (head: TypedScalar<'u>) (tail: TypedVector< 'u>) : TypedVector< 'u> =
+            let headVector = DV.ofArray [| head.Inner |]
+            let concatenated = DV.concat [ headVector; tail.Inner ]
             { Inner = concatenated }
 
-        let matMul (a: TypedTensor<Matrix, 'u>) (b: TypedTensor<Matrix, 'v>) : TypedTensor<Matrix, 'u * 'v> =
-            { Inner = a.Inner.matmul b.Inner }
+        let matMul (a: TypedMatrix<'u>) (b: TypedMatrix<'v>) : TypedMatrix<'u * 'v> =
+            { Inner = a.Inner * b.Inner }
 
         /// Filter a vector tensor by a boolean mask.
         /// The mask length must match the vector length.
-        let filterByMask (mask: bool[]) (v: TypedTensor<Vector, 'u>) =
-            if v.Value.dim <> 1 then
-                invalidArg "v" "Expected 1‑D vector"
+        let filterByMask (mask: bool[]) (v: TypedVector< 'u>) : TypedVector<'u> =
+            if mask.Length <> v.Inner.Length then
+                invalidArg "mask" (sprintf "Mask length mismatch (%i vs %i data length)" mask.Length v.Inner.Length)
 
-            if mask.Length <> v.Value.shape.[0] then
-                invalidArg "mask" (sprintf "Mask length mismatch (%i vs %i data length)" mask.Length v.Value.shape.[0])
-
-            let idx =
+            let selectedElements = 
                 mask
-                |> Array.mapi (fun i keep -> if keep then Some i else None)
+                |> Array.mapi (fun i keep -> if keep then Some v.Inner.[i] else None)
                 |> Array.choose id
 
-            let selected = idx |> Array.map (fun i -> v.Value.[i]) |> dsharp.stack
-
-            { Inner = selected }
+            { Inner = DV.ofArray selectedElements }
 
 
-        let toFloatScalar (t: TypedTensor<Scalar, 'u>) : float<'u> =
-            float t.Value |> LanguagePrimitives.FloatWithMeasure<'u>
+        let toFloatScalar (t: TypedScalar<'u>) : float<'u> =
+            float t.Inner |> LanguagePrimitives.FloatWithMeasure<'u>
 
-        let toFloatArray (v: TypedTensor<Vector, 'u>) : float<'u>[] =
-            (v.Value.toArray () :?> float[])
-            |> Array.map LanguagePrimitives.FloatWithMeasure<'u>
+        let toArray (v: TypedVector< 'u>) : TypedScalar<'u>[] =
+            v.Inner.ToArray() |> Array.map(fun t -> { Inner = t })
 
-        let toFloatValueAt (i: int) (t: TypedTensor<Vector, 'u>) =
-            t.Value.[i].toDouble () |> LanguagePrimitives.FloatWithMeasure<'u>
+        let toFloatArray (v: TypedVector< 'u>) : float<'u>[] =
+            v.Inner.ToArray()
+            |> Array.map (float >> LanguagePrimitives.FloatWithMeasure<'u>)
 
-        let length (t: TypedTensor<Vector, 'u>) = t.Value.shape.[0]
+        let toFloatValueAt (i: int) (t: TypedVector< 'u>) =
+            t.Inner.[i] |> float |> LanguagePrimitives.FloatWithMeasure<'u>
 
-        let itemAt (i: int) (v: TypedTensor<Vector, 'u>) : TypedTensor<Scalar, 'u> = { Inner = v.Value.[i] }
+        let length (t: TypedVector< 'u>) = t.Inner.Length
 
-        /// Change the unit-of-measure phantom type of a TypedTensor without altering its value.
+        let itemAt (i: int) (v: TypedVector< 'u>) : TypedScalar<'u> = { Inner = v.Inner.[i] }
+
+        /// Change the unit-of-measure phantom type of a TypedTensor without altering its Inner.
         /// This is purely a compile-time reinterpretation; the underlying DiffSharp tensor is unchanged.
-        let retype<[<Measure>] 'u, [<Measure>] 'v, 'Shape> (t: TypedTensor<'Shape, 'u>) : TypedTensor<'Shape, 'v> =
-            { Inner = t.Value }
+        let retypeScalar<[<Measure>] 'u, [<Measure>] 'v> (t: TypedScalar<'u>) : TypedScalar<'v> =
+            { Inner = t.Inner }
+
+        let retypeVector<[<Measure>] 'u, [<Measure>] 'v> (t: TypedVector<'u>) : TypedVector<'v> =
+            { Inner = t.Inner }
 
         // And scalar-to-vector broadcast
-        let broadcastScalarToVector (s: TypedTensor<Scalar, 'u>) (len: int) : TypedTensor<Vector, 'u> =
+        let broadcastScalarToVector (s: TypedScalar<'u>) (len: int) : TypedVector< 'u> =
             let arr =
-                Array.init len (fun _ -> LanguagePrimitives.FloatWithMeasure<'u>(float s.Value))
+                Array.init len (fun _ -> LanguagePrimitives.FloatWithMeasure<'u>(float s.Inner))
 
             ofVector arr
 
-    // ---------------------
-    // Shape-category active patterns
-    // ---------------------
-    let (|Scalar|_|) (t: Tensor) =
-        match t.shape with
-        | [||] -> Some { Inner = t }: TypedTensor<Scalar, 'u> option
+
+    let (|VectorOfLen|_|) (len: int) (t: TypedVector<'u>) =
+        match t.Inner.Length with
+        | l when l = len -> Some t: TypedVector< 'u> option
         | _ -> None
 
-    let (|Vector|_|) (t: Tensor) =
-        match t.shape with
-        | [| _ |] -> Some { Inner = t }: TypedTensor<Vector, 'u> option
+    let (|MatrixOfShape|_|) (rows: int, cols: int) (t: TypedMatrix<'u>) =
+        match t.Inner.Rows, t.Inner.Cols with
+        | r, c when r = rows && c = cols -> Some t: TypedMatrix<'u> option
         | _ -> None
-
-    let (|Matrix|_|) (t: Tensor) =
-        match t.shape with
-        | [| _; _ |] -> Some { Inner = t }: TypedTensor<Matrix, 'u> option
-        | _ -> None
-
-    // ---------------------
-    // Size-aware active patterns
-    // ---------------------
-    let (|VectorOfLen|_|) (len: int) (t: Tensor) =
-        match t.shape with
-        | [| n |] when n = len -> Some { Inner = t }: TypedTensor<Vector, 'u> option
-        | _ -> None
-
-    let (|MatrixOfShape|_|) (rows: int, cols: int) (t: Tensor) =
-        match t.shape with
-        | [| r; c |] when r = rows && c = cols -> Some { Inner = t }: TypedTensor<Matrix, 'u> option
-        | _ -> None
-
-    // Classification stays the same, but no size in the type
-    type Untyped =
-        | UScalar of Tensor
-        | UVector of Tensor
-        | UMatrix of Tensor
-        | UOther of Tensor
-
-    let classify (t: Tensor) =
-        match t.shape with
-        | [||] -> UScalar t
-        | [| _ |] -> UVector t
-        | [| _; _ |] -> UMatrix t
-        | _ -> UOther t
-
-    // Upgrade to typed form (unit of measure still applies)
-    let tryAsScalar<[<Measure>] 'u> t =
-        match classify t with
-        | UScalar s -> Some { Inner = s }: TypedTensor<Scalar, 'u> option
-        | _ -> None
-
-    let tryAsVector<[<Measure>] 'u> t =
-        match classify t with
-        | UVector v -> Some { Inner = v }: TypedTensor<Vector, 'u> option
-        | _ -> None
-
-    let tryAsMatrix<[<Measure>] 'u> t =
-        match classify t with
-        | UMatrix m -> Some { Inner = m }: TypedTensor<Matrix, 'u> option
-        | _ -> None
-
-    let asScalar<[<Measure>] 'u> t =
-        match classify t with
-        | UScalar s -> { Inner = s }: TypedTensor<Scalar, 'u>
-        | _ -> failwithf "%A is not a valid scalar" t
-
-    let allocateTensor value =
-        dsharp.tensor (value, dtype = Dtype.Float64)
-
-    /// Operators that rely on the 0/1 encoding of booleans
-    /// in DiffSharp for working with raw tensors.
-    module Unsafe =
-        let logicalNot (b: Tensor) = dsharp.eq (b, dsharp.zerosLike b)
-
-        let logicalOr (a: Tensor) (b: Tensor) =
-            dsharp.gt (dsharp.add (a, b), dsharp.zerosLike a)
-
-        let logicalAnd (a: Tensor) (b: Tensor) =
-            dsharp.eq (dsharp.add (a, b), dsharp.onesLike a)

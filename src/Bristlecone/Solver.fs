@@ -19,8 +19,8 @@ module Solver =
     /// Some runners return a paired set of time-index * scalars whereas others
     /// return a tuple of a list of time-index and vectors for each map item.
     type RunnerOutput<[<Measure>] 'modelTimeUnit> =
-        | Paired of CodedMap<(float<'modelTimeUnit ``time index``> * TypedTensor<Scalar, state>)[]>
-        | Unpaired of float<'modelTimeUnit ``time index``> list * CodedMap<TypedTensor<Vector, state>>
+        | Paired of CodedMap<(float<'modelTimeUnit ``time index``> * TypedScalar<state>)[]>
+        | Unpaired of float<'modelTimeUnit ``time index``> list * CodedMap<TypedVector<state>>
 
     /// Masks to only return the requested values, for example when
     /// comparing with observational data.
@@ -32,7 +32,7 @@ module Solver =
             (dateMode: DateMode.DateMode<'date, 'yearType, 'timespan>)
             (startDate: 'date)
             (dataTimeToIndexTime: DateMode.Conversion.ResolutionToModelUnits<'date, 'timespan, ``time index``>)
-            : RunnerOutput<1> -> CodedMap<TypedTensor<Vector, state>> =
+            : RunnerOutput<1> -> CodedMap<TypedVector<state>> =
 
             match stepType with
             | Internal ->
@@ -98,7 +98,7 @@ module Solver =
             fun pars env tIndex state ->
                 let tIndexF = Typed.toFloatScalar tIndex
                 let tModel = Typed.ofScalar (tIndexF * factor)
-                eq pars env tModel state |> Typed.retype
+                eq pars env tModel state |> Typed.retypeScalar
 
         // Lift wrapping over a whole model form
         let wrapModelForm<[<Measure>] 'timeUnit>
@@ -117,20 +117,20 @@ module Solver =
 
             let internal stepOnce
                 (eqs: CodedMap<StateEquation<``time index``>>)
-                (pars: TypedTensor<Vector, ``parameter``>)
-                (env: CodedMap<TypedTensor<Scalar, environment>>)
-                (t: TypedTensor<Scalar, ``time index``>)
-                (state: CodedMap<TypedTensor<Scalar, state>>)
-                : CodedMap<TypedTensor<Scalar, state>> =
+                (pars: TypedVector<``parameter``>)
+                (env: CodedMap<TypedScalar<environment>>)
+                (t: TypedScalar<``time index``>)
+                (state: CodedMap<TypedScalar<state>>)
+                : CodedMap<TypedScalar<state>> =
                 eqs |> Map.map (fun key eq -> eq pars env t state.[key])
 
             let iterateDifference
                 (eqs: CodedMap<StateEquation<``time index``>>)
                 (timeline: float<``time index``>[])
-                (envStream: CodedMap<TypedTensor<Scalar, environment>>[])
-                (baselineValue: CodedMap<TypedTensor<Scalar, state>>)
+                (envStream: CodedMap<TypedScalar<environment>>[])
+                (baselineValue: CodedMap<TypedScalar<state>>)
                 pars
-                : CodedMap<(float<``time index``> * TypedTensor<Scalar, state>)[]> =
+                : CodedMap<(float<``time index``> * TypedScalar<state>)[]> =
                 let _, outputs =
                     ((baselineValue, eqs |> Map.map (fun _ _ -> [])), timeline |> Array.mapi (fun i ti -> i, ti))
                     ||> Array.fold (fun (state, acc) (i, tiVal) ->
@@ -145,7 +145,7 @@ module Solver =
                                 Map.fold
                                     (fun acc k v -> Map.add k v acc)
                                     envStream.[i]
-                                    (state |> Map.map (fun _ v -> Tensors.Typed.retype v))
+                                    (state |> Map.map (fun _ v -> Tensors.Typed.retypeScalar v))
 
                             let nextState = stepOnce eqs pars env t state
                             let acc' = acc |> Map.map (fun k vs -> (tiVal, nextState.[k]) :: vs)
@@ -159,7 +159,7 @@ module Solver =
                 (eqs: CodedMap<StateEquation<``time index``>>)
                 (timeline: float<``time index``>[])
                 (envIndex: CodedMap<TimeIndex.TimeIndex<float<environment>, _, _, _, 1>>)
-                (baselineValueFn: TypedTensor<Vector, ``parameter``> -> CodedMap<TypedTensor<Scalar, state>>)
+                (baselineValueFn: TypedVector<``parameter``> -> CodedMap<TypedScalar<state>>)
                 point
                 =
                 let envStream =
@@ -176,7 +176,7 @@ module Solver =
                 (eqs: CodedMap<StateEquation<``time index``>>)
                 (timeline: float<``time index``>[]) // irregular observation times
                 (envIndex: CodedMap<TimeIndex.TimeIndex<float<environment>, _, _, _, 1>>)
-                (t0: TypedTensor<Vector, ``parameter``> -> CodedMap<TypedTensor<Scalar, state>>)
+                (t0: TypedVector<``parameter``> -> CodedMap<TypedScalar<state>>)
                 point
                 =
 
@@ -210,7 +210,7 @@ module Solver =
                 (integrator: Integration.IntegrationRoutine)
                 (times: float<``time index``> array)
                 (forcings: CodedMap<TimeIndex.TimeIndex<float<environment>, _, _, _, 1>>)
-                (initialStateFn: TypedTensor<Vector, ``parameter``> -> CodedMap<TypedTensor<Scalar, state>>)
+                (initialStateFn: TypedVector<``parameter``> -> CodedMap<TypedScalar<state>>)
                 =
 
                 let tStart, tEnd = times.[0], times.[times.Length - 1]
@@ -244,7 +244,7 @@ module Solver =
                 (integrator: Integration.IntegrationRoutine)
                 (times: float<``time index``> array)
                 (forcings: CodedMap<TimeIndex.TimeIndex<float<environment>, _, _, _, 1>>)
-                (initialStateFn: TypedTensor<Vector, ``parameter``> -> CodedMap<TypedTensor<Scalar, state>>)
+                (initialStateFn: TypedVector<``parameter``> -> CodedMap<TypedScalar<state>>)
                 =
                 fun parameters ->
 
@@ -368,8 +368,8 @@ module Solver =
             engineTimeMode
             (stepType: StepType<'date>)
             (observedStates: TimeFrame.TimeFrame<float<state>, 'date, 'timeunit, 'timespan>)
-            (observedMeasuresT0: CodedMap<TypedTensor<Scalar, state>>)
-            (hiddenStatesT0: CodedMap<Tensors.TypedTensor<Tensors.Scalar, state>>)
+            (observedMeasuresT0: CodedMap<TypedScalar<state>>)
+            (hiddenStatesT0: CodedMap<Tensors.TypedScalar<state>>)
             (hiddenStatesT0Initialisers: CodedMap<ModelSystem.Initialiser<state>>)
             (environment: TimeFrame.TimeFrame<float<environment>, 'date, 'timeunit, 'timespan> option)
             (interpolationModeFor: ShortCode.ShortCode -> Solver.InterpolationMode)
@@ -509,9 +509,9 @@ module Solver =
     module Conditioning =
 
         type Resolved<'date, 'timeunit, 'timespan> =
-            { StatesHiddenForSolver: CodedMap<TypedTensor<Scalar, state>>
+            { StatesHiddenForSolver: CodedMap<TypedScalar<state>>
               StatesObservedForSolver: TimeFrame.TimeFrame<float<state>, 'date, 'timeunit, 'timespan>
-              MeasuresForSolver: CodedMap<TypedTensor<Scalar, state>>
+              MeasuresForSolver: CodedMap<TypedScalar<state>>
               ExogenousForSolver: option<TimeFrame.TimeFrame<float<environment>, 'date, 'timeunit, 'timespan>>
               ObservedForPairing: TimeFrame.TimeFrame<float<state>, 'date, 'timeunit, 'timespan>
               Log: string option }
@@ -545,7 +545,7 @@ module Solver =
                 |> Seq.toArray)
 
         let private resolveWithConditionedT0
-            (t0: CodedMap<TypedTensor<Scalar, state>>)
+            (t0: CodedMap<TypedScalar<state>>)
             (observedTF: TimeFrame.TimeFrame<float<state>, 'date, 'timeunit, 'timespan>)
             (envTF: option<TimeFrame.TimeFrame<float<environment>, 'date, 'timeunit, 'timespan>>)
             equationKeys

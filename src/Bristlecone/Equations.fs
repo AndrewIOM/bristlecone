@@ -16,8 +16,8 @@ module NegLogLikelihood =
     let internal getParamValue<[<Measure>] 'u>
         (paramAccessor: ParameterValueAccessor)
         (par: Language.IncludedParameter<'u>)
-        : TypedTensor<Scalar, 'u> =
-        paramAccessor.Get par.ParamId.Inner.Value |> Typed.retype
+        : TypedScalar<'u> =
+        paramAccessor.Get par.ParamId.Inner.Value |> Typed.retypeScalar
 
     let internal paramToAny<[<Measure>] 'u> (p: Language.IncludedParameter<'u>) =
         let boxed = Parameter.Pool.boxParam<'u> p.ParamId.Inner.Value p.Parameter
@@ -34,8 +34,8 @@ module NegLogLikelihood =
 
         match pairs |> Map.tryFindBy (fun k -> k = key) with
         | Some d ->
-            { Expected = d.Expected |> Typed.retype<'state, 'u, Tensors.Vector>
-              Observed = d.Observed |> Typed.retype<'state, 'u, Tensors.Vector> }
+            { Expected = d.Expected |> Typed.retypeVector<'state, 'u>
+              Observed = d.Observed |> Typed.retypeVector<'state, 'u> }
         | None -> failwithf "Predicted data was required for the variable '%s' but did not exist." key.Value
 
 
@@ -63,7 +63,7 @@ module NegLogLikelihood =
 
         /// A variance function maps expected values to per-point σ
         type VarianceFunction<[<Measure>] 'sigma, [<Measure>] 'x> =
-            { Evaluate: ParameterValueAccessor -> TypedTensor<Vector, 'x> -> TypedTensor<Vector, 'sigma>
+            { Evaluate: ParameterValueAccessor -> TypedVector<'x> -> TypedVector<'sigma>
               RequiredParameters: (ShortCode.ShortCode * Parameter.Pool.AnyParameter) list }
 
         /// Variance is constant within through time.
@@ -112,7 +112,7 @@ module NegLogLikelihood =
                     Typed.squareVector diff)
                 |> List.reduce (+)
                 |> Typed.sumVector
-                |> Typed.retype
+                |> Typed.retypeScalar
             |> fun f ->
                 { Evaluate = f
                   RequiredCodes = List.map obsKeyToLikelihoodKey keys
@@ -126,10 +126,10 @@ module NegLogLikelihood =
         /// Negative log likelihood for a bivariate normal distribution.
         /// For two random variables with bivariate normal N(u1,u2,sigma1,sigma2,rho).
         let internal gaussianVec
-            (sigma: TypedTensor<Vector, 'u>)
-            (obsx: TypedTensor<Vector, 'u>)
-            (expx: TypedTensor<Vector, 'u>)
-            : TypedTensor<Vector, ``-logL``> =
+            (sigma: TypedVector<'u>)
+            (obsx: TypedVector<'u>)
+            (expx: TypedVector<'u>)
+            : TypedVector<``-logL``> =
 
             let diffx = obsx - expx
 
@@ -168,14 +168,14 @@ module NegLogLikelihood =
         /// Negative log likelihood for a bivariate normal distribution.
         /// For two random variables with bivariate normal N(u1,u2,sigma1,sigma2,rho).
         let internal bivariateGaussianVec
-            (sigmax: TypedTensor<Scalar, 'ux>)
-            (sigmay: TypedTensor<Scalar, 'uy>)
-            (rho: TypedTensor<Scalar, 1>)
-            (obsx: TypedTensor<Vector, 'ux>)
-            (obsy: TypedTensor<Vector, 'uy>)
-            (expx: TypedTensor<Vector, 'ux>)
-            (expy: TypedTensor<Vector, 'uy>)
-            : TypedTensor<Vector, 1> =
+            (sigmax: TypedScalar<'ux>)
+            (sigmay: TypedScalar<'uy>)
+            (rho: TypedScalar<1>)
+            (obsx: TypedVector<'ux>)
+            (obsy: TypedVector<'uy>)
+            (expx: TypedVector<'ux>)
+            (expy: TypedVector<'uy>)
+            : TypedVector<1> =
 
             let diffx = obsx - expx
             let diffy = obsy - expy
@@ -186,7 +186,7 @@ module NegLogLikelihood =
             let q =
                 half
                 * (one / (one - Typed.square rho))
-                * (zta1 - zta2 + zta3: TypedTensor<Vector, 1>)
+                * (zta1 - zta2 + zta3: TypedVector<1>)
 
             let logNorm =
                 Typed.logScalar twoPi
@@ -235,10 +235,10 @@ module NegLogLikelihood =
                   RequiredCodes = [ obsKeyToLikelihoodKey key1; obsKeyToLikelihoodKey key2 ] }
 
         let internal logGaussianVec
-            (sigma: TypedTensor<Vector, 'u>)
-            (obsx: TypedTensor<Vector, 'u>)
-            (expx: TypedTensor<Vector, 1>)
-            : TypedTensor<Vector, ``-logL``> =
+            (sigma: TypedVector<'u>)
+            (obsx: TypedVector<'u>)
+            (expx: TypedVector<1>)
+            : TypedVector<``-logL``> =
 
             let logx = Typed.logVector obsx
             let diff = logx - expx

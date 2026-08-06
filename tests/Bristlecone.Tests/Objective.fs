@@ -51,7 +51,7 @@ let initialBounds =
 
                 // Returns the parameter value
                 let fakeLikelihood (code:ShortCode.ShortCode) : ModelSystem.Likelihood<'u> =
-                    { Evaluate = fun paramAccessor _ -> paramAccessor.Get "a" |> Tensors.Typed.retype
+                    { Evaluate = fun paramAccessor _ -> paramAccessor.Get "a" |> Tensors.Typed.retypeScalar
                       RequiredParameters = []
                       RequiredCodes = [ LikelihoodRequirement.State code ] }
 

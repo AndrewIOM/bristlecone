@@ -42,7 +42,7 @@ let typedTensorProps =
         testProperty "Retype does not change underlying numeric values" <| fun (xs: FsCheck.NonEmptyArray<NormalFloat>) ->
             let data = xs.Get |> Array.map (fun f -> f.Get * 1.0<m>)
             let v = Typed.ofVector data
-            let v' = Typed.retype<m,s,_> v
+            let v' = Typed.retypeScalar<m,s,_> v
             let back = Typed.toFloatArray v'
             let expected = data |> Array.map (fun f -> f * 1.0<s> / 1.0<m>)
             Expect.sequenceEqual back expected "Retype altered numeric values"

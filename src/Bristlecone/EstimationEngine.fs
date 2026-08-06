@@ -14,17 +14,17 @@ module ModelSystem =
     type ``state``
 
     /// The external environment at any time t.
-    type ExternalEnvironment = CodedMap<TypedTensor<Scalar, environment>>
+    type ExternalEnvironment = CodedMap<TypedScalar<environment>>
 
     /// An equation that may require fixed or free parameters,
     /// the current time t, the current response value, and / or
     /// external environmental time series.
     type GenericModelEquation<[<Measure>] 'timeUnit, [<Measure>] 'returnUnit> =
-        TypedTensor<Vector, ``parameter``>
-            -> CodedMap<TypedTensor<Scalar, ``environment``>>
-            -> TypedTensor<Scalar, 'timeUnit>
-            -> TypedTensor<Scalar, state>
-            -> TypedTensor<Scalar, 'returnUnit>
+        TypedVector< ``parameter``>
+            -> CodedMap<TypedScalar<``environment``>>
+            -> TypedScalar<'timeUnit>
+            -> TypedScalar<state>
+            -> TypedScalar<'returnUnit>
 
 
     type RateEquation<[<Measure>] 'timeUnit> = GenericModelEquation<'timeUnit, state / 'timeUnit>
@@ -40,13 +40,13 @@ module ModelSystem =
 
     /// Predicted time-series for a single variable.
     /// 'u is the state unit of measure.
-    type PredictedSeries<[<Measure>] 'u> = TypedTensor<Vector, 'u>
+    type PredictedSeries<[<Measure>] 'u> = TypedVector< 'u>
     // type PredictedSeries<'data,'date,'timeunit,'timespan> =
     //     TimeSeries.TimeSeries<ModelFitToPoint<'data>, 'date, 'timeunit, 'timespan>
 
     /// A function that returns a parameter's current value by its name.
     type ParameterValueAccessor =
-        | ParameterValueAccessor of (string -> TypedTensor<Scalar, ``parameter``>)
+        | ParameterValueAccessor of (string -> TypedScalar<``parameter``>)
 
         member this.Get name =
             let (ParameterValueAccessor v) = this in v name
@@ -54,14 +54,14 @@ module ModelSystem =
     /// A single variable’s observed vs expected values
     /// after model-fitting.
     type SeriesPair<[<Measure>] 'u> =
-        { Observed: TypedTensor<Vector, 'u>
-          Expected: TypedTensor<Vector, 'u> }
+        { Observed: TypedVector< 'u>
+          Expected: TypedVector< 'u> }
 
     /// The negative log likelihood given the predicted and observed
     /// per-variable time-series and a function to retrieve parameters
     /// required by the likelihood function.
     type LikelihoodEval<[<Measure>] 'u> =
-        ParameterValueAccessor -> CodedMap<SeriesPair<'u>> -> TypedTensor<Scalar, ``-logL``>
+        ParameterValueAccessor -> CodedMap<SeriesPair<'u>> -> TypedScalar<``-logL``>
 
     type LikelihoodRequirement =
         | State of ShortCode.ShortCode
@@ -80,19 +80,19 @@ module ModelSystem =
     /// A function that computes a measured system property given a
     /// current (time t) and previous (time t-1) system state.
     type Measurement<[<Measure>] 'u> =
-        TypedTensor<Vector, ``parameter``> // current parameters
-            -> CodedMap<TypedTensor<Vector, state>> // states time-series
-            -> TypedTensor<Scalar, state> // last value of this measurement
+        TypedVector< ``parameter``> // current parameters
+            -> CodedMap<TypedVector< state>> // states time-series
+            -> TypedScalar<state> // last value of this measurement
             -> int // current time index
-            -> TypedTensor<Scalar, 'u>
+            -> TypedScalar<'u>
 
     /// Computes the hidden state’s initial value at t0
     /// from fitted parameters and baseline known values.
     type Initialiser<[<Measure>] 'u> =
-        TypedTensor<Vector, ``parameter``> // current parameters
-            -> CodedMap<TypedTensor<Scalar, ``environment``>> // baseline environment values at t0
-            -> CodedMap<TypedTensor<Scalar, ``state``>> // baseline observed state values at t0
-            -> TypedTensor<Scalar, 'u> // initial hidden state value
+        TypedVector< ``parameter``> // current parameters
+            -> CodedMap<TypedScalar<``environment``>> // baseline environment values at t0
+            -> CodedMap<TypedScalar<``state``>> // baseline observed state values at t0
+            -> TypedScalar<'u> // initial hidden state value
 
     type ModelSystem<[<Measure>] 'modelTimeUnit> =
         { Parameters: Parameter.Pool.ParameterPool
@@ -137,7 +137,7 @@ module EstimationEngine =
     /// A point in optimisation-space. Optim-space
     /// is tensor-based, so all points are tensor vectors
     /// representing the parameters.
-    type Point = TypedTensor<Vector, ``optim-space``>
+    type Point = TypedVector< ``optim-space``>
 
     /// The likelihood at a particular place in
     /// optimisation space.
@@ -145,12 +145,12 @@ module EstimationEngine =
 
     /// An objective function that can be optimised
     /// within an optimisation routine.
-    type Objective = Point -> Tensors.TypedTensor<Tensors.Scalar, ``-logL``>
+    type Objective = Point -> Tensors.TypedScalar<``-logL``>
 
     /// Low‑level compiled likelihood
     /// Works directly with a parameter tensor (real space).
     type CompiledLikelihood<[<Measure>] 'u> =
-        TypedTensor<Vector, ``parameter``> -> CodedMap<SeriesPair<'u>> -> TypedTensor<Scalar, ``-logL``>
+        TypedVector< ``parameter``> -> CodedMap<SeriesPair<'u>> -> TypedScalar<``-logL``>
 
     /// Reasons optimisation may stop.
     type OptimStopReason =
@@ -181,11 +181,11 @@ module EstimationEngine =
         | FloatODEs of CodedMap<FloatODE>
 
     and TensorODE =
-        TypedTensor<Vector, ``parameter``>
-            -> CodedMap<TypedTensor<Scalar, ``environment``>>
-            -> TypedTensor<Scalar, ``time index``>
-            -> TypedTensor<Scalar, state>
-            -> TypedTensor<Scalar, state / ``time index``>
+        TypedVector< ``parameter``>
+            -> CodedMap<TypedScalar<``environment``>>
+            -> TypedScalar<``time index``>
+            -> TypedScalar<state>
+            -> TypedScalar<state / ``time index``>
 
     and FloatODE =
         CodedMap<float<parameter>>
@@ -200,17 +200,17 @@ module EstimationEngine =
     /// A function that, given parameters, produces a parameterised RHS
     /// for the ODE system. This is the output of the static solver setup.
     type UnparameterisedRHS =
-        TypedTensor<Vector, ``parameter``>
-            -> TypedTensor<Scalar, ``time index``>
-            -> TypedTensor<Vector, state>
-            -> CodedMap<TypedTensor<Scalar, state / ``time index``>>
+        TypedVector< ``parameter``>
+            -> TypedScalar<``time index``>
+            -> TypedVector< state>
+            -> CodedMap<TypedScalar<state / ``time index``>>
 
     /// A parameterised RHS — parameters already bound.
     /// This is what the integration routine actually steps.
     type ParameterisedRHS =
-        TypedTensor<Scalar, ``time index``>
-            -> TypedTensor<Vector, state>
-            -> CodedMap<TypedTensor<Scalar, state / ``time index``>>
+        TypedScalar<``time index``>
+            -> TypedVector< state>
+            -> CodedMap<TypedScalar<state / ``time index``>>
 
 
     module Solver =
@@ -222,14 +222,14 @@ module EstimationEngine =
             float<``time index``> // tInitial
                 -> float<``time index``> // tEnd
                 -> float<``time index``> // tStep
-                -> CodedMap<TypedTensor<Scalar, environment>> // initial environment
-                -> CodedMap<TimeIndex.TimeIndex<TypedTensor<Scalar, environment>, 'date, 'timeunit, 'timespan, 1>> // external env
+                -> CodedMap<TypedScalar<environment>> // initial environment
+                -> CodedMap<TimeIndex.TimeIndex<TypedScalar<environment>, 'date, 'timeunit, 'timespan, 1>> // external env
                 -> ModelEquations
                 -> UnparameterisedRHS
 
         type ConfiguredSolver =
-            TypedTensor<Vector, ``parameter``> // parameters
-                -> CodedMap<TypedTensor<Vector, state>> * CodedMap<TypedTensor<Scalar, state>> // predictions * initial state
+            TypedVector< ``parameter``> // parameters
+                -> CodedMap<TypedVector< state>> * CodedMap<TypedScalar<state>> // predictions * initial state
 
         /// A solver may configure environmental forcing variables
         /// to be interpolated if they are not available at an exact
@@ -250,12 +250,12 @@ module EstimationEngine =
         /// and current state.
         /// Must return the baseline state plus evolutions.
         type IntegrationRoutine =
-            TypedTensor<Scalar, ``time index``> // tInitial
-                -> TypedTensor<Scalar, ``time index``> // tEnd
-                -> TypedTensor<Scalar, ``time index``> // tStep
-                -> CodedMap<TypedTensor<Scalar, state>> // initialConditions
+            TypedScalar<``time index``> // tInitial
+                -> TypedScalar<``time index``> // tEnd
+                -> TypedScalar<``time index``> // tStep
+                -> CodedMap<TypedScalar<state>> // initialConditions
                 -> ParameterisedRHS
-                -> CodedMap<TypedTensor<Vector, state>>
+                -> CodedMap<TypedVector< state>>
 
 
     module Optimisation =

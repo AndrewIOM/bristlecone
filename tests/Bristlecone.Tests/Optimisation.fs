@@ -89,11 +89,11 @@ module Gibbs =
         |> Array.map (fun f -> f * 1.0<``optim-space``>)
         |> Typed.ofVector
 
-    let dummyObjective (theta: Point) : TypedTensor<Scalar,``-logL``> =
+    let dummyObjective (theta: Point) : TypedScalar<``-logL``> =
         // simple convex bowl: min at origin
         let arr = Typed.toFloatArray theta
         let v = Array.sumBy (fun x -> x * x) arr
-        Typed.ofScalar v |> Typed.retype
+        Typed.ofScalar v |> Typed.retypeScalar
 
     [<Tests>]
     let gibbsProps =

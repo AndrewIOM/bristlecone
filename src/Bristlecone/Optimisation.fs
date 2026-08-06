@@ -187,7 +187,7 @@ module MonteCarlo =
         tune
         f
         (theta1: Point)
-        (l1: TypedTensor<Scalar, ``-logL``>)
+        (l1: TypedScalar<``-logL``>)
         d
         scale
         iteration
@@ -1356,7 +1356,7 @@ module MonteCarlo =
             random
             writeOut
             domain
-            (f: TypedTensor<Vector, ``optim-space``> -> TypedTensor<Scalar, ``-logL``>)
+            (f: TypedVector<``optim-space``> -> TypedScalar<``-logL``>)
             =
 
             // 1. Initial conditions
@@ -1567,7 +1567,7 @@ module MonteCarlo =
 
         let filzbach'
             (settings: FilzbachSettings)
-            (theta: TypedTensor<Vector, ``optim-space``>)
+            (theta: TypedVector<``optim-space``>)
             (random: System.Random)
             writeOut
             (sampleEnd: EndCondition)
@@ -1617,7 +1617,7 @@ module MonteCarlo =
                         pickRandom tuningState
 
                 // Propose a new point
-                let propose (theta: TypedTensor<Vector, ``optim-space``>) =
+                let propose (theta: TypedVector<``optim-space``>) =
                     Array.zip3 (Typed.toFloatArray theta) changeMask domain
                     |> Array.map (fun (value, (tune, shouldChange), (_, _, con)) ->
                         if shouldChange then
@@ -1755,10 +1755,10 @@ module Amoeba =
               Rho = 0.5 }
 
         type SettingsT =
-            { Alpha: Tensors.TypedTensor<Tensors.Scalar, 1>
-              Sigma: Tensors.TypedTensor<Tensors.Scalar, 1>
-              Gamma: Tensors.TypedTensor<Tensors.Scalar, 1>
-              Rho: Tensors.TypedTensor<Tensors.Scalar, 1> }
+            { Alpha: Tensors.TypedScalar<1>
+              Sigma: Tensors.TypedScalar<1>
+              Gamma: Tensors.TypedScalar<1>
+              Rho: Tensors.TypedScalar<1> }
 
         let asTensorSettings (s: Settings) =
             { Alpha = Tensors.Typed.ofScalar s.Alpha

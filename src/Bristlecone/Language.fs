@@ -337,10 +337,10 @@ module Language =
             |> Seq.mapi (fun i name -> name, i)
             |> Map.ofSeq
 
-        type Bool<'r> = Bool of 'r
+        type Bool<'b> = Bool of 'b
 
         // ---- Generic AST traversal ----
-        type Ops<'r> =
+        type Ops<'r, 'b> =
             { constVal: float -> Expr<'r>
               constValLift: Expr<'r> -> float -> Expr<'r>
               parameter: string -> Expr<'r>
@@ -356,15 +356,15 @@ module Language =
               log: Expr<'r> -> Expr<'r>
               exp: Expr<'r> -> Expr<'r>
               modulo: Expr<'r> * Expr<'r> -> Expr<'r>
-              cond: Expr<Bool<'r>> * Expr<'r> * Expr<'r> -> Expr<'r>
+              cond: Expr<Bool<'b>> * Expr<'r> * Expr<'r> -> Expr<'r>
               label: string * Expr<'r> -> Expr<'r>
               stateAt: int<Time.``time index``> * string -> Expr<'r>
               invalid: unit -> Expr<'r>
               // Boolean ops
-              greaterThan: Expr<'r> * Expr<'r> -> Expr<Bool<'r>>
-              lessThan: Expr<'r> * Expr<'r> -> Expr<Bool<'r>>
-              equalTo: Expr<'r> * Expr<'r> -> Expr<Bool<'r>>
-              isFinite: Expr<'r> -> Expr<Bool<'r>>
+              greaterThan: Expr<'r> * Expr<'r> -> Expr<Bool<'b>>
+              lessThan: Expr<'r> * Expr<'r> -> Expr<Bool<'b>>
+              equalTo: Expr<'r> * Expr<'r> -> Expr<Bool<'b>>
+              isFinite: Expr<'r> -> Expr<Bool<'b>>
               // Functions
               inverse:
                   Expr<'r -> 'r> *
@@ -428,10 +428,10 @@ module Language =
 
         let rec buildBool<'r>
             (buildQuotation: (ModelExpression<'u> -> Expr<'r>))
-            (ops: Ops<'r>)
+            (ops: Ops<'r, 'b>)
             (symbols: Map<string, Var>)
             (BE bexpr: BoolExpression)
-            : Expr<Bool<'r>> =
+            : Expr<Bool<'b>> =
             match bexpr with
             | GreaterThan(l, r) -> ops.greaterThan (buildQuotation (ME l), buildQuotation (ME r))
             | LessThan(l, r) -> ops.lessThan (buildQuotation (ME l), buildQuotation (ME r))
@@ -442,7 +442,7 @@ module Language =
         let rec private buildQuotationCore<'r, [<Measure>] 'u>
             (shouldCache: ModelExpression<'u> -> bool)
             (cache: Caching.QuotationCache<'r, 'u>)
-            (ops: Ops<'r>)
+            (ops: Ops<'r, 'b>)
             (symbols: Map<string, Var>)
             (expr: ModelExpression<'u>)
             =
@@ -502,7 +502,7 @@ module Language =
                     let oneVar = Var("one", typeof<'r>)
                     let oneExpr: Expr<'r> = ops.div (xExpr, xExpr)
 
-                    let opsScoped: Ops<'r> =
+                    let opsScoped: Ops<'r, 'b> =
                         { ops with
                             constVal = ops.constValLift (Expr.Var oneVar |> Expr.Cast<'r>) }
 
@@ -537,7 +537,7 @@ module Language =
 
         let internal buildQuotation'<'r, [<Measure>] 'u>
             (policy: ModelExpression<'u> -> bool)
-            (ops: Ops<'r>)
+            (ops: Ops<'r,'b>)
             (symbols: Map<string, Var>)
             (expr: ModelExpression<'u>)
             : Expr<'r> =
@@ -565,7 +565,7 @@ module Language =
         /// are introduced as let bindings to minimise repetition
         /// of work in computation.
         let buildQuotationCached<'r, [<Measure>] 'u>
-            (ops: Ops<'r>)
+            (ops: Ops<'r, 'b>)
             (symbols: Map<string, Var>)
             (expr: ModelExpression<'u>)
             : Expr<'r> =
@@ -582,45 +582,44 @@ module Language =
 
             full
 
-        let private mkTensor (v: float) = dsharp.tensor (v, dtype = Float64)
+        /// Different branching techniques for AD-based computation.
+        module internal Branching =
 
-        let invalidPenalty = mkTensor 1e8
-        let internal one = mkTensor 1.0
+            /// Blends the true and false cases for AD-safe operation, but eagerly
+            /// evaluates both sides. If a NaN is present, it will contaminate the
+            /// whole operation despite being in the unused case.
+            let blendConditional c t f =
+                <@
+                    match %c with
+                    | Bool (mask:TypedBoolScalar) ->
+                        let m = mask.AsTensor ()
+                        Typed.addScalar (Typed.mulScalar %t m) (Typed.mulScalar %f (Typed.minusScalar Typed.Constants.one m))
+                @>
 
-        let convertMask (mask: Tensor) = dsharp.cast (mask, Dtype.Float64)
+            /// For situations where we don't need gradients, use F# control flow.
+            let simple c t f =
+                <@
+                    match %c with
+                    | Bool (b:TypedBoolScalar) -> if b.AsBool () then %t else %f
+                @>
 
-        /// Blends the true and false cases for AD-safe operation, but eagerly
-        /// evaluates both sides. If a NaN is present, it will contaminate the
-        /// whole operation despite being in the unused case.
-        let private blendConditional c t f =
-            <@
-                match %c with
-                | Bool mask ->
-                    let m = convertMask mask
-                    dsharp.add (dsharp.mul (%t, m), dsharp.mul (%f, dsharp.sub (one, m)))
-            @>
 
-        let private tensorSum (xs: Expr<Tensor> list) : Expr<Tensor> =
+        let private tensorSum (xs: Expr<TypedScalar<'u>> list) : Expr<TypedScalar<'u>> =
             match xs with
             | [] -> failwith "Cannot add an empty list"
-            | x :: rest -> rest |> List.fold (fun acc e -> <@ dsharp.add (%acc, %e) @>) x
+            | x :: rest -> rest |> List.fold (fun acc e -> <@ Typed.addScalar %acc %e @>) x
 
-        let private tensorProduct (xs: Expr<Tensor> list) : Expr<Tensor> =
+        let private tensorProduct (xs: Expr<TypedScalar<'u>> list) : Expr<TypedScalar<'u>> =
             match xs with
             | [] -> failwith "Cannot multiply an empty list"
-            | x :: rest -> rest |> List.fold (fun acc e -> <@ dsharp.mul (%acc, %e) @>) x
+            | x :: rest -> rest |> List.fold (fun acc e -> <@ Typed.mulScalar %acc %e @>) x
 
-
-        let private penalty = allocateTensor 1e6
-
-
-
-        let inverse fLambda (targetExpr: Expr<Tensor>) loExpr hiExpr tol maxIter =
-            let tol = allocateTensor tol
+        let tensorInverse (fLambda, targetExpr: Expr<TypedScalar<'u>>, loExpr, hiExpr, tol, maxIter) =
+            let tol = Typed.ofScalar tol
 
             <@
-                if (%targetExpr).isnan().toBool () then
-                    penalty
+                if (Typed.isNan %targetExpr).AsBool() then
+                    Typed.Constants.penalty
                 else
                     let interval =
                         Statistics.RootFinding.Tensor.Interval.identify
@@ -641,21 +640,21 @@ module Language =
                             interval.High
 
                     let mask = interval.InRange
-                    let invMask = one - mask
-                    mask * x + invMask * interval.Penalty
+                    let invMask = Typed.minusScalar Typed.Constants.one mask
+                    Typed.addScalar (Typed.mulScalar mask x) (Typed.mulScalar invMask interval.Penalty)
             @>
 
         let getEnvironment eVar name =
             <@
-                let map =
-                    (%%Expr.Var eVar: CodedMap<TypedTensor<Scalar, ModelSystem.``environment``>>)
+                let map = %%Expr.Var eVar: CodedMap<TypedScalar<ModelSystem.``environment``>>
 
                 map
                 |> Map.tryFindBy (fun k -> k.Value = name)
                 |> fun o ->
                     match o with
-                    | Some o -> o.Value
+                    | Some o -> o
                     | None -> failwithf "State / environment %s was not available. Available: %A" name map.Keys
+                |> Typed.retypeScalar
             @>
 
 
@@ -664,6 +663,7 @@ module Language =
         // let tIdxVar   = Var("timeIndex", typeof<int>)
         // let pIndex    = paramIndex parameters
         let private tensorOps<[<Measure>] 'timeUnit>
+            requiresGradients
             (pIndex: Map<string, int>)
             (eIndex: Map<string, int>)
             (pVar: Var)
@@ -673,12 +673,12 @@ module Language =
             =
             { constVal =
                 fun n ->
-                    let tensor = mkTensor n
+                    let tensor = Typed.ofScalar n
                     <@ tensor @>
               constValLift =
                 fun one n ->
-                    let tensor = mkTensor n
-                    <@ %one * tensor @>
+                    let tensor = Typed.ofScalar n
+                    <@ Typed.mulScalar %one tensor @>
               parameter =
                 fun name ->
                     let pIdx =
@@ -689,61 +689,54 @@ module Language =
 
                             invalidOp
                                 $"Parameter '{name}' was referenced in the model but not provided as an estimatable parameter. Available parameters: {available}"
-
-                    <@ (%%Expr.Var pVar: TypedTensor<Vector, ``parameter``>).Value.[pIdx] @>
+                            
+                    <@ (%%Expr.Var pVar: TypedVector<``parameter``>) |> Typed.itemAt pIdx |> Typed.retypeScalar @>
               environment = fun name -> getEnvironment eVar name
               state = fun name -> getEnvironment eVar name // Currently, state and environment are intermingled
-              timeVal = <@ (%%Expr.Var tVar: TypedTensor<Scalar, 'timeUnit>).Value @>
-              thisVal = <@ (%%Expr.Var xVar: TypedTensor<Scalar, ModelSystem.state>).Value @>
+              timeVal = <@ (%%Expr.Var tVar: TypedScalar<'timeUnit>) |> Typed.retypeScalar @>
+              thisVal = <@ (%%Expr.Var xVar: TypedScalar<ModelSystem.state>) |> Typed.retypeScalar @>
               add = tensorSum
-              sub = fun (l, r) -> <@ dsharp.sub (%l, %r) @>
+              sub = fun (l, r) -> <@ Typed.minusScalar %l %r @>
               mul = tensorProduct
-              div = fun (l, r) -> <@ dsharp.div (%l, %r) @>
-              pow = fun (l, r) -> <@ dsharp.pow (%l, %r) @>
-              log = fun e -> <@ dsharp.log %e @>
-              exp = fun e -> <@ dsharp.exp %e @>
-              modulo = fun (l, r) -> <@ %l - %r * dsharp.floor (%l / %r) @>
-              cond = fun (c, t, f) -> blendConditional c t f
+              div = fun (l, r) -> <@ Typed.divScalar %l %r @>
+              pow = fun (l, r) -> <@ Typed.pow %l %r @>
+              log = fun e -> <@ Typed.logScalar %e @>
+              exp = fun e -> <@ Typed.exp %e @>
+              modulo = fun (l, r) -> <@ Typed.minusScalar %l (Typed.mulScalar %r (Typed.floor (Typed.divScalar %l %r))) @>
+              cond = fun (c, t, f) ->
+                if requiresGradients then Branching.blendConditional c t f
+                else Branching.simple c t f
               label = fun (_, m) -> m
               stateAt = fun _ -> failwith "State lookup not supported in equations"
-              invalid = fun () -> <@ invalidPenalty @>
-              greaterThan = fun (l, r) -> <@ dsharp.gt (%l, %r) |> Bool @>
-              lessThan = fun (l, r) -> <@ dsharp.lt (%l, %r) |> Bool @>
-              equalTo = fun (l, r) -> <@ dsharp.eq (%l, %r) |> Bool @>
-              isFinite =
-                fun ex ->
-                    <@
-                        let nanMask = dsharp.isnan %ex
-                        let infMask = dsharp.isinf %ex
-                        let badMask = Tensors.Unsafe.logicalOr nanMask infMask
-                        let finiteMask = Tensors.Unsafe.logicalNot badMask
-                        Bool finiteMask
-                    @>
-              inverse =
-                fun (fLambda, targetExpr, loExpr, hiExpr, tol, maxIter) ->
-                    inverse fLambda targetExpr loExpr hiExpr tol maxIter }
+              invalid = fun () -> <@ Typed.Constants.invalidPenalty @>
+              greaterThan = fun (l, r) -> <@ Typed.gt %l %r |> Bool @>
+              lessThan = fun (l, r) -> <@ Typed.lt %l %r |> Bool @>
+              equalTo = fun (l, r) -> <@ Typed.eq %l %r |> Bool @>
+              isFinite = fun ex -> <@ Typed.isFinite %ex |> Bool @>
+              inverse = tensorInverse }
 
         // Initialisers are time-invariant (t = initial), but can access the current exogeneous
         // environment and observed states at the initial time.
         let private tensorOpsForInitialiser (pIndex: Map<string, int>) (pVar: Var) (eVar: Var) (bVar: Var) =
-            let tFake = Var("time", typeof<TypedTensor<Scalar, 1>>)
-            let xFake = Var("state", typeof<TypedTensor<Scalar, 1>>)
+            let tFake = Var("time", typeof<TypedScalar<1>>)
+            let xFake = Var("state", typeof<TypedScalar<1>>)
 
-            { tensorOps pIndex Map.empty pVar eVar tFake xFake with
-                timeVal = <@ mkTensor nan @> // not used in initialisers
+            { tensorOps false pIndex Map.empty pVar eVar tFake xFake with
+                timeVal = <@ Typed.Constants.nan @> // not used in initialisers
                 stateAt = fun _ -> failwith "'State at' not supported in initialisers. Use 'State' for baseline."
                 state =
                     fun name ->
                         <@
-                            (%%Expr.Var bVar: CodedMap<TypedTensor<Scalar, ModelSystem.``state``>>)
+                            (%%Expr.Var bVar: CodedMap<TypedScalar<ModelSystem.``state``>>)
                             |> Map.tryFindBy (fun k -> k.Value = name)
                             |> fun o ->
                                 match o with
-                                | Some o -> o.Value
+                                | Some o -> o |> Typed.retypeScalar
                                 | None -> failwithf "Baseline state not available for: %s" name
                         @> }
 
         let private tensorOpsForMeasure
+            requiresGradients
             (pIndex: Map<string, int>)
             (pVar: Var)
             (statesVar: Var)
@@ -752,58 +745,55 @@ module Language =
             =
             { constVal =
                 fun n ->
-                    let tensor = mkTensor n
+                    let tensor = Typed.ofScalar n
                     <@ tensor @>
               constValLift =
                 fun one n ->
-                    let tensor = mkTensor n
-                    <@ dsharp.mul (%one, tensor) @>
-              parameter = fun name -> <@ (%%Expr.Var pVar: TypedTensor<Vector, ``parameter``>).Value.[pIndex.[name]] @>
+                    let tensor = Typed.ofScalar n
+                    <@ Typed.mulScalar %one tensor @>
+              parameter = fun name -> <@
+                    (%%Expr.Var pVar: TypedVector<``parameter``>)
+                    |> Typed.itemAt (pIndex.[name])
+                    |> Typed.retypeScalar @>
               environment = fun _ -> failwith "Environment not supported in measures"
-              timeVal = <@ mkTensor (float (%%Expr.Var tIdxVar: int)) @>
-              thisVal = <@ (%%Expr.Var thisVar: TypedTensor<Scalar, ModelSystem.state>).Value @>
+              timeVal = <@ Typed.ofScalar (float (%%Expr.Var tIdxVar: int)) @>
+              thisVal = <@ (%%Expr.Var thisVar: TypedScalar<ModelSystem.state>).Value @>
               add = tensorSum
-              sub = fun (l, r) -> <@ dsharp.sub (%l, %r) @>
+              sub = fun (l, r) -> <@ Typed.minusScalar %l %r @>
               mul = tensorProduct
-              div = fun (l, r) -> <@ dsharp.div (%l, %r) @>
-              pow = fun (l, r) -> <@ dsharp.pow (%l, %r) @>
-              log = fun e -> <@ dsharp.log %e @>
-              exp = fun e -> <@ dsharp.exp %e @>
-              modulo = fun (l, r) -> <@ %l - %r * dsharp.floor (dsharp.div (%l, %r)) @>
-              cond = fun (c, t, f) -> blendConditional c t f
+              div = fun (l, r) -> <@ Typed.divScalar %l %r @>
+              pow = fun (l, r) -> <@ Typed.pow %l %r @>
+              log = fun e -> <@ Typed.logScalar %e @>
+              exp = fun e -> <@ Typed.exp %e @>
+              modulo = fun (l, r) -> <@ Typed.minusScalar %l (Typed.mulScalar %r (Typed.floor (Typed.divScalar %l %r))) @>
+              cond = fun (c, t, f) ->
+                if requiresGradients then Branching.blendConditional c t f
+                else Branching.simple c t f
               label = fun (_, m) -> m
-              invalid = fun () -> <@ invalidPenalty @>
+              invalid = fun () -> <@ Typed.Constants.invalidPenalty @>
               state =
                 fun name ->
                     <@
-                        let states = %%Expr.Var statesVar: CodedMap<TypedTensor<Vector, ModelSystem.state>>
+                        let states = %%Expr.Var statesVar: CodedMap<TypedVector<ModelSystem.state>>
                         let vec = states |> Map.tryFindBy (fun n -> n.Value = name) |> Option.get
 
-                        (Typed.itemAt ((%%Expr.Var tIdxVar: int) + Units.removeUnitFromInt 0) vec).Value
+                        (Typed.itemAt ((%%Expr.Var tIdxVar: int) + Units.removeUnitFromInt 0) vec)
+                        |> Typed.retypeScalar
                     @>
               stateAt =
                 fun (offset, name) ->
                     <@
-                        let states = %%Expr.Var statesVar: CodedMap<TypedTensor<Vector, ModelSystem.state>>
+                        let states = %%Expr.Var statesVar: CodedMap<TypedVector<ModelSystem.state>>
                         let vec = states |> Map.tryFindBy (fun n -> n.Value = name) |> Option.get
 
-                        (Typed.itemAt ((%%Expr.Var tIdxVar: int) + Units.removeUnitFromInt offset) vec).Value
+                        (Typed.itemAt ((%%Expr.Var tIdxVar: int) + Units.removeUnitFromInt offset) vec)
+                        |> Typed.retypeScalar
                     @>
-              greaterThan = fun (l, r) -> <@ dsharp.gt (%l, %r) |> Bool @>
-              lessThan = fun (l, r) -> <@ dsharp.lt (%l, %r) |> Bool @>
-              equalTo = fun (l, r) -> <@ dsharp.eq (%l, %r) |> Bool @>
-              isFinite =
-                fun ex ->
-                    <@
-                        let nanMask = dsharp.isnan %ex
-                        let infMask = dsharp.isinf %ex
-                        let badMask = Tensors.Unsafe.logicalOr nanMask infMask
-                        let finiteMask = Tensors.Unsafe.logicalNot badMask
-                        Bool finiteMask
-                    @>
-              inverse =
-                fun (fLambda, targetExpr, loExpr, hiExpr, tol, maxIter) ->
-                    inverse fLambda targetExpr loExpr hiExpr tol maxIter }
+              greaterThan = fun (l, r) -> <@ Typed.gt %l %r |> Bool @>
+              lessThan = fun (l, r) -> <@ Typed.lt %l %r |> Bool @>
+              equalTo = fun (l, r) -> <@ Typed.eq %l %r |> Bool @>
+              isFinite = fun ex -> <@ Typed.isFinite %ex |> Bool @>
+              inverse = tensorInverse }
 
         // ---- Float ops ----
         let private floatOps (pVar: Var) (eVar: Var) (tVar: Var) (xVar: Var) =
@@ -847,15 +837,15 @@ module Language =
               stateAt = fun _ -> failwith "State lookup not supported in equations"
               invalid = fun () -> <@ nan @>
               cond = fun (c, t, f) -> <@ if %c = Bool 1 then %t else %f @>
-              greaterThan = fun (l, r) -> <@ if %l > %r then Bool 1. else Bool 0. @>
-              lessThan = fun (l, r) -> <@ if %l < %r then Bool 1. else Bool 0. @>
-              equalTo = fun (l, r) -> <@ if %l = %r then Bool 1. else Bool 0. @>
+              greaterThan = fun (l, r) -> <@ if %l > %r then Bool 1 else Bool 0 @>
+              lessThan = fun (l, r) -> <@ if %l < %r then Bool 1 else Bool 0 @>
+              equalTo = fun (l, r) -> <@ if %l = %r then Bool 1 else Bool 0 @>
               isFinite =
                 fun x ->
                     <@
                         let v = %x
                         let b = not (System.Double.IsNaN v || System.Double.IsInfinity v)
-                        Bool(if b then 1.0 else 0.0)
+                        Bool(if b then 1 else 0)
                     @>
               inverse =
                 fun (fLambda, targetExpr, loExpr, hiExpr, tol, maxIter) ->
@@ -883,22 +873,22 @@ module Language =
             (expr: ModelExpression<'stateUnit / 'timeUnit>)
             : ModelSystem.RateEquation<'timeUnit> =
 
-            let pVar = Var("parameters", typeof<TypedTensor<Vector, ``parameter``>>)
+            let pVar = Var("parameters", typeof<TypedVector<``parameter``>>)
 
             let eVar =
-                Var("environment", typeof<CodedMap<TypedTensor<Scalar, ModelSystem.``environment``>>>)
+                Var("environment", typeof<CodedMap<TypedScalar<ModelSystem.``environment``>>>)
 
-            let tVar = Var("time", typeof<TypedTensor<Scalar, 'timeUnit>>)
-            let xVar = Var("state", typeof<TypedTensor<Scalar, 'stateUnit>>)
+            let tVar = Var("time", typeof<TypedScalar<'timeUnit>>)
+            let xVar = Var("state", typeof<TypedScalar<'stateUnit>>)
 
             let pIndex = paramIndex parameters
             let eIndex = envIndexFromKeys envKeys
 
             let core =
-                buildQuotationCached (tensorOps pIndex eIndex pVar eVar tVar xVar) Map.empty expr
+                buildQuotationCached (tensorOps true pIndex eIndex pVar eVar tVar xVar) Map.empty expr
 
             // Convert from 'stateUnit/'timeUnit to internal state/'timeUnit
-            <@ tryAsScalar<ModelSystem.state / 'timeUnit> %core |> Option.get @>
+            <@ %core |> Typed.retypeScalar<1, ModelSystem.state / 'timeUnit> @> // TODO Why retype required?
             |> toLambda4 pVar eVar tVar xVar
             |> LeafExpressionConverter.EvaluateQuotation
             |> unbox<ModelSystem.RateEquation<'timeUnit>>
@@ -909,21 +899,21 @@ module Language =
             (expr: ModelExpression<'stateUnit>)
             : ModelSystem.StateEquation<'timeUnit> =
 
-            let pVar = Var("parameters", typeof<TypedTensor<Vector, ``parameter``>>)
+            let pVar = Var("parameters", typeof<TypedVector<``parameter``>>)
 
             let eVar =
-                Var("environment", typeof<CodedMap<TypedTensor<Scalar, ModelSystem.``environment``>>>)
+                Var("environment", typeof<CodedMap<TypedScalar<ModelSystem.``environment``>>>)
 
-            let tVar = Var("time", typeof<TypedTensor<Scalar, 'timeUnit>>)
-            let xVar = Var("state", typeof<TypedTensor<Scalar, 'stateUnit>>)
+            let tVar = Var("time", typeof<TypedScalar<'timeUnit>>)
+            let xVar = Var("state", typeof<TypedScalar<'stateUnit>>)
 
             let pIndex = paramIndex parameters
             let eIndex = envIndexFromKeys envKeys
 
             let core =
-                buildQuotationCached (tensorOps pIndex eIndex pVar eVar tVar xVar) Map.empty expr
+                buildQuotationCached (tensorOps true pIndex eIndex pVar eVar tVar xVar) Map.empty expr
 
-            <@ tryAsScalar<ModelSystem.state> %core |> Option.get @>
+            <@ %core |> Typed.retypeScalar<1, ModelSystem.state> @> // TODO Why retype required?
             |> toLambda4 pVar eVar tVar xVar
             |> LeafExpressionConverter.EvaluateQuotation
             |> unbox<ModelSystem.StateEquation<'timeUnit>>
@@ -932,19 +922,20 @@ module Language =
             let core =
                 buildQuotationCached
                     (tensorOps
+                        false
                         Map.empty
                         Map.empty
-                        (Var("p", typeof<TypedTensor<Vector, ``parameter``>>))
-                        (Var("e", typeof<CodedMap<TypedTensor<Scalar, ModelSystem.``environment``>>>))
-                        (Var("t", typeof<TypedTensor<Scalar, 1>>))
-                        (Var("x", typeof<TypedTensor<Scalar, 1>>)))
+                        (Var("p", typeof<TypedVector<``parameter``>>))
+                        (Var("e", typeof<CodedMap<TypedScalar<ModelSystem.``environment``>>>))
+                        (Var("t", typeof<TypedScalar<1>>))
+                        (Var("x", typeof<TypedScalar<1>>)))
                     Map.empty
                     expr
 
-            let q = <@ tryAsScalar<ModelSystem.state> %core |> Option.get @>
+            let q : Expr<TypedScalar<ModelSystem.state>> = <@ %core |> Typed.retypeScalar @>
 
             match LeafExpressionConverter.EvaluateQuotation q with
-            | :? TypedTensor<Scalar, 'u> as t -> Typed.toFloatScalar t
+            | :? TypedScalar<'u> as t -> Typed.toFloatScalar t
             | _ -> failwith "Expected a scalar tensor result"
 
         let compileFloat expr =
@@ -959,39 +950,39 @@ module Language =
             |> unbox<Parameter.Pool.ParameterPool -> CodedMap<float> -> float<Time.``time index``> -> float -> float>
 
         let compileMeasure<[<Measure>] 'stateUnit> parameters (expr: ModelExpression<'stateUnit>) =
-            let pVar = Var("parameters", typeof<TypedTensor<Vector, parameter>>)
+            let pVar = Var("parameters", typeof<TypedVector<parameter>>)
 
             let statesVar =
-                Var("states", typeof<CodedMap<TypedTensor<Vector, ModelSystem.state>>>)
+                Var("states", typeof<CodedMap<TypedVector<ModelSystem.state>>>)
 
-            let thisVar = Var("thisVal", typeof<TypedTensor<Scalar, ModelSystem.state>>)
+            let thisVar = Var("thisVal", typeof<TypedScalar<ModelSystem.state>>)
 
             let tIdxVar = Var("timeIndex", typeof<int>)
             let pIndex = paramIndex parameters
 
             let core =
-                buildQuotationCached (tensorOpsForMeasure pIndex pVar statesVar thisVar tIdxVar) Map.empty expr
+                buildQuotationCached (tensorOpsForMeasure true pIndex pVar statesVar thisVar tIdxVar) Map.empty expr
 
-            <@ tryAsScalar<ModelSystem.state> %core |> Option.get @>
+            <@ %core |> Typed.retypeScalar<1,ModelSystem.state> @>
             |> fun body -> Expr.Lambda(pVar, Expr.Lambda(statesVar, Expr.Lambda(thisVar, Expr.Lambda(tIdxVar, body))))
             |> LeafExpressionConverter.EvaluateQuotation
             |> unbox<ModelSystem.Measurement<'stateUnit>>
 
         let compileInitialiser<[<Measure>] 'stateUnit> parameters (expr: ModelExpression<'stateUnit>) =
-            let pVar = Var("parameters", typeof<TypedTensor<Vector, ``parameter``>>)
+            let pVar = Var("parameters", typeof<TypedVector<``parameter``>>)
 
             let eVar =
-                Var("environment", typeof<CodedMap<TypedTensor<Scalar, ModelSystem.``environment``>>>)
+                Var("environment", typeof<CodedMap<TypedScalar<ModelSystem.``environment``>>>)
 
             let bVar =
-                Var("baselines", typeof<CodedMap<TypedTensor<Scalar, ModelSystem.state>>>)
+                Var("baselines", typeof<CodedMap<TypedScalar<ModelSystem.state>>>)
 
             let pIndex = paramIndex parameters
 
             let core =
                 buildQuotationCached (tensorOpsForInitialiser pIndex pVar eVar bVar) Map.empty expr
 
-            <@ tryAsScalar<ModelSystem.state> %core |> Option.get @>
+            <@ %core |> Typed.retypeScalar<1,ModelSystem.state> @>
             |> fun body -> Expr.Lambda(pVar, Expr.Lambda(eVar, Expr.Lambda(bVar, body)))
             |> LeafExpressionConverter.EvaluateQuotation
             |> unbox<ModelSystem.Initialiser<'stateUnit>>
@@ -1008,11 +999,8 @@ module Language =
         : float =
         ExpressionCompiler.compileFloat ex pool environment t x
 
-    let computeT x t pool (environment: CodedMap<Tensors.TypedTensor<Tensors.Scalar, ModelSystem.environment>>) ex =
-        let eIndex, eScalar =
-            environment |> Seq.toList |> List.map (fun kv -> kv.Key, kv.Value) |> List.unzip
-        // let eVector = eScalar |> List.toArray |> Tensors.Typed.stack1D
-        ExpressionCompiler.compileRate pool eIndex ex
+    let computeT x t pool (environment: CodedMap<Tensors.TypedScalar<ModelSystem.environment>>) ex =
+        ExpressionCompiler.compileRate pool (Seq.toList environment.Keys) ex
         |> fun f -> f (Parameter.Pool.toTensorWithKeysReal pool |> snd) environment t x
 
 
@@ -1090,7 +1078,7 @@ module Language =
 
         module Measurement =
             let adapt<[<Measure>] 'u> (m: ModelSystem.Measurement<'u>) : ModelSystem.Measurement<ModelSystem.state> =
-                fun p s sThis i -> (m p s sThis i).Value |> Tensors.tryAsScalar<ModelSystem.state> |> Option.get
+                fun p s sThis i -> m p s sThis i |> Tensors.Typed.retypeScalar<'u, ModelSystem.state>
 
         module Likelihood =
 
@@ -1104,8 +1092,8 @@ module Language =
                         let s =
                             series
                             |> Map.map (fun _ v ->
-                                { Expected = v.Expected |> Tensors.Typed.retype<ModelSystem.state, 'u, Tensors.Vector>
-                                  Observed = v.Observed |> Tensors.Typed.retype<ModelSystem.state, 'u, Tensors.Vector> })
+                                { Expected = v.Expected |> Tensors.Typed.retypeVector<ModelSystem.state, 'u>
+                                  Observed = v.Observed |> Tensors.Typed.retypeVector<ModelSystem.state, 'u> })
 
                         l.Evaluate param s }
 
@@ -1159,7 +1147,7 @@ module Language =
                     (sc,
                      (fun p ->
                          let ini = ExpressionCompiler.compileInitialiser<'u> p expr
-                         fun p e s -> (ini p e s).Value |> Tensors.tryAsScalar<ModelSystem.state> |> Option.get))
+                         fun p e s -> ini p e s |> Tensors.Typed.retypeScalar<'u, ModelSystem.state>))
                 )
 
             let likelihood<[<Measure>] 'time, [<Measure>] 'u> (l: ModelSystem.Likelihood<'u>) : ModelFragment<'time> =

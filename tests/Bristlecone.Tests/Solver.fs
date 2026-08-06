@@ -54,7 +54,7 @@ module Runners =
             testPropertyWithConfig Config.config
                 "discreteRunner passes env values through to equations" <| fun c envKey (envVal:NormalFloat) ->
                 let eqs : CodedMap<StateEquation<Time.``time index``>> =
-                    [ c, fun _ (env: CodedMap<TypedTensor<Scalar,environment>>) _ _ -> env.[envKey] |> Typed.retype ]
+                    [ c, fun _ (env: CodedMap<TypedTensor<Scalar,environment>>) _ _ -> env.[envKey] |> Typed.retypeScalar ]
                     |> Map.ofList
                 let startDate = DateTime(1980,01,01)
                 let times = [| for i in 0 .. 10 -> startDate.AddYears i |] // includes baseline year 0

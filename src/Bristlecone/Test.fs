@@ -172,7 +172,7 @@ module Test =
             (length: int)
             (eqs: ModelForm<'timeunit>)
             (dateMode: DateMode.DateMode<'T, 'yearType, 'timespan>)
-            (t1: CodedMap<Tensors.TypedTensor<Tensors.Scalar, 'state>>)
+            (t1: CodedMap<Tensors.TypedScalar<'state>>)
             =
 
             let mkTimeSeries (t1: float<'state> option) =
