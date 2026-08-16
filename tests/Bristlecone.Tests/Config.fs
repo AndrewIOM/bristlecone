@@ -72,7 +72,7 @@ type BristleconeTypesGen() =
                 |> List.map (fun (c, b1, b2) ->
                     c,
                     match Parameter.create NoConstraints b1.Get b2.Get with
-                    | Some (p: Parameter.Parameter<1>) -> Parameter.Pool.boxParam<1> c.Value p
+                    | Some (p: Parameter.Parameter<1>) -> Parameter.Pool.stripUnit<1> c.Value p
                     | None -> failwithf "The bounds %f - %f cannot be used to estimate a parameter. See docs." b1.Get b2.Get
                 )
                 |> Parameter.Pool.fromList

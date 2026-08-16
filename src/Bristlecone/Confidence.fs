@@ -47,14 +47,12 @@ module Bounds =
 /// confidence based on a chi squared distribution.</remarks>
 module ProfileLikelihood =
 
-    open Bristlecone
     open Bristlecone.EstimationEngine
-    open Bristlecone.ModelSystem
     open Bristlecone.Optimisation
 
-    type EstimateFunction<[<Measure>] 'modelTimeUnit, [<Measure>] 'state, 'subject, 'date, 'timeunit, 'timespan> =
-        EstimationEngine<'date, 'timespan, 'modelTimeUnit, 'state>
-            -> ModelSystem<'modelTimeUnit>
+    type EstimateFunction<'S,'V,'M,[<Measure>] 'modelTimeUnit, [<Measure>] 'state, 'subject, 'date, 'timeunit, 'timespan> =
+        EstimationEngine<'S,'V,'M, 'date, 'timespan, 'modelTimeUnit, 'state>
+            -> ModelSystem<'S,'V,'modelTimeUnit>
             -> 'subject
             -> EstimationResult<'date, 'timeunit, 'timespan>
 
@@ -69,7 +67,7 @@ module ProfileLikelihood =
 
     /// The profile likelihood method samples the likelihood space
     /// around the Maximum Likelihood Estimate
-    let profile fit engine subject (hypothesis: ModelSystem<'modelTimeUnit>) n result =
+    let profile fit engine subject (hypothesis: ModelSystem<'S,'V,'modelTimeUnit>) n result =
 
         // Start at the MLE
         let hypothesisMle =
@@ -120,7 +118,7 @@ module ProfileLikelihood =
             trace
             |> interval (Parameter.Pool.count hypothesisMle.Parameters) mle Bounds.upperBound
 
-        let paramKeys = Parameter.Pool.toTensorWithKeysReal result.Parameters |> fst
+        let paramKeys = Parameter.Pool.toArrayReal result.Parameters |> Seq.map fst
 
         paramKeys
         |> Seq.zip3 lowerInterval upperInterval

@@ -16,6 +16,7 @@ module Bristlecone =
     open Bristlecone.ModelSystem
     open Bristlecone.EstimationEngine
     open Bristlecone.Statistics
+    open Bristlecone.Numerics.Typed
 
     /// <summary>A basic estimation engine for discrete-time equations, using a Nelder-Mead optimiser.</summary>
     let mkDiscrete () =
@@ -26,6 +27,7 @@ module Bristlecone =
           ToModelTime = DateMode.Conversion.CalendarDates.toYears
           InterpolationGlobal = Solver.InterpolationMode.Lower
           InterpolationPerVariable = Map.empty
+          Backend = Numerics.Backends.DiffSharp.engine
           Conditioning = Conditioning.NoConditioning }
 
     /// <summary>A basic estimation engine for ordinary differential equations, using a Nelder-Mead optimiser.</summary>
@@ -37,6 +39,7 @@ module Bristlecone =
           ToModelTime = DateMode.Conversion.CalendarDates.toYears
           InterpolationGlobal = Solver.InterpolationMode.Lower
           InterpolationPerVariable = Map.empty
+          Backend = Numerics.Backends.DiffSharp.engine
           Conditioning = Conditioning.RepeatFirstDataPoint }
 
 
@@ -50,8 +53,8 @@ module Bristlecone =
 
     let withTimeConversion<'d, 'd2, 'timespan, 'timespan2, [<Measure>] 'modelTimeUnit, 'o1, [<Measure>] 'o2, [<Measure>] 'u>
         (fn: DateMode.Conversion.ResolutionToModelUnits<'d2, 'timespan2, 'modelTimeUnit>)
-        (engine: EstimationEngine<'d, 'o1, 'o2, 'u>)
-        : EstimationEngine<'d2, 'timespan2, 'modelTimeUnit, 'u> =
+        (engine: EstimationEngine<'S,'V,'M,'d, 'o1, 'o2, 'u>)
+        : EstimationEngine<'S,'V,'M,'d2, 'timespan2, 'modelTimeUnit, 'u> =
         { TimeHandling = engine.TimeHandling
           OptimiseWith = engine.OptimiseWith
           LogTo = engine.LogTo
@@ -59,6 +62,7 @@ module Bristlecone =
           ToModelTime = fn
           InterpolationGlobal = engine.InterpolationGlobal
           InterpolationPerVariable = engine.InterpolationPerVariable
+          Backend = engine.Backend
           Conditioning = engine.Conditioning }
 
     let forDailyModel engine =
@@ -148,7 +152,7 @@ module Bristlecone =
 
     module internal Metadata =
 
-        let genMetadata (conditioned: Solver.Conditioning.Resolved<'date, 'yearType, 'timespan>) timeTaken =
+        let genMetadata (conditioned: Solver.Conditioning.Resolved<'S, 'date, 'yearType, 'timespan>) timeTaken =
             let version = Reflection.Assembly.GetExecutingAssembly().GetName().Version
 
             [ "Bristlecone: version", version.ToString()
@@ -174,20 +178,20 @@ module Bristlecone =
 
     // Temporary helpers until optim-space-transformed can be handled correctly:
     let private unsafeEraseSpace<'space> =
-        unbox<Parameter.Pool.OptimiserConfig<``optim-space``>>
+        unbox<Parameter.Pool.OptimiserConfig<'S,'V,``optim-space``>>
 
     let private unsafeEraseSpaceForward<'space> =
-        unbox<Tensors.TypedVector<``optim-space-transformed``>>
+        unbox<TypedVector<'S,'V,``optim-space-transformed``>>
 
-    let private dynamicVariableKeys (models: ModelSystem.ModelForm<'modelTimeUnit>) =
+    let private dynamicVariableKeys (models: ModelSystem.ModelForm<'S,'V,'modelTimeUnit>) =
         match models with
         | ModelForm.DifferenceEqs eqs -> eqs |> Map.keys
         | ModelForm.DifferentialEqs eqs -> eqs |> Map.keys
 
     /// Convert a list of optimiser-space solutions into real-space solutions
     let internal toRealSpaceSolutions
-        (config: Parameter.Pool.AnyOptimiserConfig)
-        (solutions: Solution list)
+        (config: Parameter.Pool.AnyOptimiserConfig<'S,'V>)
+        (solutions: Solution<'S,'V> list)
         : (float<``-logL``> * float<``parameter``>[]) list =
 
         match config with
@@ -195,13 +199,13 @@ module Bristlecone =
             solutions
             |> List.map (fun (ll, pointOptSpace) ->
                 let realVec = cfg.Compiled.Forward pointOptSpace
-                ll, realVec |> Tensors.Typed.toFloatArray)
+                ll, realVec |> Vector.toArrayFloat)
 
         | Parameter.Pool.TransformedConfig cfg ->
             solutions
             |> List.map (fun (ll, pointOptSpace) ->
                 let realVec = cfg.Compiled.Forward(unsafeEraseSpaceForward pointOptSpace)
-                ll, realVec |> Tensors.Typed.toFloatArray)
+                ll, realVec |> Vector.toArrayFloat)
 
     let internal validateEnvData expectedKeys actualMap =
         let expectedSet = expectedKeys |> Set.ofList
@@ -217,8 +221,8 @@ module Bristlecone =
                 (Map.keys actualMap)
 
     let internal validateConditionedStartData
-        (conditioned: Solver.Conditioning.Resolved<_, _, _>)
-        (initialisers: CodedMap<Initialiser<state>>)
+        (conditioned: Solver.Conditioning.Resolved<'S,_, _, _>)
+        (initialisers: CodedMap<Initialiser<'S,'V,state>>)
         equationKeys
         =
         let conditionedStates =
@@ -262,10 +266,10 @@ module Bristlecone =
     /// <param name="model"></param>
     /// <returns></returns>
     let tryFit
-        (engine: EstimationEngine<'date, 'timespan, 'modelTimeUnit, 'stateUnit>)
+        (engine: EstimationEngine<'S,'V,'M,'date, 'timespan, 'modelTimeUnit, 'stateUnit>)
         endCondition
         (observedSeries: CodedMap<TimeSeries<float<'stateUnit>, 'date, 'yearType, 'timespan>>)
-        (model: ModelSystem<'modelTimeUnit>)
+        (model: ModelSystem<'S,'V,'modelTimeUnit>)
         =
 
         let resultId = Guid.NewGuid()
@@ -317,6 +321,7 @@ module Bristlecone =
 
             let conditioned =
                 Solver.Conditioning.resolve
+                    (ofScalar engine.Backend.scalarBackend)
                     engine.Conditioning
                     observedOnCommonTimeline
                     exogenousOnCommonTimeline
@@ -367,6 +372,7 @@ module Bristlecone =
             // 4. Compile solver (auto‑selects discrete/differential)
             let solver stepType =
                 Solver.SolverCompiler.compile
+                    engine.Backend
                     engine.LogTo
                     engine.ToModelTime
                     model.Equations
@@ -390,9 +396,9 @@ module Bristlecone =
             let optimise =
                 match engine.OptimiseWith, optimConfig with
                 | Optimisation.InDetachedSpace optim, Parameter.Pool.DetachedConfig cfg ->
-                    optim engine.Random engine.LogTo endCondition cfg.Domain None
+                    optim engine.Backend engine.Random engine.LogTo endCondition cfg.Domain None
                 | Optimisation.InTransformedSpace optim, Parameter.Pool.TransformedConfig cfg ->
-                    optim engine.Random engine.LogTo endCondition (unsafeEraseSpace cfg).Domain None
+                    optim engine.Backend engine.Random engine.LogTo endCondition (unsafeEraseSpace cfg).Domain None
                 | _ -> invalidOp "Mode/config mismatch"
 
             let obsDataForObjective =
@@ -411,7 +417,7 @@ module Bristlecone =
                     model.Measures
                     (solver (Solver.StepType.External obsTimes))
                     optimConfig
-                    obsDataForObjective
+                    (obsDataForObjective |> Map.map(fun _ v -> ofScalar v backend))
 
             let result, timeTaken = measureTime (fun _ -> objective |> optimise)
 
@@ -434,7 +440,7 @@ module Bristlecone =
                 conditioned.ObservedForPairing.Series
                 |> Map.filter (fun key _ -> estimatedSeries |> Map.containsKey key)
                 |> Map.map (fun k observedSeries ->
-                    let expected = estimatedSeries |> Map.find k |> Tensors.Typed.toFloatArray
+                    let expected = estimatedSeries |> Map.find k |> Vector.toArrayFloat
 
                     observedSeries
                     |> TimeSeries.toObservations
@@ -453,7 +459,7 @@ module Bristlecone =
             let bestPointPool = Parameter.Pool.fromRealVector bestPoint model.Parameters
 
             let estimatedHighResFloat =
-                estimatedHighRes |> Map.map (fun _ v -> v |> Tensors.Typed.toFloatArray) |> Some
+                estimatedHighRes |> Map.map (fun _ v -> v |> Vector.toArrayFloat) |> Some
 
             engine.LogTo CompleteEvent
 
@@ -483,7 +489,7 @@ module Bristlecone =
     /// <param name="timeSeriesData">Time-series dataset that contains a series for each equation in the model system.</param>
     /// <param name="model">A model system of equations, likelihood function, estimatible parameters, and optional measures.</param>
     /// <returns>The result of the model-fitting procedure. If an error occurs, throws an exception.</returns>
-    let fit engine endCondition timeSeriesData (model: ModelSystem<'modelTimeUnit>) =
+    let fit engine endCondition timeSeriesData (model: ModelSystem<'S,'V,'modelTimeUnit>) =
         tryFit engine endCondition timeSeriesData model |> Result.forceOk
 
     open Test
@@ -500,10 +506,10 @@ module Bristlecone =
     /// It is wrapped in an F# Result, indicating if the procedure
     /// was successful or not.</returns>
     let tryTestModel
-        (engine: EstimationEngine<'date, 'timespan, 'modelTimeUnit, 'state>)
+        (engine: EstimationEngine<'S,'V,'date, 'timespan, 'modelTimeUnit, 'state>)
         endCondition
         (settings: Test.TestSettings<'state, 'date, 'timeunit, 'timespan>)
-        (model: ModelSystem<'modelTimeUnit>)
+        (model: ModelSystem<'S,'V,'modelTimeUnit>)
         =
 
         engine.LogTo <| GeneralEvent "Attempting to generate parameter set."
@@ -537,7 +543,7 @@ module Bristlecone =
             engine.LogTo <| GeneralEvent(sprintf "Dataset is %A" mergedData)
 
             engine.LogTo
-            <| GeneralEvent(sprintf "Parameters to test are %A" (trueParamPool |> Parameter.Pool.toTensorWithKeysReal))
+            <| GeneralEvent(sprintf "Parameters to test are %A" (trueParamPool |> Parameter.Pool.toVectorWithKeysReal))
 
             // Fit with true parameters (no optimisation)
             let! realEstimate =
@@ -597,10 +603,10 @@ module Bristlecone =
     /// <param name="model">The model system to test against the estimation engine.</param>
     /// <returns>A test result that indicates differences between the expected and actual fit.</returns>
     let testModel
-        (engine: EstimationEngine<'date, 'timespan, 'modelTimeUnit, 'state>)
+        (engine: EstimationEngine<'S,'V,'M,'date, 'timespan, 'modelTimeUnit, 'state>)
         endCondition
-        (settings: TestSettings<'state, 'date, 'yearUnit, 'timespan>)
-        (model: ModelSystem<'modelTimeUnit>)
+        (settings: TestSettings<'S,'state, 'date, 'yearUnit, 'timespan>)
+        (model: ModelSystem<'S,'V,'modelTimeUnit>)
         =
         tryTestModel engine endCondition settings model |> Result.forceOk
 
@@ -612,10 +618,10 @@ module Bristlecone =
     /// <param name="series">Time-series to fit with model</param>
     /// <returns>A list of estimation results (one for each bootstrap) for further analysis</returns>
     let bootstrap
-        (engine: EstimationEngine.EstimationEngine<'date, 'timespan, 'modelTimeUnit, 1>)
-        (endCondition: EndCondition)
+        (engine: EstimationEngine.EstimationEngine<'S,'V,'M,'date, 'timespan, 'modelTimeUnit, 1>)
+        (endCondition: EndCondition<'S,'V>)
         bootstrapCount
-        (model: ModelSystem<'modelTimeUnit>)
+        (model: ModelSystem<'S,'V,'modelTimeUnit>)
         (series: Map<ShortCode.ShortCode, TimeSeries.TimeSeries<float, 'date, 'timeunit, 'timespan>>)
         =
         let rec bootstrap
@@ -655,7 +661,7 @@ module Bristlecone =
     /// <returns>A time-series for each variable containing a step-ahead prediction</returns>
     let oneStepAhead
         engine
-        (hypothesis: ModelSystem<'modelTimeUnit>)
+        (hypothesis: ModelSystem<'S,'V,'modelTimeUnit>)
         preTransform
         (timeSeries: Map<ShortCode.ShortCode, TimeSeries.TimeSeries<float, 'date, 'timeunit, 'timespan>>)
         estimatedTheta

@@ -89,7 +89,7 @@ module Test =
                 |> Seq.contains false
 
 
-    type TestSettings<[<Measure>] 'stateUnit, 'date, 'yearUnit, 'timespan> =
+    type TestSettings<'S,[<Measure>] 'stateUnit, 'date, 'yearUnit, 'timespan> =
         { TimeSeriesLength: int
           StartValues: CodedMap<float<'stateUnit>>
           GenerationRules: (ShortCode.ShortCode * GenerationRule<'stateUnit>) list
@@ -115,14 +115,14 @@ module Test =
               RetryDataGen = 100
               DateMode = dateMode }
 
-        static member Default: TestSettings<1, DateTime, int<year>, TimeSpan> =
-            TestSettings<_, _, _, _>.mkSettings DateMode.calendarDateMode (DateTime(1970, 01, 01))
+        static member Default: TestSettings<'S, 1, DateTime, int<year>, TimeSpan> =
+            TestSettings<_,_, _, _, _>.mkSettings DateMode.calendarDateMode (DateTime(1970, 01, 01))
 
-        static member Annual: TestSettings<1, DatingMethods.Annual, int<year>, int<year>> =
-            TestSettings<_, _, _, _>.mkSettings DateMode.annualDateMode (DatingMethods.Annual 1970<year>)
+        static member Annual: TestSettings<'S, 1, DatingMethods.Annual, int<year>, int<year>> =
+            TestSettings<_,_, _, _, _>.mkSettings DateMode.annualDateMode (DatingMethods.Annual 1970<year>)
 
-    let defaultSettings = TestSettings<_, _, _, _>.Default
-    let annualSettings = TestSettings<_, _, _, _>.Annual
+    let defaultSettings = TestSettings<_,_, _, _, _>.Default
+    let annualSettings = TestSettings<_,_, _, _, _>.Annual
 
 
     type ParameterTestResult =
@@ -141,7 +141,7 @@ module Test =
 
     /// Ensures settings are valid for a test, by ensuring that
     /// start values have been set for each equation.
-    let isValidSettings (model: ModelSystem.ModelSystem<'modelTimeUnit>) testSettings =
+    let isValidSettings (model: ModelSystem.ModelSystem<'S,'V,'modelTimeUnit>) testSettings =
         let equationKeys =
             match model.Equations with
             | DifferenceEqs eqs -> eqs |> Map.toList |> List.map fst
@@ -160,6 +160,8 @@ module Test =
 
     module Compute =
 
+        open Bristlecone.Numerics.Typed
+
         let stateNames eqs =
             match eqs with
             | DifferenceEqs e -> Map.keys e
@@ -170,9 +172,9 @@ module Test =
             (startDate: 'T)
             (resolution: Resolution.FixedTemporalResolution<'timespan>)
             (length: int)
-            (eqs: ModelForm<'timeunit>)
+            (eqs: ModelForm<'S,'V,'timeunit>)
             (dateMode: DateMode.DateMode<'T, 'yearType, 'timespan>)
-            (t1: CodedMap<Tensors.TypedScalar<'state>>)
+            (t1: CodedMap<TypedScalar<'S,'state>>)
             =
 
             let mkTimeSeries (t1: float<'state> option) =
@@ -188,7 +190,7 @@ module Test =
 
             t1.Keys
             |> Seq.map (fun s ->
-                let t1 = t1 |> Map.tryFind s |> Option.map Tensors.Typed.toFloatScalar
+                let t1 = t1 |> Map.tryFind s |> Option.map Scalar.toFloat
                 s, mkTimeSeries t1)
             |> Map.ofSeq
             |> TimeFrame.tryCreate
@@ -196,9 +198,9 @@ module Test =
         /// Generate time-series for a given engine and model, and
         /// for a particular point in optim-space.
         let tryGenerateData'
-            engine
-            (model: ModelSystem<'modelTimeUnit>)
-            (testSettings: TestSettings<'T, 'date, 'timeunit, 'timespan>)
+            (engine: EstimationEngine.EstimationEngine<'S,'V,'M,_,_,_,_>)
+            (model: ModelSystem<'S,'V,'modelTimeUnit>)
+            (testSettings: TestSettings<'S, 'T, 'date, 'timeunit, 'timespan>)
             rnd
             thetaPool
             =
@@ -213,7 +215,7 @@ module Test =
 
             let t1 =
                 testSettings.StartValues
-                |> Map.map (fun _ v -> v |> Units.removeUnitFromFloat |> (*) 1.<state> |> Tensors.Typed.ofScalar)
+                |> Map.map (fun _ v -> v |> Units.removeUnitFromFloat |> (*) 1.<state> |> ofScalar engine.Numeric.Scalar)
 
             // Setup dummy timeline for solver (all values = nan, except t1 = custom t1).
             // Observed series are defined as those with a start value set (t1).
@@ -229,6 +231,7 @@ module Test =
 
             let conditioned =
                 Solver.Conditioning.resolve
+                    mkScalar
                     engine.Conditioning
                     fakeObservedSeries
                     envSeries
@@ -240,6 +243,7 @@ module Test =
             // Configure solver
             let solver =
                 Solver.SolverCompiler.compile
+                    numEngine
                     ignore
                     engine.ToModelTime
                     model.Equations
@@ -253,7 +257,7 @@ module Test =
                     (fun _ -> Solver.Exact)
 
             // Get real-space vector from pool
-            let _, thetaReal = Parameter.Pool.toTensorWithKeysReal thetaPool
+            let _, thetaReal = Parameter.Pool.toArrayReal thetaPool |> List.unzip
 
             // Predict series
             let timeline = conditioned.ObservedForPairing |> TimeFrame.dates |> List.toArray
@@ -261,7 +265,7 @@ module Test =
             let predicted =
                 Objective.predict solver model.Measures thetaReal
                 |> Map.map (fun _ v ->
-                    Tensors.Typed.toFloatArray v
+                    Vector.toArrayFloat v
                     |> Array.map (Units.removeUnitFromFloat >> LanguagePrimitives.FloatWithMeasure<'T>)
                     |> Array.zip timeline
                     |> Array.map (fun (a, b) -> b, a)
@@ -275,9 +279,9 @@ module Test =
         /// Generate data and check that it complies with the
         /// given ruleset.
         let rec tryGenerateData
-            (engine: EstimationEngine.EstimationEngine<'date, 'timespan, 'modelTimeUnit, 'state>)
-            (settings: TestSettings<'state, 'date, 'timeunit, 'timespan>)
-            (model: ModelSystem.ModelSystem<'modelTimeUnit>)
+            (engine: EstimationEngine.EstimationEngine<'S,'V,'M,'date, 'timespan, 'modelTimeUnit, 'state>)
+            (settings: TestSettings<'S, 'state, 'date, 'timeunit, 'timespan>)
+            (model: ModelSystem.ModelSystem<'S,'V,'modelTimeUnit>)
             attempts
             =
             let randomPool = Parameter.Pool.drawRandom engine.Random model.Parameters

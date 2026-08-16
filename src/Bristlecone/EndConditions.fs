@@ -4,6 +4,7 @@ open Bristlecone
 open Bristlecone.Logging
 open Bristlecone.EstimationEngine
 open Bristlecone.Statistics
+open Bristlecone.Numerics
 
 /// <summary>Composable end conditions to specify when optimisation
 /// routines should end.</summary>
@@ -133,8 +134,9 @@ module EndConditions =
                     |> List.take (Units.removeUnitFromInt nSteps)
                     |> List.pairwise
                     |> List.map (fun ((_, θ1), (_, θ2)) ->
-                        Tensors.Typed.squaredLength (θ1 - θ2) |> Tensors.Typed.toFloatScalar)
-
+                        // Array.zip θ1 θ2 |> Array.map (fun (a,b) -> (a - b) * (a - b)))
+                        //Stats.squaredLength (θ1 - θ2) |> Typed.Scalar.toFloat)
+                        failwith "not finished")
                 if List.forall (fun d -> d < threshold) jumps then
                     Stationary
                 else
@@ -166,7 +168,7 @@ module EndConditions =
                             bins
                             |> List.map (fun bin ->
                                 bin
-                                |> List.map (snd >> Tensors.Typed.toFloatArray >> Array.toList)
+                                |> List.map (snd >> Array.toList)
                                 |> List.transpose
                                 |> List.map (fun p ->
                                     p
@@ -323,12 +325,12 @@ module EndConditions =
 
         module SimulatedAnnealing =
 
-            let preTuning =
+            let preTuning<'S,'V> : EndCondition =
                 combineAny [ whenVarianceStabilised 500<iteration> 0.02; atIteration 1500<iteration> ]
 
             /// Requires equlibrium to be approximated within every
             /// heating step. Better for classical SA.
-            let heatingStrict =
+            let heatingStrict<'S,'V> : EndCondition =
                 combineAny
                     [ combineAll
                           [ whenVarianceStabilised 200<iteration> 0.05
@@ -338,7 +340,7 @@ module EndConditions =
             /// Relaxed requirements that allows approximation of the
             /// stationary distribution at each temperature, without
             /// strict requirement.
-            let heatingRelaxed =
+            let heatingRelaxed<'S,'V> : EndCondition =
                 combineAny
                     [ whenVarianceStabilised 50<iteration> 0.10
                       whenWorstValuePlateaued 50<iteration>
@@ -346,7 +348,7 @@ module EndConditions =
 
             /// Annealing will stop when either: there is little movement in parameter space;
             /// no improvements are being made; or acceptance rates are very low.
-            let annealing =
+            let annealing<'S,'V> : EndCondition =
                 combineAny
                     [ whenNoBestValueImprovement 500<iteration>
                       whenStationary 1e-6<``optim-space``^2> 100<iteration>
@@ -375,7 +377,7 @@ module EndConditions =
 
                     let parameterValueByChain =
                         let thetaLength =
-                            (chains |> Seq.head).Value |> Seq.head |> snd |> Tensors.Typed.length
+                            (chains |> Seq.head).Value |> Seq.head |> snd |> Array.length
 
                         [ 1..thetaLength ]
                         |> Seq.map (fun p ->
@@ -383,7 +385,7 @@ module EndConditions =
                             |> Seq.map (fun chain ->
                                 chain
                                 |> Seq.map (fun v ->
-                                    v |> snd |> Tensors.Typed.toFloatValueAt (p - 1) |> Units.removeUnitFromFloat)))
+                                    v |> snd |> Array.item (p - 1) |> Units.removeUnitFromFloat)))
 
                     printfn "Param values by chain: %A" parameterValueByChain
 

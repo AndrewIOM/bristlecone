@@ -6,7 +6,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Types.fs" />
-    <Compile Include="Tensors.fs" />
+    <Compile Include="Numeric.fs" />
     <Compile Include="Time.fs" />
     <Compile Include="Logging.fs" />
     <Compile Include="Statistics.fs" />

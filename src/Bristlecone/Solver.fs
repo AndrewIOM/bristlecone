@@ -7,7 +7,8 @@ module Solver =
     open Bristlecone.EstimationEngine
     open Bristlecone.Time
     open Bristlecone.ModelSystem
-    open Bristlecone.Tensors
+    open Bristlecone.Numerics
+    open Bristlecone.Numerics.Typed
 
     /// If environmental forcing data is supplied, the output series may be
     /// configured to be either external (i.e. on observation timeline) or
@@ -18,9 +19,9 @@ module Solver =
 
     /// Some runners return a paired set of time-index * scalars whereas others
     /// return a tuple of a list of time-index and vectors for each map item.
-    type RunnerOutput<[<Measure>] 'modelTimeUnit> =
-        | Paired of CodedMap<(float<'modelTimeUnit ``time index``> * TypedScalar<state>)[]>
-        | Unpaired of float<'modelTimeUnit ``time index``> list * CodedMap<TypedVector<state>>
+    type RunnerOutput<'S,'V,[<Measure>] 'modelTimeUnit> =
+        | Paired of CodedMap<(float<'modelTimeUnit ``time index``> * TypedScalar<'S,state>)[]>
+        | Unpaired of float<'modelTimeUnit ``time index``> list * CodedMap<TypedVector<'S,'V,state>>
 
     /// Masks to only return the requested values, for example when
     /// comparing with observational data.
@@ -32,13 +33,13 @@ module Solver =
             (dateMode: DateMode.DateMode<'date, 'yearType, 'timespan>)
             (startDate: 'date)
             (dataTimeToIndexTime: DateMode.Conversion.ResolutionToModelUnits<'date, 'timespan, ``time index``>)
-            : RunnerOutput<1> -> CodedMap<TypedVector<state>> =
+            : RunnerOutput<'S,'V,1> -> CodedMap<TypedVector<'S,'V,state>> =
 
             match stepType with
             | Internal ->
                 fun output ->
                     match output with
-                    | Paired vars -> vars |> Map.map (fun _ series -> series |> Array.map snd |> Typed.stack1D)
+                    | Paired vars -> vars |> Map.map (fun _ series -> series |> Array.map snd |> Stats.stack1D)
                     | Unpaired(_times, vars) -> vars
 
             | External obsDates ->
@@ -57,13 +58,13 @@ module Solver =
                             series
                             |> Array.filter (fun (ti, _) -> Set.contains ti obsTimes)
                             |> Array.map snd
-                            |> Typed.stack1D)
+                            |> Stats.stack1D)
 
                     | Unpaired(times, vars) ->
                         let keepMask =
                             times |> List.map (fun ti -> Set.contains ti obsTimes) |> List.toArray
 
-                        vars |> Map.map (fun _ v -> Typed.filterByMask keepMask v)
+                        vars |> Map.map (fun _ v -> Vector.filterByMask keepMask v)
 
 
     // Time conversion tailored for TypedTensor and time-index
@@ -72,39 +73,39 @@ module Solver =
         /// Wrap a model equation written in 'timeUnit so it accepts time index.
         let wrapTime<[<Measure>] 'timeUnit, [<Measure>] 'returnUnit>
             (factor: float<'timeUnit / ``time index``>)
-            (eq: GenericModelEquation<'timeUnit, 'returnUnit>)
-            : GenericModelEquation<``time index``, 'returnUnit> =
+            (eq: GenericModelEquation<'S,'V,'timeUnit, 'returnUnit>)
+            : GenericModelEquation<'S,'V,``time index``, 'returnUnit> =
             fun pars env tIndex state ->
                 // Convert tIndex (Scalar<time-index>) -> Scalar<'timeUnit> by multiplying with factor
-                let tIndexF = Typed.toFloatScalar tIndex
-                let tModel = Typed.ofScalar (tIndexF * factor)
+                let tIndexF = Scalar.toFloat tIndex
+                let tModel = Typed.ofScalar tIndex.Backend (tIndexF * factor)
                 eq pars env tModel state
 
         /// Wrap a model equation written in 'timeUnit so it accepts time index.
         let wrapTimeDifference<[<Measure>] 'timeUnit, [<Measure>] 'state>
             (factor: float<'timeUnit / ``time index``>)
-            (eq: StateEquation<'timeUnit>)
-            : StateEquation<``time index``> =
+            (eq: StateEquation<'S,'V,'timeUnit>)
+            : StateEquation<'S,'V,``time index``> =
             fun pars env tIndex state ->
-                let tIndexF = Typed.toFloatScalar tIndex
-                let tModel = Typed.ofScalar (tIndexF * factor)
+                let tIndexF = Scalar.toFloat tIndex
+                let tModel = Typed.ofScalar tIndex.Backend (tIndexF * factor)
                 eq pars env tModel state
 
         // For differential equations: return unit is 'state / 'timeUnit
         let wrapTimeDifferential<[<Measure>] 'timeUnit, [<Measure>] 'state>
             (factor: float<'timeUnit / ``time index``>)
-            (eq: RateEquation<'timeUnit>)
-            : RateEquation<``time index``> =
+            (eq: RateEquation<'S,'V,'timeUnit>)
+            : RateEquation<'S,'V,``time index``> =
             fun pars env tIndex state ->
-                let tIndexF = Typed.toFloatScalar tIndex
-                let tModel = Typed.ofScalar (tIndexF * factor)
-                eq pars env tModel state |> Typed.retypeScalar
+                let tIndexF = Scalar.toFloat tIndex
+                let tModel = Typed.ofScalar tIndex.Backend (tIndexF * factor)
+                eq pars env tModel state |> Scalar.retype
 
         // Lift wrapping over a whole model form
         let wrapModelForm<[<Measure>] 'timeUnit>
             (factor: float<'timeUnit / ``time index``>)
-            (mf: ModelForm<'timeUnit>)
-            : ModelForm<``time index``> =
+            (mf: ModelForm<'S,'V,'timeUnit>)
+            : ModelForm<'S,'V,``time index``> =
             match mf with
             | DifferenceEqs eqs -> eqs |> Map.map (fun _ e -> wrapTimeDifference factor e) |> DifferenceEqs
             | DifferentialEqs eqs -> eqs |> Map.map (fun _ e -> wrapTimeDifferential factor e) |> DifferentialEqs
@@ -116,21 +117,22 @@ module Solver =
         module DiscreteTime =
 
             let internal stepOnce
-                (eqs: CodedMap<StateEquation<``time index``>>)
-                (pars: TypedVector<``parameter``>)
-                (env: CodedMap<TypedScalar<environment>>)
-                (t: TypedScalar<``time index``>)
-                (state: CodedMap<TypedScalar<state>>)
-                : CodedMap<TypedScalar<state>> =
+                (eqs: CodedMap<StateEquation<'S,'V,``time index``>>)
+                (pars: TypedVector<'S,'V,``parameter``>)
+                (env: CodedMap<TypedScalar<'S,environment>>)
+                (t: TypedScalar<'S,``time index``>)
+                (state: CodedMap<TypedScalar<'S,state>>)
+                : CodedMap<TypedScalar<'S,state>> =
                 eqs |> Map.map (fun key eq -> eq pars env t state.[key])
 
             let iterateDifference
-                (eqs: CodedMap<StateEquation<``time index``>>)
+                (numericEngine: NumericEngine<'S,'V,'M>)
+                (eqs: CodedMap<StateEquation<'S,'V,``time index``>>)
                 (timeline: float<``time index``>[])
-                (envStream: CodedMap<TypedScalar<environment>>[])
-                (baselineValue: CodedMap<TypedScalar<state>>)
+                (envStream: CodedMap<TypedScalar<'S,environment>>[])
+                (baselineValue: CodedMap<TypedScalar<'S,state>>)
                 pars
-                : CodedMap<(float<``time index``> * TypedScalar<state>)[]> =
+                : CodedMap<(float<``time index``> * TypedScalar<'S,state>)[]> =
                 let _, outputs =
                     ((baselineValue, eqs |> Map.map (fun _ _ -> [])), timeline |> Array.mapi (fun i ti -> i, ti))
                     ||> Array.fold (fun (state, acc) (i, tiVal) ->
@@ -139,13 +141,13 @@ module Solver =
                             (state, acc)
                         else
                             // Advance once from previous state to this time, then record
-                            let t = Typed.ofScalar tiVal
+                            let t = Typed.ofScalar numericEngine.scalarBackend tiVal
 
                             let env =
                                 Map.fold
                                     (fun acc k v -> Map.add k v acc)
                                     envStream.[i]
-                                    (state |> Map.map (fun _ v -> Tensors.Typed.retypeScalar v))
+                                    (state |> Map.map (fun _ v -> Scalar.retype v))
 
                             let nextState = stepOnce eqs pars env t state
                             let acc' = acc |> Map.map (fun k vs -> (tiVal, nextState.[k]) :: vs)
@@ -156,10 +158,11 @@ module Solver =
             /// The fixed runner must include the baseline date in its timeline,
             /// but only returns values for t1..tN.
             let fixedRunner
-                (eqs: CodedMap<StateEquation<``time index``>>)
+                (numericEngine: NumericEngine<'S,'V,'M>)
+                (eqs: CodedMap<StateEquation<'S,'V,``time index``>>)
                 (timeline: float<``time index``>[])
                 (envIndex: CodedMap<TimeIndex.TimeIndex<float<environment>, _, _, _, 1>>)
-                (baselineValueFn: TypedVector<``parameter``> -> CodedMap<TypedScalar<state>>)
+                (baselineValueFn: TypedVector<'S,'V,``parameter``> -> CodedMap<TypedScalar<'S,state>>)
                 point
                 =
                 let envStream =
@@ -168,15 +171,16 @@ module Solver =
                         envIndex
                         |> Map.map (fun _ idxTI ->
                             let v = idxTI.Item ti
-                            Typed.ofScalar v))
+                            Typed.ofScalar numericEngine.scalarBackend v))
 
-                iterateDifference eqs timeline envStream (baselineValueFn point) point |> Paired
+                iterateDifference numericEngine eqs timeline envStream (baselineValueFn point) point |> Paired
 
             let variableRunner
-                (eqs: CodedMap<StateEquation<``time index``>>)
+                (numericEngine: NumericEngine<'S,'V,'M>)
+                (eqs: CodedMap<StateEquation<'S,'V,``time index``>>)
                 (timeline: float<``time index``>[]) // irregular observation times
                 (envIndex: CodedMap<TimeIndex.TimeIndex<float<environment>, _, _, _, 1>>)
-                (t0: TypedVector<``parameter``> -> CodedMap<TypedScalar<state>>)
+                (t0: TypedVector<'S,'V,``parameter``> -> CodedMap<TypedScalar<'S,state>>)
                 point
                 =
 
@@ -187,15 +191,15 @@ module Solver =
                         envIndex
                         |> Map.map (fun _ idxTI ->
                             let v = idxTI.Item ti
-                            Typed.ofScalar v))
+                            Typed.ofScalar numericEngine.scalarBackend v))
 
                 // Run the difference equations interval‑by‑interval
-                let outputs = iterateDifference eqs timeline envStream (t0 point) point
+                let outputs = iterateDifference numericEngine eqs timeline envStream (t0 point) point
 
                 // Return as Unpaired (times + values)
                 Unpaired(
                     timeline.[1..] |> Array.toList,
-                    outputs |> Map.map (fun _ arr -> arr |> Array.map snd |> Typed.stack1D)
+                    outputs |> Map.map (fun _ arr -> arr |> Array.map snd |> Stats.stack1D)
                 )
 
 
@@ -206,11 +210,12 @@ module Solver =
             /// The initialState is that at the baseline.
             /// Expects integration routines that include the baseline.
             let fixedRunner
+                (numericEngine: NumericEngine<'S,'V,'M>)
                 eqs
-                (integrator: Integration.IntegrationRoutine)
+                (integrator: Integration.IntegrationRoutine<'S,'V,'M>)
                 (times: float<``time index``> array)
                 (forcings: CodedMap<TimeIndex.TimeIndex<float<environment>, _, _, _, 1>>)
-                (initialStateFn: TypedVector<``parameter``> -> CodedMap<TypedScalar<state>>)
+                (initialStateFn: TypedVector<'S,'V,``parameter``> -> CodedMap<TypedScalar<'S,state>>)
                 =
 
                 let tStart, tEnd = times.[0], times.[times.Length - 1]
@@ -218,7 +223,7 @@ module Solver =
                 let timelineIntegrated = [| tStart..tStep..tEnd |]
 
                 let compiledRhs =
-                    Integration.Base.makeCompiledFunctionForIntegration tStart tEnd tStep forcings initialStateFn eqs
+                    Integration.Base.makeCompiledFunctionForIntegration numericEngine tStart tEnd tStep forcings initialStateFn eqs
 
                 let toPureIndex (x: float<'modelTime ``time index``>) =
                     x / LanguagePrimitives.FloatWithMeasure<'modelTime> 1.
@@ -228,23 +233,25 @@ module Solver =
 
                 let integrate =
                     integrator
-                        (Typed.ofScalar (toPureIndex tStart))
-                        (Typed.ofScalar (toPureIndex tEnd))
-                        (Typed.ofScalar tStep)
+                        numericEngine
+                        (Typed.ofScalar numericEngine.scalarBackend (toPureIndex tStart))
+                        (Typed.ofScalar numericEngine.scalarBackend (toPureIndex tEnd))
+                        (Typed.ofScalar numericEngine.scalarBackend tStep)
 
                 fun parameters ->
                     let states = integrate (initialStateFn parameters) (compiledRhs parameters)
-                    let statesTailed = states |> Map.map (fun _ v -> v |> Typed.tail)
+                    let statesTailed = states |> Map.map (fun _ v -> v |> Vector.tail)
                     Unpaired(timelineIntegrated.[1..] |> Array.toList |> List.map fromPureIndex, statesTailed)
 
             /// Timeline includes baseline.
             /// Outputs exclude baseline time/state.
             let variableRunner
+                (numericEngine: NumericEngine<'S,'V,'M>)
                 eqs
-                (integrator: Integration.IntegrationRoutine)
+                (integrator: Integration.IntegrationRoutine<'S,'V,'M>)
                 (times: float<``time index``> array)
                 (forcings: CodedMap<TimeIndex.TimeIndex<float<environment>, _, _, _, 1>>)
-                (initialStateFn: TypedVector<``parameter``> -> CodedMap<TypedScalar<state>>)
+                (initialStateFn: TypedVector<'S,'V,``parameter``> -> CodedMap<TypedScalar<'S,state>>)
                 =
                 fun parameters ->
 
@@ -259,6 +266,7 @@ module Solver =
 
                             let compiledRhs =
                                 Integration.Base.makeCompiledFunctionForIntegration
+                                    numericEngine
                                     tStart
                                     tEnd
                                     step
@@ -267,13 +275,13 @@ module Solver =
                                     eqs
 
                             let integrate =
-                                integrator (Typed.ofScalar tStart) (Typed.ofScalar tEnd) (Typed.ofScalar step)
+                                integrator numericEngine (Typed.ofScalar numericEngine.scalarBackend tStart) (Typed.ofScalar numericEngine.scalarBackend tEnd) (Typed.ofScalar numericEngine.scalarBackend step)
 
                             let newTrajectory = integrate currentState (compiledRhs parameters)
 
                             let finalState =
                                 newTrajectory
-                                |> Map.map (fun _ v -> v |> Tensors.Typed.itemAt (Typed.length v - 1))
+                                |> Map.map (fun _ v -> v |> Vector.itemAt (Vector.length v - 1))
 
                             loop (finalState :: acc) finalState (i + 1)
 
@@ -283,7 +291,7 @@ module Solver =
                     let vars =
                         states
                         |> Array.fold (fun acc s -> acc |> Map.map (fun k vs -> s.[k] :: vs)) emptyAcc
-                        |> Map.map (fun _ scalars -> scalars |> List.rev |> Array.ofList |> Typed.stack1D)
+                        |> Map.map (fun _ scalars -> scalars |> List.rev |> Array.ofList |> Stats.stack1D)
 
                     Unpaired(times.[1..] |> Array.toList, vars)
 
@@ -354,7 +362,7 @@ module Solver =
                 if not (solverTimeline |> Array.contains t) then
                     invalidOp (sprintf "Environment variable has Exact mode but no value at solver time %A" t))
 
-        let private stateVariableKeys (models: ModelSystem.ModelForm<'modelTimeUnit>) =
+        let private stateVariableKeys (models: ModelSystem.ModelForm<'S,'V,'modelTimeUnit>) =
             match models with
             | ModelForm.DifferenceEqs eqs -> eqs |> Map.keys
             | ModelForm.DifferentialEqs eqs -> eqs |> Map.keys
@@ -362,18 +370,19 @@ module Solver =
         /// Compile a configured solver, automatically selecting the correct runner.
         /// t0 (conditioned or otherwise) is obtained automatically from the dynamic series.
         let compile
+            (numericEngine: NumericEngine<'S,'V,'M>)
             logTo
             (dataTimeToModelTime: DateMode.Conversion.ResolutionToModelUnits<'date, 'timespan, 'modelTimeUnit>)
-            (modelEquations: ModelForm<'modelTimeUnit>)
+            (modelEquations: ModelForm<'S,'V,'modelTimeUnit>)
             engineTimeMode
             (stepType: StepType<'date>)
             (observedStates: TimeFrame.TimeFrame<float<state>, 'date, 'timeunit, 'timespan>)
-            (observedMeasuresT0: CodedMap<TypedScalar<state>>)
-            (hiddenStatesT0: CodedMap<Tensors.TypedScalar<state>>)
-            (hiddenStatesT0Initialisers: CodedMap<ModelSystem.Initialiser<state>>)
+            (observedMeasuresT0: CodedMap<TypedScalar<'S,state>>)
+            (hiddenStatesT0: CodedMap<TypedScalar<'S,state>>)
+            (hiddenStatesT0Initialisers: CodedMap<ModelSystem.Initialiser<'S,'V,state>>)
             (environment: TimeFrame.TimeFrame<float<environment>, 'date, 'timeunit, 'timespan> option)
             (interpolationModeFor: ShortCode.ShortCode -> Solver.InterpolationMode)
-            : Solver.ConfiguredSolver =
+            : Solver.ConfiguredSolver<'S,'V> =
 
             // 1. Initial setup; identify t0 and start date.
             let headSeries = (observedStates.Series |> Seq.head).Value
@@ -383,7 +392,7 @@ module Solver =
             let observedStatesT0 =
                 observedStates
                 |> TimeFrame.t0
-                |> Map.map (fun k v -> Typed.ofScalar v)
+                |> Map.map (fun k v -> Typed.ofScalar numericEngine.scalarBackend v)
                 |> Map.fold (fun acc k v -> Map.add k v acc) hiddenStatesT0
 
             let baselineObservables =
@@ -470,10 +479,10 @@ module Solver =
 
                     match modelInTI, engineTimeMode with
                     | DifferentialEqs eqs, Continuous i ->
-                        SolverRunners.DifferentialTime.fixedRunner eqs i fixedTimeline envIndex t0States
+                        SolverRunners.DifferentialTime.fixedRunner numericEngine eqs i fixedTimeline envIndex t0States
 
                     | DifferenceEqs eqs, Discrete ->
-                        SolverRunners.DiscreteTime.fixedRunner eqs fixedTimeline envIndex t0States
+                        SolverRunners.DiscreteTime.fixedRunner numericEngine eqs fixedTimeline envIndex t0States
 
                     | _ -> invalidOp "Mismatch between time-mode and differential/difference equation form."
 
@@ -493,10 +502,10 @@ module Solver =
 
                     match modelInTI, engineTimeMode with
                     | DifferentialEqs eqs, Continuous i ->
-                        SolverRunners.DifferentialTime.variableRunner eqs i obsTimes envIndex t0States
+                        SolverRunners.DifferentialTime.variableRunner numericEngine eqs i obsTimes envIndex t0States
 
                     | DifferenceEqs eqs, Discrete ->
-                        SolverRunners.DiscreteTime.variableRunner eqs obsTimes envIndex t0States
+                        SolverRunners.DiscreteTime.variableRunner numericEngine eqs obsTimes envIndex t0States
 
                     | _ -> invalidOp "Mismatch between time-mode and differential/difference equation form."
 
@@ -508,17 +517,17 @@ module Solver =
     /// from which to solve from.
     module Conditioning =
 
-        type Resolved<'date, 'timeunit, 'timespan> =
-            { StatesHiddenForSolver: CodedMap<TypedScalar<state>>
+        type Resolved<'S, 'date, 'timeunit, 'timespan> =
+            { StatesHiddenForSolver: CodedMap<TypedScalar<'S,state>>
               StatesObservedForSolver: TimeFrame.TimeFrame<float<state>, 'date, 'timeunit, 'timespan>
-              MeasuresForSolver: CodedMap<TypedScalar<state>>
+              MeasuresForSolver: CodedMap<TypedScalar<'S,state>>
               ExogenousForSolver: option<TimeFrame.TimeFrame<float<environment>, 'date, 'timeunit, 'timespan>>
               ObservedForPairing: TimeFrame.TimeFrame<float<state>, 'date, 'timeunit, 'timespan>
               Log: string option }
 
-        let internal t0FromFirstObs (tf: TimeFrame.TimeFrame<float<state>, _, _, _>) =
+        let internal t0FromFirstObs mkScalar (tf: TimeFrame.TimeFrame<float<state>, _, _, _>) =
             tf.Series
-            |> Map.map (fun _ ts -> ts |> TimeSeries.head |> fst |> Typed.ofScalar)
+            |> Map.map (fun _ ts -> ts |> TimeSeries.head |> fst |> mkScalar)
 
         let internal toEquationStatesOnly (equationKeys: seq<ShortCode.ShortCode>) data =
             data |> TimeFrame.filter equationKeys
@@ -545,7 +554,7 @@ module Solver =
                 |> Seq.toArray)
 
         let private resolveWithConditionedT0
-            (t0: CodedMap<TypedScalar<state>>)
+            (t0: CodedMap<TypedScalar<'S,state>>)
             (observedTF: TimeFrame.TimeFrame<float<state>, 'date, 'timeunit, 'timespan>)
             (envTF: option<TimeFrame.TimeFrame<float<environment>, 'date, 'timeunit, 'timespan>>)
             equationKeys
@@ -576,7 +585,7 @@ module Solver =
 
             let dynamicForSolver =
                 observedTF
-                |> TimeFrame.prepend solverStartDate (t0 |> Map.map (fun _ v -> Typed.toFloatScalar v))
+                |> TimeFrame.prepend solverStartDate (t0 |> Map.map (fun _ v -> Scalar.toFloat v))
 
             let trimmedEnv = envTF |> Option.map (ensureEnvCoverage solverStartDate)
 
@@ -595,19 +604,20 @@ module Solver =
               Log = Some logMessage }
 
         let resolve
+            mkScalar
             (conditioning: Conditioning.Conditioning<'stateUnit>)
             (observedTF: TimeFrame.TimeFrame<float<state>, 'date, 'timeunit, 'timespan>)
             (exogenousTF: option<TimeFrame.TimeFrame<float<environment>, 'date, 'timeunit, 'timespan>>)
             equationKeys
             measureKeys
-            : Resolved<'date, 'timeunit, 'timespan> =
+            : Resolved<'S, 'date, 'timeunit, 'timespan> =
 
             match conditioning with
             | Conditioning.NoConditioning ->
                 // Solver baseline = obs[0]; predictions (External) align to obs[1..]
                 let solverStartDate = observedTF.StartDate
                 let env = exogenousTF |> Option.map (ensureEnvCoverage solverStartDate)
-                let t0 = t0FromFirstObs observedTF
+                let t0 = t0FromFirstObs mkScalar observedTF
                 let trimmedDyn = TimeFrame.dropFirstObservation observedTF
 
                 { StatesObservedForSolver = observedTF // toEquationStatesOnly equationKeys observedTF
@@ -620,7 +630,7 @@ module Solver =
             | Conditioning.Custom t0Map ->
                 let t0 =
                     t0Map
-                    |> Map.map (fun _ v -> v |> Units.removeUnitFromFloat |> (*) 1.<state> |> Typed.ofScalar)
+                    |> Map.map (fun _ v -> v |> Units.removeUnitFromFloat |> (*) 1.<state> |> mkScalar)
 
                 resolveWithConditionedT0
                     t0
@@ -631,7 +641,7 @@ module Solver =
                     "Custom conditioning: synthetic t0 one step before first observation; pairs include obs[0]."
 
             | Conditioning.RepeatFirstDataPoint ->
-                let t0 = t0FromFirstObs observedTF
+                let t0 = t0FromFirstObs mkScalar observedTF
 
                 resolveWithConditionedT0
                     t0

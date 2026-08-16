@@ -257,163 +257,163 @@ module RootFinding =
             else
                 bisect (n + 1) N f a c t
 
-    module Tensor =
+//     module Tensor =
 
-        open DiffSharp
-        open Bristlecone.Tensors
+//         open Bristlecone.Numerics
+//         open Bristlecone.Numerics.Typed
 
-        /// Functions for constraining the interval over which to conduct
-        /// root-finding.
-        module Interval =
+//         /// Functions for constraining the interval over which to conduct
+//         /// root-finding.
+//         module Interval =
 
-            let makeGrid (n: int) (lo: TypedScalar<'u>) (hi: TypedScalar<'u>) = 
-                Typed.linspace lo hi (n + 1)
+//             let makeGrid (n: int) (lo: TypedScalar<'S,'u>) (hi: TypedScalar<'S,'u>) = 
+//                 Stats.linspace lo hi (n + 1)
 
-            let detectOutOfRange penaltyScale target (values: TypedVector<'u>) =
-                let fLo, fHi = Typed.itemAt 0 values, Typed.itemAt (Typed.length values - 1) values
+//             let detectOutOfRange penaltyScale target (values: TypedVector<'u>) =
+//                 let fLo, fHi = Typed.itemAt 0 values, Typed.itemAt (Typed.length values - 1) values
 
-                let below = Typed.lt target fLo |> fun m -> Typed.clamp (Typed.sumVector m) Typed.Constants.zero Typed.Constants.one
+//                 let below = Typed.lt target fLo |> fun m -> Typed.clamp (Typed.sumVector m) Typed.Constants.zero Typed.Constants.one
 
-                let above = Typed.gt target fHi |> fun m -> Typed.clamp (m.sum ()) Typed.Constants.zero Typed.Constants.one
-                let outOfRange = below + above
-                let inRange = Typed.Constants.one - outOfRange
+//                 let above = Typed.gt target fHi |> fun m -> Typed.clamp (m.sum ()) Typed.Constants.zero Typed.Constants.one
+//                 let outOfRange = below + above
+//                 let inRange = Typed.Constants.one - outOfRange
 
-                let dist = (fLo - target) * below + (target - fHi) * above
-                let penalty = Typed.pow dist Typed.Constants.two * penaltyScale
+//                 let dist = (fLo - target) * below + (target - fHi) * above
+//                 let penalty = Typed.pow dist Typed.Constants.two * penaltyScale
 
-                below, above, outOfRange, inRange, penalty
+//                 below, above, outOfRange, inRange, penalty
 
-            // let narrowInterval (grid: TypedVector<'u>) (values: TypedVector<'u>) (target: TypedScalar<'u>) =
-            //     let n = grid.nelement - 1
+//             // let narrowInterval (grid: TypedVector<'u>) (values: TypedVector<'u>) (target: TypedScalar<'u>) =
+//             //     let n = grid.nelement - 1
 
-            //     let diffs = values - target
-            //     let signs = Typed.signVector diffs
-            //     let prod = signs.[0 .. n - 1] * signs.[1..n]
+//             //     let diffs = values - target
+//             //     let signs = Typed.signVector diffs
+//             //     let prod = signs.[0 .. n - 1] * signs.[1..n]
 
-            //     let zeros = dsharp.zerosLike prod
-            //     let changeMask = dsharp.lt (prod, zeros) |> fun t -> dsharp.cast (t, grid.dtype)
+//             //     let zeros = dsharp.zerosLike prod
+//             //     let changeMask = dsharp.lt (prod, zeros) |> fun t -> dsharp.cast (t, grid.dtype)
 
-            //     // For a single sign change, these sums pick out exactly that interval.
-            //     let loNarrow = (changeMask * grid.[0 .. n - 1]).sum ()
-            //     let hiNarrow = (changeMask * grid.[1..n]).sum ()
+//             //     // For a single sign change, these sums pick out exactly that interval.
+//             //     let loNarrow = (changeMask * grid.[0 .. n - 1]).sum ()
+//             //     let hiNarrow = (changeMask * grid.[1..n]).sum ()
 
-            //     let hasChange = changeMask.sum () |> fun s -> dsharp.clamp (s, 0.0, 1.0)
+//             //     let hasChange = changeMask.sum () |> fun s -> dsharp.clamp (s, 0.0, 1.0)
 
-            //     loNarrow, hiNarrow, hasChange
+//             //     loNarrow, hiNarrow, hasChange
 
-            let identify n penaltyScale f (target: TypedScalar<'u>) (lo: TypedScalar<'u>) (hi: TypedScalar<'u>) =
-                let grid = makeGrid n lo hi
-                let values = f grid
+//             let identify n penaltyScale f (target: TypedScalar<'u>) (lo: TypedScalar<'u>) (hi: TypedScalar<'u>) =
+//                 let grid = makeGrid n lo hi
+//                 let values = f grid
 
-                let below, above, outOfRange, inRange, penalty =
-                    detectOutOfRange penaltyScale target values
+//                 let below, above, outOfRange, inRange, penalty =
+//                     detectOutOfRange penaltyScale target values
 
-                let clamped = below * lo + above * hi
-                let loNarrow, hiNarrow, hasChange = narrowInterval grid values target
+//                 let clamped = below * lo + above * hi
+//                 let loNarrow, hiNarrow, hasChange = narrowInterval grid values target
 
-                let lo2 =
-                    outOfRange * clamped + inRange * (hasChange * loNarrow + (Typed.Constants.one - hasChange) * lo)
+//                 let lo2 =
+//                     outOfRange * clamped + inRange * (hasChange * loNarrow + (Typed.Constants.one - hasChange) * lo)
 
-                let hi2 =
-                    outOfRange * clamped + inRange * (hasChange * hiNarrow + (Typed.Constants.one - hasChange) * hi)
+//                 let hi2 =
+//                     outOfRange * clamped + inRange * (hasChange * hiNarrow + (Typed.Constants.one - hasChange) * hi)
 
-                {| Low = lo2
-                   High = hi2
-                   Penalty = penalty
-                   InRange = inRange
-                   Grid = grid
-                   Values = values |}
-
-
-        /// Finds the root of a non-linear equation by solving f() over
-        /// an equally-spaced grid of size `nGrid`. Uses AD gradients.
-        let refinedGrid
-            (f: TypedVector<1> -> TypedVector<'v>)
-            (target: TypedScalar<'v>)
-            (grid: TypedVector<'u>)
-            (values: TypedVector<'v>)
-            (lo: TypedScalar<'u>)
-            (hi: TypedScalar<'u>)
-            : TypedScalar<'u> =
-
-            let errors = Typed.absVector (values - target)
-            let minErr = Typed.minVector errors
-            let minErrExpanded = dsharp.fullLike (errors, minErr)
-
-            let eps =
-                let raw = dsharp.max (absTol, dsharp.abs minErr * relTol)
-                dsharp.fullLike (errors, raw)
-
-            let diff = dsharp.abs (errors - minErrExpanded)
-            let mask = dsharp.le (diff, eps) |> fun t -> dsharp.cast (t, grid.dtype)
-
-            let x0 = (mask * grid).sum ()
-
-            let fLifted z = f z - target
-            let fx = fLifted x0
-            let dfx = dsharp.grad fLifted x0
-            let x1 = x0 - fx / dfx
-
-            dsharp.max (lo, dsharp.min (hi, x1))
+//                 {| Low = lo2
+//                    High = hi2
+//                    Penalty = penalty
+//                    InRange = inRange
+//                    Grid = grid
+//                    Values = values |}
 
 
-        /// Bisect method for finding root of non-linear equations.
-        /// `adSafe` keeps within tensor space for all operations,
-        /// but is substantially slower owing to two casts.
-        // let bisect
-        //     (f: TypedScalar<'u> -> TypedScalar<'u>)
-        //     (target: TypedScalar<'u>)
-        //     (lo: TypedScalar<'u>)
-        //     (hi: TypedScalar<'u>)
-        //     (tol: TypedScalar<'u>)
-        //     (maxIter: int)
-        //     : TypedScalar<'u> =
+//         /// Finds the root of a non-linear equation by solving f() over
+//         /// an equally-spaced grid of size `nGrid`. Uses AD gradients.
+//         let refinedGrid
+//             (f: TypedVector<1> -> TypedVector<'v>)
+//             (target: TypedScalar<'v>)
+//             (grid: TypedVector<'u>)
+//             (values: TypedVector<'v>)
+//             (lo: TypedScalar<'u>)
+//             (hi: TypedScalar<'u>)
+//             : TypedScalar<'u> =
 
-        //     let fa0 = f lo - target
-        //     let fb0 = f hi - target
+//             let errors = Typed.absVector (values - target)
+//             let minErr = Typed.minVector errors
+//             let minErrExpanded = dsharp.fullLike (errors, minErr)
 
-        //     let rec loop (a: TypedScalar<'u>, fa: TypedScalar<'u>) (b: TypedScalar<'u>, fb: TypedScalar<'u>) i =
-        //         let c = (a + b) * half
-        //         let fc = f c - target
+//             let eps =
+//                 let raw = dsharp.max (absTol, dsharp.abs minErr * relTol)
+//                 dsharp.fullLike (errors, raw)
 
-        //         if i >= maxIter then
-        //             c
-        //         else
-        //             let stopMask = dsharp.lt (dsharp.abs fc, tol) + dsharp.lt ((b - a) * half, tol)
-        //             let stopF = dsharp.cast (stopMask, a.dtype)
-        //             let contF = one - stopF
+//             let diff = dsharp.abs (errors - minErrExpanded)
+//             let mask = dsharp.le (diff, eps) |> fun t -> dsharp.cast (t, grid.dtype)
 
-        //             let prod = fa * fc
-        //             let mask = dsharp.cast (dsharp.gt (prod, zero), a.dtype)
-        //             let invMask = one - mask
+//             let x0 = (mask * grid).sum ()
 
-        //             let a' = a * stopF + (a * invMask + c * mask) * contF
-        //             let b' = b * stopF + (b * mask + c * invMask) * contF
+//             let fLifted z = f z - target
+//             let fx = fLifted x0
+//             let dfx = dsharp.grad fLifted x0
+//             let x1 = x0 - fx / dfx
 
-        //             let fa' = fa * stopF + (fa * invMask + fc * mask) * contF
-        //             let fb' = fb * stopF + (fb * mask + fc * invMask) * contF
-        //             loop (a', fa') (b', fb') (i + 1)
+//             dsharp.max (lo, dsharp.min (hi, x1))
 
-        //     loop (lo, fa0) (hi, fb0) 0
 
-        /// Newton–Raphson root finder using AD for derivative.
-        let newtonRaphson
-            (f: TypedScalar<'u> -> TypedScalar<'v>)
-            (target: TypedScalar<'v>)
-            (x0: TypedScalar<'u>)
-            (lo: TypedScalar<'u>)
-            (hi: TypedScalar<'u>)
-            (maxIter: int)
-            : TypedScalar<'u> =
+//         /// Bisect method for finding root of non-linear equations.
+//         /// `adSafe` keeps within tensor space for all operations,
+//         /// but is substantially slower owing to two casts.
+//         // let bisect
+//         //     (f: TypedScalar<'u> -> TypedScalar<'u>)
+//         //     (target: TypedScalar<'u>)
+//         //     (lo: TypedScalar<'u>)
+//         //     (hi: TypedScalar<'u>)
+//         //     (tol: TypedScalar<'u>)
+//         //     (maxIter: int)
+//         //     : TypedScalar<'u> =
 
-            let step x _ =
-                let fLifted z = f z - target
-                let fx = fLifted x
-                let dfx = Typed.grad fLifted x
-                let xNext = x - fx / dfx
-                Typed.max lo (Typed.min hi xNext)
+//         //     let fa0 = f lo - target
+//         //     let fb0 = f hi - target
 
-            [ 1 .. maxIter ] |> List.fold step x0
+//         //     let rec loop (a: TypedScalar<'u>, fa: TypedScalar<'u>) (b: TypedScalar<'u>, fb: TypedScalar<'u>) i =
+//         //         let c = (a + b) * half
+//         //         let fc = f c - target
+
+//         //         if i >= maxIter then
+//         //             c
+//         //         else
+//         //             let stopMask = dsharp.lt (dsharp.abs fc, tol) + dsharp.lt ((b - a) * half, tol)
+//         //             let stopF = dsharp.cast (stopMask, a.dtype)
+//         //             let contF = one - stopF
+
+//         //             let prod = fa * fc
+//         //             let mask = dsharp.cast (dsharp.gt (prod, zero), a.dtype)
+//         //             let invMask = one - mask
+
+//         //             let a' = a * stopF + (a * invMask + c * mask) * contF
+//         //             let b' = b * stopF + (b * mask + c * invMask) * contF
+
+//         //             let fa' = fa * stopF + (fa * invMask + fc * mask) * contF
+//         //             let fb' = fb * stopF + (fb * mask + fc * invMask) * contF
+//         //             loop (a', fa') (b', fb') (i + 1)
+
+//         //     loop (lo, fa0) (hi, fb0) 0
+
+//         /// Newton–Raphson root finder using AD for derivative.
+//         let newtonRaphson
+//             (f: TypedScalar<'u> -> TypedScalar<'v>)
+//             (target: TypedScalar<'v>)
+//             (x0: TypedScalar<'u>)
+//             (lo: TypedScalar<'u>)
+//             (hi: TypedScalar<'u>)
+//             (maxIter: int)
+//             : TypedScalar<'u> =
+
+//             let step x _ =
+//                 let fLifted z = f z - target
+//                 let fx = fLifted x
+//                 let dfx = Typed.grad fLifted x
+//                 let xNext = x - fx / dfx
+//                 Typed.max lo (Typed.min hi xNext)
+
+//             [ 1 .. maxIter ] |> List.fold step x0
 
 
 /// Statistics to measure the convergence of multiple trajectories,

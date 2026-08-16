@@ -185,8 +185,7 @@ module MLE =
 
         let fromResult subject hypothesisId result =
             result.Parameters
-            |> Parameter.Pool.toTensorWithKeysReal
-            |> fun (k, v) -> Seq.zip k (v |> Tensors.Typed.toFloatArray)
+            |> Parameter.Pool.toArrayReal
             |> Seq.map (fun (name, v) ->
                 (subject,
                  hypothesisId,
@@ -196,7 +195,7 @@ module MLE =
                  v |> Units.removeUnitFromFloat)
                 |> IndividualMLE.Row)
 
-        let toResult (modelSystem: ModelSystem<'modelTimeUnit>) (data: IndividualMLE) =
+        let toResult (modelSystem: ModelSystem<'S,'V,'modelTimeUnit>) (data: IndividualMLE) =
             if data.Rows |> Seq.isEmpty then
                 Error "An MLE file is corrupt"
             else
@@ -210,7 +209,6 @@ module MLE =
                         let e = data.Rows |> Seq.find (fun r -> r.ParameterCode = pName.Value)
                         e.ParameterValue * 1.<parameter>)
                     |> List.toArray
-                    |> Tensors.Typed.ofVector
 
                 let newPool = Parameter.Pool.fromRealVector estimatedTheta modelSystem.Parameters
 
@@ -231,7 +229,7 @@ module MLE =
     /// <param name="modelId">An identifier for the model that was fit</param>
     /// <returns>A sequence of tuples which contain the analysis ID followed by another tuple
     /// that contains the likelihood and theta (parameter set)</returns>
-    let load directory subject (modelSystem: ModelSystem<'modelTimeUnit>) modelId =
+    let load directory subject (modelSystem: ModelSystem<'S,'V,'modelTimeUnit>) modelId =
         let files = Config.fileMatch directory subject modelId Config.DataType.MLE
 
         files
@@ -351,7 +349,7 @@ module EstimationResult =
     /// Load an `EstimationResult` that has previously been saved as
     /// three seperate dataframes. Results will only be reconstructed
     /// when file names and formats are in original Bristlecone format.
-    let loadAll toSeries directory subject (modelSystem: ModelSystem<'modelTimeUnit>) modelId =
+    let loadAll toSeries directory subject (modelSystem: ModelSystem<'S,'V,'modelTimeUnit>) modelId =
         let mles =
             MLE.load directory subject modelSystem modelId
             |> Seq.map (fun (k, v) -> k.ToString(), v)

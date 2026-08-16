@@ -10,23 +10,24 @@ module NegLogLikelihood =
 
     open Bristlecone
     open Bristlecone.ModelSystem
-    open Bristlecone.Tensors
+    open Bristlecone.Numerics
+    open Bristlecone.Numerics.Typed
 
     /// A small helper for unit-safety when working with units-of-measure-based Language types.
     let internal getParamValue<[<Measure>] 'u>
-        (paramAccessor: ParameterValueAccessor)
+        (paramAccessor: ParameterValueAccessor<'S>)
         (par: Language.IncludedParameter<'u>)
-        : TypedScalar<'u> =
-        paramAccessor.Get par.ParamId.Inner.Value |> Typed.retypeScalar
+        : TypedScalar<'S,'u> =
+        paramAccessor.Get par.ParamId.Inner.Value |> Scalar.retype
 
     let internal paramToAny<[<Measure>] 'u> (p: Language.IncludedParameter<'u>) =
-        let boxed = Parameter.Pool.boxParam<'u> p.ParamId.Inner.Value p.Parameter
+        let boxed = Parameter.Pool.stripUnit<'u> p.ParamId.Inner.Value p.Parameter
         p.ParamId.Inner, boxed
 
     let inline internal getData<[<Measure>] 'u, [<Measure>] 'state>
         (obsKey: Language.Require.ObsForLikelihood<'u>)
-        (pairs: CodedMap<SeriesPair<'state>>)
-        : SeriesPair<'u> =
+        (pairs: CodedMap<SeriesPair<'S,'V,'state>>)
+        : SeriesPair<'S,'V,'u> =
         let key =
             match obsKey with
             | Language.Require.StateObs r -> r.Code
@@ -34,8 +35,8 @@ module NegLogLikelihood =
 
         match pairs |> Map.tryFindBy (fun k -> k = key) with
         | Some d ->
-            { Expected = d.Expected |> Typed.retypeVector<'state, 'u>
-              Observed = d.Observed |> Typed.retypeVector<'state, 'u> }
+            { Expected = d.Expected |> Vector.retype
+              Observed = d.Observed |> Vector.retype }
         | None -> failwithf "Predicted data was required for the variable '%s' but did not exist." key.Value
 
 
@@ -54,7 +55,7 @@ module NegLogLikelihood =
                 failwithf "The specified %s parameter must be positive-only" label
         | Parameter.Constraint.Unconstrained -> failwithf "The specified %s parameter must be positive-only" label
 
-    let private likelihoodTag = Typed.ofScalar 1.<``-logL``>
+    let private likelihoodTag = Typed.ofScalar b 1.<``-logL``>
 
 
     /// <summary>Functions representing how variance is handled
@@ -62,16 +63,16 @@ module NegLogLikelihood =
     module Variance =
 
         /// A variance function maps expected values to per-point σ
-        type VarianceFunction<[<Measure>] 'sigma, [<Measure>] 'x> =
-            { Evaluate: ParameterValueAccessor -> TypedVector<'x> -> TypedVector<'sigma>
-              RequiredParameters: (ShortCode.ShortCode * Parameter.Pool.AnyParameter) list }
+        type VarianceFunction<'S,'V, [<Measure>] 'sigma, [<Measure>] 'x> =
+            { Evaluate: ParameterValueAccessor<'S> -> TypedVector<'S,'V,'x> -> TypedVector<'S,'V,'sigma>
+              RequiredParameters: (ShortCode.ShortCode * Parameter.Pool.ParameterNoUnit) list }
 
         /// Variance is constant within through time.
-        let constant sigma : VarianceFunction<'x, 'x> =
+        let constant sigma : VarianceFunction<'S,'V, 'x, 'x> =
             { Evaluate =
                 fun accessor expected ->
                     let sigmaVal = getParamValue accessor sigma
-                    Typed.broadcastScalarToVector sigmaVal (Typed.length expected)
+                    Typed.Scalar.broadcast engine sigmaVal (Typed.length expected)
               RequiredParameters = [ paramToAny sigma ] }
 
         /// Variance is proportional to the expected value (σ = σ0 * x).
@@ -93,7 +94,7 @@ module NegLogLikelihood =
                 fun accessor expected ->
                     let sigma0Val = getParamValue accessor sigma0
                     let sigma1Val = getParamValue accessor sigma1
-                    sigma0Val * Typed.expVector (sigma1Val * expected)
+                    sigma0Val * Vector.exp (sigma1Val * expected)
               RequiredParameters = [ paramToAny sigma0; paramToAny sigma1 ] }
 
 
@@ -101,18 +102,18 @@ module NegLogLikelihood =
 
         /// Residual sum of squares. Provides a simple metric of distance between
         /// observed data and model predictions.
-        let sumOfSquares (keys: Language.Require.ObsForLikelihood<'s> list) : Likelihood<'state> =
+        let sumOfSquares (keys: Language.Require.ObsForLikelihood<'s> list) : Likelihood<'S,'V,'state> =
             fun _ data ->
                 keys
                 |> List.map (fun k ->
                     let d = data |> getData k
-                    let obs = Typed.tail d.Observed
-                    let exp = Typed.tail d.Expected
+                    let obs = Vector.tail d.Observed
+                    let exp = Vector.tail d.Expected
                     let diff = obs - exp
-                    Typed.squareVector diff)
+                    Vector.square diff)
                 |> List.reduce (+)
-                |> Typed.sumVector
-                |> Typed.retypeScalar
+                |> Vector.sum
+                |> Scalar.retype
             |> fun f ->
                 { Evaluate = f
                   RequiredCodes = List.map obsKeyToLikelihoodKey keys
@@ -126,15 +127,15 @@ module NegLogLikelihood =
         /// Negative log likelihood for a bivariate normal distribution.
         /// For two random variables with bivariate normal N(u1,u2,sigma1,sigma2,rho).
         let internal gaussianVec
-            (sigma: TypedVector<'u>)
-            (obsx: TypedVector<'u>)
-            (expx: TypedVector<'u>)
-            : TypedVector<``-logL``> =
+            (sigma: TypedVector<'S,'V,'u>)
+            (obsx: TypedVector<'S,'V,'u>)
+            (expx: TypedVector<'S,'V,'u>)
+            : TypedVector<'S,'V,``-logL``> =
 
             let diffx = obsx - expx
 
-            let term1Scalar = half * Typed.logScalar twoPi
-            let n = Typed.length obsx
+            let term1Scalar = half * Scalar.log twoPi
+            let n = Vector.length obsx
 
             let term1 = Typed.broadcastScalarToVector term1Scalar n
             let term2 = Typed.logVector sigma
@@ -143,13 +144,13 @@ module NegLogLikelihood =
             (term1 + term2 + term3) * likelihoodTag
 
         let internal gaussian'
-            (mkVariance: Variance.VarianceFunction<'s, 's>)
+            (mkVariance: Variance.VarianceFunction<'S,'V,'s, 's>)
             (key: Language.Require.ObsForLikelihood<'s>)
-            : Likelihood<'state> =
-            fun (paramAccessor: ParameterValueAccessor) data ->
+            : Likelihood<'S,'V,'state> =
+            fun (paramAccessor: ParameterValueAccessor<'S>) data ->
                 let x = data |> getData key
-                let obsx = Typed.tail x.Observed
-                let expx = Typed.tail x.Expected
+                let obsx = Vector.tail x.Observed
+                let expx = Vector.tail x.Expected
                 let sigma = mkVariance.Evaluate paramAccessor expx
 
                 gaussianVec sigma obsx expx |> Tensors.Typed.sumVector
@@ -256,19 +257,19 @@ module NegLogLikelihood =
         let internal logGaussian'
             (mkVariance: Variance.VarianceFunction<1, 1>)
             (key: Language.Require.ObsForLikelihood<1>)
-            : Likelihood<'state> =
-            fun (paramAccessor: ParameterValueAccessor) data ->
+            : Likelihood<'S,'V,'state> =
+            fun (paramAccessor: ParameterValueAccessor<'S>) data ->
                 let x = data |> getData key
-                let obsx = Typed.tail x.Observed
-                let expx = Typed.tail x.Expected |> Typed.logVector
+                let obsx = Vector.tail x.Observed
+                let expx = Vector.tail x.Expected |> Vector.log
                 let sigma = mkVariance.Evaluate paramAccessor expx
-                logGaussianVec sigma obsx expx |> Typed.sumVector
+                logGaussianVec sigma obsx expx |> Vector.sum
             |> fun f ->
                 { Evaluate = f
                   RequiredParameters = mkVariance.RequiredParameters
                   RequiredCodes = [ obsKeyToLikelihoodKey key ] }
 
-        let logGaussian key sigma : Likelihood<'state> =
+        let logGaussian key sigma : Likelihood<'S,'V,'state> =
             logGaussian' (Variance.constant sigma) key
 
 

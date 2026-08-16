@@ -315,11 +315,11 @@ module Language =
     /// changing state as Tensors.
     module ExpressionCompiler =
 
-        open DiffSharp
         open Microsoft.FSharp.Quotations
         open Microsoft.FSharp.Linq.RuntimeHelpers
-        open Bristlecone.Tensors
         open Untyped
+        open Bristlecone.Numerics
+        open Bristlecone.Numerics.Typed
 
         // ---- Index Builders ----
         let private buildIndex toKey =
@@ -614,17 +614,17 @@ module Language =
             | [] -> failwith "Cannot multiply an empty list"
             | x :: rest -> rest |> List.fold (fun acc e -> <@ Typed.mulScalar %acc %e @>) x
 
-        let tensorInverse (fLambda, targetExpr: Expr<TypedScalar<'u>>, loExpr, hiExpr, tol, maxIter) =
+        let tensorInverse (fLambda, targetExpr: Expr<TypedScalar<'S,'u>>, loExpr, hiExpr, tol, maxIter) =
             let tol = Typed.ofScalar tol
-
             <@
-                if (Typed.isNan %targetExpr).AsBool() then
-                    Typed.Constants.penalty
+                let backend : NumericBackend<'S,'V> = (%targetExpr).Backend
+                if (Scalar.isNan %targetExpr) = backend.atomic.constants.one then
+                    backend.atomic.constants.penalty
                 else
                     let interval =
                         Statistics.RootFinding.Tensor.Interval.identify
                             250
-                            penalty
+                            Typed.Constants.penalty
                             (%%fLambda: Tensor -> Tensor)
                             %targetExpr
                             %loExpr
@@ -641,12 +641,12 @@ module Language =
 
                     let mask = interval.InRange
                     let invMask = Typed.minusScalar Typed.Constants.one mask
-                    Typed.addScalar (Typed.mulScalar mask x) (Typed.mulScalar invMask interval.Penalty)
+                    (mask * x) + (invMask * interval.Penalty)
             @>
 
         let getEnvironment eVar name =
             <@
-                let map = %%Expr.Var eVar: CodedMap<TypedScalar<ModelSystem.``environment``>>
+                let map = %%Expr.Var eVar: CodedMap<TypedScalar<'S,ModelSystem.``environment``>>
 
                 map
                 |> Map.tryFindBy (fun k -> k.Value = name)
@@ -654,7 +654,7 @@ module Language =
                     match o with
                     | Some o -> o
                     | None -> failwithf "State / environment %s was not available. Available: %A" name map.Keys
-                |> Typed.retypeScalar
+                |> Scalar.retype
             @>
 
 
@@ -662,7 +662,8 @@ module Language =
         // let statesVar = Var("states", typeof<CodedMap<TypedTensor<Scalar,ModelSystem.state>>[]>)
         // let tIdxVar   = Var("timeIndex", typeof<int>)
         // let pIndex    = paramIndex parameters
-        let private tensorOps<[<Measure>] 'timeUnit>
+        let private numericOps<[<Measure>] 'timeUnit>
+            (backend: NumericBackend<'S,'V>) // Currently setup as scalar-only compiler.
             requiresGradients
             (pIndex: Map<string, int>)
             (eIndex: Map<string, int>)
@@ -673,12 +674,12 @@ module Language =
             =
             { constVal =
                 fun n ->
-                    let tensor = Typed.ofScalar n
+                    let tensor = backend.atomic.fromFloatS n
                     <@ tensor @>
               constValLift =
                 fun one n ->
-                    let tensor = Typed.ofScalar n
-                    <@ Typed.mulScalar %one tensor @>
+                    let tensor = backend.atomic.fromFloatS n
+                    <@ %one * tensor @>
               parameter =
                 fun name ->
                     let pIdx =
@@ -689,53 +690,56 @@ module Language =
 
                             invalidOp
                                 $"Parameter '{name}' was referenced in the model but not provided as an estimatable parameter. Available parameters: {available}"
-                            
-                    <@ (%%Expr.Var pVar: TypedVector<``parameter``>) |> Typed.itemAt pIdx |> Typed.retypeScalar @>
-              environment = fun name -> getEnvironment eVar name
+                    
+                    <@ (%%Expr.Var pVar: TypedVector<'S,'V,``parameter``>) |> Vector.itemAt pIdx |> Scalar.retype @>
+              environment = fun name -> getEnvironment eVar name |> Scalar.retype
               state = fun name -> getEnvironment eVar name // Currently, state and environment are intermingled
-              timeVal = <@ (%%Expr.Var tVar: TypedScalar<'timeUnit>) |> Typed.retypeScalar @>
-              thisVal = <@ (%%Expr.Var xVar: TypedScalar<ModelSystem.state>) |> Typed.retypeScalar @>
+              timeVal = <@ (%%Expr.Var tVar: TypedScalar<'S,'timeUnit>) |> Scalar.retype @>
+              thisVal = <@ (%%Expr.Var xVar: TypedScalar<'S,ModelSystem.state>) |> Scalar.retype @>
               add = tensorSum
-              sub = fun (l, r) -> <@ Typed.minusScalar %l %r @>
+              sub = fun (l, r) -> <@ %l - %r @>
               mul = tensorProduct
-              div = fun (l, r) -> <@ Typed.divScalar %l %r @>
-              pow = fun (l, r) -> <@ Typed.pow %l %r @>
-              log = fun e -> <@ Typed.logScalar %e @>
-              exp = fun e -> <@ Typed.exp %e @>
-              modulo = fun (l, r) -> <@ Typed.minusScalar %l (Typed.mulScalar %r (Typed.floor (Typed.divScalar %l %r))) @>
+              div = fun (l, r) -> <@ %l / %r @>
+              pow = fun (l, r) -> <@ Scalar.pow %l %r @>
+              log = fun e -> <@ Scalar.log %e @>
+              exp = fun e -> <@ Scalar.exp %e @>
+              modulo = fun (l, r) -> <@ %l - (%r * (Scalar.floor (%l / %r))) @>
               cond = fun (c, t, f) ->
                 if requiresGradients then Branching.blendConditional c t f
                 else Branching.simple c t f
               label = fun (_, m) -> m
               stateAt = fun _ -> failwith "State lookup not supported in equations"
-              invalid = fun () -> <@ Typed.Constants.invalidPenalty @>
-              greaterThan = fun (l, r) -> <@ Typed.gt %l %r |> Bool @>
-              lessThan = fun (l, r) -> <@ Typed.lt %l %r |> Bool @>
-              equalTo = fun (l, r) -> <@ Typed.eq %l %r |> Bool @>
-              isFinite = fun ex -> <@ Typed.isFinite %ex |> Bool @>
+              invalid = fun () ->
+                <@ backend.atomic.constants.invalid @>
+              greaterThan = fun (l, r) -> <@ Scalar.gt %l %r |> Bool @>
+              lessThan = fun (l, r) -> <@ Scalar.lt %l %r |> Bool @>
+              equalTo = fun (l, r) -> <@ Scalar.eq %l %r |> Bool @>
+              isFinite = fun ex -> <@ Scalar.isFinite %ex |> Bool @>
               inverse = tensorInverse }
 
         // Initialisers are time-invariant (t = initial), but can access the current exogeneous
         // environment and observed states at the initial time.
-        let private tensorOpsForInitialiser (pIndex: Map<string, int>) (pVar: Var) (eVar: Var) (bVar: Var) =
-            let tFake = Var("time", typeof<TypedScalar<1>>)
-            let xFake = Var("state", typeof<TypedScalar<1>>)
+        let private numericOpsForInitialiser backend (pIndex: Map<string, int>) (pVar: Var) (eVar: Var) (bVar: Var) =
+            let tFake = Var("time", typeof<TypedScalar<'S,1>>)
+            let xFake = Var("state", typeof<TypedScalar<'S,1>>)
 
-            { tensorOps false pIndex Map.empty pVar eVar tFake xFake with
-                timeVal = <@ Typed.Constants.nan @> // not used in initialisers
+            { numericOps backend false pIndex Map.empty pVar eVar tFake xFake with
+                timeVal =
+                    let n = backend.atomic.fromFloatS nan
+                    <@ n @> // not used in initialisers
                 stateAt = fun _ -> failwith "'State at' not supported in initialisers. Use 'State' for baseline."
                 state =
                     fun name ->
                         <@
-                            (%%Expr.Var bVar: CodedMap<TypedScalar<ModelSystem.``state``>>)
+                            (%%Expr.Var bVar: CodedMap<TypedScalar<'S,ModelSystem.``state``>>)
                             |> Map.tryFindBy (fun k -> k.Value = name)
                             |> fun o ->
                                 match o with
-                                | Some o -> o |> Typed.retypeScalar
+                                | Some o -> o |> Scalar.retype
                                 | None -> failwithf "Baseline state not available for: %s" name
                         @> }
 
-        let private tensorOpsForMeasure
+        let private numericOpsForMeasure
             requiresGradients
             (pIndex: Map<string, int>)
             (pVar: Var)
@@ -795,100 +799,34 @@ module Language =
               isFinite = fun ex -> <@ Typed.isFinite %ex |> Bool @>
               inverse = tensorInverse }
 
-        // ---- Float ops ----
-        let private floatOps (pVar: Var) (eVar: Var) (tVar: Var) (xVar: Var) =
-            { constVal = fun n -> <@ n @>
-              constValLift = fun _ n -> <@ n @>
-              parameter =
-                fun name ->
-                    <@
-                        match
-                            (%%Expr.Var pVar: Parameter.Pool.ParameterPool)
-                            |> Parameter.Pool.tryGetRealValue name
-                        with
-                        | Some est -> float est // strip measure for numeric ops
-                        | None -> failwithf "The parameter '%s' is missing" name
-                    @>
-              environment =
-                fun name ->
-                    <@
-                        match (%%Expr.Var eVar: CodedMap<float>) |> Map.tryFindBy (fun n -> n.Value = name) with
-                        | Some v -> v
-                        | None -> failwithf "The environment value '%s' is missing" name
-                    @>
-              state = // Currently, state and environment are in the same map.
-                fun name ->
-                    <@
-                        match (%%Expr.Var eVar: CodedMap<float>) |> Map.tryFindBy (fun n -> n.Value = name) with
-                        | Some v -> v
-                        | None -> failwithf "The environment value '%s' is missing" name
-                    @>
-              timeVal = <@ (%%Expr.Var tVar: float<Time.``time index``>) |> Units.removeUnitFromFloat @>
-              thisVal = <@ %%Expr.Var xVar: float @>
-              add = List.reduce (fun l r -> <@ %l + %r @>)
-              sub = fun (l, r) -> <@ %l - %r @>
-              mul = List.reduce (fun l r -> <@ %l * %r @>)
-              div = fun (l, r) -> <@ %l / %r @>
-              pow = fun (l, r) -> <@ %l ** %r @>
-              log = fun e -> <@ log %e @>
-              exp = fun e -> <@ exp %e @>
-              modulo = fun (l, r) -> <@ %l % %r @>
-              label = fun (_, m) -> m
-              stateAt = fun _ -> failwith "State lookup not supported in equations"
-              invalid = fun () -> <@ nan @>
-              cond = fun (c, t, f) -> <@ if %c = Bool 1 then %t else %f @>
-              greaterThan = fun (l, r) -> <@ if %l > %r then Bool 1 else Bool 0 @>
-              lessThan = fun (l, r) -> <@ if %l < %r then Bool 1 else Bool 0 @>
-              equalTo = fun (l, r) -> <@ if %l = %r then Bool 1 else Bool 0 @>
-              isFinite =
-                fun x ->
-                    <@
-                        let v = %x
-                        let b = not (System.Double.IsNaN v || System.Double.IsInfinity v)
-                        Bool(if b then 1 else 0)
-                    @>
-              inverse =
-                fun (fLambda, targetExpr, loExpr, hiExpr, tol, maxIter) ->
-                    <@
-                        Statistics.RootFinding.bisect
-                            1
-                            maxIter
-                            (fun x -> (%%fLambda) x - %targetExpr)
-                            %loExpr
-                            %hiExpr
-                            tol
-                    @> }
-
-        // ---- Lambda helper ----
         let private toLambda4 v1 v2 v3 v4 body =
             Expr.Lambda(v1, Expr.Lambda(v2, Expr.Lambda(v3, Expr.Lambda(v4, body))))
-
-        // ---- Public compile functions ----
 
         /// Compile a rate-based (e.g. ODE) model expression into an internal
         /// `RateEquation` for use in model-fitting.
         let compileRate<[<Measure>] 'timeUnit, [<Measure>] 'stateUnit>
+            (backend: NumericBackend<'S,'V>)
             parameters
             envKeys
             (expr: ModelExpression<'stateUnit / 'timeUnit>)
-            : ModelSystem.RateEquation<'timeUnit> =
+            : ModelSystem.RateEquation<'S,'V,'timeUnit> =
 
-            let pVar = Var("parameters", typeof<TypedVector<``parameter``>>)
+            let pVar = Var("parameters", typeof<TypedVector<'S,'V,``parameter``>>)
 
             let eVar =
-                Var("environment", typeof<CodedMap<TypedScalar<ModelSystem.``environment``>>>)
+                Var("environment", typeof<CodedMap<TypedScalar<'S,ModelSystem.``environment``>>>)
 
-            let tVar = Var("time", typeof<TypedScalar<'timeUnit>>)
-            let xVar = Var("state", typeof<TypedScalar<'stateUnit>>)
+            let tVar = Var("time", typeof<TypedScalar<'S,'timeUnit>>)
+            let xVar = Var("state", typeof<TypedScalar<'S,'stateUnit>>)
 
             let pIndex = paramIndex parameters
             let eIndex = envIndexFromKeys envKeys
 
             let core =
-                buildQuotationCached (tensorOps true pIndex eIndex pVar eVar tVar xVar) Map.empty expr
+                buildQuotationCached (numericOps backend true pIndex eIndex pVar eVar tVar xVar) Map.empty expr
 
             // Convert from 'stateUnit/'timeUnit to internal state/'timeUnit
-            <@ %core |> Typed.retypeScalar<1, ModelSystem.state / 'timeUnit> @> // TODO Why retype required?
+            <@ %core |> Scalar.retype<'S,1, ModelSystem.state / 'timeUnit> @> // TODO Why retype required?
             |> toLambda4 pVar eVar tVar xVar
             |> LeafExpressionConverter.EvaluateQuotation
             |> unbox<ModelSystem.RateEquation<'timeUnit>>
@@ -897,7 +835,7 @@ module Language =
             parameters
             envKeys
             (expr: ModelExpression<'stateUnit>)
-            : ModelSystem.StateEquation<'timeUnit> =
+            : ModelSystem.StateEquation<'S,'V,'timeUnit> =
 
             let pVar = Var("parameters", typeof<TypedVector<``parameter``>>)
 
@@ -911,7 +849,7 @@ module Language =
             let eIndex = envIndexFromKeys envKeys
 
             let core =
-                buildQuotationCached (tensorOps true pIndex eIndex pVar eVar tVar xVar) Map.empty expr
+                buildQuotationCached (numericOps true pIndex eIndex pVar eVar tVar xVar) Map.empty expr
 
             <@ %core |> Typed.retypeScalar<1, ModelSystem.state> @> // TODO Why retype required?
             |> toLambda4 pVar eVar tVar xVar
@@ -921,7 +859,8 @@ module Language =
         let compileSimple<[<Measure>] 'u> (expr: ModelExpression<'u>) : float<'u> =
             let core =
                 buildQuotationCached
-                    (tensorOps
+                    (numericOps
+                        backend
                         false
                         Map.empty
                         Map.empty
@@ -950,20 +889,20 @@ module Language =
             |> unbox<Parameter.Pool.ParameterPool -> CodedMap<float> -> float<Time.``time index``> -> float -> float>
 
         let compileMeasure<[<Measure>] 'stateUnit> parameters (expr: ModelExpression<'stateUnit>) =
-            let pVar = Var("parameters", typeof<TypedVector<parameter>>)
+            let pVar = Var("parameters", typeof<TypedVector<'S,'V,parameter>>)
 
             let statesVar =
-                Var("states", typeof<CodedMap<TypedVector<ModelSystem.state>>>)
+                Var("states", typeof<CodedMap<TypedVector<'S,'V,ModelSystem.state>>>)
 
-            let thisVar = Var("thisVal", typeof<TypedScalar<ModelSystem.state>>)
+            let thisVar = Var("thisVal", typeof<TypedScalar<'S,ModelSystem.state>>)
 
             let tIdxVar = Var("timeIndex", typeof<int>)
             let pIndex = paramIndex parameters
 
             let core =
-                buildQuotationCached (tensorOpsForMeasure true pIndex pVar statesVar thisVar tIdxVar) Map.empty expr
+                buildQuotationCached (numericOpsForMeasure true pIndex pVar statesVar thisVar tIdxVar) Map.empty expr
 
-            <@ %core |> Typed.retypeScalar<1,ModelSystem.state> @>
+            <@ %core |> Typed.Scalar.retype<1,ModelSystem.state> @>
             |> fun body -> Expr.Lambda(pVar, Expr.Lambda(statesVar, Expr.Lambda(thisVar, Expr.Lambda(tIdxVar, body))))
             |> LeafExpressionConverter.EvaluateQuotation
             |> unbox<ModelSystem.Measurement<'stateUnit>>
@@ -980,7 +919,7 @@ module Language =
             let pIndex = paramIndex parameters
 
             let core =
-                buildQuotationCached (tensorOpsForInitialiser pIndex pVar eVar bVar) Map.empty expr
+                buildQuotationCached (numericOpsForInitialiser pIndex pVar eVar bVar) Map.empty expr
 
             <@ %core |> Typed.retypeScalar<1,ModelSystem.state> @>
             |> fun body -> Expr.Lambda(pVar, Expr.Lambda(eVar, Expr.Lambda(bVar, body)))
@@ -1001,7 +940,7 @@ module Language =
 
     let computeT x t pool (environment: CodedMap<Tensors.TypedScalar<ModelSystem.environment>>) ex =
         ExpressionCompiler.compileRate pool (Seq.toList environment.Keys) ex
-        |> fun f -> f (Parameter.Pool.toTensorWithKeysReal pool |> snd) environment t x
+        |> fun f -> f (Parameter.Pool.toVectorWithKeysReal pool |> snd) environment t x
 
 
     module ExpressionParser =
@@ -1057,7 +996,7 @@ module Language =
 
         type ModelFragment<[<Measure>] 'time> =
             | EquationFragment of ExpressionParser.Requirement list * EquationThunk<'time>
-            | ParameterFragment of Parameter.Pool.AnyParameter
+            | ParameterFragment of Parameter.Pool.ParameterNoUnit
             | LikelihoodFragment of LikelihoodThunk
             | MeasureFragment of ExpressionParser.Requirement list * MeasureThunk<ModelSystem.state>
             | InitialiserFragment of ExpressionParser.Requirement list * InitialiserThunk<ModelSystem.state>
@@ -1084,7 +1023,7 @@ module Language =
 
             open ModelSystem
 
-            let contramap<[<Measure>] 'u> (l: ModelSystem.Likelihood<'u>) : ModelSystem.Likelihood<ModelSystem.state> =
+            let contramap<[<Measure>] 'u> (l: ModelSystem.Likelihood<'S,'V,'u>) : ModelSystem.Likelihood<'S,'V,ModelSystem.state> =
                 { RequiredCodes = l.RequiredCodes
                   RequiredParameters = l.RequiredParameters
                   Evaluate =
@@ -1092,8 +1031,8 @@ module Language =
                         let s =
                             series
                             |> Map.map (fun _ v ->
-                                { Expected = v.Expected |> Tensors.Typed.retypeVector<ModelSystem.state, 'u>
-                                  Observed = v.Observed |> Tensors.Typed.retypeVector<ModelSystem.state, 'u> })
+                                { Expected = v.Expected |> Vector.retype<ModelSystem.state, 'u>
+                                  Observed = v.Observed |> Vector.retype<ModelSystem.state, 'u> })
 
                         l.Evaluate param s }
 
@@ -1147,7 +1086,7 @@ module Language =
                     (sc,
                      (fun p ->
                          let ini = ExpressionCompiler.compileInitialiser<'u> p expr
-                         fun p e s -> ini p e s |> Tensors.Typed.retypeScalar<'u, ModelSystem.state>))
+                         fun p e s -> ini p e s |> Scalar.retype<'u, ModelSystem.state>))
                 )
 
             let likelihood<[<Measure>] 'time, [<Measure>] 'u> (l: ModelSystem.Likelihood<'u>) : ModelFragment<'time> =
@@ -1179,7 +1118,7 @@ module Language =
         let useLikelihood<[<Measure>] 'u, [<Measure>] 'time> (l: ModelSystem.Likelihood<'u>) mb =
             add "likelihood" (Add.likelihood<'time, 'u> l) mb
 
-        let compile builder : ModelSystem.ModelSystem<'time> =
+        let compile builder : ModelSystem.ModelSystem<'S,'V,'time> =
             let m, isDiscrete = unwrap builder
 
             // Partition fragments
@@ -1319,7 +1258,7 @@ module Language =
             (builder: ModelBuilder.ModelBuilder<'time>)
             =
             let (ParamIdInner name) = p.ParamId
-            let boxed = Parameter.Pool.boxParam<'u> name.Value p.Parameter
+            let boxed = Parameter.Pool.stripUnit<'u> name.Value p.Parameter
             ModelBuilder.add name.Value (ModelBuilder.ParameterFragment boxed) builder
 
         let addMeasure<[<Measure>] 'time, [<Measure>] 'u>
@@ -1485,7 +1424,7 @@ module Language =
         let withEnvironmentGen
             (obs: StateId<'s>)
             (genFn: 'date -> float<'s>)
-            (settings: TestSettings<'state, 'date, 'a, 'b>)
+            (settings: TestSettings<'S,'state, 'date, 'a, 'b>)
             =
             let envTs =
                 Bristlecone.Time.TimeSeries.fromGen
@@ -1503,7 +1442,7 @@ module Language =
             (obs: StateId<'s>)
             (genFn: float<'fnTime> -> float<'s>)
             (gen2: 'timespan -> float<'fnTime>)
-            (settings: TestSettings<'state, 'date, 'yearUnit, 'timespan>)
+            (settings: TestSettings<'S,'state, 'date, 'yearUnit, 'timespan>)
             =
 
             let startDate =
@@ -1534,7 +1473,7 @@ module Language =
         let t1<[<Measure>] 's, [<Measure>] 'stateUnit, 'date, 'yearUnit, 'timespan>
             (obs: Require.ObsForLikelihood<'s>)
             (value: float<'s>)
-            (settings: Test.TestSettings<'stateUnit, 'date, 'yearUnit, 'timespan>)
+            (settings: Test.TestSettings<'S,'stateUnit, 'date, 'yearUnit, 'timespan>)
             =
             let code = obsToCode obs
 
@@ -1547,7 +1486,7 @@ module Language =
             { settings with
                 GenerationRules = (code, rule) :: settings.GenerationRules }
 
-        let seriesLength n (settings: TestSettings<'stateUnit, 'date, 'yearUnit, 'timespan>) =
+        let seriesLength n (settings: TestSettings<'S,'stateUnit, 'date, 'yearUnit, 'timespan>) =
             { settings with TimeSeriesLength = n }
 
         let resolution res settings = { settings with Resolution = res }
@@ -1559,7 +1498,7 @@ module Language =
         /// A component with its own parameters and an expression generator
         type SubComponent<'a> =
             { Label: string
-              Parameters: CodedMap<Parameter.Pool.AnyParameter>
+              Parameters: CodedMap<Parameter.Pool.ParameterNoUnit>
               Expr: 'a }
 
         type ModelComponent<'a> =
@@ -1577,7 +1516,7 @@ module Language =
 
         let estimateParameter<[<Measure>] 'u, 'a> (p: IncludedParameter<'u>) (comp: SubComponent<'a>) =
             let (ParamIdInner name) = p.ParamId
-            let boxed = Parameter.Pool.boxParam<'u> name.Value p.Parameter
+            let boxed = Parameter.Pool.stripUnit<'u> name.Value p.Parameter
 
             { comp with
                 Parameters = comp.Parameters |> Map.add name boxed }
@@ -1690,8 +1629,8 @@ module Language =
 
         /// <summary>A hypothesis consists of a model system and the names of the
         /// swappable components within it, alongside the name of their current implementation.</summary>
-        type Hypothesis<[<Measure>] 'timeIndex> =
-            | Hypothesis of ModelSystem.ModelSystem<'timeIndex> * list<ComponentName>
+        type Hypothesis<'S,'V,[<Measure>] 'timeIndex> =
+            | Hypothesis of ModelSystem.ModelSystem<'S,'V,'timeIndex> * list<ComponentName>
 
             member private this.Unwrap = let (Hypothesis(m, comps)) = this in m, comps
 
@@ -1707,14 +1646,14 @@ module Language =
         // Start the pipeline: lift the base model into a builder
         let createFromModel
             (baseModel: 'a -> 'rest)
-            : Writer.Writer<'a -> 'rest, ComponentName * CodedMap<Parameter.Pool.AnyParameter>> list =
+            : Writer.Writer<'a -> 'rest, ComponentName * CodedMap<Parameter.Pool.ParameterNoUnit>> list =
             [ Writer.return' (baseModel) ]
 
         ///
         let apply
             (comp: Components.ModelComponent<'a>)
-            (builders: Writer.Writer<'a -> 'rest, ComponentName * CodedMap<Parameter.Pool.AnyParameter>> list)
-            : Writer.Writer<'rest, ComponentName * CodedMap<Parameter.Pool.AnyParameter>> list =
+            (builders: Writer.Writer<'a -> 'rest, ComponentName * CodedMap<Parameter.Pool.ParameterNoUnit>> list)
+            : Writer.Writer<'rest, ComponentName * CodedMap<Parameter.Pool.ParameterNoUnit>> list =
             if comp.Implementations.IsEmpty then
                 failwith "Components must have at least one implementation."
 
@@ -1730,8 +1669,8 @@ module Language =
         /// Compile: run the writer(s), add parameters into the model builder, and wrap in Hypothesis
         let compile
             (builders:
-                Writer.Writer<ModelBuilder.ModelBuilder<'u>, ComponentName * CodedMap<Parameter.Pool.AnyParameter>> list)
-            : Hypothesis<'u> list =
+                Writer.Writer<ModelBuilder.ModelBuilder<'u>, ComponentName * CodedMap<Parameter.Pool.ParameterNoUnit>> list)
+            : Hypothesis<'S,'V,'u> list =
             builders
             |> List.map (fun (Writer.AWriter(mb, logs)) ->
                 let withParams =

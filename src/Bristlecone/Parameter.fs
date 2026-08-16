@@ -67,63 +67,65 @@ module Parameter =
     [<RequireQualifiedAccess>]
     module ParameterTransforms =
 
-        open Tensors
+        open Bristlecone.Numerics
+        open Bristlecone.Numerics.Typed
 
-        type OptimSpaceTransform<[<Measure>] 'space> =
-            { Forward: TypedScalar<'space> -> TypedScalar<``parameter``>
-              Inverse: TypedScalar<``parameter``> -> TypedScalar<'space> }
+        type OptimSpaceTransform<'S,[<Measure>] 'space> =
+            { Forward: TypedScalar<'S,'space> -> TypedScalar<'S,``parameter``>
+              Inverse: TypedScalar<'S,``parameter``> -> TypedScalar<'S,'space> }
 
         /// Detached/bounded mode: identity mapping regardless of constraint.
-        let scalarTransformOptimSpace: OptimSpaceTransform<``optim-space``> =
+        let scalarTransformOptimSpace: OptimSpaceTransform<'S,``optim-space``> =
             { Forward =
-                fun (z: TypedScalar<``optim-space``>) -> z |> Typed.retypeScalar
+                fun (z: TypedScalar<'S,``optim-space``>) -> z |> Scalar.retype
               Inverse =
-                fun (x: TypedScalar<``parameter``>) -> x |> Typed.retypeScalar }
+                fun (x: TypedScalar<'S,``parameter``>) -> x |> Scalar.retype }
 
         // Transformed mode: apply constraint transforms
         let scalarTransformOptimSpaceTransformed
+            backend
             (cons: Constraint<parameter>)
-            : OptimSpaceTransform<``optim-space-transformed``> =
+            : OptimSpaceTransform<'S,``optim-space-transformed``> =
             match cons with
             | Constraint.Unconstrained ->
                 { Forward =
-                    fun (z: TypedScalar<``optim-space-transformed``>) -> z |> Typed.retypeScalar
+                    fun (z: TypedScalar<'S,``optim-space-transformed``>) -> z |> Scalar.retype
                   Inverse =
-                    fun (x: TypedScalar<``parameter``>) -> x |> Typed.retypeScalar }
+                    fun (x: TypedScalar<'S,``parameter``>) -> x |> Scalar.retype }
             | Constraint.PositiveOnly ->
                 { Forward =
-                    fun (z: TypedScalar<``optim-space-transformed``>) ->
-                        z |> Typed.retypeScalar |> Typed.exp |> Typed.retypeScalar
+                    fun (z: TypedScalar<'S,``optim-space-transformed``>) ->
+                        z |> Scalar.retype |> Scalar.exp |> Scalar.retype
                   Inverse =
-                    fun (x: TypedScalar<``parameter``>) ->
-                        x |> Typed.logScalar |> Typed.retypeScalar }
+                    fun (x: TypedScalar<'S,``parameter``>) ->
+                        x |> Scalar.log |> Scalar.retype }
             | Constraint.Bounded(low, hi) ->
-                let lowT = Typed.ofScalar low
-                let hiT = Typed.ofScalar hi
-                let one = Typed.ofScalar 1.
+                let lowT = Typed.ofScalar backend low
+                let hiT = Typed.ofScalar backend hi
+                let one = Typed.ofScalar backend 1.
 
                 { Forward =
-                    fun (z: TypedScalar<``optim-space-transformed``>) ->
-                        let sigma = Typed.sigmoid (Typed.retypeScalar z)
+                    fun (z: TypedScalar<'S,``optim-space-transformed``>) ->
+                        let sigma = Scalar.sigmoid (Scalar.retype z)
                         lowT + (hiT - lowT) * sigma
                   Inverse =
-                    fun (x: TypedScalar<``parameter``>) ->
+                    fun (x: TypedScalar<'S,``parameter``>) ->
                         let sigma = (x - lowT) / (hiT - lowT)
-                        let z = Typed.logScalar (sigma / (one - sigma))
-                        z |> Typed.retypeScalar }
+                        let z = Scalar.log (sigma / (one - sigma))
+                        z |> Scalar.retype }
 
 
     [<RequireQualifiedAccess>]
     module Pool =
 
-        open DiffSharp
-        open Tensors
+        open Bristlecone.Numerics
+        open Bristlecone.Numerics.Typed
 
-        type AnyParameter =
+        type ParameterNoUnit =
             private
                 { Name: string
-                  ToTensorRealIO: unit -> TypedScalar<parameter>
-                  FromTensorRealIO: TypedScalar<parameter> -> AnyParameter
+                  ToReal: unit -> float<parameter>
+                  FromReal: float<parameter> -> ParameterNoUnit
                   GetConstraint: unit -> Constraint<parameter>
                   TryGetReal: unit -> float option
                   TryGetBounds: unit -> (float<parameter> * float<parameter>) option }
@@ -134,17 +136,17 @@ module Parameter =
             | PositiveOnly -> PositiveOnly
             | Bounded(low, hi) -> Bounded(Units.retype low, Units.retype hi)
 
-        let boxParam<[<Measure>] 'u> (name: string) (p: Parameter<'u>) : AnyParameter =
+        let stripUnit<[<Measure>] 'u> (name: string) (p: Parameter<'u>) : ParameterNoUnit =
             let rec make param =
                 { Name = name
-                  ToTensorRealIO =
+                  ToReal =
                     fun () ->
                         match tryGetEstimate param with
-                        | Some r -> Typed.ofScalar r |> Typed.retypeScalar
+                        | Some r -> r |> Units.retype
                         | None -> invalidOp $"Parameter '{name}' has no real estimate"
-                  FromTensorRealIO =
+                  FromReal =
                     fun t ->
-                        match setRealValue param (t |> Typed.toFloatScalar) with
+                        match setRealValue param (Units.retype t) with
                         | Ok p' -> make p'
                         | Error m -> invalidOp m
                   GetConstraint = fun () -> let (Parameter(c, _)) = param in retypeConstraint c
@@ -158,7 +160,7 @@ module Parameter =
 
             make p
 
-        type ParameterPool = Pool of CodedMap<AnyParameter>
+        type ParameterPool = Pool of CodedMap<ParameterNoUnit>
 
         let toList (Pool p) = Map.toList p
         let count (Pool p) = p.Count
@@ -181,48 +183,54 @@ module Parameter =
 
         /// Given a real-space parameter vector and an existing pool,
         /// return a new pool with each parameter's estimate set to the corresponding value.
-        let fromRealVector (realVec: TypedVector<``parameter``>) (Pool p: ParameterPool) : ParameterPool =
+        let fromRealVector (realVec: float<``parameter``>[]) (Pool p: ParameterPool) : ParameterPool =
             let updated =
                 p
                 |> Map.toList
                 |> List.mapi (fun i (sc, ap) ->
-                    let value = Typed.itemAt i realVec
-                    let newAp = ap.FromTensorRealIO value
+                    let value = realVec.[i]
+                    let newAp = ap.FromReal value
                     sc, newAp)
                 |> Map.ofList
 
             Pool updated
 
-        let toTensorWithKeysReal (Pool p) : ShortCode.ShortCode[] * TypedVector<``parameter``> =
+        let toVectorWithKeysReal backend (Pool p) : ShortCode.ShortCode[] * TypedVector<'S,'V,``parameter``> =
             let keys, scalars =
                 p
                 |> Map.toList
-                |> List.map (fun (sc, ap) -> sc, ap.ToTensorRealIO())
+                |> List.map (fun (sc, ap) -> sc, ap.ToReal())
                 |> List.unzip
 
             let vec =
                 scalars
                 |> Array.ofList
-                |> Typed.stack1D
+                |> Array.map (ofScalar backend)
+                |> Numerics.Stats.stack1D
 
             keys |> List.toArray, vec
 
+        let toArrayReal (Pool p) =
+            p
+            |> Map.toList
+            |> List.map (fun (sc, ap) -> sc, ap.ToReal())
 
-        type CompiledTransforms<[<Measure>] 'space> =
+
+        type CompiledTransforms<'S,'V,[<Measure>] 'space> =
             { Keys: ShortCode.ShortCode[]
               IndexByName: Map<string, int>
-              Forward: TypedVector<'space> -> TypedVector<``parameter``>
-              Inverse: TypedVector<``parameter``> -> TypedVector<'space>
-              ScalarTransforms: ParameterTransforms.OptimSpaceTransform<'space>[]
+              Forward: TypedVector<'S,'V,'space> -> TypedVector<'S,'V,``parameter``>
+              Inverse: TypedVector<'S,'V,``parameter``> -> TypedVector<'S,'V,'space>
+              ScalarTransforms: ParameterTransforms.OptimSpaceTransform<'S,'space>[]
               IsBounded: bool }
 
         /// Compiles forward and inverse transformations between parameter-space (real units)
         /// and optimisation space.
-        let internal compileTransformsWith<[<Measure>] 'space>
-            (mkScalar: Constraint<parameter> -> ParameterTransforms.OptimSpaceTransform<'space>)
+        let internal compileTransformsWith<'S,'V,[<Measure>] 'space>
+            (mkScalar: Constraint<parameter> -> ParameterTransforms.OptimSpaceTransform<'S,'space>)
             isBounded
             (Pool p)
-            : CompiledTransforms<'space> =
+            : CompiledTransforms<'S,'V,'space> =
 
             let entries = p |> Map.toList
             let keys = entries |> List.map fst |> List.toArray
@@ -233,19 +241,19 @@ module Parameter =
                 |> List.map (fun (_, ap) -> mkScalar (ap.GetConstraint()))
                 |> List.toArray
 
-            let forwardVec (thetaOpt: TypedVector<'space>) =
+            let forwardVec (thetaOpt: TypedVector<'S,'V,'space>) =
                 trans
                 |> Array.mapi (fun i t ->
-                    let zi = Typed.itemAt i thetaOpt
+                    let zi = Vector.itemAt i thetaOpt
                     t.Forward zi)
-                |> Typed.stack1D
+                |> Stats.stack1D
 
-            let inverseVec (thetaReal: TypedVector<``parameter``>) =
+            let inverseVec (thetaReal: TypedVector<'S,'V,``parameter``>) =
                 trans
                 |> Array.mapi (fun i t ->
-                    let xi = Typed.itemAt i thetaReal
+                    let xi = Vector.itemAt i thetaReal
                     t.Inverse xi)
-                |> Typed.stack1D
+                |> Stats.stack1D
 
             { Keys = keys
               IndexByName = index
@@ -255,31 +263,32 @@ module Parameter =
               IsBounded = isBounded }
 
         let internal compileTransformsBounded (pool: ParameterPool) =
-            compileTransformsWith<``optim-space``> (fun _ -> ParameterTransforms.scalarTransformOptimSpace) true pool
+            compileTransformsWith<'S,'V,``optim-space``> (fun _ -> ParameterTransforms.scalarTransformOptimSpace) true pool
 
-        let internal compileTransformsTransformed (pool: ParameterPool) =
-            compileTransformsWith<``optim-space-transformed``>
-                ParameterTransforms.scalarTransformOptimSpaceTransformed
+        let internal compileTransformsTransformed backend (pool: ParameterPool) =
+            compileTransformsWith<'S,'V,``optim-space-transformed``>
+                (ParameterTransforms.scalarTransformOptimSpaceTransformed backend)
                 false
                 pool
 
 
-        type OptimiserConfig<[<Measure>] 'space> =
+        type OptimiserConfig<'S,'V,[<Measure>] 'space> =
             { Domain: (float<'space> * float<'space> * Constraint<'space>)[]
-              Compiled: CompiledTransforms<'space> }
+              Compiled: CompiledTransforms<'S,'V,'space> }
 
-        and AnyOptimiserConfig =
-            | DetachedConfig of OptimiserConfig<``optim-space``>
-            | TransformedConfig of OptimiserConfig<``optim-space-transformed``>
+        and AnyOptimiserConfig<'S,'V> =
+            | DetachedConfig of OptimiserConfig<'S,'V,``optim-space``>
+            | TransformedConfig of OptimiserConfig<'S,'V,``optim-space-transformed``>
 
         /// Transform the units of a constraint from parameter (real) units into
         /// optimisation space units.
-        let internal transformConstraint<[<Measure>] 'space>
-            (inv: TypedScalar<parameter> -> TypedScalar<'space>)
+        let internal transformConstraint<'S,[<Measure>] 'space>
+            backend
+            (inv: TypedScalar<'S,parameter> -> TypedScalar<'S,'space>)
             (cons: Constraint<parameter>)
             =
             let invF f =
-                Typed.ofScalar f |> inv |> Typed.toFloatScalar
+                Typed.ofScalar backend f |> inv |> Scalar.toFloat
 
             match cons with
             | Unconstrained -> Unconstrained
@@ -288,8 +297,9 @@ module Parameter =
 
         /// Builds a Domain array from the starting bounds in the pool,
         /// mapping them into optimiser space using the per-parameter scalar transforms.
-        let internal buildDomainFromBounds<[<Measure>] 'space>
-            (compiled: CompiledTransforms<'space>)
+        let internal buildDomainFromBounds<'S,'V,[<Measure>] 'space>
+            backend
+            (compiled: CompiledTransforms<'S,'V,'space>)
             (pool: ParameterPool)
             : (float<'space> * float<'space> * Constraint<'space>)[] =
 
@@ -300,12 +310,12 @@ module Parameter =
                 | Some(loReal, hiReal) ->
                     // Convert real-space bounds to optimiser space using scalar transforms
                     let inv = compiled.ScalarTransforms.[i].Inverse
-                    let loOpt = inv (Typed.ofScalar loReal) |> Typed.toFloatScalar
-                    let hiOpt = inv (Typed.ofScalar hiReal) |> Typed.toFloatScalar
+                    let loOpt = inv (Typed.ofScalar backend loReal) |> Scalar.toFloat
+                    let hiOpt = inv (Typed.ofScalar backend hiReal) |> Scalar.toFloat
 
                     let con =
                         if compiled.IsBounded then
-                            ap.GetConstraint() |> transformConstraint inv
+                            ap.GetConstraint() |> transformConstraint backend inv
                         else
                             Unconstrained
 
@@ -318,9 +328,9 @@ module Parameter =
 
         /// Make a configuration for an optimiser that handles
         /// unit transforms to bounded optimisation space.
-        let toOptimiserConfigBounded (pool: ParameterPool) : OptimiserConfig<``optim-space``> =
+        let toOptimiserConfigBounded backend (pool: ParameterPool) : OptimiserConfig<'S,'V,``optim-space``> =
             let compiled = compileTransformsBounded pool
-            let domainArray = buildDomainFromBounds compiled pool
+            let domainArray = buildDomainFromBounds backend compiled pool
 
             { Domain = domainArray
               Compiled = compiled }
@@ -328,9 +338,9 @@ module Parameter =
         /// Make a configuration for an optimiser that handles
         /// unit transforms to unbounded optimisation space.
         /// Transforms are applied where applicable.
-        let toOptimiserConfigTransformed (pool: ParameterPool) : OptimiserConfig<``optim-space-transformed``> =
-            let compiled = compileTransformsTransformed pool
-            let domainArray = buildDomainFromBounds compiled pool
+        let toOptimiserConfigTransformed backend (pool: ParameterPool) : OptimiserConfig<'S,'V,``optim-space-transformed``> =
+            let compiled = compileTransformsTransformed backend pool
+            let domainArray = buildDomainFromBounds backend compiled pool
 
             { Domain = domainArray
               Compiled = compiled }
@@ -342,13 +352,10 @@ module Parameter =
             |> Map.map (fun _ ap ->
                 match ap.TryGetBounds() with
                 | Some(lo, hi) ->
-                    // Draw uniformly between lo and hi (already float<parameter>)
                     let draw = Statistics.Distributions.ContinuousUniform.draw rnd lo hi ()
-                    // Set the drawn value back into the AnyParameter
-                    ap.FromTensorRealIO(Typed.ofScalar draw)
-                | None -> failwithf "Parameter '%s' has no bounds to draw from" ap.Name)
+                    ap.FromReal draw
+                | None -> failwithf "Parameter '%s' has no bounds to draw from." ap.Name)
             |> Pool
-
 
         /// Create a Pool where all parameters are fixed at their current estimate.
         /// Lower and upper bounds are both set to the estimate.
@@ -364,7 +371,7 @@ module Parameter =
                                 (LanguagePrimitives.FloatWithMeasure<parameter> est)
                                 (LanguagePrimitives.FloatWithMeasure<parameter> est)
                             |> Option.get
-                            |> boxParam<parameter> ap.Name
+                            |> stripUnit<parameter> ap.Name
 
                         newParam
                     | None -> failwithf "Could not get estimate for parameter '%s'" ap.Name)

@@ -23,7 +23,7 @@ let initialBounds =
                 let optimConfig = Parameter.Pool.toOptimiserConfigBounded pool
                 let code = ShortCode.create "x" |> Option.get
                 let data' = [ code, data |> Array.map (fun g -> g.Get * 1.<state>) |> Tensors.Typed.ofVector ] |> Map.ofList
-                let point = Parameter.Pool.drawRandom (Random()) pool |> Parameter.Pool.toTensorWithKeysReal |> snd |> optimConfig.Compiled.Inverse
+                let point = Parameter.Pool.drawRandom (Random()) pool |> Parameter.Pool.toVectorWithKeysReal |> snd |> optimConfig.Compiled.Inverse
                 let pred =
                     Objective.createPredictor
                         Map.empty
