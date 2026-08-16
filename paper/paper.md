@@ -39,7 +39,7 @@ In contemporary ecology (‘*neo-ecology*’), the 'ecological detective' is an 
 
 The ecological community predominantly utilises R. Within LTE, key statistical approaches include transfer functions, generalised additive models, and canonical correspondence analyses. Proxy-specific mechanistic approaches have also been applied; the landscape models REVEALS [@Sugita_2007] and LOVE [@Sugita_2007_2] simulate taxon-specific biomass from pollen fluxes. However, mechanistic inference from LTE time-series has been limited (e.g., @Jeffers_Bonsall_Watson_Willis_2011). In dendrochronology, (semi-)mechanistic approaches are more prevalent, such as inferring temperature/moisture limits to tree growth using VS-Lite [@TolwinskiWard_2011].
 
-*Bristlecone*'s two unique contributions are: (1) integrating the ecological detective workflow within a single conceptual framework; and (2) providing ecological clarity through dimensional correctness. *Bristlecone* utilises F#’s type system and expressiveness [@Syme_2020] to enforce dimensionally-consistent ecological models and promote human readablity, improving transparency and reproducibility of supplementary material. As the core design relies on F# language features that could not be replicated within R, *Bristlecone* was designed from scratch. However, a compositional approach was sought whereby components may be substituted where beneficial alternatives exist (e.g. optimisers). The F# R type provider [@RProvider] presents an avenue for embedding R libraries and graphics via typed R access.
+*Bristlecone*'s two unique contributions are: (1) integrating the ecological detective workflow within a single conceptual framework; and (2) providing ecological clarity through dimensional correctness. *Bristlecone* utilises F#’s type system and expressiveness [@Syme_2020] to enforce dimensionally-consistent ecological models and promote human readablity, improving transparency and reproducibility of supplementary material. As the core design relies on F# language features that could not be replicated within R, *Bristlecone* was designed from scratch. However, a compositional approach was sought whereby components may be substituted where beneficial alternatives exist (e.g. optimisers). The F# R type provider [@rprovider_contributors_2026_21964392] presents an avenue for embedding R libraries and graphics via typed R access.
 
 *Bristlecone*’s target audience is long-term- and neo-ecologists who wish to explore mechanistic modelling. The library aims to reduce computational knowledge required to utilise the ecological detective approach within LTE research.
 
@@ -68,7 +68,8 @@ module Schaefer =
 
     let dt = Constant 1.<year>
     let ``B_est[t+1]`` =
-        let n = State B + P r * State B * (Constant 1. - State B / P K) * dt - Environment C
+        let n = State B + P r * State B * (Constant 1. - State B / P K)
+          * dt - Environment C
         Conditional (n .> Constant 0.<kton>) n (Constant 0.<kton>)
 
     let It = P q * State B
@@ -113,7 +114,7 @@ Three classes of optimisation routines broadly suited to ecological time-series 
 
 ## Research impact statement
 
-*Bristlecone* has been developed openly since 2018, maturing through research requirements. It has been formatted for community use and contribution, including documentation, examples, a benchmark suite, and contributor guidelines. Previous research applied multi-proxy palaeoecological data to infer the role of soil nutrients in plant productivity through the Holocene [@Jeffers_Bonsall_Watson_Willis_2011] using custom C; I reproduced that analysis as a *Bristlecone* example.
+*Bristlecone* has been developed openly since 2018, maturing through research requirements. It has been formatted for community use and contribution, including documentation, examples, a benchmark suite, and contributor guidelines. Previous research applied multi-proxy palaeoecological data to infer the role of soil nutrients in plant productivity through the Holocene [@Jeffers_Bonsall_Watson_Willis_2011]. Their models and optimisation routine were written from-scratch in verbose C; I reproduced their analysis as a more accessible *Bristlecone* example.
 
 *Bristlecone* was integral to @martin2019a and @Martin_MaciasFauria_Bonsall_Forbes_Zetterberg_Jeffers_2021, where it was applied to determine the role of soil nutrients in controlling Arctic shrub growth (*Bristlecone* v1). Alternative hypotheses of nutrient limitation were confronted with wood ring and nitrogen isotope time-series. That analysis is included as an example, formatted for *Bristlecone* v3. *Bristlecone* is currently being applied to a pan-Arctic synthesis of Arctic palaeoecological records [@Martin_Bell_Blake_Bradshaw_Kuoppamaa_Pavey_Prendin_Speight_Villar_Macias-Fauria_2024].
 
