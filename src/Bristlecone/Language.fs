@@ -1081,10 +1081,10 @@ module Language =
             | DiscreteEq of ModelExpression<'stateUnit>
             | RateEq of ModelExpression<'stateUnit / 'timeUnit>
 
-        type ModelBuilder<'mode,[<Measure>] 'time> =
+        type ModelBuilder<'mode, [<Measure>] 'time> =
             private | ModelBuilder of Map<ShortCode.ShortCode * bool, ModelFragment<'time>> * bool
 
-        let create<'mode, [<Measure>] 'time> isDiscrete : unit -> ModelBuilder<'mode,'time> =
+        let create<'mode, [<Measure>] 'time> isDiscrete : unit -> ModelBuilder<'mode, 'time> =
             fun () ->
                 (Map.empty<ShortCode.ShortCode * bool, ModelFragment<'time>>, isDiscrete)
                 |> ModelBuilder
@@ -1169,8 +1169,13 @@ module Language =
                 let toInternal () = Likelihood.contramap<'u> l
                 LikelihoodFragment toInternal
 
-        let add<'mode, [<Measure>] 'time> (name: string) (frag: ModelFragment<'time>) (mb:ModelBuilder<'mode,'time>) : ModelBuilder<'mode,'time> =
+        let add<'mode, [<Measure>] 'time>
+            (name: string)
+            (frag: ModelFragment<'time>)
+            (mb: ModelBuilder<'mode, 'time>)
+            : ModelBuilder<'mode, 'time> =
             let (ModelBuilder(m, disc)) = mb
+
             let sc =
                 ShortCode.create name
                 |> Option.defaultWith (fun () -> failwithf "Bad short code %s" name)
@@ -1180,19 +1185,38 @@ module Language =
 
             ModelBuilder(m.Add((sc, frag.IsInitialiserFragment), frag), disc)
 
-        let addEquationRate (name: ShortCode.ShortCode) (expr: ModelExpression<'u / 'time>) (mb: ModelBuilder<Continuous,'time>) =
+        let addEquationRate
+            (name: ShortCode.ShortCode)
+            (expr: ModelExpression<'u / 'time>)
+            (mb: ModelBuilder<Continuous, 'time>)
+            =
             add name.Value (Add.equationRate<'time, 'state> name.Value expr) mb
 
-        let addEquationDiscrete (name: ShortCode.ShortCode) (expr: ModelExpression<'u>) (mb: ModelBuilder<Discrete,'time>) =
+        let addEquationDiscrete
+            (name: ShortCode.ShortCode)
+            (expr: ModelExpression<'u>)
+            (mb: ModelBuilder<Discrete, 'time>)
+            =
             add name.Value (Add.equationDiscrete name.Value expr) mb
 
-        let includeMeasure<'mode, [<Measure>] 'time, [<Measure>] 'u> name (m: ModelExpression<'u>) (mb: ModelBuilder<'mode,'time>) : ModelBuilder<'mode,'time> =
+        let includeMeasure<'mode, [<Measure>] 'time, [<Measure>] 'u>
+            name
+            (m: ModelExpression<'u>)
+            (mb: ModelBuilder<'mode, 'time>)
+            : ModelBuilder<'mode, 'time> =
             add name (Add.measure<'time, 'u> name m) mb
 
-        let initialiseStateWith<'mode, [<Measure>] 'time, [<Measure>] 'u> name (m: ModelExpression<'u>) (mb: ModelBuilder<'mode,'time>) : ModelBuilder<'mode,'time> =
+        let initialiseStateWith<'mode, [<Measure>] 'time, [<Measure>] 'u>
+            name
+            (m: ModelExpression<'u>)
+            (mb: ModelBuilder<'mode, 'time>)
+            : ModelBuilder<'mode, 'time> =
             add name (Add.initialiser<'time, 'u> name m) mb
 
-        let useLikelihood<[<Measure>] 'u, [<Measure>] 'time> (l: ModelSystem.Likelihood<'u>) (mb: ModelBuilder<'mode,'time>) : ModelBuilder<'mode,'time> =
+        let useLikelihood<[<Measure>] 'u, [<Measure>] 'time>
+            (l: ModelSystem.Likelihood<'u>)
+            (mb: ModelBuilder<'mode, 'time>)
+            : ModelBuilder<'mode, 'time> =
             add "likelihood" (Add.likelihood<'time, 'u> l) mb
 
         let compile builder : ModelSystem.ModelSystem<'time> =
@@ -1309,21 +1333,21 @@ module Language =
     module Model =
 
         /// The default Bristlecone model is continuous-time.
-        let empty<[<Measure>] 'time> : ModelBuilder.ModelBuilder<ModelBuilder.Continuous,'time> =
+        let empty<[<Measure>] 'time> : ModelBuilder.ModelBuilder<ModelBuilder.Continuous, 'time> =
             ModelBuilder.create false ()
 
         /// An empty continuous-time model.
-        let continuous<[<Measure>] 'time> : ModelBuilder.ModelBuilder<ModelBuilder.Continuous,'time> =
+        let continuous<[<Measure>] 'time> : ModelBuilder.ModelBuilder<ModelBuilder.Continuous, 'time> =
             empty
 
         /// An empty discrete-time model.
-        let discrete<[<Measure>] 'time> : ModelBuilder.ModelBuilder<ModelBuilder.Discrete,'time> =
+        let discrete<[<Measure>] 'time> : ModelBuilder.ModelBuilder<ModelBuilder.Discrete, 'time> =
             ModelBuilder.create true ()
 
         let addRateEquation<[<Measure>] 'time, [<Measure>] 'state>
             (name: StateId<'state>)
             (expr: ModelExpression<'state / 'time>)
-            (mb: ModelBuilder.ModelBuilder<ModelBuilder.Continuous,'time>)
+            (mb: ModelBuilder.ModelBuilder<ModelBuilder.Continuous, 'time>)
             =
             let (StateIdInner name) = name
             ModelBuilder.addEquationRate name expr mb
@@ -1331,14 +1355,14 @@ module Language =
         let addDiscreteEquation<[<Measure>] 'time, [<Measure>] 'state>
             (name: StateId<'state>)
             (expr: ModelExpression<'state>)
-            (mb: ModelBuilder.ModelBuilder<ModelBuilder.Discrete,'time>)
-            : ModelBuilder.ModelBuilder<ModelBuilder.Discrete,'time> =
+            (mb: ModelBuilder.ModelBuilder<ModelBuilder.Discrete, 'time>)
+            : ModelBuilder.ModelBuilder<ModelBuilder.Discrete, 'time> =
             let (StateIdInner name) = name
             ModelBuilder.addEquationDiscrete name expr mb
 
         let estimateParameter<'mode, [<Measure>] 'time, [<Measure>] 'u>
             (p: IncludedParameter<'u>)
-            (builder: ModelBuilder.ModelBuilder<'mode,'time>)
+            (builder: ModelBuilder.ModelBuilder<'mode, 'time>)
             =
             let (ParamIdInner name) = p.ParamId
             let boxed = Parameter.Pool.boxParam<'u> name.Value p.Parameter
@@ -1355,8 +1379,8 @@ module Language =
         let initialiseHiddenStateWith<'mode, [<Measure>] 'time, [<Measure>] 'u>
             (name: StateId<'u>)
             (initialiser: ModelExpression<'u>)
-            (builder: ModelBuilder.ModelBuilder<'mode,'time>)
-            : ModelBuilder.ModelBuilder<'mode,'time> =
+            (builder: ModelBuilder.ModelBuilder<'mode, 'time>)
+            : ModelBuilder.ModelBuilder<'mode, 'time> =
             let (StateIdInner name) = name
             ModelBuilder.initialiseStateWith name.Value initialiser builder
 
@@ -1378,9 +1402,11 @@ module Language =
         /// - 'HasEq / 'HasLike: compile-time presence flags
         type ModelBuilderState<'mode, [<Measure>] 'time, 'HasEq, 'HasLike> =
             private
-                { Inner: ModelBuilder.ModelBuilder<'mode,'time> }
+                { Inner: ModelBuilder.ModelBuilder<'mode, 'time> }
 
-        let emptyState<[<Measure>] 'time> isDiscrete : ModelBuilderState<ModelBuilder.Continuous,'time, Missing, Missing> =
+        let emptyState<[<Measure>] 'time>
+            isDiscrete
+            : ModelBuilderState<ModelBuilder.Continuous, 'time, Missing, Missing> =
             { Inner = ModelBuilder.create isDiscrete () }
 
         type ModelSystemBuilder<[<Measure>] 'time>(isDiscrete) =
@@ -1389,44 +1415,50 @@ module Language =
 
             [<CustomOperation("estimate")>]
             member _.Parameter<[<Measure>] 'u, 'E, 'L>
-                (state: ModelBuilderState<'mode,'time, 'E, 'L>, p: IncludedParameter<'u>)
+                (state: ModelBuilderState<'mode, 'time, 'E, 'L>, p: IncludedParameter<'u>)
                 =
                 { Inner = Model.estimateParameter p state.Inner }
 
             [<CustomOperation("equationDiscrete")>]
             member _.EquationDiscrete
-                (state: ModelBuilderState<ModelBuilder.Discrete,'time, 'E, 'L>, sid: StateId<'u>, expr: ModelExpression<'u>)
-                : ModelBuilderState<ModelBuilder.Discrete,'time, Present, 'L> =
+                (
+                    state: ModelBuilderState<ModelBuilder.Discrete, 'time, 'E, 'L>,
+                    sid: StateId<'u>,
+                    expr: ModelExpression<'u>
+                ) : ModelBuilderState<ModelBuilder.Discrete, 'time, Present, 'L> =
                 let (StateIdInner sc) = sid
                 { Inner = ModelBuilder.addEquationDiscrete sc expr state.Inner }
 
             [<CustomOperation("equationRate")>]
             member _.EquationRate
-                (state: ModelBuilderState<ModelBuilder.Continuous,'time, 'E, 'L>, sid: StateId<'u>, expr: ModelExpression<'u / 'time>)
-                : ModelBuilderState<ModelBuilder.Continuous,'time, Present, 'L> =
+                (
+                    state: ModelBuilderState<ModelBuilder.Continuous, 'time, 'E, 'L>,
+                    sid: StateId<'u>,
+                    expr: ModelExpression<'u / 'time>
+                ) : ModelBuilderState<ModelBuilder.Continuous, 'time, Present, 'L> =
                 let (StateIdInner sc) = sid
                 { Inner = ModelBuilder.addEquationRate sc expr state.Inner }
 
             [<CustomOperation("measure")>]
             member _.Measure<[<Measure>] 'u, 'E, 'L>
-                (state: ModelBuilderState<'mode,'time, 'E, 'L>, mid: MeasureId<'u>, data)
+                (state: ModelBuilderState<'mode, 'time, 'E, 'L>, mid: MeasureId<'u>, data)
                 =
                 { Inner = Model.addMeasure mid data state.Inner }
 
             [<CustomOperation("initialise")>]
             member _.Measure<[<Measure>] 'u, 'E, 'L>
-                (state: ModelBuilderState<'mode,'time, 'E, 'L>, sid: StateId<'u>, initFn)
+                (state: ModelBuilderState<'mode, 'time, 'E, 'L>, sid: StateId<'u>, initFn)
                 =
                 { Inner = Model.initialiseHiddenStateWith sid initFn state.Inner }
 
             /// Add exactly one likelihood function.
             [<CustomOperation("likelihood")>]
             member _.Likelihood<'E>
-                (state: ModelBuilderState<'mode,'time, 'E, Missing>, fn)
-                : ModelBuilderState<'mode,'time, 'E, Present> =
+                (state: ModelBuilderState<'mode, 'time, 'E, Missing>, fn)
+                : ModelBuilderState<'mode, 'time, 'E, Present> =
                 { Inner = Model.useLikelihoodFunction fn state.Inner }
 
-            member _.Run(state: ModelBuilderState<'mode,'time, Present, Present>) = ModelBuilder.compile state.Inner
+            member _.Run(state: ModelBuilderState<'mode, 'time, Present, Present>) = ModelBuilder.compile state.Inner
 
 
     let modelDiscrete<[<Measure>] 'time> : ModelSystemDsl.ModelSystemBuilder<'time> =
@@ -1752,7 +1784,10 @@ module Language =
         /// Compile: run the writer(s), add parameters into the model builder, and wrap in Hypothesis
         let compile
             (builders:
-                Writer.Writer<ModelBuilder.ModelBuilder<'mode,'u>, ComponentName * CodedMap<Parameter.Pool.AnyParameter>> list)
+                Writer.Writer<
+                    ModelBuilder.ModelBuilder<'mode, 'u>,
+                    ComponentName * CodedMap<Parameter.Pool.AnyParameter>
+                 > list)
             : Hypothesis<'u> list =
             builders
             |> List.map (fun (Writer.AWriter(mb, logs)) ->
