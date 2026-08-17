@@ -229,7 +229,7 @@ let modelBuilder =
 
           ]
 
-let dummyBaseModel comp: ModelBuilder.ModelBuilder<Time.day> =
+let dummyBaseModel comp: ModelBuilder.ModelBuilder<ModelBuilder.Continuous,Time.day> =
     let s = state "some_random_code"
     Model.empty
     |> Model.addRateEquation s (comp * Constant 1.</Time.day>)
