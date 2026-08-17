@@ -195,7 +195,7 @@ module Parameter =
 
             Pool updated
 
-        let toVectorWithKeysReal backend (Pool p) : ShortCode.ShortCode[] * TypedVector<'S,'V,``parameter``> =
+        let toVectorWithKeysReal (eng:NumericEngine<'S,'V,'M>) (Pool p) : ShortCode.ShortCode[] * TypedVector<'S,'V,``parameter``> =
             let keys, scalars =
                 p
                 |> Map.toList
@@ -205,8 +205,8 @@ module Parameter =
             let vec =
                 scalars
                 |> Array.ofList
-                |> Array.map (ofScalar backend)
-                |> Numerics.Stats.stack1D
+                |> Array.map (ofScalar eng.scalarBackend)
+                |> Numerics.Stats.stack1D eng.vectorBackend eng.vectorAccess
 
             keys |> List.toArray, vec
 
@@ -226,7 +226,8 @@ module Parameter =
 
         /// Compiles forward and inverse transformations between parameter-space (real units)
         /// and optimisation space.
-        let internal compileTransformsWith<'S,'V,[<Measure>] 'space>
+        let internal compileTransformsWith<'S,'V,'M,[<Measure>] 'space>
+            (numEngine: NumericEngine<'S,'V,'M>)
             (mkScalar: Constraint<parameter> -> ParameterTransforms.OptimSpaceTransform<'S,'space>)
             isBounded
             (Pool p)
@@ -246,14 +247,14 @@ module Parameter =
                 |> Array.mapi (fun i t ->
                     let zi = Vector.itemAt i thetaOpt
                     t.Forward zi)
-                |> Stats.stack1D
+                |> Stats.stack1D numEngine.vectorBackend numEngine.vectorAccess
 
             let inverseVec (thetaReal: TypedVector<'S,'V,``parameter``>) =
                 trans
                 |> Array.mapi (fun i t ->
                     let xi = Vector.itemAt i thetaReal
                     t.Inverse xi)
-                |> Stats.stack1D
+                |> Stats.stack1D numEngine.vectorBackend numEngine.vectorAccess
 
             { Keys = keys
               IndexByName = index
@@ -262,12 +263,13 @@ module Parameter =
               ScalarTransforms = trans
               IsBounded = isBounded }
 
-        let internal compileTransformsBounded (pool: ParameterPool) =
-            compileTransformsWith<'S,'V,``optim-space``> (fun _ -> ParameterTransforms.scalarTransformOptimSpace) true pool
+        let internal compileTransformsBounded numEngine (pool: ParameterPool) =
+            compileTransformsWith<'S,'V,'M,``optim-space``> numEngine (fun _ -> ParameterTransforms.scalarTransformOptimSpace) true pool
 
-        let internal compileTransformsTransformed backend (pool: ParameterPool) =
-            compileTransformsWith<'S,'V,``optim-space-transformed``>
-                (ParameterTransforms.scalarTransformOptimSpaceTransformed backend)
+        let internal compileTransformsTransformed numEngine (pool: ParameterPool) =
+            compileTransformsWith<'S,'V,'M,``optim-space-transformed``>
+                numEngine
+                (ParameterTransforms.scalarTransformOptimSpaceTransformed numEngine.scalarBackend)
                 false
                 pool
 
@@ -328,9 +330,9 @@ module Parameter =
 
         /// Make a configuration for an optimiser that handles
         /// unit transforms to bounded optimisation space.
-        let toOptimiserConfigBounded backend (pool: ParameterPool) : OptimiserConfig<'S,'V,``optim-space``> =
-            let compiled = compileTransformsBounded pool
-            let domainArray = buildDomainFromBounds backend compiled pool
+        let toOptimiserConfigBounded numEngine (pool: ParameterPool) : OptimiserConfig<'S,'V,``optim-space``> =
+            let compiled = compileTransformsBounded numEngine pool
+            let domainArray = buildDomainFromBounds numEngine.scalarBackend compiled pool
 
             { Domain = domainArray
               Compiled = compiled }
@@ -338,9 +340,9 @@ module Parameter =
         /// Make a configuration for an optimiser that handles
         /// unit transforms to unbounded optimisation space.
         /// Transforms are applied where applicable.
-        let toOptimiserConfigTransformed backend (pool: ParameterPool) : OptimiserConfig<'S,'V,``optim-space-transformed``> =
-            let compiled = compileTransformsTransformed backend pool
-            let domainArray = buildDomainFromBounds backend compiled pool
+        let toOptimiserConfigTransformed numEngine (pool: ParameterPool) : OptimiserConfig<'S,'V,``optim-space-transformed``> =
+            let compiled = compileTransformsTransformed numEngine pool
+            let domainArray = buildDomainFromBounds numEngine.scalarBackend compiled pool
 
             { Domain = domainArray
               Compiled = compiled }

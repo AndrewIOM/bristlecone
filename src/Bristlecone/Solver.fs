@@ -29,6 +29,7 @@ module Solver =
 
         /// Apply masking/normalisation to runner output, producing aligned vectors.
         let makeMaskOutput
+            (numEngine: NumericEngine<'S,'V,'M>)
             (stepType: StepType<'date>)
             (dateMode: DateMode.DateMode<'date, 'yearType, 'timespan>)
             (startDate: 'date)
@@ -39,7 +40,7 @@ module Solver =
             | Internal ->
                 fun output ->
                     match output with
-                    | Paired vars -> vars |> Map.map (fun _ series -> series |> Array.map snd |> Stats.stack1D)
+                    | Paired vars -> vars |> Map.map (fun _ series -> series |> Array.map snd |> Stats.stack1D numEngine.vectorBackend numEngine.vectorAccess)
                     | Unpaired(_times, vars) -> vars
 
             | External obsDates ->
@@ -58,7 +59,7 @@ module Solver =
                             series
                             |> Array.filter (fun (ti, _) -> Set.contains ti obsTimes)
                             |> Array.map snd
-                            |> Stats.stack1D)
+                            |> Stats.stack1D numEngine.vectorBackend numEngine.vectorAccess)
 
                     | Unpaired(times, vars) ->
                         let keepMask =
@@ -71,18 +72,18 @@ module Solver =
     module internal TimeWrapping =
 
         /// Wrap a model equation written in 'timeUnit so it accepts time index.
-        let wrapTime<[<Measure>] 'timeUnit, [<Measure>] 'returnUnit>
+        let wrapTime<'S,'V,[<Measure>] 'timeUnit, [<Measure>] 'returnUnit>
             (factor: float<'timeUnit / ``time index``>)
             (eq: GenericModelEquation<'S,'V,'timeUnit, 'returnUnit>)
             : GenericModelEquation<'S,'V,``time index``, 'returnUnit> =
             fun pars env tIndex state ->
                 // Convert tIndex (Scalar<time-index>) -> Scalar<'timeUnit> by multiplying with factor
-                let tIndexF = Scalar.toFloat tIndex
+                let tIndexF: float<``time index``> = Scalar.toFloat tIndex
                 let tModel = Typed.ofScalar tIndex.Backend (tIndexF * factor)
                 eq pars env tModel state
 
         /// Wrap a model equation written in 'timeUnit so it accepts time index.
-        let wrapTimeDifference<[<Measure>] 'timeUnit, [<Measure>] 'state>
+        let wrapTimeDifference<'S,'V,[<Measure>] 'timeUnit>
             (factor: float<'timeUnit / ``time index``>)
             (eq: StateEquation<'S,'V,'timeUnit>)
             : StateEquation<'S,'V,``time index``> =
@@ -92,7 +93,7 @@ module Solver =
                 eq pars env tModel state
 
         // For differential equations: return unit is 'state / 'timeUnit
-        let wrapTimeDifferential<[<Measure>] 'timeUnit, [<Measure>] 'state>
+        let wrapTimeDifferential<'S,'V,[<Measure>] 'timeUnit>
             (factor: float<'timeUnit / ``time index``>)
             (eq: RateEquation<'S,'V,'timeUnit>)
             : RateEquation<'S,'V,``time index``> =
@@ -102,7 +103,7 @@ module Solver =
                 eq pars env tModel state |> Scalar.retype
 
         // Lift wrapping over a whole model form
-        let wrapModelForm<[<Measure>] 'timeUnit>
+        let wrapModelForm<'S,'V,[<Measure>] 'timeUnit>
             (factor: float<'timeUnit / ``time index``>)
             (mf: ModelForm<'S,'V,'timeUnit>)
             : ModelForm<'S,'V,``time index``> =
@@ -176,7 +177,7 @@ module Solver =
                 iterateDifference numericEngine eqs timeline envStream (baselineValueFn point) point |> Paired
 
             let variableRunner
-                (numericEngine: NumericEngine<'S,'V,'M>)
+                (numEngine: NumericEngine<'S,'V,'M>)
                 (eqs: CodedMap<StateEquation<'S,'V,``time index``>>)
                 (timeline: float<``time index``>[]) // irregular observation times
                 (envIndex: CodedMap<TimeIndex.TimeIndex<float<environment>, _, _, _, 1>>)
@@ -191,15 +192,15 @@ module Solver =
                         envIndex
                         |> Map.map (fun _ idxTI ->
                             let v = idxTI.Item ti
-                            Typed.ofScalar numericEngine.scalarBackend v))
+                            Typed.ofScalar numEngine.scalarBackend v))
 
                 // Run the difference equations interval‑by‑interval
-                let outputs = iterateDifference numericEngine eqs timeline envStream (t0 point) point
+                let outputs = iterateDifference numEngine eqs timeline envStream (t0 point) point
 
                 // Return as Unpaired (times + values)
                 Unpaired(
                     timeline.[1..] |> Array.toList,
-                    outputs |> Map.map (fun _ arr -> arr |> Array.map snd |> Stats.stack1D)
+                    outputs |> Map.map (fun _ arr -> arr |> Array.map snd |> Stats.stack1D numEngine.vectorBackend numEngine.vectorAccess)
                 )
 
 
@@ -246,7 +247,7 @@ module Solver =
             /// Timeline includes baseline.
             /// Outputs exclude baseline time/state.
             let variableRunner
-                (numericEngine: NumericEngine<'S,'V,'M>)
+                (numEngine: NumericEngine<'S,'V,'M>)
                 eqs
                 (integrator: Integration.IntegrationRoutine<'S,'V,'M>)
                 (times: float<``time index``> array)
@@ -266,7 +267,7 @@ module Solver =
 
                             let compiledRhs =
                                 Integration.Base.makeCompiledFunctionForIntegration
-                                    numericEngine
+                                    numEngine
                                     tStart
                                     tEnd
                                     step
@@ -275,7 +276,7 @@ module Solver =
                                     eqs
 
                             let integrate =
-                                integrator numericEngine (Typed.ofScalar numericEngine.scalarBackend tStart) (Typed.ofScalar numericEngine.scalarBackend tEnd) (Typed.ofScalar numericEngine.scalarBackend step)
+                                integrator numEngine (Typed.ofScalar numEngine.scalarBackend tStart) (Typed.ofScalar numEngine.scalarBackend tEnd) (Typed.ofScalar numEngine.scalarBackend step)
 
                             let newTrajectory = integrate currentState (compiledRhs parameters)
 
@@ -291,7 +292,7 @@ module Solver =
                     let vars =
                         states
                         |> Array.fold (fun acc s -> acc |> Map.map (fun k vs -> s.[k] :: vs)) emptyAcc
-                        |> Map.map (fun _ scalars -> scalars |> List.rev |> Array.ofList |> Stats.stack1D)
+                        |> Map.map (fun _ scalars -> scalars |> List.rev |> Array.ofList |> Stats.stack1D numEngine.vectorBackend numEngine.vectorAccess)
 
                     Unpaired(times.[1..] |> Array.toList, vars)
 
@@ -449,7 +450,7 @@ module Solver =
 
             // 4. Precompute a keep-mask for External mode
             let maskOutput =
-                Masking.makeMaskOutput stepType dateMode startDate (dataTimeToModelTime >> modelTimeToIndex)
+                Masking.makeMaskOutput numericEngine stepType dateMode startDate (dataTimeToModelTime >> modelTimeToIndex)
 
             logTo <| Logging.GeneralEvent(sprintf "Solver: starting at date %A" startDate)
 
@@ -508,7 +509,7 @@ module Solver =
                         SolverRunners.DiscreteTime.variableRunner numericEngine eqs obsTimes envIndex t0States
 
                     | _ -> invalidOp "Mismatch between time-mode and differential/difference equation form."
-
+            
             // 6. Return configured solver
             fun point -> point |> runner |> maskOutput, t0States point |> Map.append observedMeasuresT0
 

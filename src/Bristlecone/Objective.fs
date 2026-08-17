@@ -34,6 +34,7 @@ module Objective =
         (parameters: TypedVector<'S,'V,``parameter``>)
         (expectedDynamic: CodedMap<TypedVector<'S,'V,state>>)
         (initialConditions: CodedMap<TypedScalar<'S,state>>)
+        invalidValue
         : CodedMap<TypedVector<'S,'V,state>> =
 
         let expectedWithT0 = prependInitialConditions initialConditions expectedDynamic
@@ -45,14 +46,14 @@ module Objective =
                 let buf = ResizeArray()
 
                 let initialThis =
-                    initialConditions |> Map.tryFind measKey |> Option.defaultValue invalidTensor
+                    initialConditions |> Map.tryFind measKey |> Option.defaultValue invalidValue
 
                 for i = 1 to length - 1 do
                     let thisVal = if i = 1 then initialThis else buf.[i - 2]
                     let value = measFn parameters expectedWithT0 thisVal i
                     buf.Add value
 
-                buf.ToArray() |> Numerics.Stats.stack1D)
+                buf.ToArray() |> Numerics.Stats.stack1D parameters.Backend parameters.Access)
 
         // Merge into dynamic series
         Map.fold (fun acc key value -> Map.add key value acc) expectedDynamic measuredSeries
@@ -85,9 +86,9 @@ module Objective =
         | Parameter.Pool.DetachedConfig cfg -> cfg.Compiled
         | Parameter.Pool.TransformedConfig cfg -> unbox cfg.Compiled // TODO remove this unbox and coercion.
 
-    let predict solver measures parameters =
+    let predict invalidValue solver measures parameters =
         let dynamics, initialConditions = solver parameters
-        let measured = measure measures parameters dynamics initialConditions
+        let measured = measure measures parameters dynamics initialConditions invalidValue
         Map.fold (fun acc k v -> acc |> Map.add k v) dynamics measured
 
     /// Computes measurement variables and appends to expected data.
@@ -100,6 +101,7 @@ module Objective =
         (measures: CodedMap<ModelSystem.Measurement<'S,'V,state>>)
         (solver: Solver.ConfiguredSolver<'S,'V>)
         config
+        invalidValue
         (observed: CodedMap<TypedVector<'S,'V,state>>)
         : EstimationEngine.Objective<'S,'V> =
 
@@ -110,10 +112,10 @@ module Objective =
             let accessor = accessorFromRealVector compiled thetaReal
 
             thetaReal
-            |> predict solver measures
+            |> predict invalidValue solver measures
             |> pairObservationsToExpected observed
             |> negLogLikFn.Evaluate accessor
 
-    let createPredictor (measures: CodedMap<ModelSystem.Measurement<'S,'V,state>>) (solver: Solver.ConfiguredSolver<'S,'V>) config =
+    let createPredictor invalidValue (measures: CodedMap<ModelSystem.Measurement<'S,'V,state>>) (solver: Solver.ConfiguredSolver<'S,'V>) config =
         let compiled = compiledFromConfig config
-        compiled.Forward >> predict solver measures
+        compiled.Forward >> predict invalidValue solver measures

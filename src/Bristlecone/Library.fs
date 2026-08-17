@@ -199,13 +199,13 @@ module Bristlecone =
             solutions
             |> List.map (fun (ll, pointOptSpace) ->
                 let realVec = cfg.Compiled.Forward pointOptSpace
-                ll, realVec |> Vector.toArrayFloat)
+                Scalar.toFloat ll, realVec |> Vector.toArrayFloat)
 
         | Parameter.Pool.TransformedConfig cfg ->
             solutions
             |> List.map (fun (ll, pointOptSpace) ->
                 let realVec = cfg.Compiled.Forward(unsafeEraseSpaceForward pointOptSpace)
-                ll, realVec |> Vector.toArrayFloat)
+                Scalar.toFloat ll, realVec |> Vector.toArrayFloat)
 
     let internal validateEnvData expectedKeys actualMap =
         let expectedSet = expectedKeys |> Set.ofList
@@ -389,9 +389,9 @@ module Bristlecone =
             let optimConfig =
                 match engine.OptimiseWith with
                 | Optimisation.InDetachedSpace _ ->
-                    Parameter.Pool.DetachedConfig(Parameter.Pool.toOptimiserConfigBounded model.Parameters)
+                    Parameter.Pool.DetachedConfig(Parameter.Pool.toOptimiserConfigBounded engine.Backend model.Parameters)
                 | Optimisation.InTransformedSpace _ ->
-                    Parameter.Pool.TransformedConfig(Parameter.Pool.toOptimiserConfigTransformed model.Parameters)
+                    Parameter.Pool.TransformedConfig(Parameter.Pool.toOptimiserConfigTransformed engine.Backend model.Parameters)
 
             let optimise =
                 match engine.OptimiseWith, optimConfig with
@@ -417,7 +417,7 @@ module Bristlecone =
                     model.Measures
                     (solver (Solver.StepType.External obsTimes))
                     optimConfig
-                    (obsDataForObjective |> Map.map(fun _ v -> ofScalar v backend))
+                    (obsDataForObjective |> Map.map(fun _ v -> ofVector engine.Backend.vectorBackend engine.Backend.vectorAccess v))
 
             let result, timeTaken = measureTime (fun _ -> objective |> optimise)
 
@@ -426,15 +426,18 @@ module Bristlecone =
                 | Some sol -> sol
                 | None -> failwith "The optimisation algorithm did not return any results."
 
+            let invalidValue = ofScalar engine.Backend.scalarBackend engine.Backend.scalarBackend.atomic.constants.invalid
+
             let estimatedSeries =
                 Objective.createPredictor
+                    invalidValue
                     model.Measures
                     (solver (Solver.StepType.External obsTimes))
                     optimConfig
                     bestPoint
 
             let estimatedHighRes =
-                Objective.createPredictor model.Measures (solver Solver.StepType.Internal) optimConfig bestPoint
+                Objective.createPredictor invalidValue model.Measures (solver Solver.StepType.Internal) optimConfig bestPoint
 
             let paired =
                 conditioned.ObservedForPairing.Series
@@ -476,7 +479,7 @@ module Bristlecone =
             return
                 { ResultId = resultId
                   Metadata = metadata
-                  Likelihood = lowestLikelihood
+                  Likelihood = Scalar.toFloat lowestLikelihood
                   Parameters = bestPointPool
                   Series = paired
                   Trace = trace
@@ -506,9 +509,9 @@ module Bristlecone =
     /// It is wrapped in an F# Result, indicating if the procedure
     /// was successful or not.</returns>
     let tryTestModel
-        (engine: EstimationEngine<'S,'V,'date, 'timespan, 'modelTimeUnit, 'state>)
+        (engine: EstimationEngine<'S,'V,'M,'date, 'timespan, 'modelTimeUnit, 'state>)
         endCondition
-        (settings: Test.TestSettings<'state, 'date, 'timeunit, 'timespan>)
+        (settings: Test.TestSettings<'S,'state, 'date, 'timeunit, 'timespan>)
         (model: ModelSystem<'S,'V,'modelTimeUnit>)
         =
 

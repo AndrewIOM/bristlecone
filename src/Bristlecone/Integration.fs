@@ -130,8 +130,8 @@ module RungeKutta =
         (f: TypedScalar<'S,``time index``> -> TypedVector<'S,'V,'su> -> TypedVector<'S,'V,'su / ``time index``>)
         : TypedMatrix<'S,'M, 'su> =
 
-        let two = tInitial.Backend.atomic.constants.two |> Typed.Scalar.fromBackend tInitial.Backend
-        let six = tInitial.Backend.atomic.constants.six |> Typed.Scalar.fromBackend tInitial.Backend
+        let two = tInitial.Backend.atomic.constants.two |> Typed.Scalar.ofBackend tInitial.Backend
+        let six = tInitial.Backend.atomic.constants.six |> Typed.Scalar.ofBackend tInitial.Backend
 
         let mutable t = tInitial
         let mutable y = y0
@@ -174,20 +174,20 @@ module RungeKutta =
         rk4Core numEngine tInitial steps dt y0 f
 
     // Flatten a CodedMap<Scalar> into (keys, Tensor vector)
-    let flattenState (stateMap: CodedMap<TypedScalar<'S,ModelSystem.state>>) =
+    let flattenState backend (stateMap: CodedMap<TypedScalar<'S,ModelSystem.state>>) =
         let keys, vals = stateMap |> Map.toList |> List.unzip
-        let vec = vals |> List.toArray |> Stats.stack1D
+        let vec = vals |> List.toArray |> Stats.stack1D backend
         keys, vec
 
     /// Wrap a ParameterisedRHS so it works on a vector rather than
     /// a map of scalars.
-    let wrapRhs (keys: ShortCode.ShortCode list) (rhs: EstimationEngine.ParameterisedRHS<'S,'V>) =
+    let wrapRhs numEngine (keys: ShortCode.ShortCode list) (rhs: EstimationEngine.ParameterisedRHS<'S,'V>) =
         let keysArr = keys |> List.toArray
         fun (t: TypedScalar<'S,``time index``>) (y: TypedVector<'S,'V,ModelSystem.state>) ->
             if Vector.length y <> keysArr.Length then
                 failwithf "wrapRhs: state length %d does not match keys length %d" (Vector.length y) keysArr.Length
             let resultMap = rhs t y
-            keysArr |> Array.map (fun k -> resultMap.[k]) |> Stats.stack1D
+            keysArr |> Array.map (fun k -> resultMap.[k]) |> Stats.stack1D numEngine
 
     /// Unflatten trajectory Tensor back into ``CodedMap<Vector,state>``.
     /// traj has shape [timeSteps; stateCount].
@@ -199,7 +199,7 @@ module RungeKutta =
 
     let rk4: EstimationEngine.Integration.IntegrationRoutine<'S,'V,'M> =
         fun numEngine tInitial tEnd tStep t0 rhs ->
-            let keys, y0 = flattenState t0
-            let fWrapped = wrapRhs keys rhs
+            let keys, y0 = flattenState numEngine t0
+            let fWrapped = wrapRhs numEngine keys rhs
             let traj = rk4WithStepWidth numEngine tInitial tEnd tStep y0 fWrapped
             unflattenTrajectory keys traj

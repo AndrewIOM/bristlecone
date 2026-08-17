@@ -159,11 +159,11 @@ module EstimationEngine =
 
     /// The likelihood at a particular place in
     /// optimisation space.
-    type Solution = float<``-logL``> * float<``optim-space``>[]
+    type Solution<'S,'V> = TypedScalar<'S,``-logL``> * TypedVector<'S,'V,``optim-space``>
 
     /// Determines if the end has been reached based on a list
     /// of tupled Solutions with their iteration number.
-    type EndCondition = Solution list -> int<iteration> -> OptimStopReason
+    type EndCondition<'S,'V> = Solution<'S,'V> list -> int<iteration> -> OptimStopReason
 
     /// The domain is fine to be float-based, as it is only
     /// used to initialise the optimisation routine.
@@ -246,21 +246,21 @@ module EstimationEngine =
         /// Represents the trace of an optimisation heuristic,
         /// which may have multiple 'components' (i.e. sub-algorithms)
         /// and one or many stages within each.
-        type OptimisationTrace =
+        type OptimisationTrace<'S,'V> =
             { Component: string
               Stage: string
               Replicate: int
-              Results: Solution list }
+              Results: Solution<'S,'V> list }
 
         type Optimise<'S,'V,'M> =
             Numerics.NumericEngine<'S,'V,'M>
                 -> Random
                 -> WriteOut
-                -> EndCondition
+                -> EndCondition<'S,'V>
                 -> Domain
                 -> Point<'S,'V> option // optional starting point
                 -> Objective<'S,'V>
-                -> OptimisationTrace list
+                -> OptimisationTrace<'S,'V> list
 
         /// An `Optimiser` is an optimisation algorithm that may work either
         /// in 'transformed' parameter space (where parameter constraints are

@@ -63,22 +63,22 @@ module NegLogLikelihood =
     module Variance =
 
         /// A variance function maps expected values to per-point σ
-        type VarianceFunction<'S,'V, [<Measure>] 'sigma, [<Measure>] 'x> =
-            { Evaluate: ParameterValueAccessor<'S> -> TypedVector<'S,'V,'x> -> TypedVector<'S,'V,'sigma>
+        type VarianceFunction<'S,'V,'M, [<Measure>] 'sigma, [<Measure>] 'x> =
+            { Evaluate: NumericEngine<'S,'V,'M> -> ParameterValueAccessor<'S> -> TypedVector<'S,'V,'x> -> TypedVector<'S,'V,'sigma>
               RequiredParameters: (ShortCode.ShortCode * Parameter.Pool.ParameterNoUnit) list }
 
         /// Variance is constant within through time.
-        let constant sigma : VarianceFunction<'S,'V, 'x, 'x> =
+        let constant sigma : VarianceFunction<'S,'V,'M, 'x, 'x> =
             { Evaluate =
-                fun accessor expected ->
+                fun numEngine accessor expected ->
                     let sigmaVal = getParamValue accessor sigma
-                    Typed.Scalar.broadcast engine sigmaVal (Typed.length expected)
+                    Typed.Scalar.broadcast numEngine sigmaVal (Vector.length expected)
               RequiredParameters = [ paramToAny sigma ] }
 
         /// Variance is proportional to the expected value (σ = σ0 * x).
-        let proportional (sigma0: Language.IncludedParameter<'sigma / 'x>) : VarianceFunction<'sigma, 'x> =
+        let proportional (sigma0: Language.IncludedParameter<'sigma / 'x>) : VarianceFunction<'S,'V,'M,'sigma, 'x> =
             { Evaluate =
-                fun accessor expected ->
+                fun numEngine accessor expected ->
                     let sigma0Val = getParamValue accessor sigma0
                     expected * sigma0Val
               RequiredParameters = [ paramToAny sigma0 ] }
@@ -89,7 +89,7 @@ module NegLogLikelihood =
         let exponential
             (sigma0: Language.IncludedParameter<'u>)
             (sigma1: Language.IncludedParameter<1 / 'v>)
-            : VarianceFunction<'u, 'v> =
+            : VarianceFunction<'S,'V,'u, 'v> =
             { Evaluate =
                 fun accessor expected ->
                     let sigma0Val = getParamValue accessor sigma0
@@ -119,10 +119,10 @@ module NegLogLikelihood =
                   RequiredCodes = List.map obsKeyToLikelihoodKey keys
                   RequiredParameters = [] }
 
-        let private one = Typed.ofScalar 1.0
-        let private two = Typed.ofScalar 2.0
-        let private half = Typed.ofScalar 0.5
-        let private twoPi = Typed.ofScalar (2.0 * System.Math.PI)
+        // let private one = Typed.ofScalar 1.0
+        // let private two = Typed.ofScalar 2.0
+        // let private half = Typed.ofScalar 0.5
+        // let private twoPi = Typed.ofScalar (2.0 * System.Math.PI)
 
         /// Negative log likelihood for a bivariate normal distribution.
         /// For two random variables with bivariate normal N(u1,u2,sigma1,sigma2,rho).
@@ -144,7 +144,7 @@ module NegLogLikelihood =
             (term1 + term2 + term3) * likelihoodTag
 
         let internal gaussian'
-            (mkVariance: Variance.VarianceFunction<'S,'V,'s, 's>)
+            (mkVariance: Variance.VarianceFunction<'S,'V,'M,'s, 's>)
             (key: Language.Require.ObsForLikelihood<'s>)
             : Likelihood<'S,'V,'state> =
             fun (paramAccessor: ParameterValueAccessor<'S>) data ->
@@ -180,9 +180,9 @@ module NegLogLikelihood =
 
             let diffx = obsx - expx
             let diffy = obsy - expy
-            let zta1 = Typed.squareVector (diffx / sigmax)
+            let zta1 = Vector.square (diffx / sigmax)
             let zta2 = two * rho * (diffx / sigmax) * (diffy / sigmay)
-            let zta3 = Typed.squareVector (diffy / sigmay)
+            let zta3 = Vector.square (diffy / sigmay)
 
             let q =
                 half
@@ -190,12 +190,12 @@ module NegLogLikelihood =
                 * (zta1 - zta2 + zta3: TypedVector<1>)
 
             let logNorm =
-                Typed.logScalar twoPi
-                + Typed.logScalar sigmax
-                + Typed.logScalar sigmay
-                + half * Typed.logScalar (one - Typed.square rho)
+                Scalar.log twoPi
+                + Scalar.log sigmax
+                + Scalar.log sigmay
+                + half * Scalar.log (one - Typed.square rho)
 
-            let logNormVec = Typed.broadcastScalarToVector logNorm (Typed.length obsx)
+            let logNormVec = Scalar.broadcast logNorm (Typed.length obsx)
 
             logNormVec + q
 

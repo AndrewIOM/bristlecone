@@ -1745,9 +1745,11 @@ module Amoeba =
     /// Nelder–Mead downhill simplex
     module Solver =
 
+        type Solution<'S,'V> = TypedScalar<'S,``-logL``> * TypedVector<'S,'V,``optim-space``>[]
+
         type Amoeba<'S,'V> =
             { Dim: int
-              Solutions: Solution[] }
+              Solutions: Solution<'S,'V>[] }
 
             /// If well-formed, size should equal Dim + 1.
             member this.Vertices = this.Solutions.Length

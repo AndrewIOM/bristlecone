@@ -76,7 +76,7 @@ module ProfileLikelihood =
 
         // Perturb and re‑fit locally around the MLE
         let mle = result.Likelihood
-        let transforms = Parameter.Pool.compileTransformsBounded result.Parameters
+        let transforms = Parameter.Pool.compileTransformsBounded engine.Backend result.Parameters
 
         let customFit =
             fit
