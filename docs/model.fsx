@@ -110,7 +110,15 @@ let hypothesis =
 
 (**
 In the above code, we first start with an empty model system,
-`Model.empty`. We then add each component with a short code to
+`Model.empty`. There are two options available:
+
+* `Model.empty` / `Model.continuous`. Interchangable. Represents a continuous-time model.
+* `Model.discrete`. Represents a discrete-time model.
+
+Bristlecone will enforce that the correct model equations are used at compile-time.
+In other words, you cannot specify a rate-based equation to a discrete-time model.
+
+We then add each component with a short code to
 represent it, and finally call `Model.compile`. The `Model.compile`
 function checks the validity of the model in terms of duplicate short codes,
 making sure all parameters are set to be estimated, and that all the
