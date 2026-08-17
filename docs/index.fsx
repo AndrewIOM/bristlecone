@@ -67,7 +67,7 @@ let hypothesis =
 
     let NLL = ModelLibrary.NegLogLikelihood.Normal (Require.state radius) σ
 
-    Model.empty
+    Model.continuous
     |> Model.addRateEquation radius ``dR/dt``
     |> Model.estimateParameter r_max
     |> Model.estimateParameter T_opt
