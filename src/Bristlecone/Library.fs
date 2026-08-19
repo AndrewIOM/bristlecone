@@ -46,7 +46,7 @@ module Bristlecone =
     /// <typeparam name="'a"></typeparam>
     /// <typeparam name="'b"></typeparam>
     /// <returns></returns>
-    let withOutput out engine = { engine with LogTo = out }
+    let withOutput out (engine: EstimationEngine<'date,'timespan,'modelTimeUnit,'state>) = { engine with LogTo = out }
 
     let withTimeConversion<'d, 'd2, 'timespan, 'timespan2, [<Measure>] 'modelTimeUnit, 'o1, [<Measure>] 'o2, [<Measure>] 'u>
         (fn: DateMode.Conversion.ResolutionToModelUnits<'d2, 'timespan2, 'modelTimeUnit>)
@@ -69,12 +69,12 @@ module Bristlecone =
 
     /// Use a mersenne twister random number generator
     /// with a specific seed.
-    let withSeed seed engine =
+    let withSeed seed (engine: EstimationEngine<'date,'timespan,'modelTimeUnit,'state>) =
         { engine with
             Random = MathNet.Numerics.Random.MersenneTwister(seed, true) }
 
     /// Use a custom integration method
-    let withContinuousTime t engine =
+    let withContinuousTime t (engine: EstimationEngine<'date,'timespan,'modelTimeUnit,'state>) =
         { engine with
             TimeHandling = Continuous t }
 
@@ -330,13 +330,10 @@ module Bristlecone =
 
             engine.LogTo
             <| GeneralEvent(
-                if conditioned.StatesObservedForSolver.Keys.IsEmpty then
-                    sprintf "No states were observed (no stated conditioned with data)."
-                else
-                    sprintf
-                        "Time-series (conditioned) start at %A with resolution %A."
-                        conditioned.StatesObservedForSolver.StartDate
-                        (conditioned.StatesObservedForSolver |> TimeFrame.resolution)
+                sprintf
+                    "Time-series (conditioned) start at %A with resolution %A."
+                    conditioned.StatesObservedForSolver.StartDate
+                    (conditioned.StatesObservedForSolver |> TimeFrame.resolution)
             )
 
             // Log out variables
@@ -402,8 +399,6 @@ module Bristlecone =
             <| GeneralEvent(sprintf "Time-series used within objective: %A." (Map.keys obsDataForObjective))
 
             let obsTimes = conditioned.ObservedForPairing |> TimeFrame.dates
-
-            engine.LogTo <| GeneralEvent(sprintf "Observation times: %A." obsTimes)
 
             let objective =
                 Objective.create
@@ -485,6 +480,127 @@ module Bristlecone =
     /// <returns>The result of the model-fitting procedure. If an error occurs, throws an exception.</returns>
     let fit engine endCondition timeSeriesData (model: ModelSystem<'modelTimeUnit>) =
         tryFit engine endCondition timeSeriesData model |> Result.forceOk
+
+    /// Simulate a model given the specified parameters.
+    /// Given a time, current state, and forcing data, will step
+    /// one time increment.
+    /// If unestimated, draws parameters from the distribution.
+    let simulate
+        (simulationEngine: SimulationEngine<'date,'timespan,'modelUnit>)
+        (model: ModelSystem<'modelUnit>)
+        (startDate: 'date)
+        (envData: TimeFrame.TimeFrame<float<``environment``>, 'date, 'timeunit, 'timespan> option)
+        =
+
+        // Parameters are assumed to be unestimated.
+        let paramValues =
+            model.Parameters
+            |> Parameter.Pool.toOptimiserConfigBounded
+            |> fun o -> o.Domain
+            |> Array.map(fun (mi,ma,_) -> mi * 1.<``parameter``/``optim-space``>) // TODO Somehow sample from domain.
+            |> Tensors.Typed.ofVector
+
+        // Simulations run on model time = internal time index
+        let factorToIndex = LanguagePrimitives.FloatWithMeasure<'modelUnit/``time index``> 1.
+        let factorFromIndex = LanguagePrimitives.FloatWithMeasure<``time index``/'modelUnit> 1.
+        let eqs = Solver.TimeWrapping.wrapModelForm factorToIndex model.Equations
+
+        // Setup environment data
+        let getInteroplateMode key =
+            simulationEngine.InteroplateModeFor
+            |> Map.tryFind key
+            |> Option.defaultValue simulationEngine.InterpolateMode
+
+        let interpFunction =
+            function
+            | Solver.Exact -> TimeIndex.IndexMode.Exact
+            | Solver.Lower -> TimeIndex.IndexMode.Interpolate Statistics.Interpolate.lower
+            | Solver.Linear -> TimeIndex.IndexMode.Interpolate Statistics.Interpolate.bilinear
+
+        let eraseModelUnit (x: float<'modelTimeUnit>) : float<1> = Units.retype x
+
+        let envIndex =
+            envData
+            |> Option.map (fun f ->
+                f.Series
+                |> Map.map (fun sc v ->
+                    let mode = sc |> getInteroplateMode |> interpFunction
+                    TimeIndex.TimeIndex(startDate, simulationEngine.ResolutionToModelUnits >> eraseModelUnit, mode, v)))
+            |> Option.defaultValue Map.empty
+
+        // Make a runner that does a single step in time, either
+        // continuous or discrete time.
+        let runner =
+            match simulationEngine.TimeHandling with
+            | Discrete -> 
+                match eqs with
+                | DifferenceEqs (eqs: CodedMap<StateEquation<``time index``>>) ->
+                    fun state (t:float<'modelUnit>) ->
+                        // t = time of current state in units since baseline (i.e. 0 for first step).
+                        // This is so the environment can be looked up, and t is correct if used.
+
+                        let tIndex : float<``time index``> = t * factorFromIndex
+                        let tEnv = envIndex |> Map.map(fun _ ts -> ts.Item tIndex |> Tensors.Typed.ofScalar)
+                        let result =
+                            Solver.SolverRunners.DiscreteTime.stepOnce
+                                eqs
+                                paramValues
+                                tEnv
+                                (t * factorFromIndex |> Tensors.Typed.ofScalar)
+                                state
+                        result, t + LanguagePrimitives.FloatWithMeasure<'modelTime> 1.
+                | _ -> failwith "Mismatch between model time and "
+            | Continuous i ->
+
+                match eqs with
+                | DifferentialEqs eqs ->
+
+                    fun state (t:float<'modelUnit>) -> // Time since baseline?
+
+                        let newTime = t + LanguagePrimitives.FloatWithMeasure<'modelTime> 1.
+                        let timeline = [| t * factorFromIndex; newTime * factorFromIndex |]
+
+                        let output =
+                            Solver.SolverRunners.DifferentialTime.fixedRunner
+                                eqs
+                                i
+                                timeline
+                                envIndex
+                                (fun _ -> state)
+                                paramValues
+
+                        match output with
+                        | Solver.Paired p ->
+                            let lastState = p |> Map.map(fun _ v -> v |> Array.last |> snd)
+                            lastState, newTime
+                        
+                        | Solver.Unpaired (t,p) ->
+                            let lastState = p |> Map.map(fun _ v -> v |> Tensors.Typed.itemAt (t.Length - 1))
+                            lastState, newTime
+
+                | _ -> failwith "Mismatch of engine vs model time mode (differential vs discrete time)."
+
+        runner
+
+    /// <summary>Run a model simulation from time zero until endTime.</summary>
+    let simulateAll
+        (endTime: float<'modelUnit>)
+        initialState
+        (simulationEngine: SimulationEngine<'date,'timespan,'modelUnit>)
+        (model: ModelSystem<'modelUnit>)
+        (startDate: 'date)
+        (envData: TimeFrame.TimeFrame<float<``environment``>, 'date, 'timeunit, 'timespan> option) =
+        
+        let run = simulate simulationEngine model startDate envData
+        let t0 = LanguagePrimitives.FloatWithMeasure<'modelUnit> 0.
+        let one = LanguagePrimitives.FloatWithMeasure<'modelUnit> 1.
+        let timeline = [ t0 .. one .. endTime - one ]
+
+        List.scan(fun (state,_) currentTime ->
+            run state ( (currentTime |> float) * one))
+            (initialState, t0) timeline
+        |> List.tail
+
 
     open Test
 

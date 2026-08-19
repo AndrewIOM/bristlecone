@@ -125,6 +125,7 @@ module Language =
             | Divide of ModelExpressionUntyped * ModelExpressionUntyped
             | Mod of ModelExpressionUntyped * ModelExpressionUntyped
             | Power of ModelExpressionUntyped * ModelExpressionUntyped
+            | Sqrt of ModelExpressionUntyped
             | Logarithm of ModelExpressionUntyped
             | Exponential of ModelExpressionUntyped
             | Conditional of
@@ -185,6 +186,9 @@ module Language =
 
         static member Pow(ME a: ModelExpression<'u>, ME p: ModelExpression<1>) : ModelExpression<'u> =
             ME(Untyped.Power(a, p))
+
+        static member Sqrt(ME a: ModelExpression<'u>) : ModelExpression<'u^(1/2)> =
+            ME(Untyped.Sqrt a)
 
         static member Log(ME a: ModelExpression<1>) : ModelExpression<1> = ME(Untyped.Logarithm a)
 
@@ -260,6 +264,10 @@ module Language =
         let (ME e) = expExpr
         ME(Untyped.Power(b, e))
 
+    let Sqrt<[<Measure>] 'u> (baseExpr: ModelExpression<'u>) : ModelExpression<'u^(1/2)> =
+        let (ME b) = baseExpr
+        ME(Untyped.Sqrt b)
+
     /// The natural logarithm of an expression.
     let Logarithm (expr: ModelExpression<1>) : ModelExpression<1> =
         let (ME e) = expr
@@ -290,6 +298,7 @@ module Language =
             | ME(Subtract(l, r)) -> sprintf "S[%s;%s]" (exprCode (ME l)) (exprCode (ME r))
             | ME(Divide(l, r)) -> sprintf "D[%s;%s]" (exprCode (ME l)) (exprCode (ME r))
             | ME(Power(l, r)) -> sprintf "Pow[%s;%s]" (exprCode (ME l)) (exprCode (ME r))
+            | ME(Sqrt x) -> sprintf "Sqrt[%s]" (exprCode (ME x))
             | ME(Conditional(c, t, f)) -> sprintf "If[%s;%s;%s]" (exprCode (ME c)) (exprCode (ME t)) (exprCode (ME f))
             | ME(Label(n, m)) -> sprintf "L[%s;%s]" n (exprCode (ME m))
             | ME Invalid -> "Invalid"
@@ -353,6 +362,7 @@ module Language =
               mul: Expr<'r> list -> Expr<'r>
               div: Expr<'r> * Expr<'r> -> Expr<'r>
               pow: Expr<'r> * Expr<'r> -> Expr<'r>
+              sqrt: Expr<'r> -> Expr<'r>
               log: Expr<'r> -> Expr<'r>
               exp: Expr<'r> -> Expr<'r>
               modulo: Expr<'r> * Expr<'r> -> Expr<'r>
@@ -467,6 +477,8 @@ module Language =
             | ME(Divide(l, r)) -> withCache expr (fun () -> ops.div (build (ME l), build (ME r)))
 
             | ME(Power(l, r)) -> withCache expr (fun () -> ops.pow (build (ME l), build (ME r)))
+
+            | ME(Sqrt x) -> withCache expr (fun () -> ops.sqrt (build (ME x)))
 
             | ME(Logarithm e) -> withCache expr (fun () -> ops.log (build (ME e)))
 
@@ -700,6 +712,7 @@ module Language =
               mul = tensorProduct
               div = fun (l, r) -> <@ dsharp.div (%l, %r) @>
               pow = fun (l, r) -> <@ dsharp.pow (%l, %r) @>
+              sqrt = fun e -> <@ dsharp.sqrt %e @>
               log = fun e -> <@ dsharp.log %e @>
               exp = fun e -> <@ dsharp.exp %e @>
               modulo = fun (l, r) -> <@ %l - %r * dsharp.floor (%l / %r) @>
@@ -767,6 +780,7 @@ module Language =
               mul = tensorProduct
               div = fun (l, r) -> <@ dsharp.div (%l, %r) @>
               pow = fun (l, r) -> <@ dsharp.pow (%l, %r) @>
+              sqrt = fun e -> <@ dsharp.sqrt %e @>
               log = fun e -> <@ dsharp.log %e @>
               exp = fun e -> <@ dsharp.exp %e @>
               modulo = fun (l, r) -> <@ %l - %r * dsharp.floor (dsharp.div (%l, %r)) @>
@@ -840,6 +854,7 @@ module Language =
               mul = List.reduce (fun l r -> <@ %l * %r @>)
               div = fun (l, r) -> <@ %l / %r @>
               pow = fun (l, r) -> <@ %l ** %r @>
+              sqrt = fun e -> <@ sqrt %e @>
               log = fun e -> <@ log %e @>
               exp = fun e -> <@ exp %e @>
               modulo = fun (l, r) -> <@ %l % %r @>
