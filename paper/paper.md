@@ -8,7 +8,7 @@ tags:
   - mechanistic modelling
 authors:
   - name: Andrew C. Martin
-    orcid: 0000-0002-8236-980X
+    orcid: 0000-0001-5540-6161
     affiliation: "1"
 affiliations:
  - name: Scott Polar Research Institute, University of Cambridge, UK
@@ -29,7 +29,7 @@ Mechanistic modelling approaches may be used to infer the form and strength of e
 
 *Bristlecone*'s purpose is to enable researchers to build causal knowledge of the role of ecological mechanisms over decades to centuries, through confrontation of models with proxy data. LTE is essential in predicting biodiversity responses to climate change, as we may (indirectly) observe (a) ecological processes that operate over longer timescales (e.g., soil development [@McLauchlan_Gerhart_2017]); (b) biodiversity responses to broader environmental envelopes; and (c) ecological stable states and resilience [@Willis_Bailey_Bhagwat_Birks_2010]. Although LTE research has often been descriptive, causal understandings are essential for establishing predictive capability. Causal understanding may be achieved through combining multiple lines of evidence, including (a) experimentation, (b) identifying spatial-temporal associations in observational data, and (c) mechanistic investigation. Without experimental approaches in LTE, surrogates such as space-for-time substitution can misrepresent the rate and order of processes [@Elmendorf_Henry_2015]; thus, mechanistic investigation is essential.
 
-In contemporary ecology (‘*neo-ecology*’), the 'ecological detective' is an approach for causal inference [@Hilborn_Mangel_1997]. The approach requires: (1) examining theory to understand plausible mechanisms; (2) understanding process and observation uncertainties; and (3) confronting plausible alternatives with data. Taking causal mechanisms as processes *"along which a signal can be propagated to produce a response"* (@Grace_HuntingtonKlein_2025, p5), the ecological detective approach may be applied to infer causal mechanisms using LTE time-series.
+In contemporary ecology (‘*neo-ecology*’), the 'ecological detective' is an approach for causal inference [@Hilborn_Mangel_1997]. The approach requires: (1) examining theory to understand plausible mechanisms; (2) understanding process and observation uncertainties; and (3) confronting plausible alternatives with data. Taking causal mechanisms as processes *"along which a signal can be propagated to produce a response"* [@Grace_HuntingtonKlein_2025, p.5], the ecological detective approach may be applied to infer causal mechanisms using LTE time-series.
 
 *Bristlecone* is a toolkit that enables LTE researchers to utilise the ecological detective approach through: (1) a human-readable, succinct declarative grammar for the ‘ecological detective’ workflow; and (2) implementations of key components required to use the grammar. The toolkit includes a grammar of time that reflects the dating methods used within LTE and neo-ecology; it thus targets neo-ecologists who would like to integrate neo-ecological and LTE time-series for multi-scale analysis.
 
@@ -114,7 +114,7 @@ Three classes of optimisation routines broadly suited to ecological time-series 
 
 ## Research impact statement
 
-*Bristlecone* has been developed openly since 2018, maturing through research requirements. It has been formatted for community use and contribution, including documentation, examples, a benchmark suite, and contributor guidelines. Previous research applied multi-proxy palaeoecological data to infer the role of soil nutrients in plant productivity through the Holocene [@Jeffers_Bonsall_Watson_Willis_2011]. Their models and optimisation routine were written from-scratch in verbose C; I reproduced their analysis as a more accessible *Bristlecone* example.
+*Bristlecone* has been developed openly since 2018, maturing through research requirements. It has been formatted for community use and contribution, including documentation, examples, a benchmark suite, and contributor guidelines. Previous research applied multi-proxy palaeoecological data to infer the role of soil nutrients in plant productivity through the Holocene [@Jeffers_Bonsall_Watson_Willis_2011]. Their models and optimisation routine were written from scratch in verbose C; I reproduced their analysis as a more accessible *Bristlecone* example.
 
 *Bristlecone* was integral to @martin2019a and @Martin_MaciasFauria_Bonsall_Forbes_Zetterberg_Jeffers_2021, where it was applied to determine the role of soil nutrients in controlling Arctic shrub growth (*Bristlecone* v1). Alternative hypotheses of nutrient limitation were confronted with wood ring and nitrogen isotope time-series. That analysis is included as an example, formatted for *Bristlecone* v3. *Bristlecone* is currently being applied to a pan-Arctic synthesis of Arctic palaeoecological records [@Martin_Bell_Blake_Bradshaw_Kuoppamaa_Pavey_Prendin_Speight_Villar_Macias-Fauria_2024].
 
