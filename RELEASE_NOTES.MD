@@ -1,3 +1,7 @@
+#### 3.1.2 - 2026-08-27
+* Archival release to support JOSS manuscript.
+* ENHANCEMENT: Enforce discrete/continuous equations with appropriate models at compile time.
+
 #### 3.1.1 - 2026-05-23
 * BUGFIX: discrete-time models correctly handle computed initial state
 

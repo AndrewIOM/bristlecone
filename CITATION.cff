@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+  - family-names: "Martin"
+    given-names: "Andrew C."
+    orcid: "https://orcid.org/0000-0001-5540-6161"
+title: "Bristlecone: an F# library for the long-term ecological detective"
+version: "3.1.2"
+date-released: "2026-08-27"
+url: "https://github.com/AndrewIOM/bristlecone"
+identifiers:
+  - description: Archive of all versions of Bristlecone
+    type: doi
+    value: "10.5281/zenodo.11059017"
+  - description: Archived 3.1.1 release
+    type: doi
+    value: "10.5281/zenodo.20355119"
