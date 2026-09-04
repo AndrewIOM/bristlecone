@@ -1,0 +1,7 @@
+Bristlecone: version	1.0.0.0
+Data: conditioning	No conditioning: predictions start at t1; baseline = first observation.
+Model: states (observed)	CPUE
+Model: states (hidden)	
+Model: time-series used in likelihood calculation	
+Model: time-varying values	catch
+Fit: time taken (seconds)	1026.755715
