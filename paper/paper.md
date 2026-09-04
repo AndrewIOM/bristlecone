@@ -19,7 +19,7 @@ bibliography: paper.bib
 
 # Summary
 
-Long-term ecology (LTE) seeks to extend our understanding of ecological systems to decades to centuries, beyond the observational period. LTE researchers employ environmental proxies (e.g., microfossils, wood rings) to reconstruct variability in biodiversity and environments over decades to centuries. Disparate dating methods (e.g., radiocarbon dating) and representations of time are thus usually required for interpretation. Although the long view is integral to comprehensively understand ecosystem responses to environmental change, there has historically been limited application of causal inference within LTE [@Willis_Araújo_Bennett_Figueroa-Rangel_Froyd_Myers_2007].
+Long-term ecology (LTE) seeks to extend our understanding of ecological systems to decades to centuries, beyond the observational period. LTE researchers employ environmental proxies (e.g., microfossils, wood rings) to reconstruct variability in biodiversity and environments over decades to centuries. Disparate dating methods (e.g., radiocarbon dating) and representations of time are thus usually required for interpretation. Although the long view is integral to comprehensively understanding ecosystem responses to environmental change, there has historically been limited application of causal inference within LTE [@Willis_Araújo_Bennett_Figueroa-Rangel_Froyd_Myers_2007].
 
 Mechanistic modelling approaches may be used to infer the form and strength of ecological processes. In *The Ecological Detective*, @Hilborn_Mangel_1997 present a toolkit for confronting ecological models with data. Here, I developed a modelling framework to enable LTE researchers to apply the ecological detective approach to proxy time-series for causal inference. Key capabilities include: a human-readable Domain Specific Language (DSL) for model definition with enforced dimensional correctness; model composition and scaffolding competing hypotheses; and confrontation of models with time-series of disparate dating methods.
 
@@ -39,7 +39,7 @@ In contemporary ecology (‘*neo-ecology*’), the 'ecological detective' is an 
 
 R is the favoured language of ecologists, increasing in prevalence within high-impact journals from 10.9% in 2013 to 66.9% in 2023 [@Gao_2025]. Within LTE, key statistical approaches include transfer functions, generalised additive models, and canonical correspondence analyses. Proxy-specific mechanistic approaches have also been applied; the landscape models REVEALS [@Sugita_2007] and LOVE [@Sugita_2007_2] simulate taxon-specific biomass from pollen fluxes. However, mechanistic inference from LTE time-series has been limited (e.g., @Jeffers_Bonsall_Watson_Willis_2011). In dendrochronology, (semi-)mechanistic approaches are more prevalent, such as inferring temperature/moisture limits to tree growth using VS-Lite [@TolwinskiWard_2011].
 
-*Bristlecone*'s two unique contributions are: (1) integrating the ecological detective workflow within a single conceptual framework; and (2) providing ecological clarity through dimensional correctness. *Bristlecone* utilises F#’s type system and expressiveness [@Syme_2020] to enforce dimensionally-consistent ecological models and promote human readablity, improving transparency and reproducibility of supplementary material. As the core design relies on F# language features that could not be replicated within R, *Bristlecone* was designed from scratch. However, a compositional approach was sought whereby components may be substituted where beneficial alternatives exist (e.g. optimisers). The F# R type provider [@rprovider_contributors_2026_21964392] presents an avenue for embedding R libraries and graphics via typed R access.
+*Bristlecone*'s two unique contributions are: (1) integrating the ecological detective workflow within a single conceptual framework; and (2) providing ecological clarity through dimensional correctness. *Bristlecone* utilises F#’s type system and expressiveness [@Syme_2020] to enforce dimensionally-consistent ecological models and promote human readability, improving transparency and reproducibility of supplementary material. As the core design relies on F# language features that could not be replicated within R, *Bristlecone* was designed from scratch. However, a compositional approach was sought whereby components may be substituted where beneficial alternatives exist (e.g. optimisers). The F# R type provider [@rprovider_contributors_2026_21964392] presents an avenue for embedding R libraries and graphics via typed R access.
 
 *Bristlecone*’s target audience is long-term- and neo-ecologists who wish to explore mechanistic modelling. The library aims to reduce computational knowledge required to utilise the ecological detective approach within LTE research.
 
@@ -126,6 +126,6 @@ No AI tools were used prior to August 2025. From then, the Microsoft Copilot mac
 
 ## Acknowledgements
 
-I thank support from Dr Elizabeth Jeffers and Prof Marc Macias-Fauria.
+I thank Dr Elizabeth Jeffers and Prof Marc Macias-Fauria for their support.
 
 ## References
