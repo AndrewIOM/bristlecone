@@ -319,3 +319,43 @@ module ``Fit`` =
 
 
         ]
+
+
+module Simulate =
+
+    open Bristlecone.Language
+    open Bristlecone.EstimationEngine
+
+    let simulationEngine = {
+        TimeHandling = Continuous Integration.RungeKutta.rk4
+        LogTo = ignore
+        Random = MathNet.Numerics.Random.MersenneTwister true
+        ResolutionToModelUnits = DateMode.Conversion.CalendarDates.toMonths
+        InterpolateMode = Solver.InterpolationMode.Linear
+        InteroplateModeFor = Map.empty
+    }
+
+    [<Tests>]
+    let simulate =
+        testList "Simulation" [
+
+            testCase "Model simulation returns correct answer" <| fun _ ->
+
+                let model = TestModels.rateTwoEquationConstant NoConstraints 0.5 0.6
+                let startDate = System.DateTime(2000,01,01)
+                let endTime = 12.<month>
+                let x = code "X" |> Option.get
+                let y = code "Y" |> Option.get
+                let t0 =
+                    Map.ofList [
+                        x, 0.5<ModelSystem.state> |> Tensors.Typed.ofScalar
+                        y, 0.5<ModelSystem.state> |> Tensors.Typed.ofScalar ]
+
+                let result = Bristlecone.simulateAll endTime t0 simulationEngine model startDate None
+                let expectedTimeline = [ 1.<month> .. 1.<month> .. 12.<month> ]
+
+                Expect.hasLength result 12 "Expected 12 months"
+                Expect.equal (List.map snd result) expectedTimeline "Expected single-month stepping"
+                Config.floatEqualTol Accuracy.high (result.Head |> fst |> Map.find x |> Tensors.Typed.toFloatScalar) 1.0<ModelSystem.state> "t1 value was not expected"
+
+        ]
