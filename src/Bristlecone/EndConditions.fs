@@ -363,7 +363,7 @@ module EndConditions =
         /// `chainCount` - The number of chains to test for convergence. This makes the agent wait until results for all chains are in.
         let convergence thin chainCount : EndCondition<'S,'V> =
 
-            let assess (chains: Map<int, Solution list>) =
+            let assess (chains: Map<int, Solution<'S,'V> list>) =
                 printfn "Assessing convergence..."
 
                 if chains.Count < chainCount then
@@ -385,7 +385,7 @@ module EndConditions =
                             |> Seq.map (fun chain ->
                                 chain
                                 |> Seq.map (fun v ->
-                                    v |> snd |> Array.item (p - 1) |> Units.removeUnitFromFloat)))
+                                    v |> snd |> Typed.Vector.itemAt (p - 1) |> Units.removeUnitFromFloat)))
 
                     printfn "Param values by chain: %A" parameterValueByChain
 

@@ -149,7 +149,7 @@ module RungeKutta =
             t <- t + dt
             outputs.Add y
 
-        Numerics.Stats.stack2D numEngine outputs
+        Numerics.Stats.stack2D numEngine (outputs.ToArray())
 
     let rk4WithStepCount
         numEngine
@@ -176,7 +176,7 @@ module RungeKutta =
     // Flatten a CodedMap<Scalar> into (keys, Tensor vector)
     let flattenState backend (stateMap: CodedMap<TypedScalar<'S,ModelSystem.state>>) =
         let keys, vals = stateMap |> Map.toList |> List.unzip
-        let vec = vals |> List.toArray |> Stats.stack1D backend
+        let vec = vals |> List.toArray |> Stats.stack1D backend.vectorBackend backend.vectorAccess
         keys, vec
 
     /// Wrap a ParameterisedRHS so it works on a vector rather than
@@ -187,7 +187,7 @@ module RungeKutta =
             if Vector.length y <> keysArr.Length then
                 failwithf "wrapRhs: state length %d does not match keys length %d" (Vector.length y) keysArr.Length
             let resultMap = rhs t y
-            keysArr |> Array.map (fun k -> resultMap.[k]) |> Stats.stack1D numEngine
+            keysArr |> Array.map (fun k -> resultMap.[k]) |> Stats.stack1D numEngine.vectorBackend numEngine.vectorAccess
 
     /// Unflatten trajectory Tensor back into ``CodedMap<Vector,state>``.
     /// traj has shape [timeSteps; stateCount].

@@ -10,10 +10,10 @@ open Bristlecone.Numerics.Typed
 module Optimiser =
 
     /// Returns the most recent solution from an optimisation trace.
-    let tryGetSolution (trace: OptimisationTrace list) =
+    let tryGetSolution (trace: OptimisationTrace<'S,'V> list) =
         trace |> Seq.tryHead |> Option.bind (fun tr -> tr.Results |> Seq.tryHead)
 
-    let tryGetBest (trace: OptimisationTrace list) =
+    let tryGetBest (trace: OptimisationTrace<'S,'V> list) =
         trace
         |> Seq.choose (fun tr ->
             if tr.Results.IsEmpty then
@@ -191,7 +191,7 @@ module MonteCarlo =
         d
         scale
         iteration
-        : Solution list * 'a =
+        : Solution<'S,'V> list * 'a =
         if theta1 |> Array.length = 0 then
             invalidOp "Not valid theta"
 
@@ -260,7 +260,7 @@ module MonteCarlo =
             | _ -> scale
 
         /// Modifies a scale factor
-        let scaleFactor tuneInterval remainingIterations (history: Solution seq) scale =
+        let scaleFactor tuneInterval remainingIterations (history: Solution<'S,'V> seq) scale =
             if remainingIterations % tuneInterval = 0<iteration> then
                 if (history |> Seq.length) * 1<iteration> >= tuneInterval then
                     let acceptance =
@@ -329,7 +329,7 @@ module MonteCarlo =
 
         /// Tune previously observed covariance based on most recent period.
         /// Works directly with the empirical covariance of the chain history.
-        let covariance tuneInterval weighting remaining (history: Solution seq) scale =
+        let covariance tuneInterval weighting remaining (history: Solution<'S,'V> seq) scale =
             if remaining % tuneInterval = 0<iteration> then
                 if (history |> Seq.length) * 1<iteration> >= tuneInterval then
                     let sc =

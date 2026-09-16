@@ -192,6 +192,10 @@ type Numeric<'S,'C,'R,[<Measure>] 'u> =
 //         { Inner = sum; Backend = b; Access = x.Access }
 
 
+module Helpers =
+
+    let atomicToNumeric (atomic:AtomicBackend<'S>) : NumericBackend<'S,'S> =
+        failwith "not finished"
 
 
 /// Typed representations of scalars, vectors, and matricies,
@@ -299,18 +303,18 @@ module Typed =
 
         let toRaw (v:TypedScalar<'S,'u>) : 'S = v.Inner
 
-        let broadcast engine (s: TypedScalar<'S,'u>) (len: int) : TypedVector<'S,'V,'u> =
-            engine.scalarBackend.promote s.Inner len
-            |> ofVector engine.vectorBackend engine.vectorAccess
+        let broadcast (engine: NumericEngine<'S,'V,'M>) (s: TypedScalar<'S,'u>) (len: int) : TypedVector<'S,'V,'u> =
+            let data : 'V = engine.vectorBackend.promote s.Inner len
+            { Inner = data; Backend = engine.vectorBackend; Access = engine.vectorAccess }
 
         let clamp (s:TypedScalar<'S,'a>) (low: TypedScalar<'S,'a>) (high: TypedScalar<'S,'a>) : TypedScalar<'S,'a> =
             let clamped = s.Backend.min high.Inner (s.Backend.max low.Inner s.Inner)
             { s with Inner = clamped }
 
-        let sign (s:TypedScalar<'S, 'u>) =
+        let sign (s:TypedScalar<'S, 'u>) : TypedScalar<'S,1> =
             let zero = s.Backend.ofScalar s.Backend.atomic.constants.zero
             let result = s.Backend.sub (s.Backend.gt s.Inner zero) (s.Backend.lt s.Inner zero)
-            { s with Inner = result }
+            { Inner = result; Backend = s.Backend }
 
         /// Rectified Linear Unit. If s is positive, returns s, otherwise zero.
         let reLU (s:TypedScalar<'S, 'u>) =
@@ -326,7 +330,8 @@ module Typed =
         let isInf (s: TypedScalar<'S,'u>) : TypedScalar<'S,1> =
             let absThis = s.Backend.abs s.Inner
             let invAbs = s.Backend.div s.Backend.atomic.constants.one absThis
-            let isZero = s.Backend.sub s.Backend.atomic.constants.one { Inner = D.ReLU (D.Sign invAbs.Inner)}
+            let invAbsE = {Inner = invAbs; Backend = s.Backend }
+            let isZero = s.Backend.sub s.Backend.atomic.constants.one (reLU (sign invAbsE)).Inner
             { Inner = isZero.Inner; Backend = s.Backend }
 
         // let isFinite (x: TypedScalar<'S,'u>) : TypedScalar<'S,1> =
@@ -360,7 +365,7 @@ module Typed =
         let eq (l: TypedScalar<'S,'u>) (r: TypedScalar<'S,'u>) =
             let absDiff = { l with Inner = l.Backend.abs (l.Inner - r.Inner) }
             let diffMask = absDiff |> sign |> reLU
-            { Inner = l.Backend.atomic.constants.one - diffMask.Inner }
+            { Inner = l.Backend.atomic.constants.one - diffMask.Inner; Backend = l.Backend }
 
         // let grad (fn: TypedScalar<'S, 'u> -> TypedScalar<'S,'v>) (x:TypedScalar<'S,'u>) : TypedScalar<'S,'v / 'u> =
         //     let fnRaw (rawX: D) : D =
@@ -392,14 +397,13 @@ module Typed =
         let length (t: TypedVector<'S,'V,'u>) = t.Backend.length t.Inner
 
         let itemAt (i: int) (v: TypedVector<'S,'C,'u>) : TypedScalar<'S,'u> =
-            { Inner = v.Access.get v.Inner i }
+            let b = Helpers.atomicToNumeric v.Backend.atomic
+            { Inner = v.Access.get v.Inner i; Backend = b }
 
-        let itemAtFloat (i: int) (t: TypedVector<'S,'V,'u>) =
-            t.Access.get t.Inner i
-            // t.Inner.[i] |> float |> LanguagePrimitives.FloatWithMeasure<'u>
-            // { Inner = v.Inner.[i] }
-            // |> float |> LanguagePrimitives.FloatWithMeasure<'u>
-
+        let itemAtFloat (i: int) (v: TypedVector<'S,'V,'u>) =
+            itemAt i v
+            |> fun s -> s.Backend.atomic.toFloatS s.Inner
+            |> LanguagePrimitives.FloatWithMeasure<'u>
 
         /// Prepend a scalar to the front of a vector.
         let prepend (head: TypedScalar<'S,'u>) (tail: TypedVector<'S,_,'u>) : TypedVector<'S,_,'u> =
@@ -407,12 +411,15 @@ module Typed =
             let concatenated = DV.concat [ headVector; tail.Inner ]
             { Inner = concatenated }
 
-        let toArray (v: TypedVector<'S,'V,'u>) : TypedScalar<'S,'u>[] =            
-            v.Inner.ToArray() |> Array.map(fun t -> { Inner = t })
+        let toArray (v: TypedVector<'S,'V,'u>) : TypedScalar<'S,'u>[] =
+            let scalarBackend = Helpers.atomicToNumeric v.Backend.atomic
+            v.Access.toArray v.Inner
+            |> Array.map(fun t -> { Inner = t; Backend = scalarBackend })
 
         let toArrayFloat (v: TypedVector<'S,'V,'u>) : float<'u>[] =
-            v.Inner.ToArray()
-            |> Array.map (float >> LanguagePrimitives.FloatWithMeasure<'u>)
+            toArray v
+            |> Array.map(fun s -> s.Backend.atomic.toFloatS s.Inner)
+            |> Array.map LanguagePrimitives.FloatWithMeasure<'u>
 
         /// Filter a vector tensor by a boolean mask.
         /// The mask length must match the vector length.
