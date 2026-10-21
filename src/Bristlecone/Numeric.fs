@@ -70,6 +70,8 @@ type VectorAccessOps<'S,'C> = {
     ofArray : 'S array -> 'C
     length  : 'C -> int
     get     : 'C -> int -> 'S
+    concat : 'C -> 'C -> 'C
+    tail : 'C -> 'C
 }
 
 /// Matrix-specific structural access ops
@@ -208,15 +210,15 @@ module Typed =
             Inner: 'S
             Backend : NumericBackend<'S,'S> }
 
-        member internal this.Backend = this.Backend
+        member internal this.Backing = this.Backing
 
-        static member inline (+)(a: TypedScalar<'S,'u>, b: TypedScalar<'S,'u>) : TypedScalar<'S,'u> = { Inner = a.Backend.add a.Inner b.Inner; Backend = a.Backend }
-        static member inline (-)(a: TypedScalar<'S,'u>, b: TypedScalar<'S,'u>) : TypedScalar<'S,'u> = { Inner = a.Backend.sub a.Inner b.Inner; Backend = a.Backend }
-        static member inline (*)(a: TypedScalar<'S,'u>, b: TypedScalar<'S,'v>) : TypedScalar<'S,'u * 'v> = { Inner = a.Backend.mul a.Inner b.Inner; Backend = a.Backend }
-        static member inline (/)(a: TypedScalar<'S,'u>, b: TypedScalar<'S,'v>) : TypedScalar<'S,'u / 'v> = { Inner = a.Backend.div a.Inner b.Inner; Backend = a.Backend }
+        static member inline (+)(a: TypedScalar<'S,'u>, b: TypedScalar<'S,'u>) : TypedScalar<'S,'u> = { Inner = a.Backing.add a.Inner b.Inner; Backend = a.Backing }
+        static member inline (-)(a: TypedScalar<'S,'u>, b: TypedScalar<'S,'u>) : TypedScalar<'S,'u> = { Inner = a.Backing.sub a.Inner b.Inner; Backend = a.Backing }
+        static member inline (*)(a: TypedScalar<'S,'u>, b: TypedScalar<'S,'v>) : TypedScalar<'S,'u * 'v> = { Inner = a.Backing.mul a.Inner b.Inner; Backend = a.Backing }
+        static member inline (/)(a: TypedScalar<'S,'u>, b: TypedScalar<'S,'v>) : TypedScalar<'S,'u / 'v> = { Inner = a.Backing.div a.Inner b.Inner; Backend = a.Backing }
 
-        static member inline (*)(k: float, a: TypedScalar<'S,'u>) = { Inner = a.Backend.mul a.Inner (a.Backend.atomic.fromFloatS k); Backend = a.Backend }
-        static member inline (*)(a: TypedScalar<'S,'u>, k: float) = { Inner = a.Backend.mul a.Inner (a.Backend.atomic.fromFloatS k); Backend = a.Backend }
+        static member inline (*)(k: float, a: TypedScalar<'S,'u>) = { Inner = a.Backing.mul a.Inner (a.Backing.atomic.fromFloatS k); Backend = a.Backing }
+        static member inline (*)(a: TypedScalar<'S,'u>, k: float) = { Inner = a.Backing.mul a.Inner (a.Backing.atomic.fromFloatS k); Backend = a.Backing }
 
 
     // [<NoEquality; NoComparison>]
@@ -296,9 +298,9 @@ module Typed =
         /// Change the unit-of-measure phantom type of a TypedTensor without altering its Inner.
         /// This is purely a compile-time reinterpretation; the underlying value is unchanged.
         let retype<'S, [<Measure>] 'u, [<Measure>] 'v> (t: TypedScalar<'S,'u>) : TypedScalar<'S,'v> =
-            { Inner = t.Inner; Backend = t.Backend }
+            { Inner = t.Inner; Backend = t.Backing }
 
-        let ofBackend backend v : TypedScalar<'S,1> =
+        let ofRaw backend v : TypedScalar<'S,1> =
             { Inner = v; Backend = backend }
 
         let toRaw (v:TypedScalar<'S,'u>) : 'S = v.Inner
@@ -308,31 +310,32 @@ module Typed =
             { Inner = data; Backend = engine.vectorBackend; Access = engine.vectorAccess }
 
         let clamp (s:TypedScalar<'S,'a>) (low: TypedScalar<'S,'a>) (high: TypedScalar<'S,'a>) : TypedScalar<'S,'a> =
-            let clamped = s.Backend.min high.Inner (s.Backend.max low.Inner s.Inner)
+            let clamped = s.Backing.min high.Inner (s.Backing.max low.Inner s.Inner)
             { s with Inner = clamped }
 
         let sign (s:TypedScalar<'S, 'u>) : TypedScalar<'S,1> =
-            let zero = s.Backend.ofScalar s.Backend.atomic.constants.zero
-            let result = s.Backend.sub (s.Backend.gt s.Inner zero) (s.Backend.lt s.Inner zero)
-            { Inner = result; Backend = s.Backend }
+            let zero = s.Backing.ofScalar s.Backing.atomic.constants.zero
+            let result = s.Backing.sub (s.Backing.gt s.Inner zero) (s.Backing.lt s.Inner zero)
+            { Inner = result; Backend = s.Backing }
 
         /// Rectified Linear Unit. If s is positive, returns s, otherwise zero.
         let reLU (s:TypedScalar<'S, 'u>) =
-            { s with Inner = s.Backend.max s.Backend.atomic.constants.zero s.Inner }
+            { s with Inner = s.Backing.max s.Backing.atomic.constants.zero s.Inner }
 
-        let exp (a: TypedScalar<'S,1>) : TypedScalar<'S,1> = { a with Inner = a.Backend.exp a.Inner }
+        let exp (a: TypedScalar<'S,1>) : TypedScalar<'S,1> = { a with Inner = a.Backing.exp a.Inner }
 
         let isNan (s: TypedScalar<'S,'u>) : TypedScalar<'S,1> =
-            let absDiff = { s with Inner = s.Backend.abs (s.Inner - s.Inner) }
+            let absDiff = { s with Inner = s.Backing.abs (s.Inner - s.Inner) }
             let sign = sign absDiff
             reLU sign
 
+        // TODO is this correct?
         let isInf (s: TypedScalar<'S,'u>) : TypedScalar<'S,1> =
-            let absThis = s.Backend.abs s.Inner
-            let invAbs = s.Backend.div s.Backend.atomic.constants.one absThis
-            let invAbsE = {Inner = invAbs; Backend = s.Backend }
-            let isZero = s.Backend.sub s.Backend.atomic.constants.one (reLU (sign invAbsE)).Inner
-            { Inner = isZero.Inner; Backend = s.Backend }
+            let absThis = s.Backing.abs s.Inner
+            let invAbs = s.Backing.div s.Backing.atomic.constants.one absThis
+            let invAbsE = {Inner = invAbs; Backend = s.Backing }
+            let isZero = s.Backing.sub s.Backing.atomic.constants.one (reLU (sign invAbsE)).Inner
+            { Inner = isZero; Backend = s.Backing }
 
         // let isFinite (x: TypedScalar<'S,'u>) : TypedScalar<'S,1> =
         //     let nanMask = isNan x
@@ -340,20 +343,20 @@ module Typed =
         //     let badMask = x.Backend.max (nanMask.AsTensor().Inner, infMask.AsTensor().Inner)
         //     { Inner = x.Backend.atomic.constants.one.Inner - badMask; Backend = x.Backend }
 
-        let floor (s: TypedScalar<'S,'u>) : TypedScalar<'S,'u> = { s with Inner = s.Backend.floor s.Inner }
+        let floor (s: TypedScalar<'S,'u>) : TypedScalar<'S,'u> = { s with Inner = s.Backing.floor s.Inner }
 
-        let log (s: TypedScalar<'S,'u>) : TypedScalar<'S,1> = { Inner = s.Backend.log s.Inner; Backend = s.Backend }
+        let log (s: TypedScalar<'S,'u>) : TypedScalar<'S,1> = { Inner = s.Backing.log s.Inner; Backend = s.Backing }
 
         let max (s1:TypedScalar<'S,'a>) (s2: TypedScalar<'S,'a>) : TypedScalar<'S,'a> =
-            { s1 with Inner = s1.Backend.max s2.Inner s2.Inner }
+            { s1 with Inner = s1.Backing.max s2.Inner s2.Inner }
 
         let min (s1:TypedScalar<'S,'a>) (s2: TypedScalar<'S,'a>) : TypedScalar<'S,'a> =
-            { s1 with Inner = s1.Backend.min s2.Inner s2.Inner }
+            { s1 with Inner = s1.Backing.min s2.Inner s2.Inner }
 
-        let pow (a: TypedScalar<'S,'u>) (p: TypedScalar<'S,'u>) : TypedScalar<'S,'u> = { Inner = a.Backend.pow a.Inner p.Inner; Backend = a.Backend }
+        let pow (a: TypedScalar<'S,'u>) (p: TypedScalar<'S,'u>) : TypedScalar<'S,'u> = { Inner = a.Backing.pow a.Inner p.Inner; Backend = a.Backing }
 
         let toFloat (t: TypedScalar<'S,'u>) : float<'u> =
-            t.Backend.atomic.toFloatS t.Inner |> LanguagePrimitives.FloatWithMeasure<'u>
+            t.Backing.atomic.toFloatS t.Inner |> LanguagePrimitives.FloatWithMeasure<'u>
 
         // let gt (l: TypedScalar<'S,'u>) (r: TypedScalar<'S,'u>) : TypedScalar<'B,1> =
         //     let r = l.Backend.max l.Backend.atomic.constants.zero (l.Backend.sign)
@@ -363,9 +366,9 @@ module Typed =
         //     reLU (sign (r - l))
 
         let eq (l: TypedScalar<'S,'u>) (r: TypedScalar<'S,'u>) =
-            let absDiff = { l with Inner = l.Backend.abs (l.Inner - r.Inner) }
+            let absDiff = { l with Inner = l.Backing.abs (l.Inner - r.Inner) }
             let diffMask = absDiff |> sign |> reLU
-            { Inner = l.Backend.atomic.constants.one - diffMask.Inner; Backend = l.Backend }
+            { Inner = l.Backing.atomic.constants.one - diffMask.Inner; Backend = l.Backing }
 
         // let grad (fn: TypedScalar<'S, 'u> -> TypedScalar<'S,'v>) (x:TypedScalar<'S,'u>) : TypedScalar<'S,'v / 'u> =
         //     let fnRaw (rawX: D) : D =
@@ -375,13 +378,13 @@ module Typed =
         //     let result = grad fnRaw x.Inner
         //     { Inner = result }
 
-        let square (x: TypedScalar<'S,'u>) : TypedScalar<'S,'u^2> = { Inner = x.Inner ** 2.0; Backend = x.Backend }
+        let square (x: TypedScalar<'S,'u>) : TypedScalar<'S,'u^2> = { Inner = x.Inner ** 2.0; Backend = x.Backing }
 
         let sqrt (x: TypedScalar<'S,'u^2>) : TypedScalar<'S,'u> =
-            { Inner = x.Backend.sqrt x.Inner; Backend = x.Backend }
+            { Inner = x.Backing.sqrt x.Inner; Backend = x.Backing }
 
         let sigmoid (s: TypedScalar<'S,1>) : TypedScalar<'S,1> =
-            { Inner = s.Backend.sigmoid s.Inner; Backend = s.Backend }
+            { Inner = s.Backing.sigmoid s.Inner; Backend = s.Backing }
 
 
     module Vector =
@@ -391,8 +394,11 @@ module Typed =
 
         let toRaw (v:TypedVector<'S,'V,'u>) : 'V = v.Inner
 
-        let ofBackend backend access v : TypedVector<'S,'V, 1> =
+        let ofRaw backend access v : TypedVector<'S,'V, 1> =
             { Inner = v; Backend = backend; Access = access }
+
+        let ofArray backend access (s:TypedScalar<'S,'u>[]) : TypedVector<'S,'V,'u> =
+            { Inner = access.ofArray (s |> Array.map(fun s -> s.Inner)); Backend = backend; Access = access }
 
         let length (t: TypedVector<'S,'V,'u>) = t.Backend.length t.Inner
 
@@ -402,14 +408,14 @@ module Typed =
 
         let itemAtFloat (i: int) (v: TypedVector<'S,'V,'u>) =
             itemAt i v
-            |> fun s -> s.Backend.atomic.toFloatS s.Inner
+            |> fun s -> s.Backing.atomic.toFloatS s.Inner
             |> LanguagePrimitives.FloatWithMeasure<'u>
 
         /// Prepend a scalar to the front of a vector.
-        let prepend (head: TypedScalar<'S,'u>) (tail: TypedVector<'S,_,'u>) : TypedVector<'S,_,'u> =
-            let headVector = DV.ofArray [| head.Inner |]
-            let concatenated = DV.concat [ headVector; tail.Inner ]
-            { Inner = concatenated }
+        let prepend (head: TypedScalar<'S,'u>) (tail: TypedVector<'S,'V,'u>) : TypedVector<'S,'V,'u> =
+            let headVector = tail.Access.ofArray [| head.Inner |]
+            let concatenated = tail.Access.concat headVector tail.Inner
+            { Inner = concatenated; Backend = tail.Backend; Access = tail.Access }
 
         let toArray (v: TypedVector<'S,'V,'u>) : TypedScalar<'S,'u>[] =
             let scalarBackend = Helpers.atomicToNumeric v.Backend.atomic
@@ -418,7 +424,7 @@ module Typed =
 
         let toArrayFloat (v: TypedVector<'S,'V,'u>) : float<'u>[] =
             toArray v
-            |> Array.map(fun s -> s.Backend.atomic.toFloatS s.Inner)
+            |> Array.map(fun s -> s.Backing.atomic.toFloatS s.Inner)
             |> Array.map LanguagePrimitives.FloatWithMeasure<'u>
 
         /// Filter a vector tensor by a boolean mask.
@@ -431,18 +437,25 @@ module Typed =
                 mask
                 |> Array.mapi (fun i keep -> if keep then Some (itemAt i v) else None)
                 |> Array.choose id
+                |> Array.map(fun s -> s.Inner)
 
-            { Inner = DV.ofArray selectedElements; Backend = v.Backend }
+            { Inner = v.Access.ofArray selectedElements; Backend = v.Backend; Access = v.Access }
 
 
-        let dot (a: TypedVector<'S,'V,'u>) (b: TypedVector<'S,'V,'u>) : TypedScalar<'S,'u^2> =
-            { Inner = a.Inner * b.Inner }
+        let dot (a: TypedVector<'S,'V,'u>) (b: TypedVector<'S,'V,'v>) : TypedScalar<'S,'u * 'v> =
+            let scalarBackend = Helpers.atomicToNumeric a.Backend.atomic
+            let m = a.Backend.mul a.Inner b.Inner
+            let r = a.Backend.reduce a.Backend.atomic.addS m
+            { Inner = r; Backend = scalarBackend }
 
         let scale (s: TypedScalar<'S,'a>) (v: TypedVector<'S,'V,'b>) : TypedVector<'S,'V,'a * 'b> = s * v
 
         let square (x: TypedVector<'S,'V,'u>) : TypedVector<'S,'V,'u^2> = { Inner = x.Inner ** 2.0; Backend = x.Backend; Access = x.Access }
 
-        let sum (a: TypedVector<'S,'V,'u>) : TypedScalar<'S,'u> = { Inner = a.Backend.sum a.Inner; Backend = x.Backend; Access = x.Access } }
+        let sum (a: TypedVector<'S,'V,'u>) : TypedScalar<'S,'u> =
+            let sum = a.Backend.reduce a.Backend.atomic.addS a.Inner
+            let scalarBackend = Helpers.atomicToNumeric a.Backend.atomic         
+            { Inner = sum; Backend = scalarBackend }
 
         let sign (v: TypedVector<'S,'V,'u>) : TypedVector<'S,'V,1> =
             let zero = v.Backend.ofScalar v.Backend.atomic.constants.zero
@@ -455,7 +468,7 @@ module Typed =
             if len < 2 then
                 invalidArg "v" "Vector must have at least two elements to take tail."
             else
-                { Inner = v.Inner.[1..]; Backend = v.Backend; Access = v.Access }
+                { Inner = v.Access.tail v.Inner; Backend = v.Backend; Access = v.Access }
 
         let log (a: TypedVector<'S,'V,'u>) : TypedVector<'S,'V,1> = { Inner = a.Backend.log a.Inner; Backend = a.Backend; Access = a.Access }
         let exp (a: TypedVector<'S,'V,1>) : TypedVector<'S,'V,1> = { Inner = a.Backend.exp a.Inner; Backend = a.Backend; Access = a.Access }
@@ -464,10 +477,15 @@ module Typed =
     module Matrix =
 
         let toRaw (m:TypedMatrix<'S,'M,'u>) : 'M = m.Inner
+        let ofRaw backend access (v:'M) : TypedMatrix<'S,'M, 'u> =
+            { Inner = v; Backend = backend; Access = access }
 
         let matMul (a: TypedMatrix<'S,'M,'u>) (b: TypedMatrix<'S,'M,'v>) : TypedMatrix<'S,'M,'u * 'v> =
             { Inner = a.Inner * b.Inner; Backend = a.Backend; Access = a.Access }
     
+        let nRows (t: TypedMatrix<'S,'M,'u>) = t.Access.nrows t.Inner
+        let nCols (t: TypedMatrix<'S,'M,'u>) = t.Access.ncols t.Inner
+
 
 module Stats =
 
@@ -479,16 +497,16 @@ module Stats =
         b.atomic.divS total len
 
     let linspace
-        (backendV : NumericBackend<'S,'V>)
+        (engine : NumericEngine<'S,'V,'M>)
         (start: TypedScalar<'S, 'u>) (stop: TypedScalar<'S, 'u>) (num: int) : TypedVector<'S,'V,'u> =
         if num <= 1 then failwith "Cannot space less than two points along a line"
-        let steps = ofScalar start.Backend (float (num - 1))
+        let steps = ofScalar start.Backing (float (num - 1))
         let stepSize = (stop - start) / steps
-        let rawVector = backendV.initV num (fun i -> 
-            let idx = ofScalar start.Backend (float i)
-            start + idx * stepSize
+        Array.init num (fun i -> 
+        let idx = ofScalar start.Backing (float i)
+        start + idx * stepSize
         )
-        ofVector backendV rawVector
+        |> Vector.ofArray engine.vectorBackend engine.vectorAccess
 
     let stack1D vectorBackend (vectorAccess:VectorAccessOps<'S,'V>) (items: TypedScalar<'S,'u>[]) : TypedVector<'S,'V,'u> =
         if Array.isEmpty items then
@@ -496,15 +514,25 @@ module Stats =
 
         let arr = items |> Array.map Scalar.toRaw
         let v   = vectorAccess.ofArray arr
-        Vector.ofBackend vectorBackend vectorAccess v
+        Vector.ofRaw vectorBackend vectorAccess v
         |> Vector.retype
 
     let stack2D numEngine (items: TypedVector<'S,'V,'u>[]) : TypedMatrix<'S,'M,'u> =
 
         if items.Length = 0 then array2D [] |> ofMatrix numEngine.matrixBackend numEngine.matrixAccess
         else
-            let cols = numEngine.vectorAccess.length (Vector.toRaw <| items.[0])
+            let rows = items.Length
+            let cols = items |> Array.map Vector.length
+            if Array.distinct cols |> Array.length <> 1
+            then failwith "Cannot stack vectors of different lengths"
 
+            let m =
+                Array2D.init rows cols.[0] (fun row col ->
+                    numEngine.vectorAccess.get items.[row].Inner col
+                )
+                |> numEngine.matrixAccess.ofArray2d
+            
+            Matrix.ofRaw numEngine.matrixBackend numEngine.matrixAccess m
 
 
     let unstack2D (matrix: TypedMatrix<'S,'M,'u>) : TypedVector<'S,'V,'u>[] =
@@ -512,7 +540,7 @@ module Stats =
 
     /// Squared Euclidean length of a vector.
     let squaredLength (v: TypedVector<'S,'V,'u>) : TypedScalar<'S,'u^2> =
-        Scalar.ofBackend (DV.L2NormSq v.Inner)
+        Vector.dot v v
 
     let inline call f (x:^T) =
         f (^T : (member Backend : NumericBackend<'S,'V>) x)
@@ -529,10 +557,10 @@ module ActivePatterns =
         | l when l = len -> Some t: TypedVector<'S,'V,'u> option
         | _ -> None
 
-    // let (|MatrixOfShape|_|) (rows: int, cols: int) (t: TypedMatrix<'M,'u>) =
-    //     match t.Inner.Rows, t.Inner.Cols with
-    //     | r, c when r = rows && c = cols -> Some t: TypedMatrix<'M,'u> option
-    //     | _ -> None
+    let (|MatrixOfShape|_|) (rows: int, cols: int) (t: TypedMatrix<'S,'M,'u>) =
+        match Matrix.nRows t, Matrix.nCols t with
+        | r, c when r = rows && c = cols -> Some t: TypedMatrix<'S,'M,'u> option
+        | _ -> None
 
 
 module Backends =
@@ -556,13 +584,13 @@ module Backends =
 
         let scalar : NumericBackend<D,D> =
             { 
-                add    = fun x y -> x + y
-                sub    = fun x y -> x - y
-                mul    = fun x y -> x * y
-                div = failwith "Not Implemented"
+                add = fun x y -> x + y
+                sub = fun x y -> x - y
+                mul = fun x y -> x * y
+                div = fun x y -> x / y
                 scaleVS = failwith "Not Implemented"
                 scaleSV = failwith "Not Implemented"
-                ofScalar = failwith "Not Implemented"
+                ofScalar = id
                 min = failwith "Not Implemented"
                 max = failwith "Not Implemented"
                 reduce  = fun _ x -> x
@@ -596,14 +624,14 @@ module Backends =
         let vector : NumericBackend<D,DV> = {
                 add    = fun x y -> x + y
                 sub    = fun x y -> x - y
-                mul    = fun x y -> x * y
-                div = fun x y -> x / y
+                mul    = failwith "Not Implemented"
+                div = failwith "Not Implemented"
                 scaleVS = fun x y -> x * y
                 scaleSV = fun x y -> x * y
                 ofScalar = failwith "Not Implemented"
                 min = fun x y -> DV.Min(x,y)
                 max = fun x y -> DV.Max(x,y)
-                reduce  = fun fn x -> fn x
+                reduce  = failwith "Not Implemented"
                 length  = fun _ -> 1
                 promote = fun s _ -> DV.ofArray [| s |]
                 initV = failwith "Not Implemented"
@@ -631,10 +659,65 @@ module Backends =
                 sin = failwith "Not Implemented"
         }
 
+        let matrix : NumericBackend<D,DM> = {
+                add    = fun x y -> x + y
+                sub    = fun x y -> x - y
+                mul    = fun x y -> x * y
+                div = failwith "not implemented"
+                scaleVS = fun x y -> x * y
+                scaleSV = fun x y -> x * y
+                ofScalar = failwith "Not Implemented"
+                min = fun x y -> DM.Min(x,y)
+                max = fun x y -> DM.Max(x,y)
+                reduce  = failwith "not implemented"
+                length  = fun _ -> 1
+                promote = fun s _ -> failwith "not implemented"
+                initV = failwith "Not Implemented"
+                abs = failwith "Not Implemented"
+                exp = failwith "Not Implemented"
+                log = failwith "Not Implemented"
+                pow = failwith "Not Implemented"
+                sqrt = failwith "Not Implemented"
+                floor = failwith "Not Implemented"
+                gt = failwith "Not Implemented"
+                lt = failwith "Not Implemented"
+                eq = failwith "Not Implemented"
+                isNan = failwith "Not Implemented"
+                isInf = failwith "Not Implemented"
+                atomic = {
+                    addS = fun x y -> x + y
+                    subS = fun x y -> x + y
+                    mulS = fun x y -> x * y
+                    divS = fun x y -> x / y
+                    fromFloatS = D
+                    toFloatS = fun x -> float x
+                    constants = constants
+                }
+                sigmoid = failwith "Not Implemented"
+                sin = failwith "Not Implemented"
+        }
+
+        let vectorAccess : VectorAccessOps<D,DV> = {
+            toArray = DV.toArray
+            ofArray = DV.ofArray
+            length = DV.length
+            get = fun c i -> c.Item i
+            concat = fun a b -> DV.concat [ a; b ]
+            tail = fun v -> v.[1..]
+        }
+
+        let matrixAccess : MatrixAccessOps<D,DM> = {
+            get = fun c i j -> c.[i,j]
+            ncols = DM.cols
+            nrows = DM.rows
+            ofArray2d = DM.ofArray2D
+            toArray2d = DM.toArray2D
+        }
+
         let engine = {
             scalarBackend = scalar
             vectorBackend = vector
-            matrixBackend = 2
-            vectorAccess = 3
-            matrixAccess = 4
+            matrixBackend = matrix
+            vectorAccess = vectorAccess
+            matrixAccess = matrixAccess
         }
