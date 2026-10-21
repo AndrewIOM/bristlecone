@@ -548,6 +548,7 @@ module Bristlecone =
                                 tEnv
                                 (t * factorFromIndex |> Tensors.Typed.ofScalar)
                                 state
+                        // TODO Add measures here.
                         result, t + LanguagePrimitives.FloatWithMeasure<'modelTime> 1.
                 | _ -> failwith "Mismatch between model time and "
             | Continuous i ->
@@ -571,11 +572,14 @@ module Bristlecone =
 
                         match output with
                         | Solver.Paired p ->
-                            let lastState = p |> Map.map(fun _ v -> v |> Array.last |> snd)
+                            let r = p |> Map.map (fun _ series -> series |> Array.map snd |> Tensors.Typed.stack1D)
+                            let measured = Objective.measure model.Measures paramValues r state
+                            let lastState = measured |> Map.map(fun _ v -> v |> Tensors.Typed.itemAt (Tensors.Typed.length v - 1))
                             lastState, newTime
                         
                         | Solver.Unpaired (t,p) ->
-                            let lastState = p |> Map.map(fun _ v -> v |> Tensors.Typed.itemAt (t.Length - 1))
+                            let measured = Objective.measure model.Measures paramValues p state
+                            let lastState = measured |> Map.map(fun _ v -> v |> Tensors.Typed.itemAt (Tensors.Typed.length v - 1))
                             lastState, newTime
 
                 | _ -> failwith "Mismatch of engine vs model time mode (differential vs discrete time)."
