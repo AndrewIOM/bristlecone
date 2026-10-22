@@ -11,6 +11,7 @@ type Constants<'S> = {
     one: 'S
     two: 'S
     six: 'S
+    pi: 'S
 }
 
 /// Represents mathematical operations on
@@ -47,7 +48,7 @@ type NumericBackend<'S,'C> = {
     abs : 'C -> 'C
     exp : 'C -> 'C
     log : 'C -> 'C
-    pow : 'C -> 'C -> 'C
+    pow : 'C -> 'S -> 'C
     sqrt : 'C -> 'C
     floor : 'C -> 'C
     gt : 'C -> 'C -> 'C
@@ -217,8 +218,8 @@ module Typed =
         static member inline (*)(a: TypedScalar<'S,'u>, b: TypedScalar<'S,'v>) : TypedScalar<'S,'u * 'v> = { Inner = a.Backing.mul a.Inner b.Inner; Backend = a.Backing }
         static member inline (/)(a: TypedScalar<'S,'u>, b: TypedScalar<'S,'v>) : TypedScalar<'S,'u / 'v> = { Inner = a.Backing.div a.Inner b.Inner; Backend = a.Backing }
 
-        static member inline (*)(k: float, a: TypedScalar<'S,'u>) = { Inner = a.Backing.mul a.Inner (a.Backing.atomic.fromFloatS k); Backend = a.Backing }
-        static member inline (*)(a: TypedScalar<'S,'u>, k: float) = { Inner = a.Backing.mul a.Inner (a.Backing.atomic.fromFloatS k); Backend = a.Backing }
+        static member inline (*)(k: float, a: TypedScalar<'S,'u>) : TypedScalar<'S,'u> = { Inner = a.Backing.mul a.Inner (a.Backing.atomic.fromFloatS k); Backend = a.Backing }
+        static member inline (*)(a: TypedScalar<'S,'u>, k: float) : TypedScalar<'S,'u> = { Inner = a.Backing.mul a.Inner (a.Backing.atomic.fromFloatS k); Backend = a.Backing }
 
 
     // [<NoEquality; NoComparison>]
@@ -305,9 +306,29 @@ module Typed =
 
         let toRaw (v:TypedScalar<'S,'u>) : 'S = v.Inner
 
+        let constants eng = {
+            invalid = eng.scalarBackend.atomic.constants.invalid |> ofRaw eng.scalarBackend
+            penalty = eng.scalarBackend.atomic.constants.penalty |> ofRaw eng.scalarBackend
+            absTol = eng.scalarBackend.atomic.constants.absTol |> ofRaw eng.scalarBackend
+            relTol = eng.scalarBackend.atomic.constants.relTol |> ofRaw eng.scalarBackend
+            nan = eng.scalarBackend.atomic.constants.nan |> ofRaw eng.scalarBackend
+            zero = eng.scalarBackend.atomic.constants.zero |> ofRaw eng.scalarBackend
+            half = eng.scalarBackend.atomic.constants.half |> ofRaw eng.scalarBackend
+            one = eng.scalarBackend.atomic.constants.one |> ofRaw eng.scalarBackend
+            two = eng.scalarBackend.atomic.constants.two |> ofRaw eng.scalarBackend
+            six = eng.scalarBackend.atomic.constants.six |> ofRaw eng.scalarBackend
+            pi = eng.scalarBackend.atomic.constants.pi |> ofRaw eng.scalarBackend
+        }
+
         let broadcast (engine: NumericEngine<'S,'V,'M>) (s: TypedScalar<'S,'u>) (len: int) : TypedVector<'S,'V,'u> =
             let data : 'V = engine.vectorBackend.promote s.Inner len
             { Inner = data; Backend = engine.vectorBackend; Access = engine.vectorAccess }
+
+        let add (s1:TypedScalar<'S,'a>) (s2: TypedScalar<'S,'a>) : TypedScalar<'S,'a> =
+            { Inner = s1.Backing.add s1.Inner s2.Inner; Backend = s1.Backing }
+
+        let sub (s1:TypedScalar<'S,'a>) (s2: TypedScalar<'S,'a>) : TypedScalar<'S,'a> =
+            { Inner = s1.Backing.sub s1.Inner s2.Inner; Backend = s1.Backing }
 
         let clamp (s:TypedScalar<'S,'a>) (low: TypedScalar<'S,'a>) (high: TypedScalar<'S,'a>) : TypedScalar<'S,'a> =
             let clamped = s.Backing.min high.Inner (s.Backing.max low.Inner s.Inner)
@@ -325,7 +346,7 @@ module Typed =
         let exp (a: TypedScalar<'S,1>) : TypedScalar<'S,1> = { a with Inner = a.Backing.exp a.Inner }
 
         let isNan (s: TypedScalar<'S,'u>) : TypedScalar<'S,1> =
-            let absDiff = { s with Inner = s.Backing.abs (s.Inner - s.Inner) }
+            let absDiff = { s with Inner = s.Backing.abs (s.Backing.sub s.Inner s.Inner) }
             let sign = sign absDiff
             reLU sign
 
@@ -366,9 +387,9 @@ module Typed =
         //     reLU (sign (r - l))
 
         let eq (l: TypedScalar<'S,'u>) (r: TypedScalar<'S,'u>) =
-            let absDiff = { l with Inner = l.Backing.abs (l.Inner - r.Inner) }
+            let absDiff = { l with Inner = l.Backing.abs (l.Backing.sub l.Inner r.Inner) }
             let diffMask = absDiff |> sign |> reLU
-            { Inner = l.Backing.atomic.constants.one - diffMask.Inner; Backend = l.Backing }
+            { Inner = l.Backing.sub l.Backing.atomic.constants.one diffMask.Inner; Backend = l.Backing }
 
         // let grad (fn: TypedScalar<'S, 'u> -> TypedScalar<'S,'v>) (x:TypedScalar<'S,'u>) : TypedScalar<'S,'v / 'u> =
         //     let fnRaw (rawX: D) : D =
@@ -378,7 +399,7 @@ module Typed =
         //     let result = grad fnRaw x.Inner
         //     { Inner = result }
 
-        let square (x: TypedScalar<'S,'u>) : TypedScalar<'S,'u^2> = { Inner = x.Inner ** 2.0; Backend = x.Backing }
+        let square (x: TypedScalar<'S,'u>) : TypedScalar<'S,'u^2> = { Inner = x.Backing.pow x.Inner x.Backing.atomic.constants.two; Backend = x.Backing }
 
         let sqrt (x: TypedScalar<'S,'u^2>) : TypedScalar<'S,'u> =
             { Inner = x.Backing.sqrt x.Inner; Backend = x.Backing }
@@ -450,7 +471,7 @@ module Typed =
 
         let scale (s: TypedScalar<'S,'a>) (v: TypedVector<'S,'V,'b>) : TypedVector<'S,'V,'a * 'b> = s * v
 
-        let square (x: TypedVector<'S,'V,'u>) : TypedVector<'S,'V,'u^2> = { Inner = x.Inner ** 2.0; Backend = x.Backend; Access = x.Access }
+        let square (x: TypedVector<'S,'V,'u>) : TypedVector<'S,'V,'u^2> = { Inner = x.Backend.pow x.Inner x.Backend.atomic.constants.two; Backend = x.Backend; Access = x.Access }
 
         let sum (a: TypedVector<'S,'V,'u>) : TypedScalar<'S,'u> =
             let sum = a.Backend.reduce a.Backend.atomic.addS a.Inner
@@ -481,7 +502,7 @@ module Typed =
             { Inner = v; Backend = backend; Access = access }
 
         let matMul (a: TypedMatrix<'S,'M,'u>) (b: TypedMatrix<'S,'M,'v>) : TypedMatrix<'S,'M,'u * 'v> =
-            { Inner = a.Inner * b.Inner; Backend = a.Backend; Access = a.Access }
+            { Inner = a.Backend.mul a.Inner b.Inner; Backend = a.Backend; Access = a.Access }
     
         let nRows (t: TypedMatrix<'S,'M,'u>) = t.Access.nrows t.Inner
         let nCols (t: TypedMatrix<'S,'M,'u>) = t.Access.ncols t.Inner
@@ -580,6 +601,7 @@ module Backends =
             one = D 1.0
             two = D 2.0
             six = D 6.0
+            pi = D System.Math.PI
         }
 
         let scalar : NumericBackend<D,D> =

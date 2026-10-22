@@ -54,10 +54,10 @@ module Base =
     /// and tStep.
     let makeCompiledFunctionForIntegration
         (numBackend: Numerics.NumericEngine<'S,'V,'M>)
-        (tInitial: float<'modelTime ``time index``>)
-        (tEnd: float<'modelTime ``time index``>)
-        (tStep: float<'modelTime ``time index``>)
-        (externalEnv: CodedMap<TimeIndex.TimeIndex<float<``environment``>, 'date, 'timeunit, 'timespan, 'modelTime>>)
+        (tInitial: float<``time index``>)
+        (tEnd: float<``time index``>)
+        (tStep: float<``time index``>)
+        (externalEnv: CodedMap<TimeIndex.TimeIndex<float<``environment``>, 'date, 'timeunit, 'timespan, 1>>)
         (initialStateFn: TypedVector<'S,'V,``parameter``> -> CodedMap<TypedScalar<'S,state>>)
         (modelMap: ModelEquations<'S,'V>)
         : EstimationEngine.UnparameterisedRHS<'S,'V> =
@@ -130,8 +130,8 @@ module RungeKutta =
         (f: TypedScalar<'S,``time index``> -> TypedVector<'S,'V,'su> -> TypedVector<'S,'V,'su / ``time index``>)
         : TypedMatrix<'S,'M, 'su> =
 
-        let two = tInitial.Backend.atomic.constants.two |> Typed.Scalar.ofBackend tInitial.Backend
-        let six = tInitial.Backend.atomic.constants.six |> Typed.Scalar.ofBackend tInitial.Backend
+        let two = tInitial.Backing.atomic.constants.two |> Typed.Scalar.ofRaw tInitial.Backing
+        let six = tInitial.Backing.atomic.constants.six |> Typed.Scalar.ofRaw tInitial.Backing
 
         let mutable t = tInitial
         let mutable y = y0
@@ -159,7 +159,7 @@ module RungeKutta =
         (y0: TypedVector<'S,'V,'s>)
         (f: TypedScalar<'S,``time index``> -> TypedVector<'S,'V,'s> -> TypedVector<'S,'V,'s / ``time index``>)
         =
-        let dt = (tFinal - tInitial) / ofScalar tInitial.Backend (float steps)
+        let dt = (tFinal - tInitial) / ofScalar tInitial.Backing (float steps)
         rk4Core numEngine tInitial steps dt y0 f
 
     let rk4WithStepWidth

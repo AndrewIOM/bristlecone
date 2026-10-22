@@ -262,7 +262,8 @@ module Test =
             // Predict series
             let timeline = conditioned.ObservedForPairing |> TimeFrame.dates |> List.toArray
 
-            let invalidValue = engine.Backend.scalarBackend.atomic.constants.invalid |> ofScalar engine.Backend.scalarBackend
+            let constants = Scalar.constants engine.Backend
+            let invalidValue : TypedScalar<'S,state> = constants.invalid |> Scalar.retype
             let predicted =
                 Objective.predict invalidValue solver model.Measures (thetaReal |> Array.ofList |> ofVector engine.Backend.vectorBackend engine.Backend.vectorAccess)
                 |> Map.map (fun _ v ->

@@ -79,7 +79,7 @@ module Solver =
             fun pars env tIndex state ->
                 // Convert tIndex (Scalar<time-index>) -> Scalar<'timeUnit> by multiplying with factor
                 let tIndexF: float<``time index``> = Scalar.toFloat tIndex
-                let tModel = Typed.ofScalar tIndex.Backend (tIndexF * factor)
+                let tModel = Typed.ofScalar tIndex.Backing (tIndexF * factor)
                 eq pars env tModel state
 
         /// Wrap a model equation written in 'timeUnit so it accepts time index.
@@ -89,7 +89,7 @@ module Solver =
             : StateEquation<'S,'V,``time index``> =
             fun pars env tIndex state ->
                 let tIndexF = Scalar.toFloat tIndex
-                let tModel = Typed.ofScalar tIndex.Backend (tIndexF * factor)
+                let tModel = Typed.ofScalar tIndex.Backing (tIndexF * factor)
                 eq pars env tModel state
 
         // For differential equations: return unit is 'state / 'timeUnit
@@ -99,7 +99,7 @@ module Solver =
             : RateEquation<'S,'V,``time index``> =
             fun pars env tIndex state ->
                 let tIndexF = Scalar.toFloat tIndex
-                let tModel = Typed.ofScalar tIndex.Backend (tIndexF * factor)
+                let tModel = Typed.ofScalar tIndex.Backing (tIndexF * factor)
                 eq pars env tModel state |> Scalar.retype
 
         // Lift wrapping over a whole model form

@@ -339,7 +339,6 @@ module Language =
 
         type Bool<'b> = Bool of 'b
 
-        // ---- Generic AST traversal ----
         type Ops<'r, 'b> =
             { constVal: float -> Expr<'r>
               constValLift: Expr<'r> -> float -> Expr<'r>
@@ -593,7 +592,7 @@ module Language =
                     match %c with
                     | Bool (mask:TypedBoolScalar) ->
                         let m = mask.AsTensor ()
-                        Typed.addScalar (Typed.mulScalar %t m) (Typed.mulScalar %f (Typed.minusScalar Typed.Constants.one m))
+                        Scalar.add (Typed.mulScalar %t m) (Typed.mulScalar %f (Scalar.sub Typed.Constants.one m))
                 @>
 
             /// For situations where we don't need gradients, use F# control flow.
@@ -604,21 +603,21 @@ module Language =
                 @>
 
 
-        let private tensorSum (xs: Expr<TypedScalar<'u>> list) : Expr<TypedScalar<'u>> =
+        let private tensorSum (xs: Expr<TypedScalar<'S,'u>> list) : Expr<TypedScalar<'S,'u>> =
             match xs with
             | [] -> failwith "Cannot add an empty list"
-            | x :: rest -> rest |> List.fold (fun acc e -> <@ Typed.addScalar %acc %e @>) x
+            | x :: rest -> rest |> List.fold (fun acc e -> <@ Typed.Scalar.add %acc %e @>) x
 
-        let private tensorProduct (xs: Expr<TypedScalar<'u>> list) : Expr<TypedScalar<'u>> =
+        let private tensorProduct (xs: Expr<TypedScalar<'S,'u>> list) : Expr<TypedScalar<'S,'u>> =
             match xs with
             | [] -> failwith "Cannot multiply an empty list"
-            | x :: rest -> rest |> List.fold (fun acc e -> <@ Typed.mulScalar %acc %e @>) x
+            | x :: rest -> rest |> List.fold (fun acc e -> <@ Typed.Scalar.mul %acc %e @>) x
 
         let tensorInverse (fLambda, targetExpr: Expr<TypedScalar<'S,'u>>, loExpr, hiExpr, tol, maxIter) =
             let tol = Typed.ofScalar tol
             <@
-                let backend : NumericBackend<'S,'V> = (%targetExpr).Backend
-                if (Scalar.isNan %targetExpr) = backend.atomic.constants.one then
+                let backend : NumericBackend<'S,'S> = (%targetExpr).Backing
+                if (Scalar.isNan %targetExpr) = (Scalar.ofRaw backend backend.atomic.constants.one) then
                     backend.atomic.constants.penalty
                 else
                     let interval =
@@ -663,7 +662,7 @@ module Language =
         // let tIdxVar   = Var("timeIndex", typeof<int>)
         // let pIndex    = paramIndex parameters
         let private numericOps<[<Measure>] 'timeUnit>
-            (backend: NumericBackend<'S,'V>) // Currently setup as scalar-only compiler.
+            (backend: NumericBackend<'S,'S>) // Currently setup as scalar-only compiler.
             requiresGradients
             (pIndex: Map<string, int>)
             (eIndex: Map<string, int>)
@@ -671,14 +670,14 @@ module Language =
             (eVar: Var)
             (tVar: Var)
             (xVar: Var)
-            =
+            =            
             { constVal =
                 fun n ->
-                    let tensor = backend.atomic.fromFloatS n
+                    let tensor = ofScalar backend n
                     <@ tensor @>
               constValLift =
                 fun one n ->
-                    let tensor = backend.atomic.fromFloatS n
+                    let tensor = ofScalar backend n
                     <@ %one * tensor @>
               parameter =
                 fun name ->
@@ -692,7 +691,7 @@ module Language =
                                 $"Parameter '{name}' was referenced in the model but not provided as an estimatable parameter. Available parameters: {available}"
                     
                     <@ (%%Expr.Var pVar: TypedVector<'S,'V,``parameter``>) |> Vector.itemAt pIdx |> Scalar.retype @>
-              environment = fun name -> getEnvironment eVar name |> Scalar.retype
+              environment = fun name -> getEnvironment eVar name
               state = fun name -> getEnvironment eVar name // Currently, state and environment are intermingled
               timeVal = <@ (%%Expr.Var tVar: TypedScalar<'S,'timeUnit>) |> Scalar.retype @>
               thisVal = <@ (%%Expr.Var xVar: TypedScalar<'S,ModelSystem.state>) |> Scalar.retype @>
@@ -710,12 +709,13 @@ module Language =
               label = fun (_, m) -> m
               stateAt = fun _ -> failwith "State lookup not supported in equations"
               invalid = fun () ->
-                <@ backend.atomic.constants.invalid @>
+                let inv = Scalar.ofRaw backend backend.atomic.constants.invalid |> Scalar.retype
+                <@ inv @>
               greaterThan = fun (l, r) -> <@ Scalar.gt %l %r |> Bool @>
               lessThan = fun (l, r) -> <@ Scalar.lt %l %r |> Bool @>
               equalTo = fun (l, r) -> <@ Scalar.eq %l %r |> Bool @>
               isFinite = fun ex -> <@ Scalar.isFinite %ex |> Bool @>
-              inverse = tensorInverse }
+              inverse = tensorInverse backend }
 
         // Initialisers are time-invariant (t = initial), but can access the current exogeneous
         // environment and observed states at the initial time.
@@ -805,13 +805,13 @@ module Language =
         /// Compile a rate-based (e.g. ODE) model expression into an internal
         /// `RateEquation` for use in model-fitting.
         let compileRate<[<Measure>] 'timeUnit, [<Measure>] 'stateUnit>
-            (backend: NumericBackend<'S,'V>)
+            (backend: NumericBackend<'S,'S>)
             parameters
             envKeys
             (expr: ModelExpression<'stateUnit / 'timeUnit>)
-            : ModelSystem.RateEquation<'S,'V,'timeUnit> =
+            : ModelSystem.RateEquation<'S,'S,'timeUnit> =
 
-            let pVar = Var("parameters", typeof<TypedVector<'S,'V,``parameter``>>)
+            let pVar = Var("parameters", typeof<TypedVector<'S,'S,``parameter``>>)
 
             let eVar =
                 Var("environment", typeof<CodedMap<TypedScalar<'S,ModelSystem.``environment``>>>)
@@ -829,34 +829,35 @@ module Language =
             <@ %core |> Scalar.retype<'S,1, ModelSystem.state / 'timeUnit> @> // TODO Why retype required?
             |> toLambda4 pVar eVar tVar xVar
             |> LeafExpressionConverter.EvaluateQuotation
-            |> unbox<ModelSystem.RateEquation<'timeUnit>>
+            |> unbox<ModelSystem.RateEquation<'S,'S,'timeUnit>>
 
         let compileDiscrete<[<Measure>] 'timeUnit, [<Measure>] 'stateUnit>
+            (backend: NumericBackend<'S,'S>)
             parameters
             envKeys
             (expr: ModelExpression<'stateUnit>)
             : ModelSystem.StateEquation<'S,'V,'timeUnit> =
 
-            let pVar = Var("parameters", typeof<TypedVector<``parameter``>>)
+            let pVar = Var("parameters", typeof<TypedVector<'S,'V,``parameter``>>)
 
             let eVar =
-                Var("environment", typeof<CodedMap<TypedScalar<ModelSystem.``environment``>>>)
+                Var("environment", typeof<CodedMap<TypedScalar<'S,ModelSystem.``environment``>>>)
 
-            let tVar = Var("time", typeof<TypedScalar<'timeUnit>>)
-            let xVar = Var("state", typeof<TypedScalar<'stateUnit>>)
+            let tVar = Var("time", typeof<TypedScalar<'S,'timeUnit>>)
+            let xVar = Var("state", typeof<TypedScalar<'S,'stateUnit>>)
 
             let pIndex = paramIndex parameters
             let eIndex = envIndexFromKeys envKeys
 
             let core =
-                buildQuotationCached (numericOps true pIndex eIndex pVar eVar tVar xVar) Map.empty expr
+                buildQuotationCached (numericOps backend true pIndex eIndex pVar eVar tVar xVar) Map.empty expr
 
-            <@ %core |> Typed.retypeScalar<1, ModelSystem.state> @> // TODO Why retype required?
+            <@ %core |> Scalar.retype<'S,1, ModelSystem.state> @> // TODO Why retype required?
             |> toLambda4 pVar eVar tVar xVar
             |> LeafExpressionConverter.EvaluateQuotation
-            |> unbox<ModelSystem.StateEquation<'timeUnit>>
+            |> unbox<ModelSystem.StateEquation<'S,'V,'timeUnit>>
 
-        let compileSimple<[<Measure>] 'u> (expr: ModelExpression<'u>) : float<'u> =
+        let compileSimple<[<Measure>] 'u> backend (expr: ModelExpression<'u>) : float<'u> =
             let core =
                 buildQuotationCached
                     (numericOps
@@ -864,29 +865,18 @@ module Language =
                         false
                         Map.empty
                         Map.empty
-                        (Var("p", typeof<TypedVector<``parameter``>>))
-                        (Var("e", typeof<CodedMap<TypedScalar<ModelSystem.``environment``>>>))
-                        (Var("t", typeof<TypedScalar<1>>))
-                        (Var("x", typeof<TypedScalar<1>>)))
+                        (Var("p", typeof<TypedVector<'S,'V,``parameter``>>))
+                        (Var("e", typeof<CodedMap<TypedScalar<'S,ModelSystem.``environment``>>>))
+                        (Var("t", typeof<TypedScalar<'S,1>>))
+                        (Var("x", typeof<TypedScalar<'S,1>>)))
                     Map.empty
                     expr
 
-            let q : Expr<TypedScalar<ModelSystem.state>> = <@ %core |> Typed.retypeScalar @>
+            let q : Expr<TypedScalar<'S,ModelSystem.state>> = <@ %core |> Scalar.retype @>
 
             match LeafExpressionConverter.EvaluateQuotation q with
-            | :? TypedScalar<'u> as t -> Typed.toFloatScalar t
+            | :? TypedScalar<'S,'u> as t -> Scalar.toFloat t
             | _ -> failwith "Expected a scalar tensor result"
-
-        let compileFloat expr =
-            let fpVar = Var("parameters", typeof<Parameter.Pool.ParameterPool>)
-            let feVar = Var("environment", typeof<CodedMap<float>>)
-            let ftVar = Var("time", typeof<float<Time.``time index``>>)
-            let fxVar = Var("thisValue", typeof<float>)
-
-            buildQuotationCached (floatOps fpVar feVar ftVar fxVar) Map.empty expr
-            |> toLambda4 fpVar feVar ftVar fxVar
-            |> LeafExpressionConverter.EvaluateQuotation
-            |> unbox<Parameter.Pool.ParameterPool -> CodedMap<float> -> float<Time.``time index``> -> float -> float>
 
         let compileMeasure<[<Measure>] 'stateUnit> parameters (expr: ModelExpression<'stateUnit>) =
             let pVar = Var("parameters", typeof<TypedVector<'S,'V,parameter>>)
@@ -902,45 +892,36 @@ module Language =
             let core =
                 buildQuotationCached (numericOpsForMeasure true pIndex pVar statesVar thisVar tIdxVar) Map.empty expr
 
-            <@ %core |> Typed.Scalar.retype<1,ModelSystem.state> @>
+            <@ %core |> Scalar.retype<'S,1,ModelSystem.state> @>
             |> fun body -> Expr.Lambda(pVar, Expr.Lambda(statesVar, Expr.Lambda(thisVar, Expr.Lambda(tIdxVar, body))))
             |> LeafExpressionConverter.EvaluateQuotation
-            |> unbox<ModelSystem.Measurement<'stateUnit>>
+            |> unbox<ModelSystem.Measurement<'S,'V,'stateUnit>>
 
-        let compileInitialiser<[<Measure>] 'stateUnit> parameters (expr: ModelExpression<'stateUnit>) =
-            let pVar = Var("parameters", typeof<TypedVector<``parameter``>>)
+        let compileInitialiser<[<Measure>] 'stateUnit> backend parameters (expr: ModelExpression<'stateUnit>) =
+            let pVar = Var("parameters", typeof<TypedVector<'S,'V,``parameter``>>)
 
             let eVar =
-                Var("environment", typeof<CodedMap<TypedScalar<ModelSystem.``environment``>>>)
+                Var("environment", typeof<CodedMap<TypedScalar<'S,ModelSystem.``environment``>>>)
 
             let bVar =
-                Var("baselines", typeof<CodedMap<TypedScalar<ModelSystem.state>>>)
+                Var("baselines", typeof<CodedMap<TypedScalar<'S,ModelSystem.state>>>)
 
             let pIndex = paramIndex parameters
 
             let core =
-                buildQuotationCached (numericOpsForInitialiser pIndex pVar eVar bVar) Map.empty expr
+                buildQuotationCached (numericOpsForInitialiser backend pIndex pVar eVar bVar) Map.empty expr
 
-            <@ %core |> Typed.retypeScalar<1,ModelSystem.state> @>
+            <@ %core |> Scalar.retype<'S,1,ModelSystem.state> @>
             |> fun body -> Expr.Lambda(pVar, Expr.Lambda(eVar, Expr.Lambda(bVar, body)))
             |> LeafExpressionConverter.EvaluateQuotation
-            |> unbox<ModelSystem.Initialiser<'stateUnit>>
+            |> unbox<ModelSystem.Initialiser<'S,'V,'stateUnit>>
 
 
     /// Computes a `ModelExpression` given the current time, value,
     /// environment, and parameter pool.
-    let compute
-        x
-        (t: float<Time.``time index``>)
-        (pool: Parameter.Pool.ParameterPool)
-        (environment: CodedMap<float>)
-        ex
-        : float =
-        ExpressionCompiler.compileFloat ex pool environment t x
-
-    let computeT x t pool (environment: CodedMap<Tensors.TypedScalar<ModelSystem.environment>>) ex =
-        ExpressionCompiler.compileRate pool (Seq.toList environment.Keys) ex
-        |> fun f -> f (Parameter.Pool.toVectorWithKeysReal pool |> snd) environment t x
+    let computeRate (engine: Numerics.NumericEngine<'S,'S,'M>) x t pool (environment: CodedMap<Numerics.Typed.TypedScalar<'S,ModelSystem.environment>>) ex =
+        ExpressionCompiler.compileRate engine.scalarBackend pool (Seq.toList environment.Keys) ex
+        |> fun f -> f (Parameter.Pool.toVectorWithKeysReal engine pool |> snd) environment t x
 
 
     module ExpressionParser =
@@ -977,47 +958,49 @@ module Language =
     /// Scaffolds a `ModelSystem` for fitting with Bristlecone.
     module ModelBuilder =
 
+        open Bristlecone.Numerics.Typed
+
         // A compiled-at-the-end equation, but with a closure that captures its typed expression
-        type EquationThunk<[<Measure>] 'time> =
+        type EquationThunk<'S,'V,[<Measure>] 'time> =
             | Discrete of
                 ShortCode.ShortCode *
-                (Parameter.Pool.ParameterPool -> ShortCode.ShortCode list -> ModelSystem.StateEquation<'time>)
+                (Parameter.Pool.ParameterPool -> ShortCode.ShortCode list -> ModelSystem.StateEquation<'S,'V,'time>)
             | Rate of
                 ShortCode.ShortCode *
-                (Parameter.Pool.ParameterPool -> ShortCode.ShortCode list -> ModelSystem.RateEquation<'time>)
+                (Parameter.Pool.ParameterPool -> ShortCode.ShortCode list -> ModelSystem.RateEquation<'S,'V,'time>)
 
-        type MeasureThunk<[<Measure>] 'u> =
-            ShortCode.ShortCode * (Parameter.Pool.ParameterPool -> ModelSystem.Measurement<'u>)
+        type MeasureThunk<'S,'V,[<Measure>] 'u> =
+            ShortCode.ShortCode * (Parameter.Pool.ParameterPool -> ModelSystem.Measurement<'S,'V,'u>)
 
-        type InitialiserThunk<[<Measure>] 'u> =
-            ShortCode.ShortCode * (Parameter.Pool.ParameterPool -> ModelSystem.Initialiser<'u>)
+        type InitialiserThunk<'S,'V,[<Measure>] 'u> =
+            ShortCode.ShortCode * (Parameter.Pool.ParameterPool -> ModelSystem.Initialiser<'S,'V,'u>)
 
-        type LikelihoodThunk = unit -> ModelSystem.Likelihood<ModelSystem.state>
+        type LikelihoodThunk<'S,'V,'M> = Numerics.NumericEngine<'S,'V,'M> -> ModelSystem.Likelihood<'S,'V,ModelSystem.state>
 
-        type ModelFragment<[<Measure>] 'time> =
-            | EquationFragment of ExpressionParser.Requirement list * EquationThunk<'time>
+        type ModelFragment<'S,'V,'M,[<Measure>] 'time> =
+            | EquationFragment of ExpressionParser.Requirement list * EquationThunk<'S,'V,'time>
             | ParameterFragment of Parameter.Pool.ParameterNoUnit
-            | LikelihoodFragment of LikelihoodThunk
-            | MeasureFragment of ExpressionParser.Requirement list * MeasureThunk<ModelSystem.state>
-            | InitialiserFragment of ExpressionParser.Requirement list * InitialiserThunk<ModelSystem.state>
+            | LikelihoodFragment of LikelihoodThunk<'S,'V,'M>
+            | MeasureFragment of ExpressionParser.Requirement list * MeasureThunk<'S,'V,ModelSystem.state>
+            | InitialiserFragment of ExpressionParser.Requirement list * InitialiserThunk<'S,'V,ModelSystem.state>
 
         type EquationFragment<[<Measure>] 'stateUnit, [<Measure>] 'timeUnit> =
             | DiscreteEq of ModelExpression<'stateUnit>
             | RateEq of ModelExpression<'stateUnit / 'timeUnit>
 
-        type ModelBuilder<[<Measure>] 'time> =
-            private | ModelBuilder of Map<ShortCode.ShortCode * bool, ModelFragment<'time>> * bool
+        type ModelBuilder<'S,'V,[<Measure>] 'time> =
+            private | ModelBuilder of Map<ShortCode.ShortCode * bool, ModelFragment<'S,'V,'time>> * bool
 
-        let create<[<Measure>] 'time> isDiscrete : unit -> ModelBuilder<'time> =
+        let create<[<Measure>] 'time> isDiscrete : unit -> ModelBuilder<'S,'V,'time> =
             fun () ->
-                (Map.empty<ShortCode.ShortCode * bool, ModelFragment<'time>>, isDiscrete)
+                (Map.empty<ShortCode.ShortCode * bool, ModelFragment<'S,'V,'M,'time>>, isDiscrete)
                 |> ModelBuilder
 
         let internal unwrap (ModelBuilder(m, isDiscrete)) = m, isDiscrete
 
         module Measurement =
-            let adapt<[<Measure>] 'u> (m: ModelSystem.Measurement<'u>) : ModelSystem.Measurement<ModelSystem.state> =
-                fun p s sThis i -> m p s sThis i |> Tensors.Typed.retypeScalar<'u, ModelSystem.state>
+            let adapt<[<Measure>] 'u> (m: ModelSystem.Measurement<'S,'V,'u>) : ModelSystem.Measurement<'S,'V,ModelSystem.state> =
+                fun p s sThis i -> m p s sThis i |> Numerics.Typed.Scalar.retype<'S,'u, ModelSystem.state>
 
         module Likelihood =
 
@@ -1031,8 +1014,8 @@ module Language =
                         let s =
                             series
                             |> Map.map (fun _ v ->
-                                { Expected = v.Expected |> Vector.retype<ModelSystem.state, 'u>
-                                  Observed = v.Observed |> Vector.retype<ModelSystem.state, 'u> })
+                                { Expected = v.Expected |> Vector.retype<'S,'V,ModelSystem.state, 'u>
+                                  Observed = v.Observed |> Vector.retype<'S,'V,ModelSystem.state, 'u> })
 
                         l.Evaluate param s }
 
@@ -1041,29 +1024,29 @@ module Language =
             let equationRate<[<Measure>] 'time, [<Measure>] 'state>
                 (name: string)
                 (expr: ModelExpression<'state / 'time>)
-                : ModelFragment<'time> =
+                : ModelFragment<'S,'C,'time> =
                 let sc = ShortCode.create name |> Option.get
                 let (ME eUntyped) = expr
                 let envReqs = ExpressionParser.requirements eUntyped |> Writer.run |> snd
-                EquationFragment(envReqs, Rate(sc, (fun p e -> ExpressionCompiler.compileRate<'time, 'state> p e expr)))
+                EquationFragment(envReqs, Rate(sc, (fun p e -> ExpressionCompiler.compileRate<'time, 'state> backend p e expr)))
 
             let equationDiscrete<[<Measure>] 'time, [<Measure>] 'state>
                 (name: string)
                 (expr: ModelExpression<'state>)
-                : ModelFragment<'time> =
+                : ModelFragment<'S,'C,'time> =
                 let sc = ShortCode.create name |> Option.get
                 let (ME eUntyped) = expr
                 let envReqs = ExpressionParser.requirements eUntyped |> Writer.run |> snd
 
                 EquationFragment(
                     envReqs,
-                    Discrete(sc, (fun p e -> ExpressionCompiler.compileDiscrete<'time, 'state> p e expr))
+                    Discrete(sc, (fun p e -> ExpressionCompiler.compileDiscrete<'time, 'state> backend p e expr))
                 )
 
             let measure<[<Measure>] 'time, [<Measure>] 'u>
                 (name: string)
                 (expr: ModelExpression<'state>)
-                : ModelFragment<'time> =
+                : ModelFragment<'S,'C,'time> =
                 let sc: ShortCode.ShortCode = ShortCode.create name |> Option.get
                 let (ME eUntyped) = expr
                 let envReqs = ExpressionParser.requirements eUntyped |> Writer.run |> snd
@@ -1076,7 +1059,7 @@ module Language =
             let initialiser<[<Measure>] 'time, [<Measure>] 'u>
                 (name: string)
                 (expr: ModelExpression<'state>)
-                : ModelFragment<'time> =
+                : ModelFragment<'S,'C,'time> =
                 let sc: ShortCode.ShortCode = ShortCode.create name |> Option.get
                 let (ME eUntyped) = expr
                 let envReqs = ExpressionParser.requirements eUntyped |> Writer.run |> snd
@@ -1085,8 +1068,8 @@ module Language =
                     envReqs,
                     (sc,
                      (fun p ->
-                         let ini = ExpressionCompiler.compileInitialiser<'u> p expr
-                         fun p e s -> ini p e s |> Scalar.retype<'u, ModelSystem.state>))
+                         let ini = ExpressionCompiler.compileInitialiser<'u> backend p expr
+                         fun p e s -> ini p e s |> Scalar.retype<'S,'u, ModelSystem.state>))
                 )
 
             let likelihood<[<Measure>] 'time, [<Measure>] 'u> (l: ModelSystem.Likelihood<'u>) : ModelFragment<'time> =
@@ -1115,7 +1098,7 @@ module Language =
         let initialiseStateWith<[<Measure>] 'time, [<Measure>] 'u> name (m: ModelExpression<'u>) mb =
             add name (Add.initialiser<'time, 'u> name m) mb
 
-        let useLikelihood<[<Measure>] 'u, [<Measure>] 'time> (l: ModelSystem.Likelihood<'u>) mb =
+        let useLikelihood<[<Measure>] 'u, [<Measure>] 'time> (l: ModelSystem.Likelihood<'S,'V,'u>) mb =
             add "likelihood" (Add.likelihood<'time, 'u> l) mb
 
         let compile builder : ModelSystem.ModelSystem<'S,'V,'time> =
@@ -1277,7 +1260,7 @@ module Language =
             let (StateIdInner name) = name
             ModelBuilder.initialiseStateWith name.Value initialiser builder
 
-        let useLikelihoodFunction (likelihoodFn: ModelSystem.Likelihood<'u>) builder =
+        let useLikelihoodFunction (likelihoodFn: ModelSystem.Likelihood<'S,'V,'u>) builder =
             ModelBuilder.add "likelihood" (ModelBuilder.LikelihoodFragment(fun () -> likelihoodFn)) builder
 
         let compile = ModelBuilder.compile
@@ -1424,7 +1407,7 @@ module Language =
         let withEnvironmentGen
             (obs: StateId<'s>)
             (genFn: 'date -> float<'s>)
-            (settings: TestSettings<'S,'state, 'date, 'a, 'b>)
+            (settings: TestSettings<'state, 'date, 'a, 'b>)
             =
             let envTs =
                 Bristlecone.Time.TimeSeries.fromGen
@@ -1442,7 +1425,7 @@ module Language =
             (obs: StateId<'s>)
             (genFn: float<'fnTime> -> float<'s>)
             (gen2: 'timespan -> float<'fnTime>)
-            (settings: TestSettings<'S,'state, 'date, 'yearUnit, 'timespan>)
+            (settings: TestSettings<'state, 'date, 'yearUnit, 'timespan>)
             =
 
             let startDate =
@@ -1473,7 +1456,7 @@ module Language =
         let t1<[<Measure>] 's, [<Measure>] 'stateUnit, 'date, 'yearUnit, 'timespan>
             (obs: Require.ObsForLikelihood<'s>)
             (value: float<'s>)
-            (settings: Test.TestSettings<'S,'stateUnit, 'date, 'yearUnit, 'timespan>)
+            (settings: Test.TestSettings<'stateUnit, 'date, 'yearUnit, 'timespan>)
             =
             let code = obsToCode obs
 
@@ -1486,7 +1469,7 @@ module Language =
             { settings with
                 GenerationRules = (code, rule) :: settings.GenerationRules }
 
-        let seriesLength n (settings: TestSettings<'S,'stateUnit, 'date, 'yearUnit, 'timespan>) =
+        let seriesLength n (settings: TestSettings<'stateUnit, 'date, 'yearUnit, 'timespan>) =
             { settings with TimeSeriesLength = n }
 
         let resolution res settings = { settings with Resolution = res }

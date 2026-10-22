@@ -128,18 +128,13 @@ module EstimationEngine =
     open Bristlecone.Conditioning
     open ModelSystem
 
-    /// A point in optimisation-space. Optim-space
-    /// is tensor-based, so all points are tensor vectors
-    /// representing the parameters.
-    type Point<'S,'V> = TypedVector<'S,'V,``optim-space``>
+    /// A point in optimisation-space, which may be
+    /// in a transformed or 'real' parameter space.
+    type Point<'S,'V,[<Measure>] 'space> = TypedVector<'S,'V,'space>
 
     /// An objective function that can be optimised
     /// within an optimisation routine.
-    type Objective<'S,'V> = Point<'S,'V> -> TypedScalar<'S,``-logL``>
-
-    /// An objective function that can be optimised
-    /// within an optimisation routine.
-    type ObjectiveFromFloat<'S> = float<``optim-space``>[] -> TypedScalar<'S,``-logL``>
+    type Objective<'S,'V,[<Measure>] 'space> = Point<'S,'V,'space> -> TypedScalar<'S,``-logL``>
 
     /// Low‑level compiled likelihood
     /// Works directly with a parameter tensor (real space).
@@ -159,16 +154,11 @@ module EstimationEngine =
 
     /// The likelihood at a particular place in
     /// optimisation space.
-    type Solution<'S,'V> = TypedScalar<'S,``-logL``> * TypedVector<'S,'V,``optim-space``>
+    type Solution<[<Measure>] 'space> = float<``-logL``> * float<'space>[]
 
     /// Determines if the end has been reached based on a list
     /// of tupled Solutions with their iteration number.
-    type EndCondition<'S,'V> = Solution<'S,'V> list -> int<iteration> -> OptimStopReason
-
-    /// The domain is fine to be float-based, as it is only
-    /// used to initialise the optimisation routine.
-    /// Represents the bounds and any constraint.
-    type Domain = (float<``optim-space``> * float<``optim-space``> * Parameter.Constraint<``optim-space``>)[]
+    type EndCondition<[<Measure>] 'space> = Solution<'space> list -> int<iteration> -> OptimStopReason
 
     /// Model equations for estimation may be require time to be
     /// in indexed form (i.e. common across models and data).
@@ -246,37 +236,57 @@ module EstimationEngine =
         /// Represents the trace of an optimisation heuristic,
         /// which may have multiple 'components' (i.e. sub-algorithms)
         /// and one or many stages within each.
-        type OptimisationTrace<'S,'V> =
+        type OptimisationTrace<[<Measure>] 'space> =
             { Component: string
               Stage: string
               Replicate: int
-              Results: Solution<'S,'V> list }
+              Results: Solution<'space> list }
 
-        type Optimise<'S,'V,'M> =
-            Numerics.NumericEngine<'S,'V,'M>
-                -> Random
+        /// Represents a wrapped objective that may be
+        /// evalutated within an optimisation routine.
+        /// Optimisers work exclusively in float-space.
+        type EvaluateObjective<[<Measure>] 'u> = {
+            Evaluate : float<'u>[] -> float<``-logL``>
+            Gradient: float<'u>[] -> float<``-logL``>
+            EvaluateVectorised: float<'u>[,] -> float<``-logL``>[]
+        }
+
+        /// The domain is fine to be float-based, as it is only
+        /// used to initialise the optimisation routine.
+        /// Represents the bounds and any constraint.
+        type Domain<[<Measure>] 'u> = (float<'u> * float<'u> * Parameter.Constraint<'u>)[]
+
+        type OptimPoint<[<Measure>] 'space> = float<'space>[]
+
+        type Optimise<[<Measure>] 'space> =
+            Random
                 -> WriteOut
-                -> EndCondition<'S,'V>
-                -> Domain
-                -> Point<'S,'V> option // optional starting point
-                -> Objective<'S,'V>
-                -> OptimisationTrace<'S,'V> list
+                -> EndCondition<'space>
+                -> Domain<'space>
+                -> OptimPoint<'space> option // optional starting point
+                -> EvaluateObjective<'space>
+                -> OptimisationTrace<'space> list
 
         /// An `Optimiser` is an optimisation algorithm that may work either
         /// in 'transformed' parameter space (where parameter constraints are
         /// automatically handled) or in 'detatched' space (where the optimisation
         /// algorithm is responsible for respecting parameter constraints).
-        type Optimiser<'S,'V,'M> =
-            | InTransformedSpace of Optimise<'S,'V,'M>
-            | InDetachedSpace of Optimise<'S,'V,'M>
+        type Optimiser<[<Measure>] 'space,'S,'V,'M> = {
+            Optimise: Optimise<'space>
+            MakeTransformToSpace: Numerics.NumericEngine<'S,'V,'M> -> Parameter.Pool.ParameterPool -> Parameter.Pool.OptimiserConfig<'S,'V,'space>
+        }
+
+        type GenericOptimResult =
+            | TransformedResult of OptimisationTrace<``optim-space-transformed``> list
+            | UntransformedResult of OptimisationTrace<``optim-space``> list
 
     type TimeMode<'S,'V,'M> =
         | Discrete
         | Continuous of Integration.IntegrationRoutine<'S,'V,'M>
 
-    type EstimationEngine<'S,'V,'M,'date, 'timespan, [<Measure>] 'modelTimeUnit, [<Measure>] 'state> =
+    type EstimationEngine<'S,'V,'M,'date, 'timespan, [<Measure>] 'modelTimeUnit, [<Measure>] 'state, [<Measure>] 'space> =
         { TimeHandling: TimeMode<'S,'V,'M>
-          OptimiseWith: Optimisation.Optimiser<'S,'V,'M>
+          OptimiseWith: Optimisation.Optimiser<'space,'S,'V,'M>
           Conditioning: Conditioning<'state>
           Backend: Numerics.NumericEngine<'S,'V,'M>
           LogTo: WriteOut

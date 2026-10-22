@@ -27,7 +27,7 @@ module EndConditions =
             Continue
 
     /// Stop when any condition has a non-continue reason.
-    let combineAny (conditions: EndCondition<'S,'V> list) : EndCondition<'S,'V> =
+    let combineAny (conditions: EndCondition<'space> list) : EndCondition<'space> =
         fun results iter ->
             conditions
             |> Seq.map (fun cond -> cond results iter)
@@ -35,7 +35,7 @@ module EndConditions =
             |> Option.defaultValue Continue
 
     /// Stop when all conditions have non-continue reasons.
-    let combineAll (conditions: EndCondition<'S,'V> list) : EndCondition<'S,'V> =
+    let combineAll (conditions: EndCondition<'space> list) : EndCondition<'space> =
         fun results iter ->
             let evaluations = conditions |> List.map (fun cond -> cond results iter)
 
@@ -45,7 +45,7 @@ module EndConditions =
                 evaluations |> List.find (fun r -> r <> Continue)
 
     /// End on or after a minimum number of iterations.
-    let atIteration iteration : EndCondition<'S,'V> =
+    let atIteration iteration : EndCondition<'space> =
         fun _ currentIteration ->
             if currentIteration >= iteration then
                 OptimStopReason.MaxIterations
@@ -55,7 +55,7 @@ module EndConditions =
     /// Given a list of solutions, which are ordered most recent first,
     /// returns `true` if there are at least `window` recent results, and
     /// the change within the recent results is no more than `tolerance`.
-    let whenNoBestValueImprovement window : EndCondition<'S,'V> =
+    let whenNoBestValueImprovement window : EndCondition<'space> =
         fun results iteration ->
             rollingWindow window results iteration
             <| fun window ->
@@ -71,7 +71,7 @@ module EndConditions =
 
     /// Ends if the mean change in the objective's value is less than
     /// a tolerance of 1e-6.
-    let whenObjectiveFlat interval : EndCondition<'S,'V> =
+    let whenObjectiveFlat interval : EndCondition<'space> =
         fun results iteration ->
             onlyOnInterval interval iteration
             <| fun () ->
@@ -89,7 +89,7 @@ module EndConditions =
 
     /// Ends when the overall number of improvements made is
     /// greater than `count`.
-    let whenImprovementsMade count interval : EndCondition<'S,'V> =
+    let whenImprovementsMade count interval : EndCondition<'space> =
         fun results iteration ->
             onlyOnInterval interval iteration
             <| fun () ->
@@ -107,7 +107,7 @@ module EndConditions =
     /// End when exploration is not detecting any new
     /// worse results. For use in heating stages of
     /// simulated annealing.
-    let whenWorstValuePlateaued window : EndCondition<'S,'V> =
+    let whenWorstValuePlateaued window : EndCondition<'space> =
         fun results iteration ->
             onlyOnInterval (2 * window) iteration
             <| fun () ->
@@ -124,7 +124,7 @@ module EndConditions =
 
     /// Stops when there is a lack of movement, as indicated by squared jump
     /// distance below threshold across the last n steps.
-    let whenStationary threshold nSteps : EndCondition<'S,'V> =
+    let whenStationary threshold nSteps : EndCondition<'space> =
         fun results iter ->
             if iter < nSteps then
                 Continue
@@ -147,7 +147,7 @@ module EndConditions =
     /// squared jumping distance (MSJD). The significance of the slope coefficient of a linear
     /// regression is assessed to determine if the MSJD is increasing through time for every
     /// parameter sequentially: if all p-values are >0.1, then the `EndCondition` is true.
-    let stationarySquaredJumpDistance' fixedBin pointsRequired slopeTol (log: LogEvent -> unit) : EndCondition<'S,'V> =
+    let stationarySquaredJumpDistance' fixedBin pointsRequired slopeTol (log: LogEvent -> unit) : EndCondition<``optim-space``> =
         fun results i ->
             if i % (fixedBin * pointsRequired) = 0<iteration> && i > 1<iteration> then
 
@@ -202,12 +202,12 @@ module EndConditions =
 
     /// True if there is no significant slope in mean squared jumping distances (MSJD),
     /// binned per 200 iterations and a regression of five bins.
-    let stationarySquaredJumpDistance log : EndCondition<'S,'V> =
+    let stationarySquaredJumpDistance log : EndCondition<``optim-space``> =
         stationarySquaredJumpDistance' 200<iteration> 5 1e-3 log
 
     /// Stops when acceptance rate is consistently within the
     /// defined range. Used to avoid stopping when not mixing.
-    let whenStableAcceptanceRate min max interval intervalsRequired log : EndCondition<'S,'V> =
+    let whenStableAcceptanceRate min max interval intervalsRequired log : EndCondition<'space> =
         let intervalN = Units.removeUnitFromInt interval
         let required = Units.removeUnitFromInt intervalsRequired
 
@@ -236,7 +236,7 @@ module EndConditions =
                     log (GeneralEvent(sprintf "[EndCondition] Acceptance rates = %A [%A]" acceptanceRates result))
                     result
 
-    let whenAcceptanceRateOutside min max interval intervalsRequired log : EndCondition<'S,'V> =
+    let whenAcceptanceRateOutside min max interval intervalsRequired log : EndCondition<'space> =
         fun results iteration ->
             let within =
                 whenStableAcceptanceRate min max interval intervalsRequired log results iteration
@@ -250,7 +250,7 @@ module EndConditions =
     /// <param name="window">number of recent samples to compare</param>
     /// <param name="relTol">relative change threshold (e.g. 0.05 = 5%)</param>
     /// <returns>A stop condition or Continue.</returns>
-    let whenVarianceStabilised window relTol : EndCondition<'S,'V> =
+    let whenVarianceStabilised window relTol : EndCondition<'space> =
         fun results iteration ->
             rollingWindow (2 * window) results iteration
             <| fun _ ->
@@ -270,7 +270,7 @@ module EndConditions =
                 else
                     Continue
 
-    let whenStuck movementFloor interval : EndCondition<'S,'V> =
+    let whenStuck movementFloor interval : EndCondition<'space> =
         fun results iteration ->
             onlyOnInterval interval iteration
             <| fun () ->
@@ -296,7 +296,7 @@ module EndConditions =
         /// iteration count is reached. Mixing is defined by
         /// not being stuck, and the acceptance rate has stabilised
         /// in the range 0.15 - 0.5.
-        let mcmcTuningStep maxIter log : EndCondition<'S,'V> =
+        let mcmcTuningStep maxIter log : EndCondition<'space> =
             fun results iter ->
                 if atIteration maxIter results iter <> Continue then
                     MaxIterations
@@ -313,7 +313,7 @@ module EndConditions =
         /// rate 0.15 - 0.5, and not stuck) and it is stationary (as measured
         /// by windowed squared jump distance on recent 200-iteration windows).
         /// The chain will also be abandoned if `maxIter` iterations are reached.
-        let mcmc maxIter log : EndCondition<'S,'V> =
+        let mcmc maxIter log : EndCondition<``optim-space``> =
             fun results iter ->
                 let tuneStatus = mcmcTuningStep maxIter log results iter
 
@@ -325,12 +325,12 @@ module EndConditions =
 
         module SimulatedAnnealing =
 
-            let preTuning<'S,'V> : EndCondition<'S,'V> =
+            let preTuning<'S,'V> : EndCondition<``optim-space``> =
                 combineAny [ whenVarianceStabilised 500<iteration> 0.02; atIteration 1500<iteration> ]
 
             /// Requires equlibrium to be approximated within every
             /// heating step. Better for classical SA.
-            let heatingStrict<'S,'V> : EndCondition<'S,'V> =
+            let heatingStrict<'S,'V> : EndCondition<``optim-space``> =
                 combineAny
                     [ combineAll
                           [ whenVarianceStabilised 200<iteration> 0.05
@@ -340,7 +340,7 @@ module EndConditions =
             /// Relaxed requirements that allows approximation of the
             /// stationary distribution at each temperature, without
             /// strict requirement.
-            let heatingRelaxed<'S,'V> : EndCondition<'S,'V> =
+            let heatingRelaxed<'S,'V> : EndCondition<``optim-space``> =
                 combineAny
                     [ whenVarianceStabilised 50<iteration> 0.10
                       whenWorstValuePlateaued 50<iteration>
@@ -348,7 +348,7 @@ module EndConditions =
 
             /// Annealing will stop when either: there is little movement in parameter space;
             /// no improvements are being made; or acceptance rates are very low.
-            let annealing<'S,'V> : EndCondition<'S,'V> =
+            let annealing<'S,'V> : EndCondition<``optim-space``> =
                 combineAny
                     [ whenNoBestValueImprovement 500<iteration>
                       whenStationary 1e-6<``optim-space``^2> 100<iteration>
@@ -361,9 +361,9 @@ module EndConditions =
         /// Convergence of results using the Gelman-Rubin Rhat statistic.
         /// `thin` - Only test for convergence at multiples of the following intervals (when all chains are ready).
         /// `chainCount` - The number of chains to test for convergence. This makes the agent wait until results for all chains are in.
-        let convergence thin chainCount : EndCondition<'S,'V> =
+        let convergence thin chainCount : EndCondition<'space> =
 
-            let assess (chains: Map<int, Solution<'S,'V> list>) =
+            let assess (chains: Map<int, Solution<'space> list>) =
                 printfn "Assessing convergence..."
 
                 if chains.Count < chainCount then
@@ -385,7 +385,7 @@ module EndConditions =
                             |> Seq.map (fun chain ->
                                 chain
                                 |> Seq.map (fun v ->
-                                    v |> snd |> Typed.Vector.itemAt (p - 1) |> Units.removeUnitFromFloat)))
+                                    v |> snd |> Array.item (p - 1) |> Units.removeUnitFromFloat)))
 
                     printfn "Param values by chain: %A" parameterValueByChain
 

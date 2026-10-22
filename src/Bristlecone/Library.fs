@@ -53,8 +53,8 @@ module Bristlecone =
 
     let withTimeConversion<'d, 'd2, 'timespan, 'timespan2, [<Measure>] 'modelTimeUnit, 'o1, [<Measure>] 'o2, [<Measure>] 'u>
         (fn: DateMode.Conversion.ResolutionToModelUnits<'d2, 'timespan2, 'modelTimeUnit>)
-        (engine: EstimationEngine<'S,'V,'M,'d, 'o1, 'o2, 'u>)
-        : EstimationEngine<'S,'V,'M,'d2, 'timespan2, 'modelTimeUnit, 'u> =
+        (engine: EstimationEngine<'S,'V,'M,'d, 'o1, 'o2, 'u, 'optimSpace>)
+        : EstimationEngine<'S,'V,'M,'d2, 'timespan2, 'modelTimeUnit, 'u, 'optimSpace> =
         { TimeHandling = engine.TimeHandling
           OptimiseWith = engine.OptimiseWith
           LogTo = engine.LogTo
@@ -180,9 +180,6 @@ module Bristlecone =
     let private unsafeEraseSpace<'space> =
         unbox<Parameter.Pool.OptimiserConfig<'S,'V,``optim-space``>>
 
-    let private unsafeEraseSpaceForward<'space> =
-        unbox<TypedVector<'S,'V,``optim-space-transformed``>>
-
     let private dynamicVariableKeys (models: ModelSystem.ModelForm<'S,'V,'modelTimeUnit>) =
         match models with
         | ModelForm.DifferenceEqs eqs -> eqs |> Map.keys
@@ -190,22 +187,23 @@ module Bristlecone =
 
     /// Convert a list of optimiser-space solutions into real-space solutions
     let internal toRealSpaceSolutions
+        (numEngine: Numerics.NumericEngine<'S,'V,'M>)
         (config: Parameter.Pool.AnyOptimiserConfig<'S,'V>)
-        (solutions: Solution<'S,'V> list)
+        (solutions: Solution<'space> list)
         : (float<``-logL``> * float<``parameter``>[]) list =
 
         match config with
         | Parameter.Pool.DetachedConfig cfg ->
             solutions
             |> List.map (fun (ll, pointOptSpace) ->
-                let realVec = cfg.Compiled.Forward pointOptSpace
-                Scalar.toFloat ll, realVec |> Vector.toArrayFloat)
+                let realVec = cfg.Compiled.Forward (pointOptSpace |> ofVector numEngine.vectorBackend numEngine.vectorAccess)
+                ll, realVec |> Vector.toArrayFloat)
 
         | Parameter.Pool.TransformedConfig cfg ->
             solutions
             |> List.map (fun (ll, pointOptSpace) ->
-                let realVec = cfg.Compiled.Forward(unsafeEraseSpaceForward pointOptSpace)
-                Scalar.toFloat ll, realVec |> Vector.toArrayFloat)
+                let realVec = cfg.Compiled.Forward (pointOptSpace |> ofVector numEngine.vectorBackend numEngine.vectorAccess |> Vector.retype) // TODO Solution to remove retype
+                ll, realVec |> Vector.toArrayFloat)
 
     let internal validateEnvData expectedKeys actualMap =
         let expectedSet = expectedKeys |> Set.ofList
@@ -266,8 +264,8 @@ module Bristlecone =
     /// <param name="model"></param>
     /// <returns></returns>
     let tryFit
-        (engine: EstimationEngine<'S,'V,'M,'date, 'timespan, 'modelTimeUnit, 'stateUnit>)
-        endCondition
+        (engine: EstimationEngine<'S,'V,'M,'date, 'timespan, 'modelTimeUnit, 'stateUnit, 'optimSpace>)
+        (endCondition: EndCondition<'optimSpace>)
         (observedSeries: CodedMap<TimeSeries<float<'stateUnit>, 'date, 'yearType, 'timespan>>)
         (model: ModelSystem<'S,'V,'modelTimeUnit>)
         =
@@ -386,20 +384,7 @@ module Bristlecone =
                     (Fit.interpolationFor engine)
 
             // A centralised transform for parameters between point and parameter space.
-            let optimConfig =
-                match engine.OptimiseWith with
-                | Optimisation.InDetachedSpace _ ->
-                    Parameter.Pool.DetachedConfig(Parameter.Pool.toOptimiserConfigBounded engine.Backend model.Parameters)
-                | Optimisation.InTransformedSpace _ ->
-                    Parameter.Pool.TransformedConfig(Parameter.Pool.toOptimiserConfigTransformed engine.Backend model.Parameters)
-
-            let optimise =
-                match engine.OptimiseWith, optimConfig with
-                | Optimisation.InDetachedSpace optim, Parameter.Pool.DetachedConfig cfg ->
-                    optim engine.Backend engine.Random engine.LogTo endCondition cfg.Domain None
-                | Optimisation.InTransformedSpace optim, Parameter.Pool.TransformedConfig cfg ->
-                    optim engine.Backend engine.Random engine.LogTo endCondition (unsafeEraseSpace cfg).Domain None
-                | _ -> invalidOp "Mode/config mismatch"
+            let optimConfig = engine.OptimiseWith.MakeTransformToSpace engine.Backend model.Parameters
 
             let obsDataForObjective =
                 Solver.Conditioning.toObservationData conditioned.ObservedForPairing
@@ -411,33 +396,44 @@ module Bristlecone =
 
             engine.LogTo <| GeneralEvent(sprintf "Observation times: %A." obsTimes)
 
+            let constants = Scalar.constants engine.Backend
+
             let objective =
                 Objective.create
                     model.NegLogLikelihood
                     model.Measures
                     (solver (Solver.StepType.External obsTimes))
                     optimConfig
+                    (constants.invalid |> Scalar.retype)
                     (obsDataForObjective |> Map.map(fun _ v -> ofVector engine.Backend.vectorBackend engine.Backend.vectorAccess v))
 
-            let result, timeTaken = measureTime (fun _ -> objective |> optimise)
+            // TODO THIS
+            let evaluator fn : Optimisation.EvaluateObjective<'space> = {
+                Evaluate = fun p -> nan
+                Gradient = fun p -> nan
+                EvaluateVectorised = fun p -> [| nan |]
+            }
+
+            let optimise = engine.OptimiseWith.Optimise engine.Random engine.LogTo endCondition optimConfig.Domain None
+            let result, timeTaken = measureTime (fun _ -> objective |> evaluator |> optimise)
 
             let lowestLikelihood, bestPoint =
                 match result |> Optimisation.Optimiser.tryGetSolution with
                 | Some sol -> sol
                 | None -> failwith "The optimisation algorithm did not return any results."
 
-            let invalidValue = ofScalar engine.Backend.scalarBackend engine.Backend.scalarBackend.atomic.constants.invalid
+            let bestPointVec = ofVector engine.Backend.vectorBackend engine.Backend.vectorAccess bestPoint
 
             let estimatedSeries =
                 Objective.createPredictor
-                    invalidValue
+                    (constants.invalid |> Scalar.retype)
                     model.Measures
                     (solver (Solver.StepType.External obsTimes))
                     optimConfig
-                    bestPoint
+                    bestPointVec
 
             let estimatedHighRes =
-                Objective.createPredictor invalidValue model.Measures (solver Solver.StepType.Internal) optimConfig bestPoint
+                Objective.createPredictor (constants.invalid |> Scalar.retype) model.Measures (solver Solver.StepType.Internal) optimConfig bestPointVec
 
             let paired =
                 conditioned.ObservedForPairing.Series
@@ -454,12 +450,8 @@ module Bristlecone =
                          d))
                     |> TimeSeries.fromObservations observedSeries.DateMode)
 
-            let bestPoint =
-                match optimConfig with
-                | Parameter.Pool.DetachedConfig o -> o.Compiled.Forward bestPoint
-                | Parameter.Pool.TransformedConfig o -> o.Compiled.Forward(unbox bestPoint) // TODO Remove unbox
-
-            let bestPointPool = Parameter.Pool.fromRealVector bestPoint model.Parameters
+            let bestPoint = optimConfig.Compiled.Forward bestPointVec
+            let bestPointPool = Parameter.Pool.fromRealVector (bestPoint |> Vector.toArrayFloat) model.Parameters
 
             let estimatedHighResFloat =
                 estimatedHighRes |> Map.map (fun _ v -> v |> Vector.toArrayFloat) |> Some
@@ -472,14 +464,14 @@ module Bristlecone =
                     { ComponentName = r.Component
                       StageName = r.Stage
                       ReplicateNumber = r.Replicate
-                      Results = r.Results |> toRealSpaceSolutions optimConfig })
+                      Results = r.Results |> toRealSpaceSolutions engine.Backend optimConfig })
 
             let metadata = Metadata.genMetadata conditioned timeTaken
 
             return
                 { ResultId = resultId
                   Metadata = metadata
-                  Likelihood = Scalar.toFloat lowestLikelihood
+                  Likelihood = lowestLikelihood
                   Parameters = bestPointPool
                   Series = paired
                   Trace = trace
@@ -509,9 +501,9 @@ module Bristlecone =
     /// It is wrapped in an F# Result, indicating if the procedure
     /// was successful or not.</returns>
     let tryTestModel
-        (engine: EstimationEngine<'S,'V,'M,'date, 'timespan, 'modelTimeUnit, 'state>)
+        (engine: EstimationEngine<'S,'V,'M,'date, 'timespan, 'modelTimeUnit, 'state, 'optimSpace>)
         endCondition
-        (settings: Test.TestSettings<'S,'state, 'date, 'timeunit, 'timespan>)
+        (settings: Test.TestSettings<'state, 'date, 'timeunit, 'timespan>)
         (model: ModelSystem<'S,'V,'modelTimeUnit>)
         =
 
@@ -546,7 +538,7 @@ module Bristlecone =
             engine.LogTo <| GeneralEvent(sprintf "Dataset is %A" mergedData)
 
             engine.LogTo
-            <| GeneralEvent(sprintf "Parameters to test are %A" (trueParamPool |> Parameter.Pool.toVectorWithKeysReal))
+            <| GeneralEvent(sprintf "Parameters to test are %A" (trueParamPool |> Parameter.Pool.toVectorWithKeysReal engine.Backend))
 
             // Fit with true parameters (no optimisation)
             let! realEstimate =
@@ -606,9 +598,9 @@ module Bristlecone =
     /// <param name="model">The model system to test against the estimation engine.</param>
     /// <returns>A test result that indicates differences between the expected and actual fit.</returns>
     let testModel
-        (engine: EstimationEngine<'S,'V,'M,'date, 'timespan, 'modelTimeUnit, 'state>)
+        (engine: EstimationEngine<'S,'V,'M,'date, 'timespan, 'modelTimeUnit, 'state, 'optimSpace>)
         endCondition
-        (settings: TestSettings<'S,'state, 'date, 'yearUnit, 'timespan>)
+        (settings: TestSettings<'state, 'date, 'yearUnit, 'timespan>)
         (model: ModelSystem<'S,'V,'modelTimeUnit>)
         =
         tryTestModel engine endCondition settings model |> Result.forceOk
@@ -621,8 +613,8 @@ module Bristlecone =
     /// <param name="series">Time-series to fit with model</param>
     /// <returns>A list of estimation results (one for each bootstrap) for further analysis</returns>
     let bootstrap
-        (engine: EstimationEngine.EstimationEngine<'S,'V,'M,'date, 'timespan, 'modelTimeUnit, 1>)
-        (endCondition: EndCondition<'S,'V>)
+        (engine: EstimationEngine.EstimationEngine<'S,'V,'M,'date, 'timespan, 'modelTimeUnit, 1, 'optimSpace>)
+        (endCondition: EndCondition<'space>)
         bootstrapCount
         (model: ModelSystem<'S,'V,'modelTimeUnit>)
         (series: Map<ShortCode.ShortCode, TimeSeries.TimeSeries<float, 'date, 'timeunit, 'timespan>>)

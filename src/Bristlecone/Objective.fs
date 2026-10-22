@@ -79,13 +79,6 @@ module Objective =
                         (Vector.length r.Expected)
                 ))
 
-    let compiledFromConfig
-        (config: Parameter.Pool.AnyOptimiserConfig<'S,'V>)
-        : Parameter.Pool.CompiledTransforms<'S,'V,``optim-space``> =
-        match config with
-        | Parameter.Pool.DetachedConfig cfg -> cfg.Compiled
-        | Parameter.Pool.TransformedConfig cfg -> unbox cfg.Compiled // TODO remove this unbox and coercion.
-
     let predict invalidValue solver measures parameters =
         let dynamics, initialConditions = solver parameters
         let measured = measure measures parameters dynamics initialConditions invalidValue
@@ -100,22 +93,19 @@ module Objective =
         (negLogLikFn: ModelSystem.Likelihood<'S,'V,state>)
         (measures: CodedMap<ModelSystem.Measurement<'S,'V,state>>)
         (solver: Solver.ConfiguredSolver<'S,'V>)
-        config
+        (config: Parameter.Pool.OptimiserConfig<'S,'V,'space>)
         invalidValue
         (observed: CodedMap<TypedVector<'S,'V,state>>)
-        : EstimationEngine.Objective<'S,'V> =
-
-        let compiled = compiledFromConfig config
+        : EstimationEngine.Objective<'S,'V,'space> =
 
         fun point ->
-            let thetaReal = compiled.Forward point
-            let accessor = accessorFromRealVector compiled thetaReal
+            let thetaReal = config.Compiled.Forward point
+            let accessor = accessorFromRealVector config.Compiled thetaReal
 
             thetaReal
             |> predict invalidValue solver measures
             |> pairObservationsToExpected observed
             |> negLogLikFn.Evaluate accessor
 
-    let createPredictor invalidValue (measures: CodedMap<ModelSystem.Measurement<'S,'V,state>>) (solver: Solver.ConfiguredSolver<'S,'V>) config =
-        let compiled = compiledFromConfig config
-        compiled.Forward >> predict invalidValue solver measures
+    let createPredictor invalidValue (measures: CodedMap<ModelSystem.Measurement<'S,'V,state>>) (solver: Solver.ConfiguredSolver<'S,'V>) (config: Parameter.Pool.OptimiserConfig<'S,'V,'space>) =
+        config.Compiled.Forward >> predict invalidValue solver measures

@@ -278,10 +278,6 @@ module Parameter =
             { Domain: (float<'space> * float<'space> * Constraint<'space>)[]
               Compiled: CompiledTransforms<'S,'V,'space> }
 
-        and AnyOptimiserConfig<'S,'V> =
-            | DetachedConfig of OptimiserConfig<'S,'V,``optim-space``>
-            | TransformedConfig of OptimiserConfig<'S,'V,``optim-space-transformed``>
-
         /// Transform the units of a constraint from parameter (real) units into
         /// optimisation space units.
         let internal transformConstraint<'S,[<Measure>] 'space>
