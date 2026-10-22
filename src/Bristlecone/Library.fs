@@ -51,7 +51,7 @@ module Bristlecone =
     /// <returns></returns>
     let withOutput out engine = { engine with LogTo = out }
 
-    let withTimeConversion<'d, 'd2, 'timespan, 'timespan2, [<Measure>] 'modelTimeUnit, 'o1, [<Measure>] 'o2, [<Measure>] 'u>
+    let withTimeConversion<'S,'V,'M,'d, 'd2, 'timespan, 'timespan2, [<Measure>] 'modelTimeUnit, 'o1, [<Measure>] 'o2, [<Measure>] 'u, [<Measure>] 'optimSpace>
         (fn: DateMode.Conversion.ResolutionToModelUnits<'d2, 'timespan2, 'modelTimeUnit>)
         (engine: EstimationEngine<'S,'V,'M,'d, 'o1, 'o2, 'u, 'optimSpace>)
         : EstimationEngine<'S,'V,'M,'d2, 'timespan2, 'modelTimeUnit, 'u, 'optimSpace> =
@@ -175,11 +175,6 @@ module Bristlecone =
               |> Option.defaultValue ""
               "Fit: time taken (seconds)", sprintf "%f" timeTaken ]
 
-
-    // Temporary helpers until optim-space-transformed can be handled correctly:
-    let private unsafeEraseSpace<'space> =
-        unbox<Parameter.Pool.OptimiserConfig<'S,'V,``optim-space``>>
-
     let private dynamicVariableKeys (models: ModelSystem.ModelForm<'S,'V,'modelTimeUnit>) =
         match models with
         | ModelForm.DifferenceEqs eqs -> eqs |> Map.keys
@@ -188,22 +183,13 @@ module Bristlecone =
     /// Convert a list of optimiser-space solutions into real-space solutions
     let internal toRealSpaceSolutions
         (numEngine: Numerics.NumericEngine<'S,'V,'M>)
-        (config: Parameter.Pool.AnyOptimiserConfig<'S,'V>)
+        (config: Parameter.Pool.OptimiserConfig<'S,'V,'space>)
         (solutions: Solution<'space> list)
         : (float<``-logL``> * float<``parameter``>[]) list =
-
-        match config with
-        | Parameter.Pool.DetachedConfig cfg ->
-            solutions
-            |> List.map (fun (ll, pointOptSpace) ->
-                let realVec = cfg.Compiled.Forward (pointOptSpace |> ofVector numEngine.vectorBackend numEngine.vectorAccess)
-                ll, realVec |> Vector.toArrayFloat)
-
-        | Parameter.Pool.TransformedConfig cfg ->
-            solutions
-            |> List.map (fun (ll, pointOptSpace) ->
-                let realVec = cfg.Compiled.Forward (pointOptSpace |> ofVector numEngine.vectorBackend numEngine.vectorAccess |> Vector.retype) // TODO Solution to remove retype
-                ll, realVec |> Vector.toArrayFloat)
+        solutions
+        |> List.map (fun (ll, pointOptSpace) ->
+            let realVec = config.Compiled.Forward (pointOptSpace |> ofVector numEngine.vectorBackend numEngine.vectorAccess)
+            ll, realVec |> Vector.toArrayFloat)
 
     let internal validateEnvData expectedKeys actualMap =
         let expectedSet = expectedKeys |> Set.ofList
@@ -407,11 +393,11 @@ module Bristlecone =
                     (constants.invalid |> Scalar.retype)
                     (obsDataForObjective |> Map.map(fun _ v -> ofVector engine.Backend.vectorBackend engine.Backend.vectorAccess v))
 
-            // TODO THIS
-            let evaluator fn : Optimisation.EvaluateObjective<'space> = {
-                Evaluate = fun p -> nan
-                Gradient = fun p -> nan
-                EvaluateVectorised = fun p -> [| nan |]
+            // The boundary between generic numeric space and float-space (NB optimisers work on float-space).
+            let evaluator (fn:EstimationEngine.Objective<'S,'V,'space>) : Optimisation.EvaluateObjective<'space> = {
+                Evaluate = fun p -> p |> ofVector engine.Backend.vectorBackend engine.Backend.vectorAccess |> fn |> Scalar.toFloat
+                Gradient = fun p -> failwith "gradients unavailable" // TODO
+                EvaluateVectorised = fun p -> failwith "vectorised objective unavailable" // TODO
             }
 
             let optimise = engine.OptimiseWith.Optimise engine.Random engine.LogTo endCondition optimConfig.Domain None
@@ -544,7 +530,7 @@ module Bristlecone =
             let! realEstimate =
                 tryFit
                     { engine with
-                        OptimiseWith = Optimisation.None.none }
+                        OptimiseWith = Optimisation.None.none () }
                     endCondition
                     mergedData
                     { model with
@@ -673,7 +659,7 @@ module Bristlecone =
             let est =
                 fit
                     (engine
-                     |> withCustomOptimisation Optimisation.None.none
+                     |> withCustomOptimisation (Optimisation.None.none ())
                      |> withConditioning Conditioning.RepeatFirstDataPoint)
                     (Optimisation.EndConditions.atIteration 0<iteration>)
                     dataset

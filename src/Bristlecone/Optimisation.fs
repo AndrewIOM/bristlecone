@@ -4,14 +4,26 @@ open Bristlecone
 open Bristlecone.Logging
 open Bristlecone.EstimationEngine
 open Bristlecone.EstimationEngine.Optimisation
-open Bristlecone.Numerics.Typed
 
 /// Setup functions for working with transformed or
 /// detached parameter spaces within optimisation algorithms.
-module Spaces =
+module OptimSpaces =
 
-    let detached (algorithm: Optimise<``optim-space``>) : OptimStrategy<``optim-space``> =
-        2
+    /// Wrap an optimisation routine that expects parameters in their
+    /// original units.
+    let detached (routine: Optimise<``optim-space``>) : Optimisation.Optimiser<``optim-space``,'S,'V,'M> =
+        {
+            Optimise = routine
+            MakeTransformToSpace = Parameter.Pool.toOptimiserConfigBounded
+        }
+
+    /// Wrap an optimisation routine that requires parameters to be
+    /// in a unconstrained (transformed) parameter space.
+    let transformed (routine: Optimise<``optim-space-transformed``>) : Optimisation.Optimiser<``optim-space-transformed``,'S,'V,'M> =
+        {
+            Optimise = routine
+            MakeTransformToSpace = Parameter.Pool.toOptimiserConfigTransformed
+        }
 
 
 /// Functions for combining and orchestrating many optimisers.
@@ -49,8 +61,8 @@ module None =
 
     /// An optimisation function that calculates the value of `f` using
     /// the given minimum bound. Use when optimisation of the objective is not required.
-    let none: Optimiser =
-        InDetachedSpace
+    let none () : Optimiser<``optim-space``,'S,'V,'M> =
+        OptimSpaces.detached
         <| fun _ writeOut _ domain _ f ->
             writeOut <| OptimisationPhaseEvent(OptimComponentStarting "None")
             let point = [| for min, _, _ in domain -> min |]
@@ -163,8 +175,8 @@ module MonteCarlo =
         match c with
         | Parameter.Constraint.Unconstrained -> proposed
         | Parameter.Constraint.PositiveOnly ->
-            if proposed < 0.<``optim-space``> then
-                reflect proposed (0.<``optim-space``>, Units.retype infinity)
+            if proposed < LanguagePrimitives.FloatWithMeasure<'space> 0. then
+                reflect proposed (LanguagePrimitives.FloatWithMeasure<'space> 0., LanguagePrimitives.FloatWithMeasure<'space> infinity)
             else
                 proposed
         | Parameter.Constraint.Bounded(lo, hi) -> reflect proposed (lo, hi)
@@ -535,14 +547,14 @@ module MonteCarlo =
     /// A Markov Chain Monte Carlo (MCMC) sampling algorithm that randomly 'walks'
     /// through a n-dimensional posterior distribution of the parameter space.
     /// Specify `tuningSteps` to prime the jump size before random walk.
-    let randomWalk (tuningSteps: seq<TuneStep>) : Optimiser =
-        InDetachedSpace <| RandomWalk.randomWalk tuningSteps
+    let randomWalk (tuningSteps: seq<TuneStep>) : Optimiser<``optim-space``,'S,'V,'M> =
+        OptimSpaces.detached <| RandomWalk.randomWalk tuningSteps
 
     /// A Markov Chain Monte Carlo (MCMC) sampling algorithm that continually adjusts the
     /// covariance matrix based on the recently-sampled posterior distribution. Proposed
     /// jumps are therefore tuned to the recent history of accepted jumps.
-    let adaptiveMetropolis weighting period : Optimiser =
-        InDetachedSpace
+    let adaptiveMetropolis weighting period : Optimiser<``optim-space``,'S,'V,'M> =
+        OptimSpaces.detached
         <| fun random writeOut n domain startPoint f ->
             RandomWalk.randomWalk
                 [ { Method = CovarianceWithScale weighting
@@ -807,8 +819,8 @@ module MonteCarlo =
     /// each parameter according to the per-parameter acceptance rate.
     /// Reference: Bai Y (2009). “An Adaptive Directional Metropolis-within-Gibbs Algorithm.”
     /// Technical Report in Department of Statistics at the University of Toronto.
-    let ``Adaptive-Metropolis-within Gibbs``: Optimiser =
-        InDetachedSpace
+    let ``Adaptive-Metropolis-within Gibbs``: Optimiser<``optim-space``,'S,'V,'M> =
+        OptimSpaces.detached
         <| fun random writeOut _ domain startPoint f ->
             let initialTheta = Initialise.getStartPoint f domain random 10000 startPoint
             let initialSigma = Array.init (Array.length initialTheta) (fun _ -> 0.)
@@ -836,8 +848,8 @@ module MonteCarlo =
 
     /// A non-adaptive Metropolis-within-gibbs Sampler. Each parameter is updated
     /// individually, unlike the random walk algorithm.
-    let ``Metropolis-within Gibbs``: Optimiser =
-        InDetachedSpace
+    let ``Metropolis-within Gibbs``: Optimiser<``optim-space``,'S,'V,'M> =
+        OptimSpaces.detached
         <| fun random writeOut endCon domain startPoint (f: EvaluateObjective<``optim-space``>) ->
             let initialTheta = Initialise.getStartPoint f domain random 10000 startPoint
             let initialSigma = Array.init (Array.length initialTheta) (fun _ -> 0.)
@@ -863,8 +875,8 @@ module MonteCarlo =
     /// Implementation similar to that proposed by Yang and Rosenthal: "Automatically Tuned
     /// General-Purpose MCMC via New Adaptive Diagnostics"
     /// Reference: http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.70.7198&rep=rep1&type=pdf
-    let ``Automatic (Adaptive Diagnostics)``: Optimiser =
-        InDetachedSpace
+    let ``Automatic (Adaptive Diagnostics)``: Optimiser<``optim-space``,'S,'V,'M> =
+        OptimSpaces.detached
         <| fun random writeOut endCon domain startPoint (f: EvaluateObjective<``optim-space``>) ->
             writeOut <| OptimisationPhaseEvent(OptimComponentStarting "Generalised MCMC")
 
@@ -1118,8 +1130,8 @@ module MonteCarlo =
 
             /// An exploration method that perturbs around a point in optimisation-space.
             /// Used for profile likelihood in the Confidence module.
-            let perturb initialScale settings : Optimiser =
-                InDetachedSpace
+            let perturb initialScale settings : Optimiser<``optim-space``,'S,'V,'M> =
+                OptimSpaces.detached
                 <| fun random writeOut _ domain _ (f: EvaluateObjective<``optim-space``>) ->
                     let gaussian (scale: float<``optim-space``>) (t: float) =
                         fun () -> Normal.draw random 0.<``optim-space``> scale ()
@@ -1450,8 +1462,8 @@ module MonteCarlo =
 
         /// Candidate distribution: Gaussian univariate []
         /// Probability: Boltzmann Machine
-        let classicalSimulatedAnnealing scale tDependentProposal settings : Optimiser =
-            InDetachedSpace
+        let classicalSimulatedAnnealing scale tDependentProposal settings : Optimiser<``optim-space``,'S,'V,'M> =
+            OptimSpaces.detached
             <| fun random writeOut endCon domain _ (f: EvaluateObjective<``optim-space``>) ->
                 let initialScale = [| 1 .. domain.Length |] |> Array.map (fun _ -> scale)
 
@@ -1477,8 +1489,8 @@ module MonteCarlo =
 
         /// Candidate distribution: Cauchy univariate []
         /// Probability: Bottzmann Machine
-        let fastSimulatedAnnealing scale tDependentProposal settings : Optimiser =
-            InDetachedSpace
+        let fastSimulatedAnnealing scale tDependentProposal settings : Optimiser<``optim-space``,'S,'V,'M> =
+            OptimSpaces.detached
             <| fun random writeOut endCon domain _ f ->
                 let initialScale = [| 1 .. domain.Length |] |> Array.map (fun _ -> scale)
 
@@ -1512,14 +1524,14 @@ module MonteCarlo =
     /// becomes T = 1. Bristlecone library defaults are used for all settings.
     /// Pass the `EndCondition.Profiles.mcmc` end condition to set the stopping
     /// conditions for the final end.
-    let bristleconeSampler: Optimiser =
+    let bristleconeSampler: Optimiser<``optim-space``,'S,'V,'M> =
         let settings =
             { SimulatedAnnealing.AnnealSettings.Fast with
                 StartAtBest = true
                 HeatStepLength = EndConditions.Profiles.SimulatedAnnealing.heatingRelaxed
                 TemperatureFloor = Some 1.0 }
 
-        InDetachedSpace
+        OptimSpaces.detached
         <| fun random writeOut endCon domain customStartPoint f ->
             writeOut <| OptimisationPhaseEvent(OptimComponentStarting "Bristlecone sampler")
             let initialScale = Initialise.initScales domain
@@ -1720,8 +1732,8 @@ module MonteCarlo =
 
         /// A Monte Carlo Markov Chain sampler based on the 'Filzbach' algorithm from
         /// Microsoft Research Cambridge.
-        let filzbach settings : Optimiser =
-            InDetachedSpace
+        let filzbach settings : Optimiser<``optim-space``,'S,'V,'M> =
+            OptimSpaces.detached
             <| fun random writeOut endCon domain startPoint f ->
                 let theta = Initialise.getStartPoint f domain random 1000 startPoint
                 writeOut <| DebugEvent("Optimisation", sprintf "Initial theta is %A" theta)
@@ -1782,7 +1794,7 @@ module Amoeba =
         let evaluate (f: EvaluateObjective<``optim-space-transformed``>) (x: OptimPoint<``optim-space-transformed``>) = f.Evaluate x, x
         let valueOf (s: Solution<``optim-space-transformed``>) = fst s
 
-        let shrink (a: Amoeba) (f: Objective<'S,'V>) s =
+        let shrink (a: Amoeba) (f: Objective<'S,'V,``optim-space-transformed``>) s =
             let best = snd a.Best
 
             { a with
@@ -1837,7 +1849,7 @@ module Amoeba =
                         <| OptimisationEvent
                             { Iteration = i
                               Likelihood = trace |> Seq.head |> fst
-                              Theta = trace |> Seq.head |> snd }
+                              Theta = trace |> Seq.head |> snd |> Array.map Units.retype }
 
                     search (i + 1<iteration>) (a.Best :: trace) atEnd (update a f settings)
                 else
@@ -1936,8 +1948,8 @@ module Amoeba =
 
 
     /// Optimise an objective function using a single downhill Nelder Mead simplex.
-    let single settings : Optimiser =
-        InTransformedSpace
+    let single settings : Optimiser<``optim-space-transformed``,'S,'V,'M> =
+        OptimSpaces.transformed
         <| fun random writeOut endCon domain startPoint f ->
             let result = Solver.solve settings random writeOut endCon domain startPoint f
 
@@ -1949,7 +1961,7 @@ module Amoeba =
     /// Optimisation heuristic that creates a swarm of amoeba (Nelder-Mead) solvers.
     /// The swarm proceeds for `numberOfLevels` levels, constraining the starting bounds
     /// at each level to the 80th percentile of the current set of best likelihoods.
-    let swarm levels amoebaAtLevel settings : Optimiser =
-        InTransformedSpace
+    let swarm levels amoebaAtLevel settings : Optimiser<``optim-space-transformed``,'S,'V,'M> =
+        OptimSpaces.transformed
         <| fun rng logger endAt domain startPoint f ->
             Solver.swarm settings rng logger levels endAt amoebaAtLevel domain startPoint f []

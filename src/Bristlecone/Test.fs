@@ -172,7 +172,6 @@ module Test =
             (startDate: 'T)
             (resolution: Resolution.FixedTemporalResolution<'timespan>)
             (length: int)
-            (eqs: ModelForm<'S,'V,'timeunit>)
             (dateMode: DateMode.DateMode<'T, 'yearType, 'timespan>)
             (t1: CodedMap<TypedScalar<'S,'state>>)
             =
@@ -198,7 +197,7 @@ module Test =
         /// Generate time-series for a given engine and model, and
         /// for a particular point in optim-space.
         let tryGenerateData'
-            (engine: EstimationEngine.EstimationEngine<'S,'V,'M,_,_,_,_>)
+            (engine: EstimationEngine.EstimationEngine<'S,'V,'M,'date,'timespan,'modelTimeUnit,'state,'space>)
             (model: ModelSystem<'S,'V,'modelTimeUnit>)
             (testSettings: TestSettings<'T, 'date, 'timeunit, 'timespan>)
             rnd
@@ -224,7 +223,6 @@ module Test =
                     testSettings.StartDate
                     testSettings.Resolution
                     testSettings.TimeSeriesLength
-                    model.Equations
                     testSettings.DateMode
                     t1
                 |> Option.get
@@ -281,7 +279,7 @@ module Test =
         /// Generate data and check that it complies with the
         /// given ruleset.
         let rec tryGenerateData
-            (engine: EstimationEngine.EstimationEngine<'S,'V,'M,'date, 'timespan, 'modelTimeUnit, 'state>)
+            (engine: EstimationEngine.EstimationEngine<'S,'V,'M,'date, 'timespan, 'modelTimeUnit, 'state,'optimSpace>)
             (settings: TestSettings<'state, 'date, 'timeunit, 'timespan>)
             (model: ModelSystem.ModelSystem<'S,'V,'modelTimeUnit>)
             attempts
