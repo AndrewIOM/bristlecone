@@ -238,6 +238,9 @@ module Typed =
             Backend: NumericBackend<'S,'V>
             Access: VectorAccessOps<'S,'V> }
 
+        member this.Backing = this.Backing
+        member this.Inside = this.Inner
+
         // Vector–Vector elementwise
         static member inline (+)(a: TypedVector<'S,'V,'u>, b: TypedVector<'S,'V,'u>) : TypedVector<'S,'V,'u> = { Inner = a.Backend.add a.Inner b.Inner; Backend = a.Backend; Access = a.Access }
         static member inline (-)(a: TypedVector<'S,'V,'u>, b: TypedVector<'S,'V,'u>) : TypedVector<'S,'V,'u> = { Inner = a.Backend.sub a.Inner b.Inner; Backend = a.Backend; Access = a.Access }
@@ -618,7 +621,7 @@ module Backends =
                 reduce  = fun _ x -> x
                 length  = fun _ -> 1
                 promote = fun s _ -> s
-                initV = failwith "Not Implemented"
+                initV = failwith "not implemented"
                 abs = failwith "Not Implemented"
                 exp = failwith "Not Implemented"
                 log = failwith "Not Implemented"
@@ -656,7 +659,7 @@ module Backends =
                 reduce  = failwith "Not Implemented"
                 length  = fun _ -> 1
                 promote = fun s _ -> DV.ofArray [| s |]
-                initV = failwith "Not Implemented"
+                initV = fun n fn -> Array.init n fn |> DV.ofArray
                 abs = failwith "Not Implemented"
                 exp = failwith "Not Implemented"
                 log = failwith "Not Implemented"
@@ -694,7 +697,7 @@ module Backends =
                 reduce  = failwith "not implemented"
                 length  = fun _ -> 1
                 promote = fun s _ -> failwith "not implemented"
-                initV = failwith "Not Implemented"
+                initV = failwith "not implemented"
                 abs = failwith "Not Implemented"
                 exp = failwith "Not Implemented"
                 log = failwith "Not Implemented"

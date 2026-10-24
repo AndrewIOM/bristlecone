@@ -201,7 +201,7 @@ module Regression =
                 slope, nan
             else
                 let tStat = slope / seSlope
-                let tDist = MathNet.Numerics.Distributions.StudentT(0.0, 1.0, n - 2.0)
+                let tDist = StudentT(0.0, 1.0, n - 2.0)
                 let pVal = 2.0 * (1.0 - tDist.CumulativeDistribution(abs tStat))
                 slope, pVal
 
@@ -235,8 +235,10 @@ module TrendAnalysis =
 /// Statistics for determining the root of non-linear equations.
 module RootFinding =
 
+    open Bristlecone.Numerics
+
     /// Secant method for finding root of non-linear equations. This method is faster than bisection, but may not converge on a root.
-    let rec secant n N f x0 x1 x2 : float =
+    let rec secant (backend: NumericBackend<'S,'C>) n N f x0 x1 x2 : 'C =
         if n >= N then
             x0
         else
@@ -257,31 +259,91 @@ module RootFinding =
             else
                 bisect (n + 1) N f a c t
 
-    // module Tensor =
+    /// Functions for constraining the interval over which to conduct
+    /// root-finding.
+    module Interval =
 
-    //     open Bristlecone.Numerics
-    //     open Bristlecone.Numerics.Typed
+        let makeGrid (b: NumericBackend<'S, 'C>) (nGrid: int) (lo: 'S) (hi: 'S) : 'C =
+            let loFloat = b.atomic.toFloatS lo
+            let hiFloat = b.atomic.toFloatS hi
+            let step = (hiFloat - loFloat) / float nGrid
+            b.initV (nGrid + 1) (fun i -> 
+                b.atomic.fromFloatS (loFloat + float i * step)
+            )
 
-    //     /// Functions for constraining the interval over which to conduct
-    //     /// root-finding.
-    //     module Interval =
+        let detectOutOfRange (b: NumericBackend<'S, 'C>) (penaltyScale: 'S) (target: 'C) (values: 'C) =
+        
+            let fLo, fHi = Vector.itemAt 0 values, Vector.itemAt (Vector.length values - 1) values
 
-    //         let makeGrid (n: int) (lo: TypedScalar<'S,'u>) (hi: TypedScalar<'S,'u>) = 
-    //             Stats.linspace lo hi (n + 1)
+            let below = Typed.lt target fLo |> fun m -> Typed.clamp (Typed.sumVector m) Typed.Constants.zero Typed.Constants.one
 
-    //         let detectOutOfRange penaltyScale target (values: TypedVector<'u>) =
-    //             let fLo, fHi = Typed.itemAt 0 values, Typed.itemAt (Typed.length values - 1) values
+            let above = Typed.gt target fHi |> fun m -> Typed.clamp (m.sum ()) Typed.Constants.zero Typed.Constants.one
+            let outOfRange = below + above
+            let inRange = Typed.Constants.one - outOfRange
 
-    //             let below = Typed.lt target fLo |> fun m -> Typed.clamp (Typed.sumVector m) Typed.Constants.zero Typed.Constants.one
+            let dist = (fLo - target) * below + (target - fHi) * above
+            let penalty = Typed.pow dist Typed.Constants.two * penaltyScale
 
-    //             let above = Typed.gt target fHi |> fun m -> Typed.clamp (m.sum ()) Typed.Constants.zero Typed.Constants.one
-    //             let outOfRange = below + above
-    //             let inRange = Typed.Constants.one - outOfRange
+            below, above, outOfRange, inRange, penalty
 
-    //             let dist = (fLo - target) * below + (target - fHi) * above
-    //             let penalty = Typed.pow dist Typed.Constants.two * penaltyScale
 
-    //             below, above, outOfRange, inRange, penalty
+        let refinedGrid
+            (b: NumericBackend<'S, 'C>)
+            (f: 'C -> 'C)
+            (target: 'C)
+            (grid: 'C)
+            (values: 'C)
+            (lo: 'C)
+            (hi: 'C)
+            : 'C =
+            failwith "not implemented"
+
+        let identify
+            (backend: NumericBackend<'S, 'C>)
+             n (penaltyScale: 'S) (f: 'C -> 'C) (target: 'C) (lo: 'S) (hi: 'S) =
+            let grid : 'C = makeGrid backend n lo hi
+            let values = f grid
+
+            let below, above, outOfRange, inRange, penalty =
+                detectOutOfRange backend penaltyScale target values
+
+            let clamped = below * lo + above * hi
+            let loNarrow, hiNarrow, hasChange = narrowInterval grid values target
+
+            let lo2 =
+                outOfRange * clamped + inRange * (hasChange * loNarrow + (backend.atomic.constants.one - hasChange) * lo)
+
+            let hi2 =
+                outOfRange * clamped + inRange * (hasChange * hiNarrow + (backend.atomic.constants.one - hasChange) * hi)
+
+            {|  Low = lo2
+                High = hi2
+                Penalty = penalty
+                InRange = inRange
+                Grid = grid
+                Values = values |}
+
+
+        // /// Functions for constraining the interval over which to conduct
+        // /// root-finding.
+        // module Interval =
+
+        //     let makeGrid numEng (n: int) (lo: TypedScalar<'S,'u>) (hi: TypedScalar<'S,'u>) = 
+        //         Stats.linspace numEng lo hi (n + 1)
+
+            // let detectOutOfRange penaltyScale target (values: TypedVector<'S,'V,'u>) =
+            //     let fLo, fHi = Vector.itemAt 0 values, Vector.itemAt (Vector.length values - 1) values
+
+            //     let below = Typed.lt target fLo |> fun m -> Typed.clamp (Typed.sumVector m) Typed.Constants.zero Typed.Constants.one
+
+            //     let above = Typed.gt target fHi |> fun m -> Typed.clamp (m.sum ()) Typed.Constants.zero Typed.Constants.one
+            //     let outOfRange = below + above
+            //     let inRange = Typed.Constants.one - outOfRange
+
+            //     let dist = (fLo - target) * below + (target - fHi) * above
+            //     let penalty = Typed.pow dist Typed.Constants.two * penaltyScale
+
+            //     below, above, outOfRange, inRange, penalty
 
     //         // let narrowInterval (grid: TypedVector<'u>) (values: TypedVector<'u>) (target: TypedScalar<'u>) =
     //         //     let n = grid.nelement - 1
