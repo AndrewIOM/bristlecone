@@ -27,7 +27,7 @@ module Config =
 module TestSuite =
 
     open TestFunctions.LocalMinima
-    open Bristlecone.Tensors
+    open Bristlecone.Numerics.Typed
 
     let between x y =
         Statistics.Distributions.ContinuousUniform.draw Config.rng x y ()
@@ -40,7 +40,7 @@ module TestSuite =
     let twoDim f (x: float[]) = f x.[0] x.[1]
     let oneDim f (x: float[]) = f x.[0]
     let multidim f (x: float[]) = f x
-    let twoDimT f (x: TypedVector<'a>) = f (Typed.itemAt 0 x) (Typed.itemAt 1 x)
+    let twoDimT f (x: TypedVector<'S,'V,'a>) = f (Vector.itemAt 0 x) (Vector.itemAt 1 x)
 
     // Functions, input domain, global minimum, and global minimum point(s)
     let fixedDimension =

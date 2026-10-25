@@ -207,11 +207,11 @@ module Typed =
 
     [<NoEquality; NoComparison; StructuredFormatDisplay("{Inner}")>]
     type TypedScalar<'S,[<Measure>] 'u> =
-        private {
+        {
             Inner: 'S
             Backend : NumericBackend<'S,'S> }
 
-        member internal this.Backing = this.Backing
+        member this.Backing = this.Backing
 
         static member inline (+)(a: TypedScalar<'S,'u>, b: TypedScalar<'S,'u>) : TypedScalar<'S,'u> = { Inner = a.Backing.add a.Inner b.Inner; Backend = a.Backing }
         static member inline (-)(a: TypedScalar<'S,'u>, b: TypedScalar<'S,'u>) : TypedScalar<'S,'u> = { Inner = a.Backing.sub a.Inner b.Inner; Backend = a.Backing }
@@ -233,7 +233,7 @@ module Typed =
 
     [<NoEquality; NoComparison; StructuredFormatDisplay("{Inner}")>]
     type TypedVector<'S,'V,[<Measure>] 'u> =
-        internal {
+        {
             Inner: 'V
             Backend: NumericBackend<'S,'V>
             Access: VectorAccessOps<'S,'V> }

@@ -494,7 +494,7 @@ module Language =
         /// runs on the dimensions of the container type 'C. For example,
         /// if 'C is a vector, the function runs vectorised within the selected
         /// backend.
-        let rec private buildQuotationCore 
+        let rec private buildQuotationCore<[<Measure>] 'u, 'S, 'C>
             (shouldCache: ModelExpression<'u> -> bool)
             (cache: Caching.QuotationCache<'C, 'u>)
             (backend: NumericBackend<'S, 'C>)
@@ -513,7 +513,7 @@ module Language =
 
             match expr with
             | ME(Constant n) ->
-                let staticVal = backend.atomic.fromFloatS n
+                let staticVal : 'S = backend.atomic.fromFloatS n
                 <@ staticVal @> |> promote
 
             | ME(Environment n) -> context.Environment n |> promote
@@ -652,12 +652,12 @@ module Language =
         /// nodes that have already been built. 'Heavy' nodes
         /// are introduced as let bindings to minimise repetition
         /// of work in computation.
-        let buildQuotationCached<'C, [<Measure>] 'u>
-            backend
+        let buildQuotationCached
+            (backend: NumericBackend<'S,'C>)
             ctx
             inverseFn
             (symbols: Map<string, Var>)
-            (expr: ModelExpression<'u>)
+            (expr: ModelExpression<1>)
             : Expr<'C> =
             let bindingCache, bindings = Caching.makeBindingCache ()
 
@@ -695,14 +695,15 @@ module Language =
 
         /// Compile a rate-based (e.g. ODE) model expression into an internal
         /// `RateEquation` for use in model-fitting.
-        let compileRate<[<Measure>] 'timeUnit, [<Measure>] 'stateUnit>
+        /// Currently hard-coded such that 'S = 'C (i.e. is a degenerate backend / scalar).
+        let compileRate<[<Measure>] 'timeUnit, [<Measure>] 'stateUnit, 'S,'V>
             (backend: NumericBackend<'S,'S>)
             parameters
             envKeys
             (expr: ModelExpression<'stateUnit / 'timeUnit>)
-            : ModelSystem.RateEquation<'S,'S,'timeUnit> =
+            : ModelSystem.RateEquation<'S,'V,'timeUnit> =
 
-            let pVar = Var("parameters", typeof<TypedVector<'S,'S,``parameter``>>)
+            let pVar = Var("parameters", typeof<TypedVector<'S,'V,``parameter``>>)
             let eVar = Var("environment", typeof<CodedMap<TypedScalar<'S,ModelSystem.``environment``>>>)
             let tVar = Var("time", typeof<TypedScalar<'S,'timeUnit>>)
             let xVar = Var("state", typeof<TypedScalar<'S,'stateUnit>>)
@@ -717,22 +718,24 @@ module Language =
                 ThisVal = <@ (%%Expr.Var xVar: TypedScalar<'S,'stateUnit>) |> Scalar.toRaw @>
             }
 
-            let core: Expr<'S> = buildQuotationCached backend ctx (inverseFn()) Map.empty expr
+            // NB The quotation compiler doesn't currently support units. Strip here and reapply later.
+            let exprNoUnit = expr |> fun (ME expr) -> expr |> ME
+            let core: Expr<'S> = buildQuotationCached backend ctx (inverseFn()) Map.empty exprNoUnit
 
             // Convert from 'stateUnit/'timeUnit to internal state/'timeUnit
-            <@ %core |> Scalar.ofRaw backend |> Scalar.retype<'S,1,ModelSystem.state/'timeUnit> @> // TODO Why retype required?
+            <@ %core |> Scalar.ofRaw backend |> Scalar.retype<'S,1,ModelSystem.state/'timeUnit> @> // Retype unit onto solution here
             |> toLambda4 pVar eVar tVar xVar
             |> LeafExpressionConverter.EvaluateQuotation
-            |> unbox<ModelSystem.RateEquation<'S,'S,'timeUnit>>
+            |> unbox<ModelSystem.RateEquation<'S,'V,'timeUnit>>
 
-        let compileDiscrete<[<Measure>] 'timeUnit, [<Measure>] 'stateUnit>
+        let compileDiscrete<[<Measure>] 'timeUnit, [<Measure>] 'stateUnit, 'S,'V>
             (backend: NumericBackend<'S,'S>)
             parameters
             envKeys
             (expr: ModelExpression<'stateUnit>)
-            : ModelSystem.StateEquation<'S,'S,'timeUnit> =
+            : ModelSystem.StateEquation<'S,'V,'timeUnit> =
 
-            let pVar = Var("parameters", typeof<TypedVector<'S,'C,``parameter``>>)
+            let pVar = Var("parameters", typeof<TypedVector<'S,'V,``parameter``>>)
             let eVar = Var("environment", typeof<CodedMap<TypedScalar<'S,ModelSystem.``environment``>>>)
             let tVar = Var("time", typeof<TypedScalar<'S,'timeUnit>>)
             let xVar = Var("state", typeof<TypedScalar<'S,'stateUnit>>)
@@ -747,27 +750,40 @@ module Language =
                 ThisVal = <@ (%%Expr.Var xVar: TypedScalar<'S,'stateUnit>) |> Scalar.toRaw @>
             }
 
-            let core: Expr<'S> = buildQuotationCached backend discreteContext (inverseFn()) Map.empty expr
+            // NB The quotation compiler doesn't currently support units. Strip here and reapply later.
+            let exprNoUnit = expr |> fun (ME expr) -> expr |> ME
+            let core: Expr<'S> = buildQuotationCached backend discreteContext (inverseFn()) Map.empty exprNoUnit
 
-            <@ %core |> Scalar.ofRaw backend |> Scalar.retype<'S,1, ModelSystem.state> @> // TODO Why retype required?
+            <@ %core |> Scalar.ofRaw backend |> Scalar.retype<'S,1, ModelSystem.state> @> // Retype unit back here
             |> toLambda4 pVar eVar tVar xVar
             |> LeafExpressionConverter.EvaluateQuotation
-            |> unbox<ModelSystem.StateEquation<'S,'S,'timeUnit>>
+            |> unbox<ModelSystem.StateEquation<'S,'V,'timeUnit>>
 
-        let compileSimple<[<Measure>] 'u> (backend: NumericBackend<'S,'S>) (expr: ModelExpression<'u>) : float<'u> =
-            let qCore : Expr<'S> =
-                buildQuotationCached
-                    backend
-                    ctx
-                    (inverseFn())
-                    Map.empty
-                    expr
+        // TODO
+        // let compileSimple<[<Measure>] 'u, 'S,'V> (backend: NumericBackend<'S,'S>) (expr: ModelExpression<'u>) : float<'u> =
+        //     let exprNoUnit = expr |> fun (ME expr) -> expr |> ME
+        //     let ctx = {
+        //         ParameterVar = ()
+        //         ParameterIndex = Map.empty
+        //         Environment = fun _ -> failwith "Environment not supported in measures"
+        //         GetState = fun _ -> failwith "Environment not supported in measures"
+        //         TimeVal = <@ backend.atomic.constants.invalid @>
+        //         ThisVal = <@ backend.atomic.constants.invalid @>
+        //     }
+                       
+        //     let qCore : Expr<'S> =
+        //         buildQuotationCached
+        //             backend
+        //             ctx
+        //             (inverseFn())
+        //             Map.empty
+        //             exprNoUnit
 
-            match LeafExpressionConverter.EvaluateQuotation qCore with
-            | :? 'S as raw -> backend.atomic.toFloatS raw |> Units.retype
-            | _ -> failwith "Expected a scalar tensor result"
+        //     match LeafExpressionConverter.EvaluateQuotation qCore with
+        //     | :? 'S as raw -> backend.atomic.toFloatS raw |> Units.retype
+        //     | _ -> failwith "Expected a scalar tensor result"
 
-        let compileMeasure<[<Measure>] 'stateUnit> backend parameters (expr: ModelExpression<'stateUnit>) =
+        let compileMeasure<[<Measure>] 'stateUnit, 'S,'V> backend parameters (expr: ModelExpression<'stateUnit>) =
             
             let pVar = Var("parameters", typeof<TypedVector<'S,'V,parameter>>)
             let statesVar = Var("states", typeof<CodedMap<TypedVector<'S,'V,ModelSystem.state>>>)
@@ -789,14 +805,16 @@ module Language =
                 ThisVal = <@ (%%Expr.Var thisVar: TypedScalar<'S,ModelSystem.state>) |> Scalar.toRaw @>
             }
 
-            let core: Expr<'S> = buildQuotationCached backend ctx (inverseFn()) Map.empty expr
+            // NB The quotation compiler doesn't currently support units. Strip here and reapply later.
+            let exprNoUnit = expr |> fun (ME expr) -> expr |> ME
+            let core: Expr<'S> = buildQuotationCached backend ctx (inverseFn()) Map.empty exprNoUnit
 
-            <@ %core |> Scalar.ofRaw backend |> Scalar.retype<'S,1, ModelSystem.state> @>
+            <@ %core |> Scalar.ofRaw backend |> Scalar.retype<'S,1, ModelSystem.state> @> // Retype unit on here
             |> fun body -> Expr.Lambda(pVar, Expr.Lambda(statesVar, Expr.Lambda(thisVar, Expr.Lambda(tIdxVar, body))))
             |> LeafExpressionConverter.EvaluateQuotation
-            |> unbox<ModelSystem.Measurement<'S,'S,'stateUnit>>
+            |> unbox<ModelSystem.Measurement<'S,'V,'stateUnit>>
 
-        let compileInitialiser<[<Measure>] 'stateUnit> backend parameters (expr: ModelExpression<'stateUnit>) =
+        let compileInitialiser<[<Measure>] 'stateUnit, 'S,'V> backend parameters (expr: ModelExpression<'stateUnit>) =
             
             let pVar = Var("parameters", typeof<TypedVector<'S,'V,``parameter``>>)
             let eVar = Var("environment", typeof<CodedMap<TypedScalar<'S,ModelSystem.``environment``>>>)
@@ -823,9 +841,11 @@ module Language =
                 ThisVal = <@ failwith "This keyword not supported in initialisers" @>
             }
 
-            let core: Expr<'S> = buildQuotationCached backend ctx (inverseFn()) Map.empty expr
+            // NB The quotation compiler doesn't currently support units. Strip here and reapply later.
+            let exprNoUnit = expr |> fun (ME expr) -> expr |> ME
+            let core: Expr<'S> = buildQuotationCached backend ctx (inverseFn()) Map.empty exprNoUnit
 
-            <@ %core |> Scalar.ofRaw backend |> Scalar.retype<'S,1, ModelSystem.state> @>
+            <@ %core |> Scalar.ofRaw backend |> Scalar.retype<'S,1, ModelSystem.state> @> // Retype unit on here.
             |> fun body -> Expr.Lambda(pVar, Expr.Lambda(eVar, Expr.Lambda(bVar, body)))
             |> LeafExpressionConverter.EvaluateQuotation
             |> unbox<ModelSystem.Initialiser<'S,'V,'stateUnit>>
@@ -833,7 +853,7 @@ module Language =
 
     /// Computes a `ModelExpression` given the current time, value,
     /// environment, and parameter pool.
-    let computeRate (engine: Numerics.NumericEngine<'S,'S,'M>) x t pool (environment: CodedMap<Numerics.Typed.TypedScalar<'S,ModelSystem.environment>>) ex =
+    let computeRate (engine: Numerics.NumericEngine<'S,'V,'M>) x t pool (environment: CodedMap<Numerics.Typed.TypedScalar<'S,ModelSystem.environment>>) ex =
         ExpressionCompiler.compileRate engine.scalarBackend pool (Seq.toList environment.Keys) ex
         |> fun f -> f (Parameter.Pool.toVectorWithKeysReal engine pool |> snd) environment t x
 
@@ -869,6 +889,25 @@ module Language =
             }
 
 
+    // module Likelihood =
+
+    //     open Bristlecone.ModelSystem
+    //     open Bristlecone.Numerics
+    //     open Bristlecone.Numerics.Typed
+
+    //     type LikelihoodPrecompileEval<'S,'V,'M,[<Measure>] 'u> =
+    //         NumericEngine<'S,'V,'M> -> ParameterValueAccessor<'S> -> CodedMap<SeriesPair<'S,'V,'u>> -> TypedScalar<'S,``-logL``>
+
+    //     [<NoEquality; NoComparison>]
+    //     type LikelihoodPrecompile<'S,'V,'M> =
+    //         { RequiredCodes: LikelihoodRequirement list
+    //           RequiredParameters: (ShortCode.ShortCode * Parameter.Pool.ParameterNoUnit) list
+    //           Evaluate: LikelihoodPrecompileEval<'S,'V,'M,ModelSystem.state> }
+
+    //     type LikelihoodUncompiled =
+    //         abstract member Invoke<'S,'V,'M> : unit -> LikelihoodPrecompile<'S, 'V, 'M>
+
+
     /// Scaffolds a `ModelSystem` for fitting with Bristlecone.
     module Model =
 
@@ -877,16 +916,16 @@ module Language =
             | Discrete of Fragment
             | Rate of Fragment
 
-        type LikelihoodFragment =
-            { RequiredCodes: ModelSystem.LikelihoodRequirement list
-              RequiredParameters: (ShortCode.ShortCode * Parameter.Pool.ParameterNoUnit) list
-              Evaluate: Untyped.ModelExpressionUntyped }
+        // type LikelihoodFragment<'S,'V> =
+        //     { RequiredCodes: ModelSystem.LikelihoodRequirement list
+        //       RequiredParameters: (ShortCode.ShortCode * Parameter.Pool.ParameterNoUnit) list
+        //       Evaluate: ModelSystem.Likelihood<'S,'V,ModelSystem.state> }
 
-        type ModelDescriptionState = {
+        type ModelDescriptionState<'S,'V> = {
             States: Map<ShortCode.ShortCode, (EquationFragment * Fragment option)>
             Measures: Map<ShortCode.ShortCode, Fragment>
             Parameters: Map<ShortCode.ShortCode, Parameter.Pool.ParameterNoUnit>
-            Likelihood: (ExpressionParser.Requirement list * LikelihoodFragment) option
+            Likelihood: ModelSystem.Likelihood<'S,'V,ModelSystem.state> option
         }
 
         type DiscreteTime = DiscreteTime
@@ -895,10 +934,10 @@ module Language =
         // type NotReady = NotReady
         // type SimulationOnly = SimulationOnly
 
-        type ModelDescription<[<Measure>] 'time, 'TimeMode> =
-            private | ModelBuilder of ModelDescriptionState
+        type ModelDescription<[<Measure>] 'time, 'TimeMode,'S,'V> =
+            private | ModelBuilder of ModelDescriptionState<'S,'V>
 
-        let private empty'<[<Measure>] 'time, 'TimeMode> () : ModelDescription<'time, 'TimeMode> =
+        let private empty'<[<Measure>] 'time, 'TimeMode> () : ModelDescription<'time, 'TimeMode,'S,'V> =
             ModelBuilder {
                 States = Map.empty
                 Measures = Map.empty
@@ -907,23 +946,23 @@ module Language =
 
         let internal unwrap (ModelBuilder m) = m
 
-        let empty<[<Measure>] 'time> : ModelDescription<'time, ContinuousTime> =
+        let empty<[<Measure>] 'time> : ModelDescription<'time, ContinuousTime,'S,'V> =
             empty' ()
 
-        let discrete<[<Measure>] 'time> : ModelDescription<'time, DiscreteTime> =
+        let discrete<[<Measure>] 'time> : ModelDescription<'time, DiscreteTime,'S,'V> =
             empty' ()
 
-        let continuous<[<Measure>] 'time> : ModelDescription<'time, ContinuousTime> =
+        let continuous<[<Measure>] 'time> : ModelDescription<'time, ContinuousTime,'S,'V> =
             empty' ()
 
-        let private updateState fn (mb: ModelDescription<'u,'TimeMode>) : ModelDescription<'u,'TimeMode> =
+        let private updateState fn (mb: ModelDescription<'u,'TimeMode,'S,'V>) : ModelDescription<'u,'TimeMode,'S,'V> =
             let oldState = unwrap mb
             ModelBuilder (fn oldState)
 
-        let addRateEquation<[<Measure>] 'time, [<Measure>] 'state>
+        let addRateEquation<[<Measure>] 'time, [<Measure>] 'state,'S,'V>
             (name: StateId<'state>)
             (expr: ModelExpression<'state / 'time>)
-            (mb: ModelDescription<'time,ContinuousTime>) =
+            (mb: ModelDescription<'time,ContinuousTime,'S,'V>) =
             let (ME eUntyped) = expr
             let envReqs = ExpressionParser.requirements eUntyped |> Writer.run |> snd
             let frag = Rate(envReqs, eUntyped)
@@ -936,11 +975,11 @@ module Language =
             | Some _ -> failwithf "Cannot add two states with the same name (%s)" name.Code.Value
             | None -> updateState (fun state -> { state with States = state.States |> Map.add name.Code (frag, None) }) mb
 
-        let addDiscreteEquation<[<Measure>] 'time, [<Measure>] 'state>
+        let addDiscreteEquation<[<Measure>] 'time, [<Measure>] 'state,'S,'V>
             (name: StateId<'state>)
             (expr: ModelExpression<'state>)
-            (mb: ModelDescription<'time,DiscreteTime>)
-            : ModelDescription<'time,DiscreteTime> =
+            (mb: ModelDescription<'time,DiscreteTime,'S,'V>)
+            : ModelDescription<'time,DiscreteTime,'S,'V> =
             let (ME eUntyped) = expr
             let envReqs = ExpressionParser.requirements eUntyped |> Writer.run |> snd
             let frag = Discrete(envReqs, eUntyped)
@@ -953,31 +992,38 @@ module Language =
             | Some _ -> failwithf "Cannot add two states with the same name (%s)" name.Code.Value
             | None -> updateState (fun state -> { state with States = state.States |> Map.add name.Code (frag, None) }) mb
             
-        let estimateParameter<[<Measure>] 'time, [<Measure>] 'u>
-            (p: IncludedParameter<'u>)
-            (mb: ModelDescription<'time,'TimeMode>) =
-            let (ParamIdInner name) = p.ParamId
-            let boxed = Parameter.Pool.stripUnit<'u> name.Value p.Parameter
+        /// Used for scaffolding components into hypotheses internally.
+        let internal estimateParameter'<[<Measure>] 'time, [<Measure>] 'u,'TimeMode,'S,'V>
+            (p: Parameter.Pool.ParameterNoUnit)
+            (name: ShortCode.ShortCode)
+            (mb: ModelDescription<'time,'TimeMode,'S,'V>) =
             match (unwrap mb).Parameters |> Map.tryFind name with
             | Some _ -> failwithf "Cannot add two states with the same name (%s)" name.Value
-            | None -> updateState (fun state -> { state with Parameters = state.Parameters |> Map.add name boxed }) mb
+            | None -> updateState (fun state -> { state with Parameters = state.Parameters |> Map.add name p }) mb
 
-        let addMeasure<[<Measure>] 'time, [<Measure>] 'u>
+        let estimateParameter<[<Measure>] 'time, [<Measure>] 'u,'TimeMode,'S,'V>
+            (p: IncludedParameter<'u>)
+            (mb: ModelDescription<'time,'TimeMode,'S,'V>) =
+            let (ParamIdInner name) = p.ParamId
+            let boxed = Parameter.Pool.stripUnit<'u> name.Value p.Parameter
+            estimateParameter' boxed name mb
+
+        let addMeasure<[<Measure>] 'time, [<Measure>] 'u,'TimeMode,'S,'V>
             (name: MeasureId<'u>)
             (measure: ModelExpression<'u>)
-            (mb: ModelDescription<'time,'TimeMode>)
-            : ModelDescription<'time,'TimeMode> =
+            (mb: ModelDescription<'time,'TimeMode,'S,'V>)
+            : ModelDescription<'time,'TimeMode,'S,'V> =
             let (ME eUntyped) = measure
             let envReqs = ExpressionParser.requirements eUntyped |> Writer.run |> snd
             match (unwrap mb).Measures |> Map.tryFind name.Code with
             | Some _ -> failwithf "Cannot add two measures with the same name (%s)" name.Code.Value
             | None -> updateState (fun state -> { state with Measures = state.Measures |> Map.add name.Code (envReqs, eUntyped) }) mb
 
-        let initialiseHiddenStateWith<[<Measure>] 'time, [<Measure>] 'u>
+        let initialiseHiddenStateWith<[<Measure>] 'time, [<Measure>] 'u,'TimeMode,'S,'V>
             (name: StateId<'u>)
             (initialiser: ModelExpression<'u>)
-            (mb: ModelDescription<'time,'TimeMode>)
-            : ModelDescription<'time,'TimeMode> =
+            (mb: ModelDescription<'time,'TimeMode,'S,'V>)
+            : ModelDescription<'time,'TimeMode,'S,'V> =
             let (ME eUntyped) = initialiser
             let envReqs = ExpressionParser.requirements eUntyped |> Writer.run |> snd
 
@@ -994,14 +1040,13 @@ module Language =
                     | Discrete f, _ -> Discrete f, Some (envReqs, eUntyped)
                 updateState (fun state -> { state with States = state.States |> Map.add name.Code frag }) mb
 
-        let useLikelihoodFunction<[<Measure>] 'u, [<Measure>] 'time> (l: ModelExpression<'u>) (mb: ModelDescription<'time,'TimeMode>) =
-            // failwith "TODO Write likelihoods in ModelExpression system"
-            mb
+        let useLikelihoodFunction<[<Measure>] 'u, [<Measure>] 'time,'TimeMode,'S,'V> (l: ModelSystem.Likelihood<'S,'V,ModelSystem.state>) (mb: ModelDescription<'time,'TimeMode,'S,'V>) =
+            updateState (fun state -> { state with Likelihood = Some l }) mb
+
 
         module Compile =
 
             open Bristlecone.Numerics
-            open Bristlecone.Numerics.Typed
 
             let internal assertParams parameters requirements =
                 let present = Map.keys parameters |> Set.ofSeq
@@ -1027,7 +1072,7 @@ module Language =
 
             /// Compiles an expression-based model system into lower-level numerical
             /// types, ready for use in Bristlecone inference or simulation.
-            let compile (numEngine: NumericEngine<'S,'V,'M>) (mb:ModelDescription<'time,'TimeMode>) : ModelSystem.ModelSystem<'S,'V,'time> =
+            let compile (numEngine: NumericEngine<'S,'V,'M>) (mb:ModelDescription<'time,'TimeMode,'S,'V>) : ModelSystem.ModelSystem<'S,'V,'time> =
                 
                 let (ModelBuilder builder) = mb
 
@@ -1035,7 +1080,7 @@ module Language =
                     [
                         builder.States |> Seq.choose(fun kv -> kv.Value |> snd |> Option.map fst)
                         builder.Measures |> Seq.map(fun kv -> kv.Value |> fst)
-                        // builder.Likelihood |> Option.map fst
+                        // builder.Likelihood |> Option.map (fun l -> l.RequiredCodes.Head) // TODO
                     ] |> Seq.concat |> Seq.concat |> Seq.toList |> List.distinct
 
                 assertParams builder.Parameters requirements
@@ -1091,6 +1136,10 @@ module Language =
                     builder.Measures
                     |> Map.map(fun _ (_,expr) -> ExpressionCompiler.compileMeasure numEngine.scalarBackend parameters (ME expr))
 
+                let likelihood =
+                    builder.Likelihood
+                    |> Option.defaultWith(fun _ -> failwith "No likelihood function specified.")
+
                 { NegLogLikelihood = likelihood // TODO
                   Parameters = parameters
                   EnvironmentKeys = requiredEnvVars
@@ -1103,27 +1152,27 @@ module Language =
             Compile.compile numEng mb
 
 
-        module internal ComputationExpression =
+        module ComputationExpression =
 
             // Phantom types for tracking whether model has parts or not:
             type Missing = Missing
             type Present = Present
 
-            type CeState<[<Measure>] 'time, 'TimeMode, 'HasEq, 'HasLike> =
+            type CeState<[<Measure>] 'time, 'TimeMode, 'HasEq, 'HasLike,'S,'V> =
                 private
-                    { Inner: ModelDescription<'time,'TimeMode> }
+                    { Inner: ModelDescription<'time,'TimeMode,'S,'V> }
 
-            let emptyState<[<Measure>] 'time> : CeState<'time, ContinuousTime, Missing, Missing> =
+            let emptyState<[<Measure>] 'time> : CeState<'time, ContinuousTime, Missing, Missing,'S,'V> =
                 { Inner = continuous }
 
-            let emptyDiscrete<[<Measure>] 'time> : CeState<'time, DiscreteTime, Missing, Missing> =
+            let emptyDiscrete<[<Measure>] 'time> : CeState<'time, DiscreteTime, Missing, Missing,'S,'V> =
                 { Inner = discrete }
 
             type ModelSystemBuilder<[<Measure>] 'time> () =
                 member _.Yield(_) = emptyState<'time>
                 member _.Delay(f) = f ()
                 member _.Zero() =
-                    fun (state: CeState<'time, ContinuousTime, Present, Present>) ->
+                    fun (state: CeState<'time, ContinuousTime, Present, Present,'S,'V>) ->
                         state.Inner
 
                 // member _.Return(backend: Numerics.NumericEngine<'S,'V,'M>) =
@@ -1132,7 +1181,7 @@ module Language =
 
                 [<CustomOperation("estimate")>]
                 member _.Parameter<[<Measure>] 'u, 'E, 'L>
-                    (state: CeState<'time,ContinuousTime, 'E, 'L>, p: IncludedParameter<'u>)
+                    (state: CeState<'time,ContinuousTime, 'E, 'L,'S,'V>, p: IncludedParameter<'u>)
                     =
                     { Inner = estimateParameter p state.Inner }
 
@@ -1144,24 +1193,24 @@ module Language =
 
                 [<CustomOperation("measure")>]
                 member _.Measure<[<Measure>] 'u, 'E, 'L>
-                    (state: CeState<'time, ContinuousTime, 'E, 'L>, mid: MeasureId<'u>, data)
+                    (state: CeState<'time, ContinuousTime, 'E, 'L,'S,'V>, mid: MeasureId<'u>, data)
                     =
                     { Inner = addMeasure mid data state.Inner }
 
                 [<CustomOperation("initialise")>]
                 member _.Init<[<Measure>] 'u, 'E, 'L>
-                    (state: CeState<'time, ContinuousTime, 'E, 'L>, sid: StateId<'u>, initFn)
+                    (state: CeState<'time, ContinuousTime, 'E, 'L,'S,'V>, sid: StateId<'u>, initFn)
                     =
                     { Inner = initialiseHiddenStateWith sid initFn state.Inner }
 
                 /// Add exactly one likelihood function.
                 [<CustomOperation("likelihood")>]
                 member _.Likelihood<'E>
-                    (state: CeState<'time, ContinuousTime, 'E, Missing>, fn)
-                    : CeState<'time, ContinuousTime, 'E, Present> =
+                    (state: CeState<'time, ContinuousTime, 'E, Missing,'S,'V>, fn: ModelSystem.Likelihood<'S,'V,ModelSystem.state>)
+                    : CeState<'time, ContinuousTime, 'E, Present,'S,'V> =
                     { Inner = useLikelihoodFunction fn state.Inner }
 
-                member _.Run(state: CeState<'time, ContinuousTime, Present, Present>) = state.Inner
+                member _.Run(state: CeState<'time, ContinuousTime, Present, Present,'S,'V>) = state.Inner
 
 
 
@@ -1489,7 +1538,7 @@ module Language =
         let compile
             numBackend // TODO Changed API, with no doc.
             (builders:
-                Writer.Writer<Model.ModelDescription<'time, 'timeMode>, ComponentName * CodedMap<Parameter.Pool.ParameterNoUnit>> list)
+                Writer.Writer<Model.ModelDescription<'time, 'timeMode,'S,'V>, ComponentName * CodedMap<Parameter.Pool.ParameterNoUnit>> list)
             : Hypothesis<'S,'V,'u> list =
             builders
             |> List.map (fun (Writer.AWriter(mb, logs)) ->
@@ -1497,7 +1546,7 @@ module Language =
                     logs
                     |> List.collect (snd >> Map.toList)
                     |> List.fold
-                        (fun mb (name, p) -> mb |> Model.estimateParameter p)
+                        (fun mb (name, p) -> mb |> Model.estimateParameter' p name)
                         mb
 
                 Hypothesis(Model.compile numBackend withParams, logs |> List.map fst))

@@ -90,7 +90,7 @@ module Objective =
     /// - A discrete-time solver (for if measurement / computed variables are present)
     /// - Observed data (for calculating likelihood)
     let create
-        (negLogLikFn: ModelSystem.Likelihood<'S,'V,state>)
+        (negLogLikFn: ModelSystem.LikelihoodEval<'S,'V,state>)
         (measures: CodedMap<ModelSystem.Measurement<'S,'V,state>>)
         (solver: Solver.ConfiguredSolver<'S,'V>)
         (config: Parameter.Pool.OptimiserConfig<'S,'V,'space>)
@@ -105,7 +105,7 @@ module Objective =
             thetaReal
             |> predict invalidValue solver measures
             |> pairObservationsToExpected observed
-            |> negLogLikFn.Evaluate accessor
+            |> negLogLikFn accessor
 
     let createPredictor invalidValue (measures: CodedMap<ModelSystem.Measurement<'S,'V,state>>) (solver: Solver.ConfiguredSolver<'S,'V>) (config: Parameter.Pool.OptimiserConfig<'S,'V,'space>) =
         config.Compiled.Forward >> predict invalidValue solver measures

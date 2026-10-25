@@ -121,7 +121,7 @@ module NegLogLikelihood =
 
         /// Negative log likelihood for a bivariate normal distribution.
         /// For two random variables with bivariate normal N(u1,u2,sigma1,sigma2,rho).
-        let internal gaussianVec
+        let internal gaussianVec<'S,'V,'M, [<Measure>] 'u>
             (eng: NumericEngine<'S,'V,'M>)
             (sigma: TypedVector<'S,'V,'u>)
             (obsx: TypedVector<'S,'V,'u>)
@@ -160,7 +160,7 @@ module NegLogLikelihood =
         /// Log likelihood function for single equation system, assuming constant (homoscedastic) Gaussian error for x.
         /// Requires a parameter 'σ[x]' to be included in any `ModelSystem` that uses it.
         /// </summary>
-        let gaussian numEng (key: Language.Require.ObsForLikelihood<'s>) sigmax : Likelihood<'S,'V,'state> =
+        let gaussian  (numEng: NumericEngine<'S,'V,'M>) (key: Language.Require.ObsForLikelihood<'s>) sigmax : Likelihood<'S,'V,'state> =
             gaussian' numEng (Variance.constant sigmax) key
 
         /// Negative log likelihood for a bivariate normal distribution.
@@ -238,8 +238,8 @@ module NegLogLikelihood =
 
         let internal logGaussianVec
             numEngine
-            (sigma: TypedVector<'S,'V,'u>)
-            (obsx: TypedVector<'S,'V,'u>)
+            (sigma: TypedVector<'S,'V,1>)
+            (obsx: TypedVector<'S,'V,1>)
             (expx: TypedVector<'S,'V,1>)
             : TypedVector<'S,'V,``-logL``> =
 
@@ -277,12 +277,12 @@ module NegLogLikelihood =
         let logGaussian eng key sigma : Likelihood<'S,'V,'state> =
             logGaussian' eng (Variance.constant sigma) key
 
+    let Normal numEngine obs sigma = Internal.gaussian numEngine obs sigma
+    let NormalWithVariance numEngine obs varianceFn = Internal.gaussian' numEngine varianceFn obs
+    let LogNormal numEngine obs sigma = Internal.logGaussian numEngine obs sigma
 
-    let Normal obs sigma = Internal.gaussian obs sigma
-    let NormalWithVariance obs varianceFn = Internal.gaussian' varianceFn obs
-    let LogNormal obs sigma = Internal.logGaussian obs sigma
-
-    let BivariateNormal key1 key2 sigmax sigmay rho =
-        Internal.bivariateGaussian key1 key2 sigmax sigmay rho
+    let BivariateNormal numEngine key1 key2 sigmax sigmay rho =
+        Internal.bivariateGaussian numEngine key1 key2 sigmax sigmay rho
 
     let SumOfSquares obs = Internal.sumOfSquares obs
+
