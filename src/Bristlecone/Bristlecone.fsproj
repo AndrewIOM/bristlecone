@@ -25,7 +25,7 @@
     <Compile Include="Test.fs" />
     <Compile Include="Library.fs" />
     <Compile Include="Language.fs" />
-    <Compile Include="Equations.fs" />
+    <Compile Include="ModelLibrary.fs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="../../docs/img/logo.png" Pack="true" PackagePath="/">
