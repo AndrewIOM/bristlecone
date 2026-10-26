@@ -17,14 +17,14 @@ module NegLogLikelihood =
     let internal getParamValue<'S,[<Measure>] 'u>
         (paramAccessor: ParameterValueAccessor<'S>)
         (par: Language.IncludedParameter<'u>)
-        : TypedScalar<'S,'u> =
+        : FsScalar<'S,'u> =
         paramAccessor.Get par.ParamId.Inner.Value |> Scalar.retype
 
     let internal paramToAny<[<Measure>] 'u> (p: Language.IncludedParameter<'u>) =
         let boxed = Parameter.Pool.stripUnit<'u> p.ParamId.Inner.Value p.Parameter
         p.ParamId.Inner, boxed
 
-    let inline internal getData<[<Measure>] 'u, [<Measure>] 'state>
+    let inline internal getData<[<Measure>] 'u, [<Measure>] 'state,'S,'V>
         (obsKey: Language.Require.ObsForLikelihood<'u>)
         (pairs: CodedMap<SeriesPair<'S,'V,'state>>)
         : SeriesPair<'S,'V,'u> =
@@ -55,7 +55,7 @@ module NegLogLikelihood =
                 failwithf "The specified %s parameter must be positive-only" label
         | Parameter.Constraint.Unconstrained -> failwithf "The specified %s parameter must be positive-only" label
 
-    let private likelihoodTag b = Typed.ofScalar b 1.<``-logL``>
+    let private likelihoodTag (b:NumericBackend<'S,'S>) = ofScalar b 1.<``-logL``>
 
 
     /// <summary>Functions representing how variance is handled
@@ -64,7 +64,7 @@ module NegLogLikelihood =
 
         /// A variance function maps expected values to per-point σ
         type VarianceFunction<'S,'V,'M, [<Measure>] 'sigma, [<Measure>] 'x> =
-            { Evaluate: NumericEngine<'S,'V,'M> -> ParameterValueAccessor<'S> -> TypedVector<'S,'V,'x> -> TypedVector<'S,'V,'sigma>
+            { Evaluate: NumericEngine<'S,'V,'M> -> ParameterValueAccessor<'S> -> FsVector<'S,'V,'x> -> FsVector<'S,'V,'sigma>
               RequiredParameters: (ShortCode.ShortCode * Parameter.Pool.ParameterNoUnit) list }
 
         /// Variance is constant within through time.
@@ -123,10 +123,10 @@ module NegLogLikelihood =
         /// For two random variables with bivariate normal N(u1,u2,sigma1,sigma2,rho).
         let internal gaussianVec<'S,'V,'M, [<Measure>] 'u>
             (eng: NumericEngine<'S,'V,'M>)
-            (sigma: TypedVector<'S,'V,'u>)
-            (obsx: TypedVector<'S,'V,'u>)
-            (expx: TypedVector<'S,'V,'u>)
-            : TypedVector<'S,'V,``-logL``> =
+            (sigma: FsVector<'S,'V,'u>)
+            (obsx: FsVector<'S,'V,'u>)
+            (expx: FsVector<'S,'V,'u>)
+            : FsVector<'S,'V,``-logL``> =
 
             let diffx = obsx - expx
             let constants = Scalar.constants eng
@@ -167,14 +167,14 @@ module NegLogLikelihood =
         /// For two random variables with bivariate normal N(u1,u2,sigma1,sigma2,rho).
         let internal bivariateGaussianVec
             (eng: NumericEngine<'S,'V,'M>)
-            (sigmax: TypedScalar<'S,'ux>)
-            (sigmay: TypedScalar<'S,'uy>)
-            (rho: TypedScalar<'S,1>)
-            (obsx: TypedVector<'S,'V,'ux>)
-            (obsy: TypedVector<'S,'V,'uy>)
-            (expx: TypedVector<'S,'V,'ux>)
-            (expy: TypedVector<'S,'V,'uy>)
-            : TypedVector<'S,'V,1> =
+            (sigmax: FsScalar<'S,'ux>)
+            (sigmay: FsScalar<'S,'uy>)
+            (rho: FsScalar<'S,1>)
+            (obsx: FsVector<'S,'V,'ux>)
+            (obsy: FsVector<'S,'V,'uy>)
+            (expx: FsVector<'S,'V,'ux>)
+            (expy: FsVector<'S,'V,'uy>)
+            : FsVector<'S,'V,1> =
 
             let constants = Scalar.constants eng
 
@@ -187,7 +187,7 @@ module NegLogLikelihood =
             let q =
                 constants.half
                 * (constants.one / (constants.one - Scalar.square rho))
-                * (zta1 - zta2 + zta3: TypedVector<'S,'V,1>)
+                * (zta1 - zta2 + zta3: FsVector<'S,'V,1>)
 
             let logNorm =
                 Scalar.log (constants.pi * constants.two)
@@ -203,7 +203,7 @@ module NegLogLikelihood =
         /// Log likelihood function for dual simultaneous system, assuming Gaussian error for both x and y.
         /// Requires parameters 'σ[x]', 'σ[y]' and 'ρ' to be defined and passed as arguments.
         /// </summary>
-        let bivariateGaussian<[<Measure>] 'ux, [<Measure>] 'uy, [<Measure>] 'state>
+        let bivariateGaussian<[<Measure>] 'ux, [<Measure>] 'uy, [<Measure>] 'state, 'S,'V>
             numEngine
             (key1: Language.Require.ObsForLikelihood<'ux>)
             (key2: Language.Require.ObsForLikelihood<'uy>)
@@ -238,10 +238,10 @@ module NegLogLikelihood =
 
         let internal logGaussianVec
             numEngine
-            (sigma: TypedVector<'S,'V,1>)
-            (obsx: TypedVector<'S,'V,1>)
-            (expx: TypedVector<'S,'V,1>)
-            : TypedVector<'S,'V,``-logL``> =
+            (sigma: FsVector<'S,'V,1>)
+            (obsx: FsVector<'S,'V,1>)
+            (expx: FsVector<'S,'V,1>)
+            : FsVector<'S,'V,``-logL``> =
 
             let constants = Scalar.constants numEngine
 
@@ -284,5 +284,4 @@ module NegLogLikelihood =
     let BivariateNormal numEngine key1 key2 sigmax sigmay rho =
         Internal.bivariateGaussian numEngine key1 key2 sigmax sigmay rho
 
-    let SumOfSquares obs = Internal.sumOfSquares obs
-
+    let SumOfSquares obs : Likelihood<'S,'V,'state> = Internal.sumOfSquares obs

@@ -2,7 +2,10 @@ module Program
 
 open Expecto
 open MathNet.Numerics
+
 open Bristlecone
+open Bristlecone.Numerics
+open Bristlecone.Numerics.Typed
 
 type Point = float[]
 
@@ -40,7 +43,7 @@ module TestSuite =
     let twoDim f (x: float[]) = f x.[0] x.[1]
     let oneDim f (x: float[]) = f x.[0]
     let multidim f (x: float[]) = f x
-    let twoDimT f (x: TypedVector<'S,'V,'a>) = f (Vector.itemAt 0 x) (Vector.itemAt 1 x)
+    let twoDimT f (x: FsVector<'S,'V,'a>) = f (Vector.itemAt 0 x) (Vector.itemAt 1 x)
 
     // Functions, input domain, global minimum, and global minimum point(s)
     let fixedDimension =
@@ -135,7 +138,7 @@ let summariseRuns
     trueMinima
     minVal
     (minima: float list list)
-    (results: ((Result<EstimationEngine.Optimisation.OptimisationTrace list * float[],string>) * int) seq)
+    (results: ((Result<EstimationEngine.Optimisation.OptimisationTrace<'space> list * float[],string>) * int) seq)
     =
 
     let successes = results |> Seq.filter(fun (r, _) -> Result.isOk r) |> Seq.map(fun (r, x) -> forceOk r, x) 
@@ -167,7 +170,6 @@ let summariseRuns
             eachRunMinimum
             |> Seq.minBy (fun o -> abs ((fst o) - minVal))
             |> snd
-            |> Tensors.Typed.toFloatArray
 
         let elapsedAverage = successes |> Seq.map (fun (_, t) -> float t) |> median
 
@@ -177,7 +179,7 @@ let summariseRuns
             [ 1..dims ]
             |> List.map (fun d ->
                 let values =
-                    eachRunMinimum |> Seq.map (fun (_, v) -> (Tensors.Typed.toFloatArray v).[d - 1])
+                    eachRunMinimum |> Seq.map (fun (_, v) -> v.[d - 1])
 
                 { Best = bestPointEstimate.[d - 1] |> float
                   Median = median (values |> Seq.map float)
@@ -188,7 +190,7 @@ let summariseRuns
             |> Seq.map (fun (_, v) ->
                 minima
                 |> Seq.map (fun minimum ->
-                    Seq.zip minimum (Tensors.Typed.toFloatArray v)
+                    Seq.zip minimum v
                     |> Seq.map (fun (x, y) -> abs (x - float y))
                     |> Seq.sum)
                 |> Seq.min)
@@ -210,9 +212,17 @@ let summariseRuns
               |> Seq.length
           MillisecondsMedian = elapsedAverage }
 
+let numEngine = Backends.DiffSharp.engine
+
+let mkEvalFn (fn:float<'space>[] -> float) : EstimationEngine.Optimisation.EvaluateObjective<'space> = {
+    Evaluate = fun p -> p |> fn |> (*) 1.<``-logL``>
+    Gradient = fun p -> failwith "gradients unavailable" // TODO
+    EvaluateVectorised = fun p -> failwith "vectorised objective unavailable" // TODO
+}
+
 let runOptimTests optimFunctions =
     optimFunctions
-    |> List.collect (fun (optimName, optimise, endCondition) ->
+    |> List.collect (fun (optimName, optimise:EstimationEngine.Optimisation.Optimiser<'space,'S,'V,'M>, endCondition) ->
         TestSuite.fixedDimension
         |> List.map (fun (modelName, f, domain, minVal, minima) ->
             let domain =
@@ -226,22 +236,12 @@ let runOptimTests optimFunctions =
                     domain
                     |> Array.map (fun (min, max, _) -> TestSuite.between (float min) (float max))
                     |> Array.map ((*) 1.<``optim-space``>)
-                    |> Tensors.Typed.ofVector
 
                 try
-                    let result: list<EstimationEngine.Optimisation.OptimisationTrace> =
-                        // Using a shim to go between tensor space and float space
-                        let f' point =
-                            f (Tensors.Typed.toFloatArray point |> Array.map float) * 1.<``-logL``>
-                            |> Tensors.Typed.ofScalar
-
-                        match optimise with
-                        | EstimationEngine.Optimisation.InTransformedSpace optim ->
-                            optim Config.rng logger endCondition domain (Some startPoint) f'
-                        | EstimationEngine.Optimisation.InDetachedSpace optim ->
-                            optim Config.rng logger endCondition domain (Some startPoint) f'
+                    let f' point = point |> Array.map ((/) 1.<``optim-space``>) |> f
+                    let result = optimise.Optimise Config.rng logger endCondition domain (Some startPoint) (mkEvalFn f')
                     logger Logging.CompleteEvent
-                    Ok(result, startPoint |> Tensors.Typed.toFloatArray |> Array.map float)
+                    Ok(result, startPoint |> Array.map float)
                 with
                 | e -> Error e.Message
                 )
@@ -328,11 +328,11 @@ module Metrics =
 // -------
 
 let optimFunctions =
-    [  "amoeba",                    Amoeba.single Amoeba.Solver.Default, EndConditions.whenNoBestValueImprovement 300<iteration>
-       "amoeba [swarm]",            Amoeba.swarm 5 20 Amoeba.Solver.Default, EndConditions.whenNoBestValueImprovement 300<iteration>
+    [  // "amoeba",                    Amoeba.single Amoeba.Solver.Default, EndConditions.whenNoBestValueImprovement 300<iteration>
+    //    "amoeba [swarm]",            Amoeba.swarm 5 20 Amoeba.Solver.Default, EndConditions.whenNoBestValueImprovement 300<iteration>
        "sim. anneal. [classic]",    MonteCarlo.SimulatedAnnealing.classicalSimulatedAnnealing 0.01<``optim-space``> false Optimisation.MonteCarlo.SimulatedAnnealing.AnnealSettings.Classical, EndConditions.atIteration 100000<iteration>
        "sim. anneal. [fast]",       MonteCarlo.SimulatedAnnealing.fastSimulatedAnnealing 0.01<``optim-space``> false Optimisation.MonteCarlo.SimulatedAnnealing.AnnealSettings.Fast, EndConditions.atIteration 100000<iteration>
-       "sim. anneal. [bristlecone]",MonteCarlo.bristleconeSampler, EndConditions.Profiles.mcmc 100000<iteration> ignore
+       "sim. anneal. [bristlecone]",MonteCarlo.bristleconeSampler (), EndConditions.Profiles.mcmc 100000<iteration> ignore
        "filzbach",                  MonteCarlo.Filzbach.filzbach MonteCarlo.Filzbach.FilzbachSettings.Default, EndConditions.Profiles.mcmc 100000<iteration> ignore
        "random walk [AM burn-in]",  MonteCarlo.randomWalk [
             { Method = MonteCarlo.TuneMethod.CovarianceWithScale 0.25
@@ -341,21 +341,28 @@ let optimFunctions =
             EndConditions.Profiles.mcmc 100000<iteration> ignore
     ]
 
-let runTs (modelName, modelTestFn: (Logging.LogEvent -> unit) -> EstimationEngine.Optimisation.Optimiser -> EstimationEngine.EndCondition -> Result<Test.TestResult<'a,'b,'c,'u>,string>) =
+type BackendOption =
+    | DiffSharp of NumericEngine<DiffSharp.AD.Float64.D,DiffSharp.AD.Float64.DV,DiffSharp.AD.Float64.DM>
+    | FSharpFloat of NumericEngine<float,float[],float[,]>
+
+let backends =
+    [ DiffSharp Backends.DiffSharp.engine ]
+
+let runTs (modelName, modelTestFn: NumericEngine<'S,'V,'M> -> (Logging.LogEvent -> unit) -> EstimationEngine.Optimisation.Optimiser<'space,'S,'V,'M> -> EstimationEngine.EndCondition<'space> -> Result<Test.TestResult<'a,'b,'c,'u>,string>) =
     optimFunctions
-    |> List.map (fun (optimName: string, optimise, endCondition) ->
+    |> List.allPairs backends
+    |> List.map (fun (backend,(optimName: string, optimise, endCondition)) ->
         runReplicated Config.startPointCount (fun () ->
-            try modelTestFn logger optimise endCondition
+            try modelTestFn backend logger optimise endCondition
             with e ->
                 printfn "Error in model run (%s): %s, %s" modelName e.Message e.StackTrace
                 Error e.Message)
         |> fun r ->
             let ok = r |> Array.filter(fun (r,_) -> Result.isOk r) |> Array.map(fun (r,i) -> Result.forceOk r, i)
             if ok.Length = 0 then modelName, optimName, Error "no results"
-            else  modelName, optimName, Ok (Metrics.summariseRuns Config.likTol Config.paramTol ok))
+            else modelName, optimName, Ok (Metrics.summariseRuns Config.likTol Config.paramTol ok))
 
-
-let timeModels () =
+let timeModels =
     [ 
       runTs ("predator-prey",             TestFunctions.Timeseries.PredatorPrey.test false)
       runTs ("predator-prey (noisy)",     TestFunctions.Timeseries.PredatorPrey.test true)

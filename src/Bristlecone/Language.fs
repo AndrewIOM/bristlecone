@@ -525,7 +525,7 @@ module Language =
             | ME(Parameter name) ->
                 let idx = context.ParameterIndex.[name]
                 <@ 
-                    (%%Expr.Var context.ParameterVar : TypedVector<'S,'S,``parameter``>) 
+                    (%%Expr.Var context.ParameterVar : FsVector<'S,'S,``parameter``>) 
                     |> Vector.itemAt idx 
                     |> Scalar.toRaw
                 @> |> promote
@@ -677,7 +677,7 @@ module Language =
 
         let getEnvironment eVar name =
             <@
-                let map = %%Expr.Var eVar: CodedMap<TypedScalar<'S,ModelSystem.``environment``>>
+                let map = %%Expr.Var eVar: CodedMap<FsScalar<'S,ModelSystem.``environment``>>
 
                 map
                 |> Map.tryFindBy (fun k -> k.Value = name)
@@ -703,10 +703,10 @@ module Language =
             (expr: ModelExpression<'stateUnit / 'timeUnit>)
             : ModelSystem.RateEquation<'S,'V,'timeUnit> =
 
-            let pVar = Var("parameters", typeof<TypedVector<'S,'V,``parameter``>>)
-            let eVar = Var("environment", typeof<CodedMap<TypedScalar<'S,ModelSystem.``environment``>>>)
-            let tVar = Var("time", typeof<TypedScalar<'S,'timeUnit>>)
-            let xVar = Var("state", typeof<TypedScalar<'S,'stateUnit>>)
+            let pVar = Var("parameters", typeof<FsVector<'S,'V,``parameter``>>)
+            let eVar = Var("environment", typeof<CodedMap<FsScalar<'S,ModelSystem.``environment``>>>)
+            let tVar = Var("time", typeof<FsScalar<'S,'timeUnit>>)
+            let xVar = Var("state", typeof<FsScalar<'S,'stateUnit>>)
 
             let eIndex = envIndexFromKeys envKeys // TODO - USE
             let ctx = {
@@ -714,8 +714,8 @@ module Language =
                 ParameterIndex = paramIndex parameters
                 Environment = fun name -> getEnvironment eVar name
                 GetState = fun name _ -> getEnvironment eVar name 
-                TimeVal = <@ (%%Expr.Var tVar: TypedScalar<'S,'timeUnit>) |> Scalar.toRaw  @>
-                ThisVal = <@ (%%Expr.Var xVar: TypedScalar<'S,'stateUnit>) |> Scalar.toRaw @>
+                TimeVal = <@ (%%Expr.Var tVar: FsScalar<'S,'timeUnit>) |> Scalar.toRaw  @>
+                ThisVal = <@ (%%Expr.Var xVar: FsScalar<'S,'stateUnit>) |> Scalar.toRaw @>
             }
 
             // NB The quotation compiler doesn't currently support units. Strip here and reapply later.
@@ -735,10 +735,10 @@ module Language =
             (expr: ModelExpression<'stateUnit>)
             : ModelSystem.StateEquation<'S,'V,'timeUnit> =
 
-            let pVar = Var("parameters", typeof<TypedVector<'S,'V,``parameter``>>)
-            let eVar = Var("environment", typeof<CodedMap<TypedScalar<'S,ModelSystem.``environment``>>>)
-            let tVar = Var("time", typeof<TypedScalar<'S,'timeUnit>>)
-            let xVar = Var("state", typeof<TypedScalar<'S,'stateUnit>>)
+            let pVar = Var("parameters", typeof<FsVector<'S,'V,``parameter``>>)
+            let eVar = Var("environment", typeof<CodedMap<FsScalar<'S,ModelSystem.``environment``>>>)
+            let tVar = Var("time", typeof<FsScalar<'S,'timeUnit>>)
+            let xVar = Var("state", typeof<FsScalar<'S,'stateUnit>>)
 
             let eIndex = envIndexFromKeys envKeys // TODO - USE
             let discreteContext = {
@@ -746,8 +746,8 @@ module Language =
                 ParameterIndex = paramIndex parameters
                 Environment = fun name -> getEnvironment eVar name
                 GetState = fun name _ -> getEnvironment eVar name 
-                TimeVal = <@ (%%Expr.Var tVar: TypedScalar<'S,'timeUnit>) |> Scalar.toRaw  @>
-                ThisVal = <@ (%%Expr.Var xVar: TypedScalar<'S,'stateUnit>) |> Scalar.toRaw @>
+                TimeVal = <@ (%%Expr.Var tVar: FsScalar<'S,'timeUnit>) |> Scalar.toRaw  @>
+                ThisVal = <@ (%%Expr.Var xVar: FsScalar<'S,'stateUnit>) |> Scalar.toRaw @>
             }
 
             // NB The quotation compiler doesn't currently support units. Strip here and reapply later.
@@ -785,9 +785,9 @@ module Language =
 
         let compileMeasure<[<Measure>] 'stateUnit, 'S,'V> backend parameters (expr: ModelExpression<'stateUnit>) =
             
-            let pVar = Var("parameters", typeof<TypedVector<'S,'V,parameter>>)
-            let statesVar = Var("states", typeof<CodedMap<TypedVector<'S,'V,ModelSystem.state>>>)
-            let thisVar = Var("thisVal", typeof<TypedScalar<'S,ModelSystem.state>>)
+            let pVar = Var("parameters", typeof<FsVector<'S,'V,parameter>>)
+            let statesVar = Var("states", typeof<CodedMap<FsVector<'S,'V,ModelSystem.state>>>)
+            let thisVar = Var("thisVal", typeof<FsScalar<'S,ModelSystem.state>>)
             let tIdxVar = Var("timeIndex", typeof<int>)
 
             let ctx = {
@@ -796,13 +796,13 @@ module Language =
                 Environment = fun _ -> failwith "Environment not supported in measures"
                 GetState = fun name t ->
                     <@
-                        let states = %%Expr.Var statesVar: CodedMap<TypedVector<'S,'V,ModelSystem.state>>
+                        let states = %%Expr.Var statesVar: CodedMap<FsVector<'S,'V,ModelSystem.state>>
                         let vec = states |> Map.tryFindBy (fun n -> n.Value = name) |> Option.get
                         Vector.itemAt ((%%Expr.Var tIdxVar: int) + Units.removeUnitFromInt 0) vec
                         |> Scalar.toRaw
                     @>
                 TimeVal = <@ Units.intToFloat (%%Expr.Var tIdxVar: int) |> backend.atomic.fromFloatS @>
-                ThisVal = <@ (%%Expr.Var thisVar: TypedScalar<'S,ModelSystem.state>) |> Scalar.toRaw @>
+                ThisVal = <@ (%%Expr.Var thisVar: FsScalar<'S,ModelSystem.state>) |> Scalar.toRaw @>
             }
 
             // NB The quotation compiler doesn't currently support units. Strip here and reapply later.
@@ -816,9 +816,9 @@ module Language =
 
         let compileInitialiser<[<Measure>] 'stateUnit, 'S,'V> backend parameters (expr: ModelExpression<'stateUnit>) =
             
-            let pVar = Var("parameters", typeof<TypedVector<'S,'V,``parameter``>>)
-            let eVar = Var("environment", typeof<CodedMap<TypedScalar<'S,ModelSystem.``environment``>>>)
-            let bVar = Var("baselines", typeof<CodedMap<TypedScalar<'S,ModelSystem.state>>>)
+            let pVar = Var("parameters", typeof<FsVector<'S,'V,``parameter``>>)
+            let eVar = Var("environment", typeof<CodedMap<FsScalar<'S,ModelSystem.``environment``>>>)
+            let bVar = Var("baselines", typeof<CodedMap<FsScalar<'S,ModelSystem.state>>>)
 
             let ctx = {
                 ParameterVar = pVar
@@ -828,7 +828,7 @@ module Language =
                     if t <> 0<Time.``time index``> then failwith "'State at' not supported in initialisers. Use 'State' for baseline."
                     else
                         <@
-                            (%%Expr.Var bVar: CodedMap<TypedScalar<'S,ModelSystem.``state``>>)
+                            (%%Expr.Var bVar: CodedMap<FsScalar<'S,ModelSystem.``state``>>)
                             |> Map.tryFindBy (fun k -> k.Value = name)
                             |> fun o ->
                                 match o with
@@ -853,7 +853,7 @@ module Language =
 
     /// Computes a `ModelExpression` given the current time, value,
     /// environment, and parameter pool.
-    let computeRate (engine: Numerics.NumericEngine<'S,'V,'M>) x t pool (environment: CodedMap<Numerics.Typed.TypedScalar<'S,ModelSystem.environment>>) ex =
+    let computeRate (engine: Numerics.NumericEngine<'S,'V,'M>) x t pool (environment: CodedMap<Numerics.Typed.FsScalar<'S,ModelSystem.environment>>) ex =
         ExpressionCompiler.compileRate engine.scalarBackend pool (Seq.toList environment.Keys) ex
         |> fun f -> f (Parameter.Pool.toVectorWithKeysReal engine pool |> snd) environment t x
 
@@ -931,13 +931,15 @@ module Language =
         type DiscreteTime = DiscreteTime
         type ContinuousTime = ContinuousTime
 
+        type NoNumEngine = Placeholder
+
         // type NotReady = NotReady
         // type SimulationOnly = SimulationOnly
 
         type ModelDescription<[<Measure>] 'time, 'TimeMode,'S,'V> =
             private | ModelBuilder of ModelDescriptionState<'S,'V>
 
-        let private empty'<[<Measure>] 'time, 'TimeMode> () : ModelDescription<'time, 'TimeMode,'S,'V> =
+        let private empty'<[<Measure>] 'time, 'TimeMode,'S,'V> () : ModelDescription<'time, 'TimeMode,'S,'V> =
             ModelBuilder {
                 States = Map.empty
                 Measures = Map.empty
@@ -946,13 +948,13 @@ module Language =
 
         let internal unwrap (ModelBuilder m) = m
 
-        let empty<[<Measure>] 'time> : ModelDescription<'time, ContinuousTime,'S,'V> =
+        let empty<[<Measure>] 'time> : ModelDescription<'time, ContinuousTime,NoNumEngine,NoNumEngine> =
             empty' ()
 
-        let discrete<[<Measure>] 'time> : ModelDescription<'time, DiscreteTime,'S,'V> =
+        let discrete<[<Measure>] 'time> : ModelDescription<'time, DiscreteTime,NoNumEngine,NoNumEngine> =
             empty' ()
 
-        let continuous<[<Measure>] 'time> : ModelDescription<'time, ContinuousTime,'S,'V> =
+        let continuous<[<Measure>] 'time> : ModelDescription<'time, ContinuousTime,NoNumEngine,NoNumEngine> =
             empty' ()
 
         let private updateState fn (mb: ModelDescription<'u,'TimeMode,'S,'V>) : ModelDescription<'u,'TimeMode,'S,'V> =
@@ -1040,8 +1042,15 @@ module Language =
                     | Discrete f, _ -> Discrete f, Some (envReqs, eUntyped)
                 updateState (fun state -> { state with States = state.States |> Map.add name.Code frag }) mb
 
-        let useLikelihoodFunction<[<Measure>] 'u, [<Measure>] 'time,'TimeMode,'S,'V> (l: ModelSystem.Likelihood<'S,'V,ModelSystem.state>) (mb: ModelDescription<'time,'TimeMode,'S,'V>) =
-            updateState (fun state -> { state with Likelihood = Some l }) mb
+        let useLikelihoodFunction<[<Measure>] 'time,'TimeMode,'S1,'V1,'S2,'V2>
+            (l: ModelSystem.Likelihood<'S2,'V2,ModelSystem.state>)
+            (mb: ModelDescription<'time,'TimeMode,'S1,'V1>)
+            : ModelDescription<'time,'TimeMode,'S2,'V2> =
+            let oldState = unwrap mb
+            { Likelihood = Some l
+              States = oldState.States
+              Measures = oldState.Measures
+              Parameters = oldState.Parameters } |> ModelBuilder
 
 
         module Compile =
@@ -1116,18 +1125,18 @@ module Language =
                         | Discrete (_,expr) -> Some (kv.Key, expr)
                         | _ -> None) |> Seq.toList
 
-                let stateEqs =
+                let stateEqs : ModelSystem.ModelForm<'S,'V,'time> =
                     match diffEqs.Length, continEqs.Length with
-                    | 0, _ ->
-                        continEqs
-                        |> List.map(fun (c,expr) ->
-                            c, ExpressionCompiler.compileRate numEngine.scalarBackend parameters requiredEnvVars (ME expr))
-                        |> Map.ofList
-                        |> ModelSystem.DifferentialEqs
                     | _, 0 ->
                         diffEqs
                         |> List.map(fun (c,expr) ->
                             c, ExpressionCompiler.compileDiscrete numEngine.scalarBackend parameters requiredEnvVars (ME expr))
+                        |> Map.ofList
+                        |> ModelSystem.DifferenceEqs
+                    | 0, _ ->
+                        continEqs
+                        |> List.map(fun (c,expr) ->
+                            c, ExpressionCompiler.compileRate numEngine.scalarBackend parameters requiredEnvVars (ME expr))
                         |> Map.ofList
                         |> ModelSystem.DifferentialEqs
                     | _ -> failwith "Mixture of discrete and continuous-time equations specified."
@@ -1148,7 +1157,14 @@ module Language =
                   Measures = measures }
 
         /// Pre-compile a model system for use in Bristlecone.
-        let compile numEng mb =
+        /// Uses the default numeric engine (DiffSharp).
+        let compile mb =
+            Compile.compile Numerics.Backends.DiffSharp.engine mb
+
+        /// Pre-compile a model system for use in Bristlecone.
+        /// Specify a custom numeric engine that matches the estimation
+        /// engine that you will use.
+        let compileWith (numEng: Numerics.NumericEngine<'S,'V,'M>) mb =
             Compile.compile numEng mb
 
 
@@ -1162,10 +1178,10 @@ module Language =
                 private
                     { Inner: ModelDescription<'time,'TimeMode,'S,'V> }
 
-            let emptyState<[<Measure>] 'time> : CeState<'time, ContinuousTime, Missing, Missing,'S,'V> =
+            let emptyState<[<Measure>] 'time> : CeState<'time, ContinuousTime, Missing, Missing,NoNumEngine,NoNumEngine> =
                 { Inner = continuous }
 
-            let emptyDiscrete<[<Measure>] 'time> : CeState<'time, DiscreteTime, Missing, Missing,'S,'V> =
+            let emptyDiscrete<[<Measure>] 'time> : CeState<'time, DiscreteTime, Missing, Missing,NoNumEngine,NoNumEngine> =
                 { Inner = discrete }
 
             type ModelSystemBuilder<[<Measure>] 'time> () =
@@ -1180,7 +1196,7 @@ module Language =
                 //         Compile.compile backend state.Inner
 
                 [<CustomOperation("estimate")>]
-                member _.Parameter<[<Measure>] 'u, 'E, 'L>
+                member _.Parameter<[<Measure>] 'u, 'E, 'L,'S,'V>
                     (state: CeState<'time,ContinuousTime, 'E, 'L,'S,'V>, p: IncludedParameter<'u>)
                     =
                     { Inner = estimateParameter p state.Inner }
@@ -1192,22 +1208,22 @@ module Language =
                 //     { Inner = addRateEquation sid expr state.Inner }
 
                 [<CustomOperation("measure")>]
-                member _.Measure<[<Measure>] 'u, 'E, 'L>
+                member _.Measure<[<Measure>] 'u, 'E, 'L,'S,'V>
                     (state: CeState<'time, ContinuousTime, 'E, 'L,'S,'V>, mid: MeasureId<'u>, data)
                     =
                     { Inner = addMeasure mid data state.Inner }
 
                 [<CustomOperation("initialise")>]
-                member _.Init<[<Measure>] 'u, 'E, 'L>
+                member _.Init<[<Measure>] 'u, 'E, 'L,'S,'V>
                     (state: CeState<'time, ContinuousTime, 'E, 'L,'S,'V>, sid: StateId<'u>, initFn)
                     =
                     { Inner = initialiseHiddenStateWith sid initFn state.Inner }
 
                 /// Add exactly one likelihood function.
                 [<CustomOperation("likelihood")>]
-                member _.Likelihood<'E>
-                    (state: CeState<'time, ContinuousTime, 'E, Missing,'S,'V>, fn: ModelSystem.Likelihood<'S,'V,ModelSystem.state>)
-                    : CeState<'time, ContinuousTime, 'E, Present,'S,'V> =
+                member _.Likelihood<'E,'S,'V,'S2,'V2>
+                    (state: CeState<'time, ContinuousTime, 'E, Missing,'S,'V>, fn: ModelSystem.Likelihood<'S2,'V2,ModelSystem.state>)
+                    : CeState<'time, ContinuousTime, 'E, Present,'S2,'V2> =
                     { Inner = useLikelihoodFunction fn state.Inner }
 
                 member _.Run(state: CeState<'time, ContinuousTime, Present, Present,'S,'V>) = state.Inner
@@ -1535,7 +1551,7 @@ module Language =
                       yield Writer.AWriter(f sc.Expr, logs @ [ entry ]) ]
 
         /// Compile: run the writer(s), add parameters into the model builder, and wrap in Hypothesis
-        let compile
+        let compileWith
             numBackend // TODO Changed API, with no doc.
             (builders:
                 Writer.Writer<Model.ModelDescription<'time, 'timeMode,'S,'V>, ComponentName * CodedMap<Parameter.Pool.ParameterNoUnit>> list)
@@ -1549,4 +1565,6 @@ module Language =
                         (fun mb (name, p) -> mb |> Model.estimateParameter' p name)
                         mb
 
-                Hypothesis(Model.compile numBackend withParams, logs |> List.map fst))
+                Hypothesis(Model.compileWith numBackend withParams, logs |> List.map fst))
+
+        let compile numBackend builders = compileWith numBackend builders

@@ -130,17 +130,17 @@ module Timeseries =
         let σH = parameter "σ[H]" Positive 0.001 0.100
         let σL = parameter "σ[L]" Positive 0.001 0.100
 
-        let noisy =
+        let noisy backend =
 
             let NLL =
-                NegLogLikelihood.LogNormal (Require.state H) σH +
-                NegLogLikelihood.LogNormal (Require.state L) σL
+                NegLogLikelihood.LogNormal backend (Require.state H) σH +
+                NegLogLikelihood.LogNormal backend (Require.state L) σL
 
             predatorPreyBase
             |> Model.useLikelihoodFunction NLL
             |> Model.compile
 
-        let test withNoise logger optimise endCondition =
+        let test withNoise backend logger optimise endCondition =
             
             let engine =
                 Bristlecone.mkContinuous ()
@@ -162,7 +162,7 @@ module Timeseries =
                     settings
                     |> Test.withObservationError (Require.state H) (Test.Error.normal σH)
                     |> Test.withObservationError (Require.state L) (Test.Error.normal σL)
-                Bristlecone.tryTestModel engine endCondition settings noisy
+                Bristlecone.tryTestModel engine endCondition settings (noisy backend)
             else
                 Bristlecone.tryTestModel engine endCondition settings deterministic
 
@@ -224,13 +224,13 @@ module Timeseries =
         let sigma = parameter "σ" Positive 0.001<(gram/area)/day> 10.0<(gram/area)/day>
 
         // With Gaussian observation noise
-        let noisy =
-            let NLL = NegLogLikelihood.Normal (Require.measure R) sigma
+        let noisy backend =
+            let NLL = NegLogLikelihood.Normal backend (Require.measure R) sigma
             soilCarbonBase
             |> Model.useLikelihoodFunction NLL
             |> Model.compile
 
-        let test withNoise logger optimise endCondition =
+        let test withNoise backend logger optimise endCondition =
             
             let engine =
                 Bristlecone.mkContinuous ()
@@ -250,7 +250,7 @@ module Timeseries =
                 |> Test.rule (Require.measure R) (Test.GenerationRules.alwaysLessThan 1000.)
                 |> Test.withEnvironmentGenBySpan Ts mkTemperature (fun x -> float x.Days * 1.<day>)
 
-            Bristlecone.tryTestModel engine endCondition settings (if withNoise then noisy else deterministic)
+            Bristlecone.tryTestModel engine endCondition settings (if withNoise then noisy backend else deterministic)
 
 
     /// A discrete-time test model, which represents the temperature-dependence
@@ -264,7 +264,7 @@ module Timeseries =
         let logN = measure "logN"
         let temperatureAnomaly = environment<celsius> "T"
 
-        let rickerBase: ModelBuilder.ModelBuilder<day> =
+        let rickerBase =
 
             // Parameters
             let r = parameter "r" NoConstraints 0.1 2.0 // maximum per‑capita growth rate (intrinsic growth rate)
@@ -276,7 +276,7 @@ module Timeseries =
 
             let eqLogNM = State N |> Logarithm
 
-            Model.discrete
+            Model.discrete<day>
             |> Model.addDiscreteEquation N ``N[t+1]``
             |> Model.addMeasure logN eqLogNM
             |> Model.estimateParameter r
@@ -290,14 +290,14 @@ module Timeseries =
 
         let sigma = parameter "σ" Positive 0.001 10.0
 
-        let noisy =
-            let NLL = NegLogLikelihood.Normal (Require.measure logN) sigma
+        let noisy numEng =
+            let NLL = NegLogLikelihood.Normal numEng (Require.measure logN) sigma
 
             rickerBase
             |> Model.useLikelihoodFunction NLL
             |> Model.compile
 
-        let test withNoise logger optimise endCondition =
+        let test numEngine withNoise logger optimise endCondition =
             
             let engine =
                 Bristlecone.mkDiscrete ()
@@ -317,6 +317,6 @@ module Timeseries =
             if withNoise
             then
                 let settings = settings |> Test.withObservationError (Require.measure logN) (Test.Error.normal sigma)
-                Bristlecone.tryTestModel engine endCondition settings noisy
+                Bristlecone.tryTestModel engine endCondition settings (noisy engine.Backend)
             else 
                 Bristlecone.tryTestModel engine endCondition settings deterministic

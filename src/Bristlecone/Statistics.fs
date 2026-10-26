@@ -239,7 +239,7 @@ module RootFinding =
     open Bristlecone.Numerics.Typed
 
     /// Secant method for finding root of non-linear equations. This method is faster than bisection, but may not converge on a root.
-    let rec secant (engine: NumericEngine<'S,'V,'M>) (n:int) maxIter (f: TypedScalar<'S,'u> -> TypedScalar<'S,'u>) x0 x1 : TypedScalar<'S,'u> =
+    let rec secant (engine: NumericEngine<'S,'V,'M>) (n:int) maxIter (f: FsScalar<'S,'u> -> FsScalar<'S,'u>) x0 x1 : FsScalar<'S,'u> =
         if n >= maxIter then
             x1
         else  

@@ -11,7 +11,7 @@ module Objective =
 
     let accessorFromRealVector
         (compiled: Parameter.Pool.CompiledTransforms<'S,'V,'space>)
-        (thetaReal: TypedVector<'S,'V,``parameter``>)
+        (thetaReal: FsVector<'S,'V,``parameter``>)
         : ModelSystem.ParameterValueAccessor<'S> =
         let idx = compiled.IndexByName
 
@@ -31,11 +31,11 @@ module Objective =
     /// of the predictions to enable previous value lookup where needed.
     let measure
         (measures: CodedMap<Measurement<'S,'V,state>>)
-        (parameters: TypedVector<'S,'V,``parameter``>)
-        (expectedDynamic: CodedMap<TypedVector<'S,'V,state>>)
-        (initialConditions: CodedMap<TypedScalar<'S,state>>)
+        (parameters: FsVector<'S,'V,``parameter``>)
+        (expectedDynamic: CodedMap<FsVector<'S,'V,state>>)
+        (initialConditions: CodedMap<FsScalar<'S,state>>)
         invalidValue
-        : CodedMap<TypedVector<'S,'V,state>> =
+        : CodedMap<FsVector<'S,'V,state>> =
 
         let expectedWithT0 = prependInitialConditions initialConditions expectedDynamic
         let length = expectedWithT0 |> Seq.head |> fun kv -> kv.Value |> Vector.length
@@ -95,7 +95,7 @@ module Objective =
         (solver: Solver.ConfiguredSolver<'S,'V>)
         (config: Parameter.Pool.OptimiserConfig<'S,'V,'space>)
         invalidValue
-        (observed: CodedMap<TypedVector<'S,'V,state>>)
+        (observed: CodedMap<FsVector<'S,'V,state>>)
         : EstimationEngine.Objective<'S,'V,'space> =
 
         fun point ->

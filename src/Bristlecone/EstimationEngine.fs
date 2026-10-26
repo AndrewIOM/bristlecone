@@ -17,11 +17,11 @@ module ModelSystem =
     /// the current time t, the current response value, and / or
     /// external environmental time series.
     type GenericModelEquation<'S,'V,[<Measure>] 'timeUnit, [<Measure>] 'returnUnit> =
-        TypedVector<'S,'V,``parameter``>
-            -> CodedMap<TypedScalar<'S,``environment``>>
-            -> TypedScalar<'S,'timeUnit>
-            -> TypedScalar<'S,state>
-            -> TypedScalar<'S,'returnUnit>
+        FsVector<'S,'V,``parameter``>
+            -> CodedMap<FsScalar<'S,``environment``>>
+            -> FsScalar<'S,'timeUnit>
+            -> FsScalar<'S,state>
+            -> FsScalar<'S,'returnUnit>
 
     type RateEquation<'S,'V,[<Measure>] 'timeUnit> = GenericModelEquation<'S,'V,'timeUnit, state / 'timeUnit>
     type StateEquation<'S,'V,[<Measure>] 'timeUnit> = GenericModelEquation<'S,'V,'timeUnit, state>
@@ -36,11 +36,11 @@ module ModelSystem =
 
     /// Predicted time-series for a single variable.
     /// 'u is the state unit of measure.
-    type PredictedSeries<[<Measure>] 'u,'S,'V> = TypedVector<'S,'V,'u>
+    type PredictedSeries<[<Measure>] 'u,'S,'V> = FsVector<'S,'V,'u>
 
     /// A function that returns a parameter's current value by its name.
     type ParameterValueAccessor<'S> =
-        | ParameterValueAccessor of (string -> TypedScalar<'S,``parameter``>)
+        | ParameterValueAccessor of (string -> FsScalar<'S,``parameter``>)
 
         member this.Get name =
             let (ParameterValueAccessor v) = this in v name
@@ -48,14 +48,14 @@ module ModelSystem =
     /// A single variable’s observed vs expected values
     /// after model-fitting.
     type SeriesPair<'S,'V,[<Measure>] 'u> =
-        { Observed: TypedVector<'S,'V,'u>
-          Expected: TypedVector<'S,'V,'u> }
+        { Observed: FsVector<'S,'V,'u>
+          Expected: FsVector<'S,'V,'u> }
 
     /// The negative log likelihood given the predicted and observed
     /// per-variable time-series and a function to retrieve parameters
     /// required by the likelihood function.
     type LikelihoodEval<'S,'V,[<Measure>] 'u> =
-        ParameterValueAccessor<'S> -> CodedMap<SeriesPair<'S,'V,'u>> -> TypedScalar<'S,``-logL``>
+        ParameterValueAccessor<'S> -> CodedMap<SeriesPair<'S,'V,'u>> -> FsScalar<'S,``-logL``>
 
     type LikelihoodRequirement =
         | State of ShortCode.ShortCode
@@ -74,19 +74,19 @@ module ModelSystem =
     /// A function that computes a measured system property given a
     /// current (time t) and previous (time t-1) system state.
     type Measurement<'S,'V,[<Measure>] 'u> =
-        TypedVector<'S,'V, ``parameter``> // current parameters
-            -> CodedMap<TypedVector<'S,'V,state>> // states time-series
-            -> TypedScalar<'S,state> // last value of this measurement
+        FsVector<'S,'V, ``parameter``> // current parameters
+            -> CodedMap<FsVector<'S,'V,state>> // states time-series
+            -> FsScalar<'S,state> // last value of this measurement
             -> int // current time index
-            -> TypedScalar<'S,'u>
+            -> FsScalar<'S,'u>
 
     /// Computes the hidden state’s initial value at t0
     /// from fitted parameters and baseline known values.
     type Initialiser<'S,'V,[<Measure>] 'u> =
-        TypedVector<'S,'V,``parameter``> // current parameters
-            -> CodedMap<TypedScalar<'S,``environment``>> // baseline environment values at t0
-            -> CodedMap<TypedScalar<'S,``state``>> // baseline observed state values at t0
-            -> TypedScalar<'S,'u> // initial hidden state value
+        FsVector<'S,'V,``parameter``> // current parameters
+            -> CodedMap<FsScalar<'S,``environment``>> // baseline environment values at t0
+            -> CodedMap<FsScalar<'S,``state``>> // baseline observed state values at t0
+            -> FsScalar<'S,'u> // initial hidden state value
 
     type ModelSystem<'S,'V,[<Measure>] 'modelTimeUnit> =
         { Parameters: Parameter.Pool.ParameterPool
@@ -130,16 +130,16 @@ module EstimationEngine =
 
     /// A point in optimisation-space, which may be
     /// in a transformed or 'real' parameter space.
-    type Point<'S,'V,[<Measure>] 'space> = TypedVector<'S,'V,'space>
+    type Point<'S,'V,[<Measure>] 'space> = FsVector<'S,'V,'space>
 
     /// An objective function that can be optimised
     /// within an optimisation routine.
-    type Objective<'S,'V,[<Measure>] 'space> = Point<'S,'V,'space> -> TypedScalar<'S,``-logL``>
+    type Objective<'S,'V,[<Measure>] 'space> = Point<'S,'V,'space> -> FsScalar<'S,``-logL``>
 
     /// Low‑level compiled likelihood
     /// Works directly with a parameter tensor (real space).
     type CompiledLikelihood<'S,'V,[<Measure>] 'u> =
-        TypedVector<'S,'V, ``parameter``> -> CodedMap<SeriesPair<'S,'V,'u>> -> TypedScalar<'S,``-logL``>
+        FsVector<'S,'V, ``parameter``> -> CodedMap<SeriesPair<'S,'V,'u>> -> FsScalar<'S,``-logL``>
 
     /// Reasons optimisation may stop.
     type OptimStopReason =
@@ -172,17 +172,17 @@ module EstimationEngine =
     /// A function that, given parameters, produces a parameterised RHS
     /// for the ODE system. This is the output of the static solver setup.
     type UnparameterisedRHS<'S,'V> =
-        TypedVector<'S,'V,``parameter``>
-            -> TypedScalar<'S,``time index``>
-            -> TypedVector<'S,'V,state>
-            -> CodedMap<TypedScalar<'S,state / ``time index``>>
+        FsVector<'S,'V,``parameter``>
+            -> FsScalar<'S,``time index``>
+            -> FsVector<'S,'V,state>
+            -> CodedMap<FsScalar<'S,state / ``time index``>>
 
     /// A parameterised RHS — parameters already bound.
     /// This is what the integration routine actually steps.
     type ParameterisedRHS<'S,'V> =
-        TypedScalar<'S,``time index``>
-            -> TypedVector<'S,'V,state>
-            -> CodedMap<TypedScalar<'S,state / ``time index``>>
+        FsScalar<'S,``time index``>
+            -> FsVector<'S,'V,state>
+            -> CodedMap<FsScalar<'S,state / ``time index``>>
 
 
     module Solver =
@@ -194,14 +194,14 @@ module EstimationEngine =
             float<``time index``> // tInitial
                 -> float<``time index``> // tEnd
                 -> float<``time index``> // tStep
-                -> CodedMap<TypedScalar<'S,environment>> // initial environment
-                -> CodedMap<TimeIndex.TimeIndex<TypedScalar<'S,environment>, 'date, 'timeunit, 'timespan, 1>> // external env
+                -> CodedMap<FsScalar<'S,environment>> // initial environment
+                -> CodedMap<TimeIndex.TimeIndex<FsScalar<'S,environment>, 'date, 'timeunit, 'timespan, 1>> // external env
                 -> ModelEquations<'S,'V>
                 -> UnparameterisedRHS<'S,'V>
 
         type ConfiguredSolver<'S,'V> =
-            TypedVector<'S,'V,``parameter``> // parameters
-                -> CodedMap<TypedVector<'S,'V,state>> * CodedMap<TypedScalar<'S,state>> // predictions * initial state
+            FsVector<'S,'V,``parameter``> // parameters
+                -> CodedMap<FsVector<'S,'V,state>> * CodedMap<FsScalar<'S,state>> // predictions * initial state
 
         /// A solver may configure environmental forcing variables
         /// to be interpolated if they are not available at an exact
@@ -223,12 +223,12 @@ module EstimationEngine =
         /// Must return the baseline state plus evolutions.
         type IntegrationRoutine<'S,'V,'M> =
             Numerics.NumericEngine<'S,'V,'M>
-                -> TypedScalar<'S,``time index``> // tInitial
-                -> TypedScalar<'S,``time index``> // tEnd
-                -> TypedScalar<'S,``time index``> // tStep
-                -> CodedMap<TypedScalar<'S,state>> // initialConditions
+                -> FsScalar<'S,``time index``> // tInitial
+                -> FsScalar<'S,``time index``> // tEnd
+                -> FsScalar<'S,``time index``> // tStep
+                -> CodedMap<FsScalar<'S,state>> // initialConditions
                 -> ParameterisedRHS<'S,'V>
-                -> CodedMap<TypedVector<'S,'V,state>>
+                -> CodedMap<FsVector<'S,'V,state>>
 
 
     module Optimisation =

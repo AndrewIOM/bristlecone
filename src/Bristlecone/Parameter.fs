@@ -71,15 +71,15 @@ module Parameter =
         open Bristlecone.Numerics.Typed
 
         type OptimSpaceTransform<'S,[<Measure>] 'space> =
-            { Forward: TypedScalar<'S,'space> -> TypedScalar<'S,``parameter``>
-              Inverse: TypedScalar<'S,``parameter``> -> TypedScalar<'S,'space> }
+            { Forward: FsScalar<'S,'space> -> FsScalar<'S,``parameter``>
+              Inverse: FsScalar<'S,``parameter``> -> FsScalar<'S,'space> }
 
         /// Detached/bounded mode: identity mapping regardless of constraint.
         let scalarTransformOptimSpace: OptimSpaceTransform<'S,``optim-space``> =
             { Forward =
-                fun (z: TypedScalar<'S,``optim-space``>) -> z |> Scalar.retype
+                fun (z: FsScalar<'S,``optim-space``>) -> z |> Scalar.retype
               Inverse =
-                fun (x: TypedScalar<'S,``parameter``>) -> x |> Scalar.retype }
+                fun (x: FsScalar<'S,``parameter``>) -> x |> Scalar.retype }
 
         // Transformed mode: apply constraint transforms
         let scalarTransformOptimSpaceTransformed
@@ -89,15 +89,15 @@ module Parameter =
             match cons with
             | Constraint.Unconstrained ->
                 { Forward =
-                    fun (z: TypedScalar<'S,``optim-space-transformed``>) -> z |> Scalar.retype
+                    fun (z: FsScalar<'S,``optim-space-transformed``>) -> z |> Scalar.retype
                   Inverse =
-                    fun (x: TypedScalar<'S,``parameter``>) -> x |> Scalar.retype }
+                    fun (x: FsScalar<'S,``parameter``>) -> x |> Scalar.retype }
             | Constraint.PositiveOnly ->
                 { Forward =
-                    fun (z: TypedScalar<'S,``optim-space-transformed``>) ->
+                    fun (z: FsScalar<'S,``optim-space-transformed``>) ->
                         z |> Scalar.retype |> Scalar.exp |> Scalar.retype
                   Inverse =
-                    fun (x: TypedScalar<'S,``parameter``>) ->
+                    fun (x: FsScalar<'S,``parameter``>) ->
                         x |> Scalar.log |> Scalar.retype }
             | Constraint.Bounded(low, hi) ->
                 let lowT = Typed.ofScalar backend low
@@ -105,11 +105,11 @@ module Parameter =
                 let one = Typed.ofScalar backend 1.
 
                 { Forward =
-                    fun (z: TypedScalar<'S,``optim-space-transformed``>) ->
+                    fun (z: FsScalar<'S,``optim-space-transformed``>) ->
                         let sigma = Scalar.sigmoid (Scalar.retype z)
                         lowT + (hiT - lowT) * sigma
                   Inverse =
-                    fun (x: TypedScalar<'S,``parameter``>) ->
+                    fun (x: FsScalar<'S,``parameter``>) ->
                         let sigma = (x - lowT) / (hiT - lowT)
                         let z = Scalar.log (sigma / (one - sigma))
                         z |> Scalar.retype }
@@ -195,7 +195,7 @@ module Parameter =
 
             Pool updated
 
-        let toVectorWithKeysReal (eng:NumericEngine<'S,'V,'M>) (Pool p) : ShortCode.ShortCode[] * TypedVector<'S,'V,``parameter``> =
+        let toVectorWithKeysReal (eng:NumericEngine<'S,'V,'M>) (Pool p) : ShortCode.ShortCode[] * FsVector<'S,'V,``parameter``> =
             let keys, scalars =
                 p
                 |> Map.toList
@@ -219,8 +219,8 @@ module Parameter =
         type CompiledTransforms<'S,'V,[<Measure>] 'space> =
             { Keys: ShortCode.ShortCode[]
               IndexByName: Map<string, int>
-              Forward: TypedVector<'S,'V,'space> -> TypedVector<'S,'V,``parameter``>
-              Inverse: TypedVector<'S,'V,``parameter``> -> TypedVector<'S,'V,'space>
+              Forward: FsVector<'S,'V,'space> -> FsVector<'S,'V,``parameter``>
+              Inverse: FsVector<'S,'V,``parameter``> -> FsVector<'S,'V,'space>
               ScalarTransforms: ParameterTransforms.OptimSpaceTransform<'S,'space>[]
               IsBounded: bool }
 
@@ -242,14 +242,14 @@ module Parameter =
                 |> List.map (fun (_, ap) -> mkScalar (ap.GetConstraint()))
                 |> List.toArray
 
-            let forwardVec (thetaOpt: TypedVector<'S,'V,'space>) =
+            let forwardVec (thetaOpt: FsVector<'S,'V,'space>) =
                 trans
                 |> Array.mapi (fun i t ->
                     let zi = Vector.itemAt i thetaOpt
                     t.Forward zi)
                 |> Stats.stack1D numEngine.vectorBackend numEngine.vectorAccess
 
-            let inverseVec (thetaReal: TypedVector<'S,'V,``parameter``>) =
+            let inverseVec (thetaReal: FsVector<'S,'V,``parameter``>) =
                 trans
                 |> Array.mapi (fun i t ->
                     let xi = Vector.itemAt i thetaReal
@@ -282,7 +282,7 @@ module Parameter =
         /// optimisation space units.
         let internal transformConstraint<'S,[<Measure>] 'space>
             backend
-            (inv: TypedScalar<'S,parameter> -> TypedScalar<'S,'space>)
+            (inv: FsScalar<'S,parameter> -> FsScalar<'S,'space>)
             (cons: Constraint<parameter>)
             =
             let invF f =

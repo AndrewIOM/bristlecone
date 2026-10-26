@@ -85,19 +85,28 @@ module Bristlecone =
     /// Choose how the start point is chosen when solving the model system
     let withConditioning c engine = { engine with Conditioning = c }
 
-    let withTunedMCMC tuning engine =
-        { engine with
-            OptimiseWith = Optimisation.MonteCarlo.randomWalk tuning }
-
-    let withBristleconeOptimiser engine =
-        { engine with
-            OptimiseWith = Optimisation.MonteCarlo.bristleconeSampler () }
+    let withCustomOptimisation<'S,'V,'M,'date,'timespan,[<Measure>] 'modelTimeUnit,[<Measure>] 'state, [<Measure>] 'optimSpace, [<Measure>] 'newSpace>
+        optim (engine: EstimationEngine<'S,'V,'M,'date,'timespan,'modelTimeUnit,'state,'optimSpace>) :
+        EstimationEngine<'S,'V,'M,'date,'timespan,'modelTimeUnit,'state,'newSpace> =
+        { TimeHandling = engine.TimeHandling
+          OptimiseWith = optim
+          LogTo = engine.LogTo
+          Random = engine.Random
+          ToModelTime = engine.ToModelTime
+          InterpolationGlobal = engine.InterpolationGlobal
+          InterpolationPerVariable = engine.InterpolationPerVariable
+          Backend = engine.Backend
+          Conditioning = engine.Conditioning }
 
     // let withGradientDescent engine =
-    //     { engine with
-    //         OptimiseWith = Optimisation.Amoeba.single Optimisation.Amoeba.Solver.Default }
+    //     withCustomOptimisation (Optimisation.Amoeba.single Optimisation.Amoeba.Solver.Default) engine
 
-    let withCustomOptimisation optim engine = { engine with OptimiseWith = optim }
+    let withTunedMCMC tuning engine =
+        withCustomOptimisation (Optimisation.MonteCarlo.randomWalk tuning) engine
+
+    let withBristleconeOptimiser engine =
+        withCustomOptimisation (Optimisation.MonteCarlo.bristleconeSampler()) engine
+
 
     module internal Fit =
 
@@ -488,7 +497,7 @@ module Bristlecone =
     /// was successful or not.</returns>
     let tryTestModel
         (engine: EstimationEngine<'S,'V,'M,'date, 'timespan, 'modelTimeUnit, 'state, 'optimSpace>)
-        endCondition
+        (endCondition: EndCondition<'optimSpace>)
         (settings: Test.TestSettings<'state, 'date, 'timeunit, 'timespan>)
         (model: ModelSystem<'S,'V,'modelTimeUnit>)
         =
@@ -526,12 +535,15 @@ module Bristlecone =
             engine.LogTo
             <| GeneralEvent(sprintf "Parameters to test are %A" (trueParamPool |> Parameter.Pool.toVectorWithKeysReal engine.Backend))
 
+            let fakeEngine =
+                engine
+                |> withCustomOptimisation (Optimisation.None.none ())
+
             // Fit with true parameters (no optimisation)
             let! realEstimate =
                 tryFit
-                    { engine with
-                        OptimiseWith = Optimisation.None.none () }
-                    endCondition
+                    fakeEngine
+                    (Optimisation.EndConditions.atIteration 0<iteration>)
                     mergedData
                     { model with
                         Parameters = Parameter.Pool.fromEstimated trueParamPool }

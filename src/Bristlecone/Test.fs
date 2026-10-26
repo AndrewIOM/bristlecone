@@ -168,12 +168,12 @@ module Test =
             | DifferentialEqs e -> Map.keys e
 
 
-        let tryMakeDummySeries<[<Measure>] 'state, 'T, 'yearType, [<Measure>] 'timeunit, 'timespan when 'T: comparison>
-            (startDate: 'T)
+        let tryMakeDummySeries<[<Measure>] 'state, 'date, 'yearType, [<Measure>] 'timeunit, 'timespan, 'S when 'date: comparison>
+            (startDate: 'date)
             (resolution: Resolution.FixedTemporalResolution<'timespan>)
             (length: int)
-            (dateMode: DateMode.DateMode<'T, 'yearType, 'timespan>)
-            (t1: CodedMap<TypedScalar<'S,'state>>)
+            (dateMode: DateMode.DateMode<'date, 'yearType, 'timespan>)
+            (t1: CodedMap<FsScalar<'S,'state>>)
             =
 
             let mkTimeSeries (t1: float<'state> option) =
@@ -199,7 +199,7 @@ module Test =
         let tryGenerateData'
             (engine: EstimationEngine.EstimationEngine<'S,'V,'M,'date,'timespan,'modelTimeUnit,'state,'space>)
             (model: ModelSystem<'S,'V,'modelTimeUnit>)
-            (testSettings: TestSettings<'T, 'date, 'timeunit, 'timespan>)
+            (testSettings: TestSettings<'state, 'date, 'timeunit, 'timespan>)
             rnd
             thetaPool
             =
@@ -261,7 +261,7 @@ module Test =
             let timeline = conditioned.ObservedForPairing |> TimeFrame.dates |> List.toArray
 
             let constants = Scalar.constants engine.Backend
-            let invalidValue : TypedScalar<'S,state> = constants.invalid |> Scalar.retype
+            let invalidValue : FsScalar<'S,state> = constants.invalid |> Scalar.retype
             let predicted =
                 Objective.predict invalidValue solver model.Measures (thetaReal |> Array.ofList |> ofVector engine.Backend.vectorBackend engine.Backend.vectorAccess)
                 |> Map.map (fun _ v ->
@@ -274,7 +274,6 @@ module Test =
             // Add noise if needed
             let noisy = testSettings.ObservationErrorFn rnd thetaPool predicted
             noisy
-
 
         /// Generate data and check that it complies with the
         /// given ruleset.
