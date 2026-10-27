@@ -7,6 +7,12 @@ open Bristlecone
 open Bristlecone.Language
 open FsCheck
 
+// Use DiffSharp backend for all tests
+let defaultNumEngine = Numerics.Backends.DiffSharp.engine
+let defaultOfVector v = Numerics.Typed.ofVector defaultNumEngine.vectorBackend defaultNumEngine.vectorAccess v
+let defaultOfScalar v = Numerics.Typed.ofScalar defaultNumEngine.scalarBackend v
+
+
 // Helpers
 let floatEqualTol tol actual exp message =
     Expect.floatClose tol (Units.removeUnitFromFloat actual) (Units.removeUnitFromFloat exp) message
@@ -58,7 +64,7 @@ type BristleconeTypesGen() =
     static member EquationList = Arb.generate<ShortCode.ShortCode> |> genTuple<ShortCode.ShortCode,ModelExpression<testModelUnit>> |> Arb.fromGen
 
     static member MeasureList =
-        Arb.generate<ShortCode.ShortCode> |> genTuple<ShortCode.ShortCode,ModelSystem.Measurement<ModelSystem.state>> |> Arb.fromGen
+        Arb.generate<ShortCode.ShortCode> |> genTuple<ShortCode.ShortCode,ModelSystem.Measurement<'S,'V,ModelSystem.state>> |> Arb.fromGen
 
     static member Pool =
         gen {

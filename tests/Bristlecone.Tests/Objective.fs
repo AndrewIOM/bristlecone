@@ -6,12 +6,12 @@ open FsCheck
 open Bristlecone
 open Bristlecone.ModelSystem
 open Bristlecone.EstimationEngine
-open Bristlecone.Tensors
+open Bristlecone.Numerics
 
-let dummySolver code returnValue len : Solver.ConfiguredSolver =
+let dummySolver code returnValue len : Solver.ConfiguredSolver<'S,'V> =
     fun _ ->
-        Map.ofList [ code, Array.init len (fun i -> returnValue i |> Units.removeUnitFromFloat |> (*) 1.<state>) |> Typed.ofVector ],
-        Map.ofList [ code, returnValue 0 |> Units.removeUnitFromFloat |> (*) 1.<state> |> Typed.ofScalar ]
+        Map.ofList [ (code, Array.init len (fun i -> returnValue i |> Units.removeUnitFromFloat |> (*) 1.<state>) |> Config.defaultOfVector) ],
+        Map.ofList [ (code, returnValue 0 |> Units.removeUnitFromFloat |> (*) 1.<state> |> Config.defaultOfScalar) ]
 
 [<Tests>]
 let initialBounds =
@@ -20,15 +20,16 @@ let initialBounds =
         [
 
             testPropertyWithConfig Config.config "Time-series are paired to correct years" <| fun (NonEmptyArray (data: NormalFloat array)) pool ->
-                let optimConfig = Parameter.Pool.toOptimiserConfigBounded pool
+                let optimConfig = Parameter.Pool.toOptimiserConfigBounded Config.defaultNumEngine pool
                 let code = ShortCode.create "x" |> Option.get
-                let data' = [ code, data |> Array.map (fun g -> g.Get * 1.<state>) |> Tensors.Typed.ofVector ] |> Map.ofList
-                let point = Parameter.Pool.drawRandom (Random()) pool |> Parameter.Pool.toVectorWithKeysReal |> snd |> optimConfig.Compiled.Inverse
+                let data' = [ (code, data |> Array.map (fun g -> g.Get * 1.<state>) |> Config.defaultOfVector) ] |> Map.ofList
+                let point = Parameter.Pool.drawRandom (Random()) pool |> Parameter.Pool.toVectorWithKeysReal Config.defaultNumEngine |> snd |> optimConfig.Compiled.Inverse
                 let pred =
                     Objective.createPredictor
+                       ((Typed.Scalar.constants Config.defaultNumEngine).invalid |> Typed.Scalar.retype)
                         Map.empty
                         (dummySolver code (fun i -> float i * 1.2) data.Length)
-                        (Parameter.Pool.DetachedConfig optimConfig)
+                        optimConfig
                         point
                 
                 let prediction = Seq.init data.Length (fun i -> float i * 1.2)
@@ -37,11 +38,11 @@ let initialBounds =
 
                 let paired' = paired |> Map.find (ShortCode.create "x").Value
                 Config.sequenceEqualTol
-                    (paired'.Expected |> Tensors.Typed.toFloatArray |> Seq.map Units.removeUnitFromFloat)
+                    (paired'.Expected |> Typed.Vector.toArrayFloat |> Seq.map Units.removeUnitFromFloat)
                     prediction
                     "Prediction was not as expected after pairing"
                 Config.sequenceEqualTol
-                    (paired'.Observed |> Tensors.Typed.toFloatArray |> Seq.map Units.removeUnitFromFloat)
+                    (paired'.Observed |> Typed.Vector.toArrayFloat |> Seq.map Units.removeUnitFromFloat)
                     (data |> Array.map (fun g -> g.Get * 1.<state>))
                     "Observed vector was not as expected after pairing"
 
@@ -50,8 +51,8 @@ let initialBounds =
             <| fun shouldTransform (data: float list) (b1: NormalFloat) (b2: NormalFloat) ->
 
                 // Returns the parameter value
-                let fakeLikelihood (code:ShortCode.ShortCode) : ModelSystem.Likelihood<'u> =
-                    { Evaluate = fun paramAccessor _ -> paramAccessor.Get "a" |> Tensors.Typed.retypeScalar
+                let fakeLikelihood (code:ShortCode.ShortCode) : ModelSystem.Likelihood<'S,'V,'u> =
+                    { Evaluate = fun paramAccessor _ -> paramAccessor.Get "a" |> Typed.Scalar.retype
                       RequiredParameters = []
                       RequiredCodes = [ LikelihoodRequirement.State code ] }
 
@@ -77,24 +78,25 @@ let initialBounds =
                         |> Language.Model.useLikelihoodFunction (fakeLikelihood X.Code )
                         |> Language.Model.compile
 
-                    let optimConfig = Parameter.Pool.DetachedConfig (Parameter.Pool.toOptimiserConfigBounded model.Parameters)
+                    let optimConfig = Parameter.Pool.toOptimiserConfigBounded Config.defaultNumEngine model.Parameters
 
                     let code = (ShortCode.create "x").Value
                     let testObjective =
                         Objective.create
-                            model.NegLogLikelihood
+                            model.NegLogLikelihood.Evaluate
                             Map.empty
                             (dummySolver code (fun _ -> 2.0<state>) data.Length)
                             optimConfig
-                            ([ code, data |> List.map ((*) 1.<state>) |> List.toArray ] |> Map.ofList)
+                            ((Typed.Scalar.constants Config.defaultNumEngine).invalid |> Typed.Scalar.retype)
+                            ([ code, data |> List.map ((*) 1.<state>) |> List.toArray |> Config.defaultOfVector ] |> Map.ofList)
 
                     // The point given to the objective should be in optim-space.
                     let optimPoint =
-                        [| min b1 b2 * 1.<``optim-space``> |] |> Tensors.Typed.ofVector
+                        [| min b1 b2 * 1.<``optim-space``> |] |> Config.defaultOfVector
 
                     Expect.floatClose
                         Accuracy.high
-                        (testObjective optimPoint |> Tensors.Typed.toFloatScalar |> Units.removeUnitFromFloat)
+                        (testObjective optimPoint |> Typed.Scalar.toFloat |> Units.removeUnitFromFloat)
                         (min b1 b2)
                         "The likelihood function did not retrieve the 'real' parameter value"
 

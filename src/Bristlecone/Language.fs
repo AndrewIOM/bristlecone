@@ -759,7 +759,7 @@ module Language =
             |> LeafExpressionConverter.EvaluateQuotation
             |> unbox<ModelSystem.StateEquation<'S,'V,'timeUnit>>
 
-        // TODO
+        // // TODO
         // let compileSimple<[<Measure>] 'u, 'S,'V> (backend: NumericBackend<'S,'S>) (expr: ModelExpression<'u>) : float<'u> =
         //     let exprNoUnit = expr |> fun (ME expr) -> expr |> ME
         //     let ctx = {
@@ -857,6 +857,10 @@ module Language =
         ExpressionCompiler.compileRate engine.scalarBackend pool (Seq.toList environment.Keys) ex
         |> fun f -> f (Parameter.Pool.toVectorWithKeysReal engine pool |> snd) environment t x
 
+    let compute (engine: Numerics.NumericEngine<'S,'V,'M>) x t pool (environment: CodedMap<Numerics.Typed.FsScalar<'S,ModelSystem.environment>>) ex =
+        ExpressionCompiler.compileDiscrete engine.scalarBackend pool (Seq.toList environment.Keys) ex
+        |> fun f -> f (Parameter.Pool.toVectorWithKeysReal engine pool |> snd) environment t x
+
 
     module ExpressionParser =
 
@@ -887,26 +891,6 @@ module Language =
                 | Label(_, e) -> do! requirements e
                 | _ -> return ()
             }
-
-
-    // module Likelihood =
-
-    //     open Bristlecone.ModelSystem
-    //     open Bristlecone.Numerics
-    //     open Bristlecone.Numerics.Typed
-
-    //     type LikelihoodPrecompileEval<'S,'V,'M,[<Measure>] 'u> =
-    //         NumericEngine<'S,'V,'M> -> ParameterValueAccessor<'S> -> CodedMap<SeriesPair<'S,'V,'u>> -> TypedScalar<'S,``-logL``>
-
-    //     [<NoEquality; NoComparison>]
-    //     type LikelihoodPrecompile<'S,'V,'M> =
-    //         { RequiredCodes: LikelihoodRequirement list
-    //           RequiredParameters: (ShortCode.ShortCode * Parameter.Pool.ParameterNoUnit) list
-    //           Evaluate: LikelihoodPrecompileEval<'S,'V,'M,ModelSystem.state> }
-
-    //     type LikelihoodUncompiled =
-    //         abstract member Invoke<'S,'V,'M> : unit -> LikelihoodPrecompile<'S, 'V, 'M>
-
 
     /// Scaffolds a `ModelSystem` for fitting with Bristlecone.
     module Model =

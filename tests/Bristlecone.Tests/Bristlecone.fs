@@ -72,8 +72,9 @@ module TestModels =
 
 
 let defaultEngine () =
-    { TimeHandling = Continuous <| Integration.RungeKutta.rk4
-      OptimiseWith = Optimisation.None.none
+    { Backend = Config.defaultNumEngine
+      TimeHandling = Continuous <| Integration.RungeKutta.rk4
+      OptimiseWith = Optimisation.None.none ()
       LogTo = ignore
       ToModelTime = DateMode.Conversion.CalendarDates.toDays
       Random = MathNet.Numerics.Random.MersenneTwister(1000,true)
@@ -82,8 +83,9 @@ let defaultEngine () =
       Conditioning = Conditioning.RepeatFirstDataPoint }
 
 let defaultEngineDiscrete () =
-    { TimeHandling = Discrete
-      OptimiseWith = Optimisation.None.none
+    { Backend = Config.defaultNumEngine
+      TimeHandling = Discrete
+      OptimiseWith = Optimisation.None.none ()
       LogTo = ignore
       ToModelTime = DateMode.Conversion.CalendarDates.toDays
       Random = MathNet.Numerics.Random.MersenneTwister(1000,true)
@@ -107,7 +109,7 @@ module ``Fit`` =
             let obs =
               [| for i in 0..steps-1 -> (x0.Get + float i) * 1.<ModelSystem.state>, startDate.AddDays(float i) |]
               |> Time.TimeSeries.fromNeoObservations
-            let data = Map.ofList [ (Language.code "X").Value, obs ]
+            let data = Map.ofList [ ((Language.code "X").Value, obs) ]
             let engine =
               { defaultEngine() with
                   Conditioning = if useRepeat then Conditioning.RepeatFirstDataPoint else Conditioning.NoConditioning }
@@ -134,7 +136,7 @@ module ``Fit`` =
             let obs =
               [| for i in 0..steps-1 -> (x0.Get + float i) * 1.<ModelSystem.state>, startDate.AddDays(float i) |]
               |> Time.TimeSeries.fromNeoObservations
-            let data = Map.ofList [ (Language.code "X").Value, obs ]
+            let data = Map.ofList [ ((Language.code "X").Value, obs) ]
             let xs =
                 if isDifferential
                 then

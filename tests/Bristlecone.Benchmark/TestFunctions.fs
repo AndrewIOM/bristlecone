@@ -297,7 +297,7 @@ module Timeseries =
             |> Model.useLikelihoodFunction NLL
             |> Model.compile
 
-        let test numEngine withNoise logger optimise endCondition =
+        let test withNoise numEngine logger optimise endCondition =
             
             let engine =
                 Bristlecone.mkDiscrete ()

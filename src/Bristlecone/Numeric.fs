@@ -475,6 +475,7 @@ module Typed =
         let scale (s: FsScalar<'S,'a>) (v: FsVector<'S,'V,'b>) : FsVector<'S,'V,'a * 'b> = s * v
 
         let square (x: FsVector<'S,'V,'u>) : FsVector<'S,'V,'u^2> = { Inner = x.Backend.pow x.Inner x.Backend.atomic.constants.two; Backend = x.Backend; Access = x.Access }
+        let sqrt (x: FsVector<'S,'V,'u^2>) : FsVector<'S,'V,'u> = { Inner = x.Backend.sqrt x.Inner; Backend = x.Backend; Access = x.Access }
 
         let sum (a: FsVector<'S,'V,'u>) : FsScalar<'S,'u> =
             let sum = a.Backend.reduce a.Backend.atomic.addS a.Inner

@@ -1740,228 +1740,236 @@ module MonteCarlo =
                 filzbach' settings theta random writeOut endCon domain f
 
 
-// /// Nelder Mead implementation
-// /// Adapted from original at: https://github.com/mathias-brandewinder/Amoeba
-// module Amoeba =
+/// Nelder Mead implementation
+/// Adapted from original at: https://github.com/mathias-brandewinder/Amoeba
+module Amoeba =
 
-//     /// Nelder–Mead downhill simplex
-//     module Solver =
+    /// Nelder–Mead downhill simplex
+    module Solver =
 
-//         type Amoeba =
-//             { Dim: int
-//               Solutions: Solution<``optim-space-transformed``>[] }
+        type Amoeba =
+            { Dim: int
+              Solutions: Solution<``optim-space-transformed``>[] }
 
-//             /// If well-formed, size should equal Dim + 1.
-//             member this.Vertices = this.Solutions.Length
+            /// If well-formed, size should equal Dim + 1.
+            member this.Vertices = this.Solutions.Length
 
-//             member this.Best = this.Solutions.[0]
+            member this.Best = this.Solutions.[0]
 
-//             member this.Worst = this.Solutions.[this.Vertices - 1]
+            member this.Worst = this.Solutions.[this.Vertices - 1]
 
-//         type Settings =
-//             { Alpha: float
-//               Sigma: float
-//               Gamma: float
-//               Rho: float }
+        type Settings =
+            { Alpha: float
+              Sigma: float
+              Gamma: float
+              Rho: float }
 
-//         let Default =
-//             { Alpha = 1.
-//               Sigma = 0.5
-//               Gamma = 2.
-//               Rho = 0.5 }
+        let Default =
+            { Alpha = 1.
+              Sigma = 0.5
+              Gamma = 2.
+              Rho = 0.5 }
 
-//         let replace (a: Amoeba) (s: Solution<``optim-space-transformed``>) =
-//             { a with
-//                 Solutions = a.Solutions |> Array.updateAt (a.Vertices - 1) s |> Array.sortBy fst }
+        let replace (a: Amoeba) (s: Solution<``optim-space-transformed``>) =
+            { a with
+                Solutions = a.Solutions |> Array.updateAt (a.Vertices - 1) s |> Array.sortBy fst }
 
-//         let centroid (a: Amoeba) =
-//             let pts = a.Solutions.[0 .. a.Vertices - 2] |> Array.map snd
-//             let sum = pts |> Array.reduce (+)
-//             sum * (1. / float (a.Vertices - 1))
+        let centroid (a: Amoeba) =
+            let pts = a.Solutions.[0 .. a.Vertices - 2] |> Array.map snd
+            let sum = pts |> Array.reduce (Array.map2 (+))
+            sum |> Array.map (fun x -> x * (1. / float (a.Vertices - 1)))
 
-//         let reflect (c: OptimPoint<``optim-space-transformed``>) (w: OptimPoint<``optim-space-transformed``>) (s: Settings) =
-//             c + (c - w) * s.Alpha
+        let reflect (c: OptimPoint<``optim-space-transformed``>) (w: OptimPoint<``optim-space-transformed``>) (s: Settings) =
+            let diff = Array.map2 (-) c w
+            let scaledDiff = diff |> Array.map (fun x -> x * s.Alpha)
+            Array.map2 (+) c scaledDiff
 
-//         let expand (c: OptimPoint<``optim-space-transformed``>) (r: OptimPoint<``optim-space-transformed``>) (s: Settings) =
-//             c + (r - c) * s.Gamma
+        let expand (c: OptimPoint<``optim-space-transformed``>) (r: OptimPoint<``optim-space-transformed``>) (s: Settings) =
+            let diff = Array.map2 (-) r c
+            let scaledDiff = diff |> Array.map (fun x -> x * s.Gamma)
+            Array.map2 (+) c scaledDiff
 
-//         let contract (c: OptimPoint<``optim-space-transformed``>) (w: OptimPoint<``optim-space-transformed``>) (s: Settings) =
-//             c + (w - c) * s.Rho
+        let contract (c: OptimPoint<``optim-space-transformed``>) (w: OptimPoint<``optim-space-transformed``>) (s: Settings) =
+            let diff = Array.map2 (-) w c
+            let scaledDiff = diff |> Array.map (fun x -> x * s.Rho)
+            Array.map2 (+) c scaledDiff
 
-//         let shrinkTowardsBest (best: OptimPoint<``optim-space-transformed``>) (x: OptimPoint<``optim-space-transformed``>) (s: Settings) =
-//             best + (x - best) * s.Sigma
+        let shrinkTowardsBest (best: OptimPoint<``optim-space-transformed``>) (x: OptimPoint<``optim-space-transformed``>) (s: Settings) =
+            let diff = Array.map2 (-) x best
+            let scaledDiff = diff |> Array.map (fun x -> x * s.Sigma)
+            Array.map2 (+) best scaledDiff
 
-//         let evaluate (f: EvaluateObjective<``optim-space-transformed``>) (x: OptimPoint<``optim-space-transformed``>) = f.Evaluate x, x
-//         let valueOf (s: Solution<``optim-space-transformed``>) = fst s
+        let evaluate (f: EvaluateObjective<``optim-space-transformed``>) (x: OptimPoint<``optim-space-transformed``>) = f.Evaluate x, x
+        let valueOf (s: Solution<``optim-space-transformed``>) = fst s
 
-//         let shrink (a: Amoeba) (f: Objective<'S,'V,``optim-space-transformed``>) s =
-//             let best = snd a.Best
+        let shrink (a: Amoeba) (f: EvaluateObjective<``optim-space-transformed``>) s =
+            let best = snd a.Best
 
-//             { a with
-//                 Solutions =
-//                     a.Solutions
-//                     |> Array.tail // Skip best point
-//                     |> Array.map (fun (_, xi) -> shrinkTowardsBest best xi s)
-//                     |> Array.map (evaluate f)
-//                     |> Array.append [| a.Best |] }
+            { a with
+                Solutions =
+                    a.Solutions
+                    |> Array.tail // Skip best point
+                    |> Array.map (fun (_, xi) -> shrinkTowardsBest best xi s)
+                    |> Array.map (evaluate f)
+                    |> Array.append [| a.Best |] }
 
-//         let update (a: Amoeba) (f: EvaluateObjective<``optim-space-transformed``>) (s: Settings) =
-//             let c = centroid a
+        let update (a: Amoeba) (f: EvaluateObjective<``optim-space-transformed``>) (s: Settings) =
+            let c = centroid a
 
-//             let rv, r = reflect c (snd a.Worst) s |> evaluate f
+            let rv, r = reflect c (snd a.Worst) s |> evaluate f
 
-//             match rv with
-//             | v when valueOf a.Best <= v && v < valueOf a.Solutions.[a.Vertices - 2] -> replace a (rv, r)
-//             | v when v < valueOf a.Best ->
-//                 let ev, e = expand c r s |> evaluate f
-//                 if ev < rv then replace a (ev, e) else replace a (rv, r)
-//             | _ ->
-//                 let cv, cpt = contract c (snd a.Worst) s |> evaluate f
+            match rv with
+            | v when valueOf a.Best <= v && v < valueOf a.Solutions.[a.Vertices - 2] -> replace a (rv, r)
+            | v when v < valueOf a.Best ->
+                let ev, e = expand c r s |> evaluate f
+                if ev < rv then replace a (ev, e) else replace a (rv, r)
+            | _ ->
+                let cv, cpt = contract c (snd a.Worst) s |> evaluate f
 
-//                 if cv < valueOf a.Worst then
-//                     replace a (cv, cpt)
-//                 else
-//                     shrink a f s
+                if cv < valueOf a.Worst then
+                    replace a (cv, cpt)
+                else
+                    shrink a f s
 
-//         let solve settings rng writeOut endCondition domain startPoint f =
-//             let dim = Array.length domain
-//             let nVertices = dim + 1
+        let solve settings rng writeOut endCondition domain startPoint f =
+            let dim = Array.length domain
+            let nVertices = dim + 1
 
-//             if Option.isSome startPoint then
-//                 writeOut
-//                 <| WarningEvent "A fixed start point was set, but this Nelder-Mead implementation does not support one."
+            if Option.isSome startPoint then
+                writeOut
+                <| WarningEvent "A fixed start point was set, but this Nelder-Mead implementation does not support one."
 
-//             let start =
-//                 [| for _ in 1..nVertices -> Initialise.tryGenerateTheta f domain rng 10000 |]
-//                 |> Array.map (fun r ->
-//                     match r with
-//                     | Ok r -> r
-//                     | Error _ -> failwith "Could not generate theta")
-//                 |> Array.map (evaluate f)
-//                 |> Array.sortBy fst
+            let start =
+                [| for _ in 1..nVertices -> Initialise.tryGenerateTheta f domain rng 10000 |]
+                |> Array.map (fun r ->
+                    match r with
+                    | Ok r -> r
+                    | Error _ -> failwith "Could not generate theta")
+                |> Array.map (evaluate f)
+                |> Array.sortBy fst
 
-//             let amoeba = { Dim = dim; Solutions = start }
+            let amoeba = { Dim = dim; Solutions = start }
 
-//             let rec search i (trace: Solution<``optim-space-transformed``> list) atEnd (a: Amoeba) =
-//                 if atEnd trace i = Continue then
-//                     if trace.Length > 0 then
-//                         writeOut
-//                         <| OptimisationEvent
-//                             { Iteration = i
-//                               Likelihood = trace |> Seq.head |> fst
-//                               Theta = trace |> Seq.head |> snd |> Array.map Units.retype }
+            let rec search i (trace: Solution<``optim-space-transformed``> list) atEnd (a: Amoeba) =
+                if atEnd trace i = Continue then
+                    if trace.Length > 0 then
+                        writeOut
+                        <| OptimisationEvent
+                            { Iteration = i
+                              Likelihood = trace |> Seq.head |> fst
+                              Theta = trace |> Seq.head |> snd |> Array.map Units.retype }
 
-//                     search (i + 1<iteration>) (a.Best :: trace) atEnd (update a f settings)
-//                 else
-//                     a.Solutions |> Array.toList
+                    search (i + 1<iteration>) (a.Best :: trace) atEnd (update a f settings)
+                else
+                    a.Solutions |> Array.toList
 
-//             search 0<iteration> [] endCondition amoeba
-
-
-//         let rec swarm
-//             settings
-//             rng
-//             logger
-//             level
-//             endCondition
-//             numberOfAmoeba
-//             (paramBounds: Domain<``optim-space-transformed``>)
-//             startPoint
-//             (f: EvaluateObjective<``optim-space-transformed``>)
-//             oldLevels
-//             =
-
-//             let amoebaResults =
-//                 [| 1..numberOfAmoeba |]
-//                 |> Array.collect (fun i ->
-//                     try
-//                         [| { Component = "Amoeba swarm"
-//                              Stage = sprintf "Level %i" level
-//                              Replicate = i
-//                              Results = solve settings rng logger endCondition paramBounds startPoint f } |]
-//                     with e ->
-//                         logger
-//                         <| WarningEvent(
-//                             sprintf
-//                                 "Could not generate numercal solution for point (with EXN %s): %A"
-//                                 e.Message
-//                                 paramBounds
-//                         )
-
-//                         [||])
-
-//             if amoebaResults.Length = 0 then
-//                 failwith "No valid amoeba results were generated."
-
-//             // Drop worst 20% of likelihoods
-//             let percentile80thRank =
-//                 int (System.Math.Floor(float (80. / 100. * (float amoebaResults.Length + 1.))))
-
-//             let ranked =
-//                 amoebaResults
-//                 |> Array.map (fun a -> a.Results.Head)
-//                 |> Array.sortBy fst
-//                 |> Array.take (amoebaResults.Length - percentile80thRank)
-
-//             let dims = Array.length paramBounds
-//             let boundsList = ranked |> Array.map snd
-
-//             let getBounds (dim: int) (points: OptimPoint<``optim-space-transformed``> array) =
-//                 let max =
-//                     points
-//                     |> Array.maxBy (fun p -> p |> Array.item dim)
-
-//                 let min =
-//                     points
-//                     |> Array.minBy (fun p -> p |> Array.item dim)
-
-//                 logger
-//                 <| DebugEvent(
-//                     "Optimisation",
-//                     sprintf "Min %A Max %A" (min |> Array.item dim) (max |> Array.item dim)
-//                 )
-
-//                 min |> Array.item dim,
-//                 max |> Array.item dim,
-//                 Parameter.Constraint.Unconstrained
-
-//             let bounds =
-//                 [| 0 .. dims - 1 |] |> Array.map (fun dim -> boundsList |> getBounds dim)
-
-//             let boundWidth = bounds |> Array.sumBy (fun (l, h, _) -> h - l)
-//             logger <| DebugEvent("Optimisation", sprintf "Bound width: %f" boundWidth)
-
-//             if level > 1 && boundWidth > 0.01<``optim-space-transformed``> then
-//                 swarm
-//                     settings
-//                     rng
-//                     logger
-//                     (level - 1)
-//                     endCondition
-//                     numberOfAmoeba
-//                     bounds
-//                     startPoint
-//                     f
-//                     (List.append (Array.toList amoebaResults) oldLevels)
-//             else
-//                 List.append (Array.toList amoebaResults) oldLevels
+            search 0<iteration> [] endCondition amoeba
 
 
-//     /// Optimise an objective function using a single downhill Nelder Mead simplex.
-//     let single settings : Optimiser<``optim-space-transformed``,'S,'V,'M> =
-//         OptimSpaces.transformed
-//         <| fun random writeOut endCon domain startPoint f ->
-//             let result = Solver.solve settings random writeOut endCon domain startPoint f
+        let rec swarm
+            settings
+            rng
+            logger
+            level
+            endCondition
+            numberOfAmoeba
+            (paramBounds: Domain<``optim-space-transformed``>)
+            startPoint
+            (f: EvaluateObjective<``optim-space-transformed``>)
+            oldLevels
+            =
 
-//             [ { Component = "Amoeba"
-//                 Stage = "None"
-//                 Replicate = 1
-//                 Results = result } ]
+            let amoebaResults =
+                [| 1..numberOfAmoeba |]
+                |> Array.collect (fun i ->
+                    try
+                        [| { Component = "Amoeba swarm"
+                             Stage = sprintf "Level %i" level
+                             Replicate = i
+                             Results = solve settings rng logger endCondition paramBounds startPoint f } |]
+                    with e ->
+                        logger
+                        <| WarningEvent(
+                            sprintf
+                                "Could not generate numercal solution for point (with EXN %s): %A"
+                                e.Message
+                                paramBounds
+                        )
 
-//     /// Optimisation heuristic that creates a swarm of amoeba (Nelder-Mead) solvers.
-//     /// The swarm proceeds for `numberOfLevels` levels, constraining the starting bounds
-//     /// at each level to the 80th percentile of the current set of best likelihoods.
-//     let swarm levels amoebaAtLevel settings : Optimiser<``optim-space-transformed``,'S,'V,'M> =
-//         OptimSpaces.transformed
-//         <| fun rng logger endAt domain startPoint f ->
-//             Solver.swarm settings rng logger levels endAt amoebaAtLevel domain startPoint f []
+                        [||])
+
+            if amoebaResults.Length = 0 then
+                failwith "No valid amoeba results were generated."
+
+            // Drop worst 20% of likelihoods
+            let percentile80thRank =
+                int (System.Math.Floor(float (80. / 100. * (float amoebaResults.Length + 1.))))
+
+            let ranked =
+                amoebaResults
+                |> Array.map (fun a -> a.Results.Head)
+                |> Array.sortBy fst
+                |> Array.take (amoebaResults.Length - percentile80thRank)
+
+            let dims = Array.length paramBounds
+            let boundsList = ranked |> Array.map snd
+
+            let getBounds (dim: int) (points: OptimPoint<``optim-space-transformed``> array) =
+                let max =
+                    points
+                    |> Array.maxBy (fun p -> p |> Array.item dim)
+
+                let min =
+                    points
+                    |> Array.minBy (fun p -> p |> Array.item dim)
+
+                logger
+                <| DebugEvent(
+                    "Optimisation",
+                    sprintf "Min %A Max %A" (min |> Array.item dim) (max |> Array.item dim)
+                )
+
+                min |> Array.item dim,
+                max |> Array.item dim,
+                Parameter.Constraint.Unconstrained
+
+            let bounds =
+                [| 0 .. dims - 1 |] |> Array.map (fun dim -> boundsList |> getBounds dim)
+
+            let boundWidth = bounds |> Array.sumBy (fun (l, h, _) -> h - l)
+            logger <| DebugEvent("Optimisation", sprintf "Bound width: %f" boundWidth)
+
+            if level > 1 && boundWidth > 0.01<``optim-space-transformed``> then
+                swarm
+                    settings
+                    rng
+                    logger
+                    (level - 1)
+                    endCondition
+                    numberOfAmoeba
+                    bounds
+                    startPoint
+                    f
+                    (List.append (Array.toList amoebaResults) oldLevels)
+            else
+                List.append (Array.toList amoebaResults) oldLevels
+
+
+    /// Optimise an objective function using a single downhill Nelder Mead simplex.
+    let single settings : Optimiser<``optim-space-transformed``,'S,'V,'M> =
+        OptimSpaces.transformed
+        <| fun random writeOut endCon domain startPoint f ->
+            let result = Solver.solve settings random writeOut endCon domain startPoint f
+
+            [ { Component = "Amoeba"
+                Stage = "None"
+                Replicate = 1
+                Results = result } ]
+
+    /// Optimisation heuristic that creates a swarm of amoeba (Nelder-Mead) solvers.
+    /// The swarm proceeds for `numberOfLevels` levels, constraining the starting bounds
+    /// at each level to the 80th percentile of the current set of best likelihoods.
+    let swarm levels amoebaAtLevel settings : Optimiser<``optim-space-transformed``,'S,'V,'M> =
+        OptimSpaces.transformed
+        <| fun rng logger endAt domain startPoint f ->
+            Solver.swarm settings rng logger levels endAt amoebaAtLevel domain startPoint f []

@@ -2,6 +2,7 @@ module ParameterTests
 
 open System
 open Bristlecone
+open Bristlecone.Numerics.Typed
 open Expecto
 
 [<Measure>] type testUnit
@@ -30,54 +31,53 @@ module Transforms =
     [<Measure>] type testSpace
     [<Measure>] type testSpaceTransformed
 
-    let tensor1<[<Measure>] 'u> (v: float<'u>) =
-        Tensors.Typed.ofScalar v
-
     [<Tests>]
     let transformTests =
+
+        let ofScalar x = ofScalar Config.defaultNumEngine.scalarBackend x
+
         testList "Parameter transforms" [
 
             testCase "scalarTransformOptimSpace is identity for unconstrained" <| fun _ ->
                 let t = Parameter.ParameterTransforms.scalarTransformOptimSpace
-                let input = tensor1<``optim-space``> 42.0<``optim-space``>
-                let roundTrip = t.Inverse (t.Forward input) |> Tensors.Typed.toFloatScalar |> Units.removeUnitFromFloat
+                let input = ofScalar 42.0<``optim-space``>
+                let roundTrip = t.Inverse (t.Forward input) |> Scalar.toFloat |> Units.removeUnitFromFloat
                 Expect.equal roundTrip 42. "Forward >> Inverse should be identity"
 
             testCase "scalarTransformOptimSpace is identity for positive-only" <| fun _ ->
                 let t = Parameter.ParameterTransforms.scalarTransformOptimSpace
-                let input = tensor1<``optim-space``> 42.0<``optim-space``>
-                let roundTrip = t.Inverse (t.Forward input) |> Tensors.Typed.toFloatScalar |> Units.removeUnitFromFloat
+                let input = ofScalar 42.0<``optim-space``>
+                let roundTrip = t.Inverse (t.Forward input) |> Scalar.toFloat |> Units.removeUnitFromFloat
                 Expect.equal roundTrip 42. "Forward >> Inverse should be identity"
 
             testCase "scalarTransformOptimSpaceTransformed unconstrained is identity" <| fun _ ->
-                let t = Parameter.ParameterTransforms.scalarTransformOptimSpaceTransformed Parameter.Constraint.Unconstrained
-                let input = tensor1<``optim-space-transformed``> -3.5<``optim-space-transformed``>
-                let roundTrip = t.Inverse (t.Forward input) |> Tensors.Typed.toFloatScalar |> Units.removeUnitFromFloat
+                let t = Parameter.ParameterTransforms.scalarTransformOptimSpaceTransformed Config.defaultNumEngine.scalarBackend Parameter.Constraint.Unconstrained
+                let input = ofScalar -3.5<``optim-space-transformed``>
+                let roundTrip = t.Inverse (t.Forward input) |> Scalar.toFloat |> Units.removeUnitFromFloat
                 Expect.equal roundTrip -3.5 "Forward >> Inverse should be identity"
 
             testCase "scalarTransformOptimSpaceTransformed positive-only applies exp/log" <| fun _ ->
-                let t = Parameter.ParameterTransforms.scalarTransformOptimSpaceTransformed Parameter.Constraint.PositiveOnly
+                let t = Parameter.ParameterTransforms.scalarTransformOptimSpaceTransformed Config.defaultNumEngine.scalarBackend Parameter.Constraint.PositiveOnly
                 let raw = 2.0<``optim-space-transformed``>
-                let input = tensor1 raw
+                let input = ofScalar raw
                 let forward = t.Forward input
-                let expectedForward = tensor1<``parameter``> (exp (float raw) * 1.0<``parameter``>)
-                Expect.floatClose Accuracy.high (forward |> Tensors.Typed.toFloatScalar |> float) (expectedForward |> Tensors.Typed.toFloatScalar |> float) "Forward should exp the value"
+                let expectedForward = ofScalar (exp (float raw) * 1.0<``parameter``>)
+                Expect.floatClose Accuracy.high (forward |> Scalar.toFloat |> float) (expectedForward |> Scalar.toFloat |> float) "Forward should exp the value"
 
                 let inverse = t.Inverse forward
-                Expect.floatClose Accuracy.high (inverse |> Tensors.Typed.toFloatScalar |> float) (float raw) "Inverse should log the value"
+                Expect.floatClose Accuracy.high (inverse |> Scalar.toFloat |> float) (float raw) "Inverse should log the value"
 
             testProperty "Forward >> Inverse round-trips for random values" <| fun (FsCheck.NormalFloat v) ->
                 let v = if v = 0.0 then 1.0 else v // avoid log(0)
-                let posOnly = Parameter.ParameterTransforms.scalarTransformOptimSpaceTransformed Parameter.Constraint.PositiveOnly
-                let uncon = Parameter.ParameterTransforms.scalarTransformOptimSpaceTransformed Parameter.Constraint.Unconstrained
-                let unconInput = tensor1<``optim-space-transformed``> (v * 1.0<``optim-space-transformed``>)
-                let posInput = tensor1<``optim-space-transformed``> (abs v * 1.0<``optim-space-transformed``>)
+                let posOnly = Parameter.ParameterTransforms.scalarTransformOptimSpaceTransformed Config.defaultNumEngine.scalarBackend Parameter.Constraint.PositiveOnly
+                let uncon = Parameter.ParameterTransforms.scalarTransformOptimSpaceTransformed Config.defaultNumEngine.scalarBackend Parameter.Constraint.Unconstrained
+                let unconInput = ofScalar (v * 1.0<``optim-space-transformed``>)
+                let posInput = ofScalar (abs v * 1.0<``optim-space-transformed``>)
                 let unconRound = uncon.Inverse (uncon.Forward unconInput)
                 let posRound = posOnly.Inverse (posOnly.Forward posInput)
-                Expect.floatClose Accuracy.high (float (unconRound |> Tensors.Typed.toFloatScalar)) (float (unconInput |> Tensors.Typed.toFloatScalar)) "Unconstrained round-trip"
-                Expect.floatClose Accuracy.high (float (posRound |> Tensors.Typed.toFloatScalar)) (float (posInput |> Tensors.Typed.toFloatScalar)) "Positive-only round-trip"
+                Expect.floatClose Accuracy.high (float (unconRound |> Scalar.toFloat)) (float (unconInput |> Scalar.toFloat)) "Unconstrained round-trip"
+                Expect.floatClose Accuracy.high (float (posRound |> Scalar.toFloat)) (float (posInput |> Scalar.toFloat)) "Positive-only round-trip"
         ]
-
 
 [<Tests>]
 let parameters =

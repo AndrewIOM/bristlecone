@@ -348,10 +348,9 @@ type BackendOption =
 let backends =
     [ DiffSharp Backends.DiffSharp.engine ]
 
-let runTs (modelName, modelTestFn: NumericEngine<'S,'V,'M> -> (Logging.LogEvent -> unit) -> EstimationEngine.Optimisation.Optimiser<'space,'S,'V,'M> -> EstimationEngine.EndCondition<'space> -> Result<Test.TestResult<'a,'b,'c,'u>,string>) =
+let runTs (backendName, backend: NumericEngine<'S,'V,'M>) (modelName, modelTestFn: NumericEngine<'S,'V,'M> -> (Logging.LogEvent -> unit) -> EstimationEngine.Optimisation.Optimiser<'space,'S,'V,'M> -> EstimationEngine.EndCondition<'space> -> Result<Test.TestResult<'a,'b,'c,'u>,string>) =
     optimFunctions
-    |> List.allPairs backends
-    |> List.map (fun (backend,(optimName: string, optimise, endCondition)) ->
+    |> List.map (fun ((optimName: string, optimise, endCondition)) ->
         runReplicated Config.startPointCount (fun () ->
             try modelTestFn backend logger optimise endCondition
             with e ->
@@ -359,17 +358,17 @@ let runTs (modelName, modelTestFn: NumericEngine<'S,'V,'M> -> (Logging.LogEvent 
                 Error e.Message)
         |> fun r ->
             let ok = r |> Array.filter(fun (r,_) -> Result.isOk r) |> Array.map(fun (r,i) -> Result.forceOk r, i)
-            if ok.Length = 0 then modelName, optimName, Error "no results"
-            else modelName, optimName, Ok (Metrics.summariseRuns Config.likTol Config.paramTol ok))
+            if ok.Length = 0 then modelName, optimName, backendName, Error "no results"
+            else modelName, optimName, backendName, Ok (Metrics.summariseRuns Config.likTol Config.paramTol ok))
 
-let timeModels =
+let timeModels backend =
     [ 
-      runTs ("predator-prey",             TestFunctions.Timeseries.PredatorPrey.test false)
-      runTs ("predator-prey (noisy)",     TestFunctions.Timeseries.PredatorPrey.test true)
-    //   runTs ("soil respiration",          TestFunctions.Timeseries.SoilCarbon.test false)
-    //   runTs ("soil respiration (noisy)",  TestFunctions.Timeseries.SoilCarbon.test true)
-    //   runTs ("ricker temperature",          TestFunctions.Timeseries.RickerTemperature.test false)
-    //   runTs ("ricker temperature (noisy)",  TestFunctions.Timeseries.RickerTemperature.test true)
+      runTs backend ("predator-prey",             TestFunctions.Timeseries.PredatorPrey.test false)
+      runTs backend ("predator-prey (noisy)",     TestFunctions.Timeseries.PredatorPrey.test true)
+      runTs backend ("soil respiration",          TestFunctions.Timeseries.SoilCarbon.test false)
+      runTs backend ("soil respiration (noisy)",  TestFunctions.Timeseries.SoilCarbon.test true)
+      runTs backend ("ricker temperature",          TestFunctions.Timeseries.RickerTemperature.test false)
+      runTs backend ("ricker temperature (noisy)",  TestFunctions.Timeseries.RickerTemperature.test true)
     ]
 
 module Output =
@@ -461,12 +460,15 @@ let main argv =
 
         System.IO.File.WriteAllText(Output.fileName, Output.markdown optimTable "")
 
-        let timeResults = timeModels () |> List.concat
+        let timeResults = List.concat <| List.concat [
+            timeModels ("DiffSharp 0.8", Backends.DiffSharp.engine)
+        ]
 
         let timeTable =
             Output.markdownTable
                 [ "Model"
                   "Optimisation method"
+                  "Backend"
                   "Success %"
                   "n"
                   "Likelihood gap (med, tol=1.0)"
@@ -474,11 +476,12 @@ let main argv =
                   "n iterations (median)"
                   "Time to solution (ms, median)" ]
                 (timeResults
-                 |> Seq.filter(fun (_,_,m) -> Result.isOk m)
-                 |> Seq.map(fun (a,b,m) -> a, b, Result.forceOk m )
-                 |> Seq.map (fun (modelName, optimName, metrics) ->
+                 |> Seq.filter(fun (_,_,_,m) -> Result.isOk m)
+                 |> Seq.map(fun (a,b,backend,m) -> a, b, backend, Result.forceOk m )
+                 |> Seq.map (fun (modelName, optimName, backendName, metrics) ->
                      [ modelName
                        optimName
+                       backendName
                        Output.threeDp metrics.SuccessPct + "%"
                        metrics.RunN.ToString()
                        Output.threeDp metrics.MedianLikelihoodGap
