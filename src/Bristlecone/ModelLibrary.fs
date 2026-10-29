@@ -102,7 +102,7 @@ module NegLogLikelihood =
 
         /// Residual sum of squares. Provides a simple metric of distance between
         /// observed data and model predictions.
-        let sumOfSquares (keys: Language.Require.ObsForLikelihood<'s> list) : Likelihood<'S,'V,'state> =
+        let sumOfSquares (numEngine: NumericEngine<'S,'V,'M>) (keys: Language.Require.ObsForLikelihood<'s> list) : Likelihood<'S,'V,'state> =
             fun _ data ->
                 keys
                 |> List.map (fun k ->
@@ -112,7 +112,7 @@ module NegLogLikelihood =
                     let diff = obs - exp
                     Vector.square diff)
                 |> List.reduce (+)
-                |> Vector.sum
+                |> Vector.sum numEngine.scalarBackend
                 |> Scalar.retype
             |> fun f ->
                 { Evaluate = f
@@ -150,7 +150,7 @@ module NegLogLikelihood =
                 let obsx = Vector.tail x.Observed
                 let expx = Vector.tail x.Expected
                 let sigma = mkVariance.Evaluate numEng paramAccessor expx
-                gaussianVec numEng sigma obsx expx |> Vector.sum
+                gaussianVec numEng sigma obsx expx |> Vector.sum numEng.scalarBackend
             
             { Evaluate = fn
               RequiredParameters = mkVariance.RequiredParameters
@@ -229,7 +229,7 @@ module NegLogLikelihood =
                 let expy = Vector.tail y.Expected
 
                 bivariateGaussianVec numEngine sigmax sigmay rho obsx obsy expx expy
-                |> Vector.sum
+                |> Vector.sum numEngine.scalarBackend
                 |> (*) (likelihoodTag numEngine.scalarBackend)
             
             { Evaluate = fn
@@ -259,7 +259,7 @@ module NegLogLikelihood =
             (term1 + term2 + term3 + term4) * likelihoodTag numEngine.scalarBackend
 
         let internal logGaussian'
-            eng
+            numEng
             (mkVariance: Variance.VarianceFunction<'S,'V,'M,1, 1>)
             (key: Language.Require.ObsForLikelihood<1>)
             : Likelihood<'S,'V,'state> =
@@ -267,8 +267,8 @@ module NegLogLikelihood =
                 let x = data |> getData key
                 let obsx = Vector.tail x.Observed
                 let expx = Vector.tail x.Expected |> Vector.log
-                let sigma = mkVariance.Evaluate eng paramAccessor expx
-                logGaussianVec eng sigma obsx expx |> Vector.sum
+                let sigma = mkVariance.Evaluate numEng paramAccessor expx
+                logGaussianVec numEng sigma obsx expx |> Vector.sum numEng.scalarBackend
             |> fun f ->
                 { Evaluate = f
                   RequiredParameters = mkVariance.RequiredParameters
@@ -284,4 +284,4 @@ module NegLogLikelihood =
     let BivariateNormal numEngine key1 key2 sigmax sigmay rho =
         Internal.bivariateGaussian numEngine key1 key2 sigmax sigmay rho
 
-    let SumOfSquares obs : Likelihood<'S,'V,'state> = Internal.sumOfSquares obs
+    let SumOfSquares numEngine obs : Likelihood<'S,'V,'state> = Internal.sumOfSquares numEngine obs

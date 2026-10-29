@@ -22,6 +22,7 @@ module Base =
 
     // Merge helpers (typed, AD-safe)
     let inline injectStatesIntoContext
+        atomicBackend
         (newValues: FsVector<'S,'V,ModelSystem.state>)
         (newValueKeys: ShortCode.ShortCode[])
         (environment: CodedMap<FsScalar<'S,ModelSystem.``environment``>>)
@@ -29,13 +30,14 @@ module Base =
         =
 
         // Extract typed scalars from the vector without converting to float
-        let scalars = newValues |> Vector.retype |> Vector.toArray
+        let scalars = newValues |> Vector.retype |> Vector.toArray atomicBackend
         let merged = Array.zip newValueKeys scalars |> Map.ofArray
 
         environment
         |> Map.map (fun k v -> Map.tryFind k merged |> Option.defaultValue v)
 
     let inline overlayExogenousAtTime
+        atomicBackend
         (timeIdx: int)
         (externalEnv: CodedMap<FsVector<'S,'V,``environment``>>)
         (currentEnv: CodedMap<FsScalar<'S,``environment``>>)
@@ -44,7 +46,7 @@ module Base =
         currentEnv
         |> Map.map (fun k v ->
             match Map.tryFind k externalEnv with
-            | Some vec -> Vector.itemAt timeIdx vec
+            | Some vec -> Vector.itemAt atomicBackend timeIdx vec
             | None -> v)
 
     /// Scaffolds an AD-aware function that bakes in the current parameter
@@ -82,7 +84,7 @@ module Base =
             Map.keys externalEnvTensors
             |> Seq.map (fun k ->
                 match Map.tryFind k externalEnvTensors with
-                | Some vec -> k, Vector.itemAt 0 vec
+                | Some vec -> k, Vector.itemAt numBackend.scalarBackend 0 vec
                 | None -> failwithf "Could not assign initial value to state / environment %s" k.Value)
             |> Map.ofSeq
 
@@ -101,14 +103,14 @@ module Base =
 
                 let env =
                     baselineEnv
-                    |> overlayExogenousAtTime idx externalEnvTensors
+                    |> overlayExogenousAtTime numBackend.scalarBackend idx externalEnvTensors
                     |> Map.fold (fun acc k v -> Map.add k v acc) initialState
-                    |> injectStatesIntoContext x modelKeys
+                    |> injectStatesIntoContext numBackend.scalarBackend x modelKeys
 
                 // Compute derivatives for all variables
                 modelEqs
                 |> Array.mapi (fun i m ->
-                    let xi = Vector.itemAt i x
+                    let xi = Vector.itemAt numBackend.scalarBackend i x
                     modelKeys.[i], m parameters env t xi)
                 |> Map.ofArray
 
@@ -130,9 +132,9 @@ module RungeKutta =
         (f: FsScalar<'S,``time index``> -> FsVector<'S,'V,'su> -> FsVector<'S,'V,'su / ``time index``>)
         : FsMatrix<'S,'M, 'su> =
 
-        let two = tInitial.Backing.atomic.constants.two |> Typed.Scalar.ofRaw tInitial.Backing
-        let six = tInitial.Backing.atomic.constants.six |> Typed.Scalar.ofRaw tInitial.Backing
-
+        let two = tInitial.Backend.atomic.constants.two |> Typed.Scalar.ofRaw tInitial.Backend
+        let six = tInitial.Backend.atomic.constants.six |> Typed.Scalar.ofRaw tInitial.Backend
+        
         let mutable t = tInitial
         let mutable y = y0
         let outputs = ResizeArray<FsVector<'S,'V,'su>>()
@@ -159,7 +161,7 @@ module RungeKutta =
         (y0: FsVector<'S,'V,'s>)
         (f: FsScalar<'S,``time index``> -> FsVector<'S,'V,'s> -> FsVector<'S,'V,'s / ``time index``>)
         =
-        let dt = (tFinal - tInitial) / ofScalar tInitial.Backing (float steps)
+        let dt = (tFinal - tInitial) / ofScalar tInitial.Backend (float steps)
         rk4Core numEngine tInitial steps dt y0 f
 
     let rk4WithStepWidth

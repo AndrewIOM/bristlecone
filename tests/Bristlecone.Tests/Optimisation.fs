@@ -93,8 +93,8 @@ module Gibbs =
             // simple convex bowl: min at origin
             Array.sumBy (fun x -> x * x) theta |> Units.retype
         {Evaluate = fn
-         Gradient = failwith "Not Implemented"
-         EvaluateVectorised = failwith "Not Implemented" }
+         Gradient = fun _ -> failwith "Dummy has no gradient"
+         EvaluateVectorised = fun _ -> failwith "Dummy has no vectorised form" }
 
     [<Tests>]
     let gibbsProps =

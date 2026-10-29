@@ -248,6 +248,9 @@ module MonteCarlo =
                   Likelihood = lAccepted
                   Theta = thetaAccepted }
 
+            // writeOut <| GeneralEvent (sprintf "theta1 = %A; l1 = %A; sc = %A" theta1 l1 sc)
+            // System.Console.ReadKey()
+
             metropolisHastings'
                 random
                 writeOut

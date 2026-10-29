@@ -47,7 +47,7 @@ module TestSuite =
 
     // Functions, input domain, global minimum, and global minimum point(s)
     let fixedDimension =
-        [ "Ackley (2D)", ackley |> multidim, [ (-32.768, 32.768); (-32.768, 32.768) ], 0., [ [ 0.; 0. ] ]
+        [ //"Ackley (2D)", ackley |> multidim, [ (-32.768, 32.768); (-32.768, 32.768) ], 0., [ [ 0.; 0. ] ]
           "Bukin Sixth", bukinSixth |> twoDim, [ (-15., -5.); (-3., 3.) ], 0., [ [ -10.; 1. ] ]
           "Griewank", griewank |> multidim, [ -600., 600.; -600., 600. ], 0., [ [ 0.; 0. ] ]
           "Holder Table",
@@ -70,7 +70,7 @@ module TestSuite =
           "Eggholder", eggHolder |> twoDim, [ (-512., 512.); (-512., 512.) ], -959.6406627, [ [ 512.; 404.2319 ] ]
           "Gramarcy-Lee", gramacyLee |> oneDim, [ (0.5, 2.5) ], -0.869011134989500, [ [ 0.548563444114526 ] ]
           "Langermann", langermann |> twoDim, [ (0., 10.); (0., 10.) ], -5.1621259, [ [ 2.00299219; 1.006096 ] ] ]
-
+        
     // let nDimensional = [
     //     fun d -> ackley <| hypercube d -32.768 32.768
     //     fun d -> griewank <| hypercube d -600. 600.
@@ -220,26 +220,32 @@ let mkEvalFn (fn:float<'space>[] -> float) : EstimationEngine.Optimisation.Evalu
     EvaluateVectorised = fun p -> failwith "vectorised objective unavailable" // TODO
 }
 
-let runOptimTests optimFunctions =
+type OptimSpace<'S,'V,'M> =
+    | Bounded of EstimationEngine.Optimisation.Optimiser<``optim-space``,'S,'V,'M>
+    | Transformed of EstimationEngine.Optimisation.Optimiser<``optim-space-transformed``,'S,'V,'M>
+
+let runOptimTests (optimFunctions: (string * OptimSpace<'d,'e,'f> * EstimationEngine.EndCondition<'s>) list) =
     optimFunctions
-    |> List.collect (fun (optimName, optimise:EstimationEngine.Optimisation.Optimiser<'space,'S,'V,'M>, endCondition) ->
+    |> List.collect (fun (optimName, optimise, endCondition) ->
         TestSuite.fixedDimension
         |> List.map (fun (modelName, f, domain, minVal, minima) ->
             let domain =
                 domain
                 |> List.map (fun (min, max) ->
-                    min * 1.<``optim-space``>, max * 1.<``optim-space``>, Parameter.Constraint.Unconstrained)
+                    min, max, Parameter.Constraint.Bounded(min,max))
                 |> List.toArray
 
             runReplicated Config.startPointCount (fun () ->
                 let startPoint =
                     domain
                     |> Array.map (fun (min, max, _) -> TestSuite.between (float min) (float max))
-                    |> Array.map ((*) 1.<``optim-space``>)
+                printfn "START POINT = %A" startPoint
 
                 try
-                    let f' point = point |> Array.map ((/) 1.<``optim-space``>) |> f
-                    let result = optimise.Optimise Config.rng logger endCondition domain (Some startPoint) (mkEvalFn f')
+                    let result =
+                        match optimise with
+                        | Bounded optim ->  optim.Optimise Config.rng logger endCondition domain (Some startPoint) (mkEvalFn f)
+                        | Transformed optim ->  optim.Optimise Config.rng logger endCondition domain (Some startPoint) (mkEvalFn f)
                     logger Logging.CompleteEvent
                     Ok(result, startPoint |> Array.map float)
                 with
@@ -328,17 +334,17 @@ module Metrics =
 // -------
 
 let optimFunctions =
-    [  // "amoeba",                    Amoeba.single Amoeba.Solver.Default, EndConditions.whenNoBestValueImprovement 300<iteration>
-    //    "amoeba [swarm]",            Amoeba.swarm 5 20 Amoeba.Solver.Default, EndConditions.whenNoBestValueImprovement 300<iteration>
-       "sim. anneal. [classic]",    MonteCarlo.SimulatedAnnealing.classicalSimulatedAnnealing 0.01<``optim-space``> false Optimisation.MonteCarlo.SimulatedAnnealing.AnnealSettings.Classical, EndConditions.atIteration 100000<iteration>
-       "sim. anneal. [fast]",       MonteCarlo.SimulatedAnnealing.fastSimulatedAnnealing 0.01<``optim-space``> false Optimisation.MonteCarlo.SimulatedAnnealing.AnnealSettings.Fast, EndConditions.atIteration 100000<iteration>
-       "sim. anneal. [bristlecone]",MonteCarlo.bristleconeSampler (), EndConditions.Profiles.mcmc 100000<iteration> ignore
-       "filzbach",                  MonteCarlo.Filzbach.filzbach MonteCarlo.Filzbach.FilzbachSettings.Default, EndConditions.Profiles.mcmc 100000<iteration> ignore
-       "random walk [AM burn-in]",  MonteCarlo.randomWalk [
-            { Method = MonteCarlo.TuneMethod.CovarianceWithScale 0.25
-              Frequency = 500<iteration>
-              EndCondition = EndConditions.Profiles.mcmcTuningStep 50000<iteration> logger } ],
-            EndConditions.Profiles.mcmc 100000<iteration> ignore
+    [  "amoeba",                    Transformed (Amoeba.single Amoeba.Solver.Default), EndConditions.whenNoBestValueImprovement 300<iteration>
+       "amoeba [swarm]",            Transformed (Amoeba.swarm 5 20 Amoeba.Solver.Default), EndConditions.whenNoBestValueImprovement 300<iteration>
+    //    "sim. anneal. [classic]",    MonteCarlo.SimulatedAnnealing.classicalSimulatedAnnealing 0.01<``optim-space``> false Optimisation.MonteCarlo.SimulatedAnnealing.AnnealSettings.Classical, EndConditions.atIteration 100000<iteration>
+    //    "sim. anneal. [fast]",       MonteCarlo.SimulatedAnnealing.fastSimulatedAnnealing 0.01<``optim-space``> false Optimisation.MonteCarlo.SimulatedAnnealing.AnnealSettings.Fast, EndConditions.atIteration 100000<iteration>
+       "sim. anneal. [bristlecone]",Bounded (MonteCarlo.bristleconeSampler ()), EndConditions.Profiles.mcmc 100000<iteration> ignore
+       "filzbach",                  Bounded (MonteCarlo.Filzbach.filzbach MonteCarlo.Filzbach.FilzbachSettings.Default), EndConditions.Profiles.mcmc 100000<iteration> ignore
+    //    "random walk [AM burn-in]",  MonteCarlo.randomWalk [
+    //         { Method = MonteCarlo.TuneMethod.CovarianceWithScale 0.25
+    //           Frequency = 500<iteration>
+    //           EndCondition = EndConditions.Profiles.mcmcTuningStep 50000<iteration> logger } ],
+    //         EndConditions.Profiles.mcmc 100000<iteration> ignore
     ]
 
 type BackendOption =
@@ -348,27 +354,30 @@ type BackendOption =
 let backends =
     [ DiffSharp Backends.DiffSharp.engine ]
 
-let runTs (backendName, backend: NumericEngine<'S,'V,'M>) (modelName, modelTestFn: NumericEngine<'S,'V,'M> -> (Logging.LogEvent -> unit) -> EstimationEngine.Optimisation.Optimiser<'space,'S,'V,'M> -> EstimationEngine.EndCondition<'space> -> Result<Test.TestResult<'a,'b,'c,'u>,string>) =
-    optimFunctions
-    |> List.map (fun ((optimName: string, optimise, endCondition)) ->
-        runReplicated Config.startPointCount (fun () ->
-            try modelTestFn backend logger optimise endCondition
-            with e ->
-                printfn "Error in model run (%s): %s, %s" modelName e.Message e.StackTrace
-                Error e.Message)
-        |> fun r ->
-            let ok = r |> Array.filter(fun (r,_) -> Result.isOk r) |> Array.map(fun (r,i) -> Result.forceOk r, i)
-            if ok.Length = 0 then modelName, optimName, backendName, Error "no results"
-            else modelName, optimName, backendName, Ok (Metrics.summariseRuns Config.likTol Config.paramTol ok))
+// let runTs (backendName, backend: NumericEngine<'S,'V,'M>) (modelName, modelTestFn: NumericEngine<'S,'V,'M> -> (Logging.LogEvent -> unit) -> EstimationEngine.Optimisation.Optimiser<'space,'S,'V,'M> -> EstimationEngine.EndCondition<'space> -> Result<Test.TestResult<'a,'b,'c,'u>,string>) =
+//     optimFunctions
+//     |> List.map (fun ((optimName: string, optimise, endCondition)) ->
+//         runReplicated Config.startPointCount (fun () ->
+//             try
+//                 match optimise with
+//                 | Bounded optim ->  modelTestFn backend logger optim endCondition
+//                 | Transformed optim ->  modelTestFn backend logger optim endCondition
+//             with e ->
+//                 printfn "Error in model run (%s): %s, %s" modelName e.Message e.StackTrace
+//                 Error e.Message)
+//         |> fun r ->
+//             let ok = r |> Array.filter(fun (r,_) -> Result.isOk r) |> Array.map(fun (r,i) -> Result.forceOk r, i)
+//             if ok.Length = 0 then modelName, optimName, backendName, Error "no results"
+//             else modelName, optimName, backendName, Ok (Metrics.summariseRuns Config.likTol Config.paramTol ok))
 
 let timeModels backend =
     [ 
-      runTs backend ("predator-prey",             TestFunctions.Timeseries.PredatorPrey.test false)
-      runTs backend ("predator-prey (noisy)",     TestFunctions.Timeseries.PredatorPrey.test true)
-      runTs backend ("soil respiration",          TestFunctions.Timeseries.SoilCarbon.test false)
-      runTs backend ("soil respiration (noisy)",  TestFunctions.Timeseries.SoilCarbon.test true)
-      runTs backend ("ricker temperature",          TestFunctions.Timeseries.RickerTemperature.test false)
-      runTs backend ("ricker temperature (noisy)",  TestFunctions.Timeseries.RickerTemperature.test true)
+    //   runTs backend ("predator-prey",             TestFunctions.Timeseries.PredatorPrey.test false)
+    //   runTs backend ("predator-prey (noisy)",     TestFunctions.Timeseries.PredatorPrey.test true)
+    //   runTs backend ("soil respiration",          TestFunctions.Timeseries.SoilCarbon.test false)
+    //   runTs backend ("soil respiration (noisy)",  TestFunctions.Timeseries.SoilCarbon.test true)
+    //   runTs backend ("ricker temperature",          TestFunctions.Timeseries.RickerTemperature.test false)
+    //   runTs backend ("ricker temperature (noisy)",  TestFunctions.Timeseries.RickerTemperature.test true)
     ]
 
 module Output =
@@ -460,37 +469,37 @@ let main argv =
 
         System.IO.File.WriteAllText(Output.fileName, Output.markdown optimTable "")
 
-        let timeResults = List.concat <| List.concat [
-            timeModels ("DiffSharp 0.8", Backends.DiffSharp.engine)
-        ]
+        // let timeResults = List.concat <| List.concat [
+        //     timeModels ("DiffSharp 0.8", Backends.DiffSharp.engine)
+        // ]
 
-        let timeTable =
-            Output.markdownTable
-                [ "Model"
-                  "Optimisation method"
-                  "Backend"
-                  "Success %"
-                  "n"
-                  "Likelihood gap (med, tol=1.0)"
-                  "Param RMSE (rel, median)"
-                  "n iterations (median)"
-                  "Time to solution (ms, median)" ]
-                (timeResults
-                 |> Seq.filter(fun (_,_,_,m) -> Result.isOk m)
-                 |> Seq.map(fun (a,b,backend,m) -> a, b, backend, Result.forceOk m )
-                 |> Seq.map (fun (modelName, optimName, backendName, metrics) ->
-                     [ modelName
-                       optimName
-                       backendName
-                       Output.threeDp metrics.SuccessPct + "%"
-                       metrics.RunN.ToString()
-                       Output.threeDp metrics.MedianLikelihoodGap
-                       Output.threeDp metrics.MedianParamRMSE
-                    //    Output.summariseParameters metrics.MedianParamRMSE
-                       metrics.MedianIterations.ToString()
-                       metrics.MedianTimeMs.ToString() ]))
+        // let timeTable =
+        //     Output.markdownTable
+        //         [ "Model"
+        //           "Optimisation method"
+        //           "Backend"
+        //           "Success %"
+        //           "n"
+        //           "Likelihood gap (med, tol=1.0)"
+        //           "Param RMSE (rel, median)"
+        //           "n iterations (median)"
+        //           "Time to solution (ms, median)" ]
+        //         (timeResults
+        //          |> Seq.filter(fun (_,_,_,m) -> Result.isOk m)
+        //          |> Seq.map(fun (a,b,backend,m) -> a, b, backend, Result.forceOk m )
+        //          |> Seq.map (fun (modelName, optimName, backendName, metrics) ->
+        //              [ modelName
+        //                optimName
+        //                backendName
+        //                Output.threeDp metrics.SuccessPct + "%"
+        //                metrics.RunN.ToString()
+        //                Output.threeDp metrics.MedianLikelihoodGap
+        //                Output.threeDp metrics.MedianParamRMSE
+        //             //    Output.summariseParameters metrics.MedianParamRMSE
+        //                metrics.MedianIterations.ToString()
+        //                metrics.MedianTimeMs.ToString() ]))
 
-        System.IO.File.WriteAllText(Output.fileName, Output.markdown optimTable timeTable)
+        // System.IO.File.WriteAllText(Output.fileName, Output.markdown optimTable timeTable)
         0
     else
         testSuccess

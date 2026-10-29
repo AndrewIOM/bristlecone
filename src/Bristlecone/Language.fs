@@ -408,7 +408,9 @@ module Language =
             | EqualTo(l, r) ->
                 let l, r = buildQuotation (ME l), buildQuotation (ME r)
                 <@ backend.eq %l %r |> Bitmask @>
-            | IsFinite ex -> failwith "TODO not implemented"
+            | IsFinite ex ->
+                let ex = buildQuotation (ME ex)
+                <@ backend.isInf %ex |> Bitmask @> // TODO Also is nan
              // ops.isFinite (buildQuotation (ME ex))
             | _ -> failwith "Unexpected boolean form"
 
@@ -458,7 +460,7 @@ module Language =
             | [] -> failwith "Cannot multiply an empty list"
             | x :: rest -> rest |> List.fold (fun acc e -> <@ backend.mul %acc %e @>) x
 
-        let inverseFn () = failwith "TODO Not implemented"
+        let inverseFn () = failwith "TODO Inverse node not implemented"
 
         // let tensorInverse backend fLambda (targetExpr: Expr<'S>) loExpr hiExpr tol maxIter =
         //     <@
@@ -498,6 +500,7 @@ module Language =
             (shouldCache: ModelExpression<'u> -> bool)
             (cache: Caching.QuotationCache<'C, 'u>)
             (backend: NumericBackend<'S, 'C>)
+            (scalarBackend: NumericBackend<'S, 'S>)
             inverseFn
             requiresGradients
             (context:OpsContext<'S,'C,'u>)
@@ -506,7 +509,7 @@ module Language =
             (expr: ModelExpression<'u>)
             : Expr<'C>
             =
-            let build : ModelExpression<'u> -> Expr<'C> = buildQuotationCore shouldCache cache backend inverseFn requiresGradients context symbols batchLength
+            let build : ModelExpression<'u> -> Expr<'C> = buildQuotationCore shouldCache cache backend scalarBackend inverseFn requiresGradients context symbols batchLength
             let withCache expr mk = Caching.apply cache shouldCache expr mk
 
             let promote (scalarExpr: Expr<'S>) : Expr<'C> = <@ backend.promote %scalarExpr batchLength @>
@@ -526,7 +529,7 @@ module Language =
                 let idx = context.ParameterIndex.[name]
                 <@ 
                     (%%Expr.Var context.ParameterVar : FsVector<'S,'S,``parameter``>) 
-                    |> Vector.itemAt idx 
+                    |> Vector.itemAt scalarBackend idx
                     |> Scalar.toRaw
                 @> |> promote
 
@@ -622,6 +625,7 @@ module Language =
         let internal buildQuotation'
             (policy: ModelExpression<'u> -> bool)
             (backend: NumericBackend<'S,'C>)
+            scalarBackend
             ctx
             inverseFn
             (symbols: Map<string, Var>)
@@ -632,7 +636,7 @@ module Language =
 
             let batchLength = 1
             let reqGrad = false
-            let body: Expr<'C> = buildQuotationCore policy bindingCache backend inverseFn reqGrad ctx symbols batchLength expr
+            let body: Expr<'C> = buildQuotationCore policy bindingCache backend scalarBackend inverseFn reqGrad ctx symbols batchLength expr
 
             let full: Expr<'C> =
                 List.foldBack
@@ -644,8 +648,8 @@ module Language =
 
         /// Builds a quotation from a model expression tree simply,
         /// with no internal caching or let bindings.
-        let buildQuotation ops ctx inverseFn symbols expr =
-            buildQuotation' Caching.Policies.noCaching ops ctx inverseFn symbols expr
+        let buildQuotation containerBackend scalarBackend ctx inverseFn symbols expr =
+            buildQuotation' Caching.Policies.noCaching containerBackend scalarBackend ctx inverseFn symbols expr
 
         /// Builds a quotation from a model expression tree,
         /// using an internal cache to avoid rebuilding 'heavy'
@@ -654,6 +658,7 @@ module Language =
         /// of work in computation.
         let buildQuotationCached
             (backend: NumericBackend<'S,'C>)
+            scalarBackend
             ctx
             inverseFn
             (symbols: Map<string, Var>)
@@ -664,7 +669,7 @@ module Language =
             let reqGrad = false
             let batchLen = 1
             let body: Expr<'C> =
-                buildQuotationCore Caching.Policies.cacheHeavy bindingCache backend inverseFn reqGrad ctx symbols batchLen expr
+                buildQuotationCore Caching.Policies.cacheHeavy bindingCache backend scalarBackend inverseFn reqGrad ctx symbols batchLen expr
 
             let full: Expr<'C> =
                 List.foldBack
@@ -720,7 +725,7 @@ module Language =
 
             // NB The quotation compiler doesn't currently support units. Strip here and reapply later.
             let exprNoUnit = expr |> fun (ME expr) -> expr |> ME
-            let core: Expr<'S> = buildQuotationCached backend ctx (inverseFn()) Map.empty exprNoUnit
+            let core: Expr<'S> = buildQuotationCached backend backend ctx (inverseFn()) Map.empty exprNoUnit
 
             // Convert from 'stateUnit/'timeUnit to internal state/'timeUnit
             <@ %core |> Scalar.ofRaw backend |> Scalar.retype<'S,1,ModelSystem.state/'timeUnit> @> // Retype unit onto solution here
@@ -752,7 +757,7 @@ module Language =
 
             // NB The quotation compiler doesn't currently support units. Strip here and reapply later.
             let exprNoUnit = expr |> fun (ME expr) -> expr |> ME
-            let core: Expr<'S> = buildQuotationCached backend discreteContext (inverseFn()) Map.empty exprNoUnit
+            let core: Expr<'S> = buildQuotationCached backend backend discreteContext (inverseFn()) Map.empty exprNoUnit
 
             <@ %core |> Scalar.ofRaw backend |> Scalar.retype<'S,1, ModelSystem.state> @> // Retype unit back here
             |> toLambda4 pVar eVar tVar xVar
@@ -798,7 +803,7 @@ module Language =
                     <@
                         let states = %%Expr.Var statesVar: CodedMap<FsVector<'S,'V,ModelSystem.state>>
                         let vec = states |> Map.tryFindBy (fun n -> n.Value = name) |> Option.get
-                        Vector.itemAt ((%%Expr.Var tIdxVar: int) + Units.removeUnitFromInt 0) vec
+                        Vector.itemAt backend ((%%Expr.Var tIdxVar: int) + Units.removeUnitFromInt 0) vec
                         |> Scalar.toRaw
                     @>
                 TimeVal = <@ Units.intToFloat (%%Expr.Var tIdxVar: int) |> backend.atomic.fromFloatS @>
@@ -807,7 +812,7 @@ module Language =
 
             // NB The quotation compiler doesn't currently support units. Strip here and reapply later.
             let exprNoUnit = expr |> fun (ME expr) -> expr |> ME
-            let core: Expr<'S> = buildQuotationCached backend ctx (inverseFn()) Map.empty exprNoUnit
+            let core: Expr<'S> = buildQuotationCached backend backend ctx (inverseFn()) Map.empty exprNoUnit
 
             <@ %core |> Scalar.ofRaw backend |> Scalar.retype<'S,1, ModelSystem.state> @> // Retype unit on here
             |> fun body -> Expr.Lambda(pVar, Expr.Lambda(statesVar, Expr.Lambda(thisVar, Expr.Lambda(tIdxVar, body))))
@@ -843,7 +848,7 @@ module Language =
 
             // NB The quotation compiler doesn't currently support units. Strip here and reapply later.
             let exprNoUnit = expr |> fun (ME expr) -> expr |> ME
-            let core: Expr<'S> = buildQuotationCached backend ctx (inverseFn()) Map.empty exprNoUnit
+            let core: Expr<'S> = buildQuotationCached backend backend ctx (inverseFn()) Map.empty exprNoUnit
 
             <@ %core |> Scalar.ofRaw backend |> Scalar.retype<'S,1, ModelSystem.state> @> // Retype unit on here.
             |> fun body -> Expr.Lambda(pVar, Expr.Lambda(eVar, Expr.Lambda(bVar, body)))

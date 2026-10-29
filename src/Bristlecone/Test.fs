@@ -265,7 +265,7 @@ module Test =
             let predicted =
                 Objective.predict invalidValue solver model.Measures (thetaReal |> Array.ofList |> ofVector engine.Backend.vectorBackend engine.Backend.vectorAccess)
                 |> Map.map (fun _ v ->
-                    Vector.toArrayFloat v
+                    Vector.toArrayFloat engine.Backend.scalarBackend v
                     |> Array.map (Units.removeUnitFromFloat >> LanguagePrimitives.FloatWithMeasure<'T>)
                     |> Array.zip timeline
                     |> Array.map (fun (a, b) -> b, a)

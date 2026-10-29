@@ -245,14 +245,14 @@ module Parameter =
             let forwardVec (thetaOpt: FsVector<'S,'V,'space>) =
                 trans
                 |> Array.mapi (fun i t ->
-                    let zi = Vector.itemAt i thetaOpt
+                    let zi = Vector.itemAt numEngine.scalarBackend i thetaOpt
                     t.Forward zi)
                 |> Stats.stack1D numEngine.vectorBackend numEngine.vectorAccess
 
             let inverseVec (thetaReal: FsVector<'S,'V,``parameter``>) =
                 trans
                 |> Array.mapi (fun i t ->
-                    let xi = Vector.itemAt i thetaReal
+                    let xi = Vector.itemAt numEngine.scalarBackend i thetaReal
                     t.Inverse xi)
                 |> Stats.stack1D numEngine.vectorBackend numEngine.vectorAccess
 

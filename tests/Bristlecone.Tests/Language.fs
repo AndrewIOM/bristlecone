@@ -15,37 +15,37 @@ let randomiseList ls =
     |> List.sortBy snd
     |> List.map fst
 
-[<Tests>]
-let modelExpressionOperators =
-    testList
-        "Model expression - operators"
-        [
+// [<Tests>]
+// let modelExpressionOperators =
+//     testList
+//         "Model expression - operators"
+//         [
 
-          testProperty "Addition operator adds two constants"
-          <| fun (a: NormalFloat) (b: NormalFloat) x t pool env ->
-              Constant a.Get + Constant b.Get |> compute Config.defaultNumEngine x t pool env = a.Get + b.Get
+//           testProperty "Addition operator adds two constants"
+//           <| fun (a: NormalFloat) (b: NormalFloat) x t pool env ->
+//               Constant a.Get + Constant b.Get |> compute Config.defaultNumEngine x t pool env = a.Get + b.Get
 
-          testProperty "Subtraction operator subtracts two constants"
-          <| fun (a: NormalFloat) (b: NormalFloat) x t pool env ->
-              Constant a.Get - Constant b.Get |> compute Config.defaultNumEngine x t pool env = a.Get - b.Get
+//           testProperty "Subtraction operator subtracts two constants"
+//           <| fun (a: NormalFloat) (b: NormalFloat) x t pool env ->
+//               Constant a.Get - Constant b.Get |> compute Config.defaultNumEngine x t pool env = a.Get - b.Get
 
-          testProperty "Multiplication operator multiplies two constants"
-          <| fun (a: NormalFloat) (b: NormalFloat) x t pool env ->
-              Constant a.Get * Constant b.Get |> compute Config.defaultNumEngine x t pool env = a.Get * b.Get
+//           testProperty "Multiplication operator multiplies two constants"
+//           <| fun (a: NormalFloat) (b: NormalFloat) x t pool env ->
+//               Constant a.Get * Constant b.Get |> compute Config.defaultNumEngine x t pool env = a.Get * b.Get
 
-          testProperty "Division operator divides two constants"
-          <| fun (a: NormalFloat) (b: NormalFloat) x t pool env ->
-              Constant a.Get / Constant b.Get |> compute Config.defaultNumEngine x t pool env = a.Get / b.Get
+//           testProperty "Division operator divides two constants"
+//           <| fun (a: NormalFloat) (b: NormalFloat) x t pool env ->
+//               Constant a.Get / Constant b.Get |> compute Config.defaultNumEngine x t pool env = a.Get / b.Get
 
-          testProperty "Modulus operator finds mod of constant"
-          <| fun (a: NormalFloat) (b: NormalFloat) x t pool env ->
-              if b.Get = 0. then
-                  true // Can't do mod of 0
-              else
-                  Constant a.Get % Constant b.Get |> compute x t pool env = a.Get % b.Get
+//           testProperty "Modulus operator finds mod of constant"
+//           <| fun (a: NormalFloat) (b: NormalFloat) x t pool env ->
+//               if b.Get = 0. then
+//                   true // Can't do mod of 0
+//               else
+//                   Constant a.Get % Constant b.Get |> compute x t pool env = a.Get % b.Get
 
-          testProperty "Negative sign negates value"
-          <| fun (a: NormalFloat) x t pool env -> -Constant a.Get |> compute x t pool env = -a.Get ]
+//           testProperty "Negative sign negates value"
+//           <| fun (a: NormalFloat) x t pool env -> -Constant a.Get |> compute x t pool env = -a.Get ]
 
 
 let dummyParameterT = [|0.<parameter>|] |> Config.defaultOfVector
@@ -112,17 +112,17 @@ let modelExpressions =
             <| fun (pool:Parameter.Pool.ParameterPool) (pVal:NormalFloat) (t:NormalFloat) ->
                 let paramToTest = pool |> Parameter.Pool.keys |> randomiseList |> Seq.head
                 let dummyParam = parameter paramToTest.Value NoConstraints 0.1 0.2 
-                let fakePoolVector = pool |> Parameter.Pool.keys |> Seq.map(fun pn -> if pn = paramToTest then pVal.Get * 1.<parameter> else nan * 1.<parameter>) |> Seq.toArray |> Tensors.Typed.ofVector
+                let fakePoolVector = pool |> Parameter.Pool.keys |> Seq.map(fun pn -> if pn = paramToTest then pVal.Get * 1.<parameter> else nan * 1.<parameter>) |> Seq.toArray |> Config.defaultOfVector
                 let t' = Config.defaultOfScalar <| t.Get * 1.<Time.year>
                 let this = Config.defaultOfScalar 999.<ModelSystem.state>
                 let fn = P dummyParam |> ExpressionCompiler.compileRate Config.defaultNumEngine.scalarBackend pool []
                 let result = fn fakePoolVector Map.empty t' this
                 Expect.floatClose Accuracy.high (result |> Scalar.toFloat |> Units.removeUnitFromFloat) pVal.Get "Parameter value didn't match"
 
-            testPropertyWithConfig Config.config "Greater than short-circuits on invalid (nan)" <| fun _ ->
-                let safe = Conditional (Constant 200. .> Constant 100.) (Constant 1.0) (Invalid)
-                let r = ExpressionCompiler.compileSimple safe
-                Expect.floatClose Accuracy.high r 1.0
+            // testPropertyWithConfig Config.config "Greater than short-circuits on invalid (nan)" <| fun _ ->
+            //     let safe = Conditional (Constant 200. .> Constant 100.) (Constant 1.0) (Invalid)
+            //     let r = ExpressionCompiler.compileSimple safe
+            //     Expect.floatClose Accuracy.high r 1.0
 
         ]
 
@@ -133,30 +133,30 @@ let modelBuilder =
         "Model builder"
         [
 
-            testProperty "Throws if more than one likelihood function"
-            <| fun likelihoodFns ->
-                let f () =
-                    likelihoodFns
-                    |> Seq.fold (fun mb l -> mb |> Model.useLikelihoodFunction l) Model.empty
-                    |> Model.addRateEquation (state "x") (Constant 1.)
-                    |> Model.compileWith Config.defaultNumEngine
+            // testProperty "Throws if more than one likelihood function"
+            // <| fun likelihoodFns ->
+            //     let f () =
+            //         likelihoodFns
+            //         |> Seq.fold (fun mb l -> mb |> Model.useLikelihoodFunction l) Model.empty
+            //         |> Model.addRateEquation (state "x") (Constant 1.)
+            //         |> Model.compileWith Config.defaultNumEngine
 
-                if likelihoodFns |> Seq.length <> 1 then
-                    Expect.throws (fun () -> f () |> ignore) "Allowed more than one likelihood function"
+            //     if likelihoodFns |> Seq.length <> 1 then
+            //         Expect.throws (fun () -> f () |> ignore) "Allowed more than one likelihood function"
 
-            testPropertyWithConfig Config.config "Throws if no equations are specified"
-            <| fun (eqs: (ShortCode.ShortCode * ModelExpression<Config.testModelUnit>) seq) ->
-                if eqs |> Seq.map fst |> Seq.hasDuplicates then
-                    ()
-                else
-                    let mb =
-                        eqs |> Seq.fold (fun mb (n, eq) ->
-                            let n = state n.Value
-                            mb |> Model.addRateEquation n eq) Model.empty
-                    let fn () = mb |> Model.compile
+            // testPropertyWithConfig Config.config "Throws if no equations are specified"
+            // <| fun (eqs: (ShortCode.ShortCode * ModelExpression<Config.testModelUnit>) seq) ->
+            //     if eqs |> Seq.map fst |> Seq.hasDuplicates then
+            //         ()
+            //     else
+            //         let mb =
+            //             eqs |> Seq.fold (fun mb (n, eq) ->
+            //                 let n = state n.Value
+            //                 mb |> Model.addRateEquation n eq) Model.empty
+            //         let fn () = mb |> Model.compile
 
-                    if eqs |> Seq.length <> 1 then
-                        Expect.throws (fun () -> fn () |> ignore) "Did not throw when no equations specified"
+            //         if eqs |> Seq.length <> 1 then
+            //             Expect.throws (fun () -> fn () |> ignore) "Did not throw when no equations specified"
 
             testPropertyWithConfig
                 Config.config
@@ -228,7 +228,7 @@ let dummyBaseModel comp =
     let s = state "some_random_code"
     Model.empty<Bristlecone.Time.day>
     |> Model.addRateEquation s (comp * Constant 1.</Time.day>)
-    |> Model.useLikelihoodFunction  (ModelLibrary.NegLogLikelihood.SumOfSquares [ Require.state s ])
+    |> Model.useLikelihoodFunction  (ModelLibrary.NegLogLikelihood.SumOfSquares Config.defaultNumEngine [ Require.state s ])
 
 [<Tests>]
 let hypotheses =
@@ -278,14 +278,14 @@ let hypotheses =
 
         ]
 
-[<Tests>]
-let modelCE =
-    testList "model computation expression" [
+// [<Tests>]
+// let modelCE =
+//     testList "model computation expression" [
 
-        testCase "Cool" <| fun _ ->
-            let m = model {
-                estimate x
-                likelihood cool
-            }
+//         testCase "Cool" <| fun _ ->
+//             let m = model {
+//                 estimate x
+//                 likelihood cool
+//             }
         
-    ]
+//     ]

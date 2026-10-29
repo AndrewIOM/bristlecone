@@ -14,7 +14,7 @@ module TestModels =
         Model.empty
         |> Model.addRateEquation X (P a)
         |> Model.estimateParameter a
-        |> Model.useLikelihoodFunction (ModelLibrary.NegLogLikelihood.SumOfSquares [ Require.state X ])
+        |> Model.useLikelihoodFunction (ModelLibrary.NegLogLikelihood.SumOfSquares Config.defaultNumEngine [ Require.state X ])
         |> Model.compile
 
     /// Scaffold a discrete model where there is one parameter (a)
@@ -25,7 +25,7 @@ module TestModels =
         Model.discrete
         |> Model.addDiscreteEquation X (P a)
         |> Model.estimateParameter a
-        |> Model.useLikelihoodFunction (ModelLibrary.NegLogLikelihood.SumOfSquares [ Require.state X ])
+        |> Model.useLikelihoodFunction (ModelLibrary.NegLogLikelihood.SumOfSquares Config.defaultNumEngine [ Require.state X ])
         |> Model.compile
 
     let rateTwoEquationConstant cons bound1 bound2 =
@@ -36,7 +36,7 @@ module TestModels =
         |> Model.addRateEquation X (P a)
         |> Model.addRateEquation Y (P a)
         |> Model.estimateParameter a
-        |> Model.useLikelihoodFunction (ModelLibrary.NegLogLikelihood.SumOfSquares [ Require.state X; Require.state Y ])
+        |> Model.useLikelihoodFunction (ModelLibrary.NegLogLikelihood.SumOfSquares Config.defaultNumEngine [ Require.state X; Require.state Y ])
         |> Model.compile
 
     /// dX/dt = Temperature
@@ -47,7 +47,7 @@ module TestModels =
         Model.empty
         |> Model.addRateEquation X (Environment temp)   // derivative of X is just the env forcing
         |> Model.estimateParameter dummy
-        |> Model.useLikelihoodFunction (ModelLibrary.NegLogLikelihood.SumOfSquares [ Require.state X ])
+        |> Model.useLikelihoodFunction (ModelLibrary.NegLogLikelihood.SumOfSquares Config.defaultNumEngine [ Require.state X ])
         |> Model.compile
 
     let tempDrivenModelDiscrete () =
@@ -57,7 +57,7 @@ module TestModels =
         Model.discrete
         |> Model.addDiscreteEquation X (Environment temp)   // derivative of X is just the env forcing
         |> Model.estimateParameter dummy
-        |> Model.useLikelihoodFunction (ModelLibrary.NegLogLikelihood.SumOfSquares [ Require.state X ])
+        |> Model.useLikelihoodFunction (ModelLibrary.NegLogLikelihood.SumOfSquares Config.defaultNumEngine [ Require.state X ])
         |> Model.compile
 
     let diffSingleEnv (dynCode:ShortCode.ShortCode) (envCode:ShortCode.ShortCode) =
@@ -67,7 +67,7 @@ module TestModels =
         Model.empty<year>
         |> Model.addRateEquation X (Environment temp)   // derivative of X is just the env forcing
         |> Model.estimateParameter dummy
-        |> Model.useLikelihoodFunction (ModelLibrary.NegLogLikelihood.SumOfSquares [ Require.state X ])
+        |> Model.useLikelihoodFunction (ModelLibrary.NegLogLikelihood.SumOfSquares Config.defaultNumEngine [ Require.state X ])
         |> Model.compile
 
 

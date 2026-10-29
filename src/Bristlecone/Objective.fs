@@ -10,6 +10,7 @@ module Objective =
     open Bristlecone.Numerics.Typed
 
     let accessorFromRealVector
+        scalarBackend
         (compiled: Parameter.Pool.CompiledTransforms<'S,'V,'space>)
         (thetaReal: FsVector<'S,'V,``parameter``>)
         : ModelSystem.ParameterValueAccessor<'S> =
@@ -17,7 +18,7 @@ module Objective =
 
         ParameterValueAccessor(fun name ->
             match Map.tryFind name idx with
-            | Some i -> Vector.itemAt i thetaReal
+            | Some i -> Vector.itemAt scalarBackend i thetaReal
             | None -> invalidOp $"Parameter '{name}' not found")
 
     let prependInitialConditions initial expected =
@@ -90,6 +91,7 @@ module Objective =
     /// - A discrete-time solver (for if measurement / computed variables are present)
     /// - Observed data (for calculating likelihood)
     let create
+        scalarBackend
         (negLogLikFn: ModelSystem.LikelihoodEval<'S,'V,state>)
         (measures: CodedMap<ModelSystem.Measurement<'S,'V,state>>)
         (solver: Solver.ConfiguredSolver<'S,'V>)
@@ -100,7 +102,7 @@ module Objective =
 
         fun point ->
             let thetaReal = config.Compiled.Forward point
-            let accessor = accessorFromRealVector config.Compiled thetaReal
+            let accessor = accessorFromRealVector scalarBackend config.Compiled thetaReal
 
             thetaReal
             |> predict invalidValue solver measures

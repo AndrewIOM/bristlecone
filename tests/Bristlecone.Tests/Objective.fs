@@ -38,11 +38,11 @@ let initialBounds =
 
                 let paired' = paired |> Map.find (ShortCode.create "x").Value
                 Config.sequenceEqualTol
-                    (paired'.Expected |> Typed.Vector.toArrayFloat |> Seq.map Units.removeUnitFromFloat)
+                    (paired'.Expected |> Typed.Vector.toArrayFloat Config.defaultNumEngine.scalarBackend |> Seq.map Units.removeUnitFromFloat)
                     prediction
                     "Prediction was not as expected after pairing"
                 Config.sequenceEqualTol
-                    (paired'.Observed |> Typed.Vector.toArrayFloat |> Seq.map Units.removeUnitFromFloat)
+                    (paired'.Observed |> Typed.Vector.toArrayFloat Config.defaultNumEngine.scalarBackend |> Seq.map Units.removeUnitFromFloat)
                     (data |> Array.map (fun g -> g.Get * 1.<state>))
                     "Observed vector was not as expected after pairing"
 
@@ -83,6 +83,7 @@ let initialBounds =
                     let code = (ShortCode.create "x").Value
                     let testObjective =
                         Objective.create
+                            Config.defaultNumEngine.scalarBackend
                             model.NegLogLikelihood.Evaluate
                             Map.empty
                             (dummySolver code (fun _ -> 2.0<state>) data.Length)

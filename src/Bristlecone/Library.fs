@@ -198,7 +198,7 @@ module Bristlecone =
         solutions
         |> List.map (fun (ll, pointOptSpace) ->
             let realVec = config.Compiled.Forward (pointOptSpace |> ofVector numEngine.vectorBackend numEngine.vectorAccess)
-            ll, realVec |> Vector.toArrayFloat)
+            ll, realVec |> Vector.toArrayFloat numEngine.scalarBackend)
 
     let internal validateEnvData expectedKeys actualMap =
         let expectedSet = expectedKeys |> Set.ofList
@@ -395,6 +395,7 @@ module Bristlecone =
 
             let objective =
                 Objective.create
+                    engine.Backend.scalarBackend
                     model.NegLogLikelihood.Evaluate
                     model.Measures
                     (solver (Solver.StepType.External obsTimes))
@@ -434,7 +435,7 @@ module Bristlecone =
                 conditioned.ObservedForPairing.Series
                 |> Map.filter (fun key _ -> estimatedSeries |> Map.containsKey key)
                 |> Map.map (fun k observedSeries ->
-                    let expected = estimatedSeries |> Map.find k |> Vector.toArrayFloat
+                    let expected = estimatedSeries |> Map.find k |> Vector.toArrayFloat engine.Backend.scalarBackend
 
                     observedSeries
                     |> TimeSeries.toObservations
@@ -446,10 +447,10 @@ module Bristlecone =
                     |> TimeSeries.fromObservations observedSeries.DateMode)
 
             let bestPoint = optimConfig.Compiled.Forward bestPointVec
-            let bestPointPool = Parameter.Pool.fromRealVector (bestPoint |> Vector.toArrayFloat) model.Parameters
+            let bestPointPool = Parameter.Pool.fromRealVector (bestPoint |> Vector.toArrayFloat engine.Backend.scalarBackend) model.Parameters
 
             let estimatedHighResFloat =
-                estimatedHighRes |> Map.map (fun _ v -> v |> Vector.toArrayFloat) |> Some
+                estimatedHighRes |> Map.map (fun _ v -> v |> Vector.toArrayFloat engine.Backend.scalarBackend) |> Some
 
             engine.LogTo CompleteEvent
 

@@ -65,7 +65,7 @@ module Solver =
                         let keepMask =
                             times |> List.map (fun ti -> Set.contains ti obsTimes) |> List.toArray
 
-                        vars |> Map.map (fun _ v -> Vector.filterByMask keepMask v)
+                        vars |> Map.map (fun _ v -> Vector.filterByMask numEngine.scalarBackend keepMask v)
 
 
     // Time conversion tailored for TypedTensor and time-index
@@ -79,7 +79,7 @@ module Solver =
             fun pars env tIndex state ->
                 // Convert tIndex (Scalar<time-index>) -> Scalar<'timeUnit> by multiplying with factor
                 let tIndexF: float<``time index``> = Scalar.toFloat tIndex
-                let tModel = Typed.ofScalar tIndex.Backing (tIndexF * factor)
+                let tModel = Typed.ofScalar tIndex.Backend (tIndexF * factor)
                 eq pars env tModel state
 
         /// Wrap a model equation written in 'timeUnit so it accepts time index.
@@ -89,7 +89,7 @@ module Solver =
             : StateEquation<'S,'V,``time index``> =
             fun pars env tIndex state ->
                 let tIndexF = Scalar.toFloat tIndex
-                let tModel = Typed.ofScalar tIndex.Backing (tIndexF * factor)
+                let tModel = Typed.ofScalar tIndex.Backend (tIndexF * factor)
                 eq pars env tModel state
 
         // For differential equations: return unit is 'state / 'timeUnit
@@ -99,7 +99,7 @@ module Solver =
             : RateEquation<'S,'V,``time index``> =
             fun pars env tIndex state ->
                 let tIndexF = Scalar.toFloat tIndex
-                let tModel = Typed.ofScalar tIndex.Backing (tIndexF * factor)
+                let tModel = Typed.ofScalar tIndex.Backend (tIndexF * factor)
                 eq pars env tModel state |> Scalar.retype
 
         // Lift wrapping over a whole model form
@@ -282,7 +282,7 @@ module Solver =
 
                             let finalState =
                                 newTrajectory
-                                |> Map.map (fun _ v -> v |> Vector.itemAt (Vector.length v - 1))
+                                |> Map.map (fun _ v -> v |> Vector.itemAt numEngine.scalarBackend (Vector.length v - 1))
 
                             loop (finalState :: acc) finalState (i + 1)
 
