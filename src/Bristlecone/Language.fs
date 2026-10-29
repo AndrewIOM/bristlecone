@@ -441,8 +441,9 @@ module Language =
         /// Plugs in context-dependent values into
         /// the model compilation. Allows parameter values
         /// to be vectorised.
-        type OpsContext<'S,'C,[<Measure>] 'u> = {
-            ParameterVar : Var
+        type OpsContext<'S,[<Measure>] 'u> = {
+            GetParameter: string -> Expr<'S>
+            // ParameterVar : Var
             ParameterIndex: Map<string, int>
             GetState : string -> int<Time.``time index``> -> Expr<'S>
             Environment : string -> Expr<'S>
@@ -483,7 +484,7 @@ module Language =
             (scalarBackend: NumericBackend<'S, 'S>)
             inverseFn
             requiresGradients
-            (context:OpsContext<'S,'C,'u>)
+            (context:OpsContext<'S,'u>)
             (symbols: Map<string, Var>)
             batchLength
             (expr: ModelExpression<'u>)
@@ -506,12 +507,8 @@ module Language =
             | ME Invalid -> <@ backend.atomic.constants.invalid @> |> promote
 
             | ME(Parameter name) ->
-                let idx = context.ParameterIndex.[name]
-                <@ 
-                    (%%Expr.Var context.ParameterVar : FsVector<'S,'S,``parameter``>) 
-                    |> Vector.itemAt scalarBackend idx
-                    |> Scalar.toRaw
-                @> |> promote
+                let scalarParamExpr = context.GetParameter name
+                <@ %scalarParamExpr @> |> promote
 
             | ME(Add xs) -> withCache expr (fun () -> xs |> List.map (fun x -> build (ME x)) |> listSum backend)
 
@@ -558,7 +555,7 @@ module Language =
 
                     // Build x and one = x/x for AD lifting
                     let xExpr: Expr<'C> = Expr.Var xVar |> Expr.Cast<'C>
-                    let oneVar = Var("one", typeof<'r>)
+                    let oneVar = Var("one", typeof<'C>)
                     let oneExpr: Expr<'C> = <@ backend.div %xExpr %xExpr @>
 
                     let innerCache, innerBindings = Caching.makeBindingCache ()
@@ -694,8 +691,15 @@ module Language =
             let xVar = Var("state", typeof<FsScalar<'S,'stateUnit>>)
 
             let eIndex = envIndexFromKeys envKeys // TODO - USE
+            let pIndex = paramIndex parameters
             let ctx = {
-                ParameterVar = pVar
+                GetParameter = fun name ->
+                    let idx = pIndex.[name]
+                    <@ 
+                        (%%Expr.Var pVar : FsVector<'S,'V,``parameter``>) 
+                        |> Vector.itemAt backend idx
+                        |> Scalar.toRaw
+                    @>
                 ParameterIndex = paramIndex parameters
                 Environment = fun name -> getEnvironment eVar name
                 GetState = fun name _ -> getEnvironment eVar name 
@@ -726,9 +730,16 @@ module Language =
             let xVar = Var("state", typeof<FsScalar<'S,'stateUnit>>)
 
             let eIndex = envIndexFromKeys envKeys // TODO - USE
+            let pIndex = paramIndex parameters
             let discreteContext = {
-                ParameterVar = pVar
-                ParameterIndex = paramIndex parameters
+                GetParameter = fun name ->
+                    let idx = pIndex.[name]
+                    <@ 
+                        (%%Expr.Var pVar : FsVector<'S,'V,``parameter``>) 
+                        |> Vector.itemAt backend idx
+                        |> Scalar.toRaw
+                    @>
+                ParameterIndex = pIndex
                 Environment = fun name -> getEnvironment eVar name
                 GetState = fun name _ -> getEnvironment eVar name 
                 TimeVal = <@ (%%Expr.Var tVar: FsScalar<'S,'timeUnit>) |> Scalar.toRaw  @>
@@ -775,9 +786,16 @@ module Language =
             let thisVar = Var("thisVal", typeof<FsScalar<'S,ModelSystem.state>>)
             let tIdxVar = Var("timeIndex", typeof<int>)
 
+            let pIndex = paramIndex parameters
             let ctx = {
-                ParameterVar = pVar
-                ParameterIndex = paramIndex parameters
+                GetParameter = fun name ->
+                    let idx = pIndex.[name]
+                    <@ 
+                        (%%Expr.Var pVar : FsVector<'S,'V,``parameter``>) 
+                        |> Vector.itemAt backend idx
+                        |> Scalar.toRaw
+                    @>
+                ParameterIndex = pIndex
                 Environment = fun _ -> failwith "Environment not supported in measures"
                 GetState = fun name t ->
                     <@
@@ -805,8 +823,15 @@ module Language =
             let eVar = Var("environment", typeof<CodedMap<FsScalar<'S,ModelSystem.``environment``>>>)
             let bVar = Var("baselines", typeof<CodedMap<FsScalar<'S,ModelSystem.state>>>)
 
+            let pIndex = paramIndex parameters
             let ctx = {
-                ParameterVar = pVar
+                GetParameter = fun name ->
+                    let idx = pIndex.[name]
+                    <@ 
+                        (%%Expr.Var pVar : FsVector<'S,'V,``parameter``>) 
+                        |> Vector.itemAt backend idx
+                        |> Scalar.toRaw
+                    @>
                 ParameterIndex = paramIndex parameters
                 Environment = fun name -> getEnvironment eVar name
                 GetState = fun name t ->
