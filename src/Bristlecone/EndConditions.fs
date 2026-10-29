@@ -233,7 +233,7 @@ module EndConditions =
 
                     let result = if stable then OptimStopReason.Custom "Stable" else Continue
 
-                    log (GeneralEvent(sprintf "[EndCondition] Acceptance rates = %A [%A]" acceptanceRates result))
+                    // log (GeneralEvent(sprintf "[EndCondition] Acceptance rates = %A [%A]" acceptanceRates result))
                     result
 
     let whenAcceptanceRateOutside min max interval intervalsRequired log : EndCondition<'space> =

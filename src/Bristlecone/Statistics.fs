@@ -248,21 +248,57 @@ module RootFinding =
             let x = x1 - fx1 * ((x1 - x0) / (fx1 - fx0))
             secant engine (n + 1) maxIter f x1 x
 
-    // /// Bisect method for finding root of non-linear equations.
-    // let rec bisect (engine: NumericEngine<'S,'V,'M>) n maxIter (f: TypedScalar<'S,'u> -> TypedScalar<'S,'v>) (low:TypedScalar<'S,'u>) (high:TypedScalar<'S,'u>) (tol:TypedScalar<'S,'u>) : TypedScalar<'S,'u> =
-    //     let constants = Scalar.constants engine
-    //     if n >= maxIter then
-    //         constants.nan |> Scalar.retype
-    //     else
-    //         let c = (low + high) / constants.two
-    //         let fc = f c
+    /// Bisect method for finding root of non-linear equations.
+    /// `adSafe` keeps within tensor space for all operations,
+    /// but is substantially slower owing to two casts.
+    let bisect
+        (backend: NumericBackend<'S,'C>)
+        (f: 'C -> 'C)
+        (target: 'C)
+        (lo: 'C)
+        (hi: 'C)
+        (tol: 'C)
+        (maxIter: int)
+        : 'C =
 
-    //         if Scalar.eq fc (Scalar.retype constants.zero) || (high - low) / constants.two < tol then
-    //             c
-    //         else if Scalar.eq (Scalar.sign fc) (Scalar.sign (f low)) then
-    //             bisect engine (n + 1) maxIter f c high tol
-    //         else
-    //             bisect engine (n + 1) maxIter f low c tol
+        let fa0 = backend.sub (f lo) target
+        let fb0 = backend.sub (f hi) target
+
+        let len = backend.length lo
+        let zero = backend.promote backend.atomic.constants.zero len
+        let half = backend.promote backend.atomic.constants.half len
+        let one = backend.promote backend.atomic.constants.one len
+
+        let rec loop (a: 'C, fa: 'C) (b: 'C, fb: 'C) i =
+            let c = backend.mul (backend.add a b) half
+            let fc = backend.sub (f c) target
+
+            if i >= maxIter then
+                c
+            else
+                let mask1 = backend.lt (backend.abs fc) tol
+                let mask2 = backend.lt (backend.mul (backend.sub b a) half) tol
+                let stopF = backend.max mask1 mask2
+                let contF = backend.sub one stopF
+
+                let prod = backend.mul fa fc
+                let mask = backend.gt prod zero
+                let invMask = backend.sub one mask
+
+                //let a' = a * stopF + (a * invMask + c * mask) * contF
+                let a' = backend.add (backend.mul a stopF) (backend.mul (backend.add (backend.mul a invMask) (backend.mul c mask)) contF)
+                //let b' = b * stopF + (b * mask + c * invMask) * contF
+                let b' = backend.add (backend.mul b stopF) (backend.mul (backend.add (backend.mul b mask) (backend.mul c invMask)) contF)
+
+                // fa' = fa * stopF + (fa * invMask + fc * mask) * contF
+                let fa' = backend.add (backend.mul fa stopF) (backend.mul (backend.add (backend.mul fa invMask) (backend.mul fc mask)) contF)
+                // fb' = fb * stopF + (fb * mask + fc * invMask) * contF
+                let fb' = backend.add (backend.mul fb stopF) (backend.mul (backend.add (backend.mul fb mask) (backend.mul fc invMask)) contF)
+
+                loop (a', fa') (b', fb') (i + 1)
+
+        loop (lo, fa0) (hi, fb0) 0
+
 
     /// Functions for constraining the interval over which to conduct
     /// root-finding.
@@ -361,46 +397,6 @@ module RootFinding =
         //     let x1 = x0 - fx / dfx
 
         //     Scalar.max lo (Scalar.min hi x1)
-
-
-    //     /// Bisect method for finding root of non-linear equations.
-    //     /// `adSafe` keeps within tensor space for all operations,
-    //     /// but is substantially slower owing to two casts.
-    //     // let bisect
-    //     //     (f: TypedScalar<'u> -> TypedScalar<'u>)
-    //     //     (target: TypedScalar<'u>)
-    //     //     (lo: TypedScalar<'u>)
-    //     //     (hi: TypedScalar<'u>)
-    //     //     (tol: TypedScalar<'u>)
-    //     //     (maxIter: int)
-    //     //     : TypedScalar<'u> =
-
-    //     //     let fa0 = f lo - target
-    //     //     let fb0 = f hi - target
-
-    //     //     let rec loop (a: TypedScalar<'u>, fa: TypedScalar<'u>) (b: TypedScalar<'u>, fb: TypedScalar<'u>) i =
-    //     //         let c = (a + b) * half
-    //     //         let fc = f c - target
-
-    //     //         if i >= maxIter then
-    //     //             c
-    //     //         else
-    //     //             let stopMask = dsharp.lt (dsharp.abs fc, tol) + dsharp.lt ((b - a) * half, tol)
-    //     //             let stopF = dsharp.cast (stopMask, a.dtype)
-    //     //             let contF = one - stopF
-
-    //     //             let prod = fa * fc
-    //     //             let mask = dsharp.cast (dsharp.gt (prod, zero), a.dtype)
-    //     //             let invMask = one - mask
-
-    //     //             let a' = a * stopF + (a * invMask + c * mask) * contF
-    //     //             let b' = b * stopF + (b * mask + c * invMask) * contF
-
-    //     //             let fa' = fa * stopF + (fa * invMask + fc * mask) * contF
-    //     //             let fb' = fb * stopF + (fb * mask + fc * invMask) * contF
-    //     //             loop (a', fa') (b', fb') (i + 1)
-
-    //     //     loop (lo, fa0) (hi, fb0) 0
 
     //     /// Newton–Raphson root finder using AD for derivative.
     //     let newtonRaphson

@@ -42,30 +42,36 @@ module TestModels =
     /// dX/dt = Temperature
     let tempDrivenModel () =
         let X = state "X"
+        let Y = state "dummy"
         let temp = environment "Temp"
-        let dummy = parameter "a" NoConstraints (min 0.1 0.2) (max 0.1 0.2)        
+        let dummy = parameter "a" NoConstraints 0.01 0.02
         Model.empty
         |> Model.addRateEquation X (Environment temp)   // derivative of X is just the env forcing
+        |> Model.addRateEquation Y (P dummy)
         |> Model.estimateParameter dummy
         |> Model.useLikelihoodFunction (ModelLibrary.NegLogLikelihood.SumOfSquares Config.defaultNumEngine [ Require.state X ])
         |> Model.compile
 
     let tempDrivenModelDiscrete () =
         let X = state "X"
+        let Y = state "dummy"
         let temp = environment "Temp"
-        let dummy = parameter "dummy_a_par" NoConstraints (min 0.1 0.2) (max 0.1 0.2)        
+        let dummy = parameter "dummy_a_par" NoConstraints 0.01 0.02
         Model.discrete
         |> Model.addDiscreteEquation X (Environment temp)   // derivative of X is just the env forcing
+        |> Model.addDiscreteEquation Y (P dummy)
         |> Model.estimateParameter dummy
         |> Model.useLikelihoodFunction (ModelLibrary.NegLogLikelihood.SumOfSquares Config.defaultNumEngine [ Require.state X ])
         |> Model.compile
 
     let diffSingleEnv (dynCode:ShortCode.ShortCode) (envCode:ShortCode.ShortCode) =
         let X = state dynCode.Value
+        let Y = state "dummy"
         let temp = environment envCode.Value
-        let dummy = parameter "dummy_a_par" NoConstraints (min 0.1 0.2) (max 0.1 0.2)        
+        let dummy = parameter "dummy_a_par" NoConstraints 0.01 0.02
         Model.empty<year>
         |> Model.addRateEquation X (Environment temp)   // derivative of X is just the env forcing
+        |> Model.addRateEquation Y (P dummy)
         |> Model.estimateParameter dummy
         |> Model.useLikelihoodFunction (ModelLibrary.NegLogLikelihood.SumOfSquares Config.defaultNumEngine [ Require.state X ])
         |> Model.compile

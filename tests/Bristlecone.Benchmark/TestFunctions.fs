@@ -120,27 +120,27 @@ module Timeseries =
             |> Model.estimateParameter γ // Natural death rate of lynx in the absence of food
             |> Model.estimateParameter δ // Efficiency of turning predated hares into lynx
 
-        let deterministic =
+        let deterministic numEngine =
             predatorPreyBase
             |> Model.useLikelihoodFunction (
-                NegLogLikelihood.SumOfSquares [ Require.state H; Require.state L ]
+                NegLogLikelihood.SumOfSquares numEngine [ Require.state H; Require.state L ]
             )
             |> Model.compile
 
         let σH = parameter "σ[H]" Positive 0.001 0.100
         let σL = parameter "σ[L]" Positive 0.001 0.100
 
-        let noisy backend =
+        let noisy numEngine =
 
             let NLL =
-                NegLogLikelihood.LogNormal backend (Require.state H) σH +
-                NegLogLikelihood.LogNormal backend (Require.state L) σL
+                NegLogLikelihood.LogNormal numEngine (Require.state H) σH +
+                NegLogLikelihood.LogNormal numEngine (Require.state L) σL
 
             predatorPreyBase
             |> Model.useLikelihoodFunction NLL
             |> Model.compile
 
-        let test withNoise backend logger optimise endCondition =
+        let test withNoise numEngine logger optimise endCondition =
             
             let engine =
                 Bristlecone.mkContinuous ()
@@ -162,9 +162,9 @@ module Timeseries =
                     settings
                     |> Test.withObservationError (Require.state H) (Test.Error.normal σH)
                     |> Test.withObservationError (Require.state L) (Test.Error.normal σL)
-                Bristlecone.tryTestModel engine endCondition settings (noisy backend)
+                Bristlecone.tryTestModel engine endCondition settings (noisy numEngine)
             else
-                Bristlecone.tryTestModel engine endCondition settings deterministic
+                Bristlecone.tryTestModel engine endCondition settings (deterministic numEngine)
 
 
     /// A two-compartment soil carbon model that represents the fast turnover
@@ -216,9 +216,9 @@ module Timeseries =
             |> Model.estimateParameter alpha
 
         // Deterministic fit
-        let deterministic =
+        let deterministic numEngine =
             soilCarbonBase
-            |> Model.useLikelihoodFunction (NegLogLikelihood.SumOfSquares [ Require.measure R ])
+            |> Model.useLikelihoodFunction (NegLogLikelihood.SumOfSquares numEngine [ Require.measure R ])
             |> Model.compile
 
         let sigma = parameter "σ" Positive 0.001<(gram/area)/day> 10.0<(gram/area)/day>
@@ -230,7 +230,7 @@ module Timeseries =
             |> Model.useLikelihoodFunction NLL
             |> Model.compile
 
-        let test withNoise backend logger optimise endCondition =
+        let test withNoise numEngine logger optimise endCondition =
             
             let engine =
                 Bristlecone.mkContinuous ()
@@ -250,7 +250,7 @@ module Timeseries =
                 |> Test.rule (Require.measure R) (Test.GenerationRules.alwaysLessThan 1000.)
                 |> Test.withEnvironmentGenBySpan Ts mkTemperature (fun x -> float x.Days * 1.<day>)
 
-            Bristlecone.tryTestModel engine endCondition settings (if withNoise then noisy backend else deterministic)
+            Bristlecone.tryTestModel engine endCondition settings (if withNoise then noisy numEngine else deterministic numEngine)
 
 
     /// A discrete-time test model, which represents the temperature-dependence
@@ -283,9 +283,9 @@ module Timeseries =
             |> Model.estimateParameter K
             |> Model.estimateParameter beta
 
-        let deterministic =
+        let deterministic numEngine =
             rickerBase
-            |> Model.useLikelihoodFunction (NegLogLikelihood.SumOfSquares [ Require.measure logN ])
+            |> Model.useLikelihoodFunction (NegLogLikelihood.SumOfSquares numEngine [ Require.measure logN ])
             |> Model.compile
 
         let sigma = parameter "σ" Positive 0.001 10.0
@@ -319,4 +319,4 @@ module Timeseries =
                 let settings = settings |> Test.withObservationError (Require.measure logN) (Test.Error.normal sigma)
                 Bristlecone.tryTestModel engine endCondition settings (noisy engine.Backend)
             else 
-                Bristlecone.tryTestModel engine endCondition settings deterministic
+                Bristlecone.tryTestModel engine endCondition settings (deterministic engine.Backend)

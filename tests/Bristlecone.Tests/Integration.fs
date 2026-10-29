@@ -54,7 +54,7 @@ let rk4EdgeCases =
             printfn "TEST 1"
             let rhs : EstimationEngine.ParameterisedRHS<'S,'V> =
                 fun _t _yVec ->
-                    printfn "Hello"
+                    printfn "Hello %A" _yVec
                     Map.ofList [ (key, Config.defaultOfScalar 2.0<state/``time index``>) ]
 
             printfn "TEST 2"
@@ -74,10 +74,15 @@ let rk4EdgeCases =
 
             let traj = rk4WithStepWidth Config.defaultNumEngine t0 t1 dt y0 (wrapRhs Config.defaultNumEngine keys rhs)
             printfn "TEST 2.3"
-            let series = unflattenTrajectory keys traj
+            let series = unflattenTrajectory Config.defaultNumEngine keys traj
             printfn "TEST 3"
 
             let xs = series.[key] |> Vector.toArrayFloat Config.defaultNumEngine.scalarBackend
+            
+            let xs = series.[key] |> Vector.toArrayFloat Config.defaultNumEngine.scalarBackend
+            printfn "TOTAL SERIES ELEMENT COUNT: %i" xs.Length
+            xs |> Array.iteri (fun i v -> printfn "Step [%i] = %f" i v)
+            
             Expect.floatClose Accuracy.high (xs.[xs.Length - 1] |> Units.removeUnitFromFloat) (1.0 + 2.0*1.0) "Final value mismatch"
 
     ]

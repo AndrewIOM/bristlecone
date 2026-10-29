@@ -66,22 +66,23 @@ type NumericBackend<'S,'C> = {
 }
 
 /// Vector-specific access ops
-type VectorAccessOps<'S,'C> = {
-    toArray : 'C -> 'S array
-    ofArray : 'S array -> 'C
-    length  : 'C -> int
-    get     : 'C -> int -> 'S
-    concat : 'C -> 'C -> 'C
-    tail : 'C -> 'C
+type VectorAccessOps<'S,'V> = {
+    toArray : 'V -> 'S array
+    ofArray : 'S array -> 'V
+    length  : 'V -> int
+    get     : 'V -> int -> 'S
+    concat : 'V -> 'V -> 'V
+    tail : 'V -> 'V
 }
 
 /// Matrix-specific structural access ops
-type MatrixAccessOps<'S,'C> = {
-    toArray2d : 'C -> 'S array2d
-    ofArray2d : 'S array2d -> 'C
-    nrows     : 'C -> int
-    ncols     : 'C -> int
-    get       : 'C -> int -> int -> 'S
+type MatrixAccessOps<'V,'M> = {
+    toArray2d : 'M -> 'V array2d
+    ofArray2d : 'V array2d -> 'M
+    nrows     : 'M -> int
+    ncols     : 'M -> int
+    get       : 'M -> int -> int -> 'V
+    transpose : 'M -> 'M
 }
 
 /// Represents operations in a numerical system,
@@ -401,6 +402,8 @@ module Typed =
         let nRows (t: FsMatrix<'S,'M,'u>) = t.Access.nrows t.Inner
         let nCols (t: FsMatrix<'S,'M,'u>) = t.Access.ncols t.Inner
 
+        let transpose (t: FsMatrix<'S,'M,'u>) =
+            { Inner = t.Access.transpose t.Inner; Backend = t.Backend; Access = t.Access }
 
 module Stats =
 
@@ -432,6 +435,7 @@ module Stats =
         Vector.ofRaw vectorBackend vectorAccess v
         |> Vector.retype
 
+    /// Stack *row* vectors into a matrix.
     let stack2D numEngine (items: FsVector<'S,'V,'u>[]) : FsMatrix<'S,'M,'u> =
 
         if items.Length = 0 then array2D [] |> ofMatrix numEngine.matrixBackend numEngine.matrixAccess
@@ -450,8 +454,17 @@ module Stats =
             Matrix.ofRaw numEngine.matrixBackend numEngine.matrixAccess m
 
 
-    let unstack2D (matrix: FsMatrix<'S,'M,'u>) : FsVector<'S,'V,'u>[] =
-        failwith "not implemented!"
+    /// Unstack a matrix as an array of rows.
+    let unstack2D numEngine (matrix: FsMatrix<'S,'M,'u>) : FsVector<'S,'V,'u>[] =
+        let grid2d = Matrix.toRaw matrix |> numEngine.matrixAccess.toArray2d
+        let rows = Array2D.length1 grid2d
+        let cols = Array2D.length2 grid2d
+        Array.init rows (fun r ->
+            let rowScalars = Array.init cols (fun c -> grid2d.[r, c])
+            let rawVector = numEngine.vectorAccess.ofArray rowScalars
+            Vector.ofRaw numEngine.vectorBackend numEngine.vectorAccess rawVector
+            |> Vector.retype
+        )
 
     /// Squared Euclidean length of a vector.
     let squaredLength scalarBackend (v: FsVector<'S,'V,'u>) : FsScalar<'S,'u^2> =
@@ -718,6 +731,7 @@ module Backends =
             nrows = DM.rows
             ofArray2d = DM.ofArray2D
             toArray2d = DM.toArray2D
+            transpose = DM.transpose
         }
 
         let engine = {

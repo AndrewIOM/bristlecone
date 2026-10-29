@@ -460,37 +460,17 @@ module Language =
             | [] -> failwith "Cannot multiply an empty list"
             | x :: rest -> rest |> List.fold (fun acc e -> <@ backend.mul %acc %e @>) x
 
-        let inverseFn () = failwith "TODO Inverse node not implemented"
-
-        // let tensorInverse backend fLambda (targetExpr: Expr<'S>) loExpr hiExpr tol maxIter =
-        //     <@
-        //         if backend.isNan %targetExpr = backend.atomic.constants.one then
-        //             backend.atomic.constants.penalty
-        //         else
-        //             let interval =
-        //                 Statistics.RootFinding.Interval.identify
-        //                     250
-        //                     Typed.Constants.penalty
-        //                     (%%fLambda: 'C -> 'C)
-        //                     %targetExpr
-        //                     %loExpr
-        //                     %hiExpr
-
-        //             let x =
-        //                 Statistics.RootFinding.Interval.refinedGrid
-        //                     backend
-        //                     (%%fLambda: 'C -> 'C)
-        //                     %targetExpr
-        //                     interval.Grid
-        //                     interval.Values
-        //                     interval.Low
-        //                     interval.High
-
-        //             let mask = interval.InRange
-        //             let invMask = backend.sub backend.atomic.constants.one mask
-        //             (mask * x) + (invMask * interval.Penalty)
-        //     @>
-
+        let inverseFn (backend: NumericBackend<'S,'C>) (fLambda: Expr<'C -> 'C>) (targetExpr: Expr<'C>) (loExpr: Expr<'C>) (hiExpr: Expr<'C>) (tolExpr: 'C) (maxIter: int) : Expr<'C> =
+            <@
+                Statistics.RootFinding.bisect
+                    backend
+                    %fLambda
+                    %targetExpr
+                    %loExpr
+                    %hiExpr
+                    tolExpr
+                    maxIter
+            @>
 
         /// Compiles a model expression into a quoted function, which
         /// runs on the dimensions of the container type 'C. For example,
@@ -581,23 +561,23 @@ module Language =
                     let oneVar = Var("one", typeof<'r>)
                     let oneExpr: Expr<'C> = <@ backend.div %xExpr %xExpr @>
 
+                    let innerCache, innerBindings = Caching.makeBindingCache ()
+
                     let fBody =
                         if requiresGradients
                         then
                             // Make a custom AD lifter to multiply constants by
                             // a one value that is tagged into the AD tape.
-                            let adLift (scalarExpr: Expr<'S>) : Expr<'C> =
+                            let adLift (ex: Expr<'C>) : Expr<'C> =
                                 <@ 
-                                    let baseVal = backend.promote %scalarExpr batchLength
                                     let one = backend.div %xExpr %xExpr
-                                    backend.mul baseVal one
+                                    backend.mul %ex one
                                 @>
-                            build (ME fn) // TODO pass in custom AD lift
-                        else build (ME fn)
-
-                    let innerCache, innerBindings = Caching.makeBindingCache ()
-                    let innerPairs: (Var * Expr<'r>) list = innerBindings |> Seq.toList
-
+                            buildQuotationCore shouldCache innerCache backend scalarBackend inverseFn requiresGradients context symbolsForFn batchLength (ME fn) |> adLift
+                        else
+                            buildQuotationCore shouldCache innerCache backend scalarBackend inverseFn requiresGradients context symbolsForFn batchLength (ME fn)
+                    
+                    let innerPairs: (Var * Expr<'C>) list = innerBindings |> Seq.toList
                     let fBodyWithLets: Expr<'C> =
                         List.foldBack
                             (fun (v, rhs) (acc: Expr<'C>) -> Expr.Cast<'C>(Expr.Let(v, rhs, acc)))
@@ -612,8 +592,8 @@ module Language =
                     let targetExpr = build (ME targetVal)
                     let loExpr = build (ME lo)
                     let hiExpr = build (ME hi)
-
-                    let tol, maxIter = 1e-6, 50
+                    let tol = backend.promote backend.atomic.constants.relTol batchLength
+                    let maxIter = 50
                     inverseFn backend fLambda targetExpr loExpr hiExpr tol maxIter)
 
             | ME(GreaterThan _)
@@ -725,7 +705,7 @@ module Language =
 
             // NB The quotation compiler doesn't currently support units. Strip here and reapply later.
             let exprNoUnit = expr |> fun (ME expr) -> expr |> ME
-            let core: Expr<'S> = buildQuotationCached backend backend ctx (inverseFn()) Map.empty exprNoUnit
+            let core: Expr<'S> = buildQuotationCached backend backend ctx inverseFn Map.empty exprNoUnit
 
             // Convert from 'stateUnit/'timeUnit to internal state/'timeUnit
             <@ %core |> Scalar.ofRaw backend |> Scalar.retype<'S,1,ModelSystem.state/'timeUnit> @> // Retype unit onto solution here
@@ -757,7 +737,7 @@ module Language =
 
             // NB The quotation compiler doesn't currently support units. Strip here and reapply later.
             let exprNoUnit = expr |> fun (ME expr) -> expr |> ME
-            let core: Expr<'S> = buildQuotationCached backend backend discreteContext (inverseFn()) Map.empty exprNoUnit
+            let core: Expr<'S> = buildQuotationCached backend backend discreteContext inverseFn Map.empty exprNoUnit
 
             <@ %core |> Scalar.ofRaw backend |> Scalar.retype<'S,1, ModelSystem.state> @> // Retype unit back here
             |> toLambda4 pVar eVar tVar xVar
@@ -812,7 +792,7 @@ module Language =
 
             // NB The quotation compiler doesn't currently support units. Strip here and reapply later.
             let exprNoUnit = expr |> fun (ME expr) -> expr |> ME
-            let core: Expr<'S> = buildQuotationCached backend backend ctx (inverseFn()) Map.empty exprNoUnit
+            let core: Expr<'S> = buildQuotationCached backend backend ctx inverseFn Map.empty exprNoUnit
 
             <@ %core |> Scalar.ofRaw backend |> Scalar.retype<'S,1, ModelSystem.state> @> // Retype unit on here
             |> fun body -> Expr.Lambda(pVar, Expr.Lambda(statesVar, Expr.Lambda(thisVar, Expr.Lambda(tIdxVar, body))))
@@ -848,7 +828,7 @@ module Language =
 
             // NB The quotation compiler doesn't currently support units. Strip here and reapply later.
             let exprNoUnit = expr |> fun (ME expr) -> expr |> ME
-            let core: Expr<'S> = buildQuotationCached backend backend ctx (inverseFn()) Map.empty exprNoUnit
+            let core: Expr<'S> = buildQuotationCached backend backend ctx inverseFn Map.empty exprNoUnit
 
             <@ %core |> Scalar.ofRaw backend |> Scalar.retype<'S,1, ModelSystem.state> @> // Retype unit on here.
             |> fun body -> Expr.Lambda(pVar, Expr.Lambda(eVar, Expr.Lambda(bVar, body)))
@@ -955,8 +935,8 @@ module Language =
             (expr: ModelExpression<'state / 'time>)
             (mb: ModelDescription<'time,ContinuousTime,'S,'V>) =
             let (ME eUntyped) = expr
-            let envReqs = ExpressionParser.requirements eUntyped |> Writer.run |> snd
-            let frag = Rate(envReqs, eUntyped)
+            let reqs = ExpressionParser.requirements eUntyped |> Writer.run |> snd
+            let frag = Rate(reqs, eUntyped)
 
             let existingEq =
                 (unwrap mb).States
@@ -972,8 +952,8 @@ module Language =
             (mb: ModelDescription<'time,DiscreteTime,'S,'V>)
             : ModelDescription<'time,DiscreteTime,'S,'V> =
             let (ME eUntyped) = expr
-            let envReqs = ExpressionParser.requirements eUntyped |> Writer.run |> snd
-            let frag = Discrete(envReqs, eUntyped)
+            let reqs = ExpressionParser.requirements eUntyped |> Writer.run |> snd
+            let frag = Discrete(reqs, eUntyped)
             
             let existingEq =
                 (unwrap mb).States
@@ -1046,7 +1026,7 @@ module Language =
 
             open Bristlecone.Numerics
 
-            let internal assertParams parameters requirements =
+            let internal assertParams parameters requirements likelihoodRequired =
                 let present = Map.keys parameters |> Set.ofSeq
                 let requiredParams =
                     requirements
@@ -1055,6 +1035,7 @@ module Language =
                         | ExpressionParser.Requirement.ParameterRequirement e ->
                             Some(e |> ShortCode.create |> Option.get)
                         | _ -> None)
+                    |> List.append likelihoodRequired
                     |> Set.ofList
                 
                 if present <> requiredParams
@@ -1074,14 +1055,14 @@ module Language =
                 
                 let (ModelBuilder builder) = mb
 
+                let likelihoodReqs = builder.Likelihood |> Option.map(fun l -> l.RequiredParameters |> List.map fst) |> Option.defaultValue []
                 let requirements =
                     [
                         builder.States |> Seq.choose(fun kv -> kv.Value |> snd |> Option.map fst)
                         builder.Measures |> Seq.map(fun kv -> kv.Value |> fst)
-                        // builder.Likelihood |> Option.map (fun l -> l.RequiredCodes.Head) // TODO
                     ] |> Seq.concat |> Seq.concat |> Seq.toList |> List.distinct
 
-                assertParams builder.Parameters requirements
+                assertParams builder.Parameters requirements likelihoodReqs
 
                 // Add likelihood parameters? Is this needed now?
                 let parameters = builder.Parameters |> Parameter.Pool.Pool

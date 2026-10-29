@@ -49,13 +49,7 @@ let initialBounds =
 
             testPropertyWithConfig Config.config "Likelihood functions use 'real' parameter values"
             <| fun shouldTransform (data: float list) (b1: NormalFloat) (b2: NormalFloat) ->
-
-                // Returns the parameter value
-                let fakeLikelihood (code:ShortCode.ShortCode) : ModelSystem.Likelihood<'S,'V,'u> =
-                    { Evaluate = fun paramAccessor _ -> paramAccessor.Get "a" |> Typed.Scalar.retype
-                      RequiredParameters = []
-                      RequiredCodes = [ LikelihoodRequirement.State code ] }
-
+                
                 if b1.Get = b2.Get || b1.Get = 0. || b2.Get = 0. then
                     ()
                 else
@@ -70,6 +64,12 @@ let initialBounds =
 
                     let X = Language.state "x"
                     let a = Language.parameter "a" mode (min b1 b2) (max b1 b2)
+
+                    // Returns the parameter value
+                    let fakeLikelihood (code:ShortCode.ShortCode) : ModelSystem.Likelihood<'S,'V,'u> =
+                        { Evaluate = fun paramAccessor _ -> paramAccessor.Get "a" |> Typed.Scalar.retype
+                          RequiredParameters = [ ModelLibrary.NegLogLikelihood.paramToAny a ]
+                          RequiredCodes = [ State code ] }
 
                     let model =
                         Language.Model.empty
@@ -89,7 +89,7 @@ let initialBounds =
                             (dummySolver code (fun _ -> 2.0<state>) data.Length)
                             optimConfig
                             ((Typed.Scalar.constants Config.defaultNumEngine).invalid |> Typed.Scalar.retype)
-                            ([ code, data |> List.map ((*) 1.<state>) |> List.toArray |> Config.defaultOfVector ] |> Map.ofList)
+                            ([ (code, data |> List.map ((*) 1.<state>) |> List.toArray |> Config.defaultOfVector) ] |> Map.ofList)
 
                     // The point given to the objective should be in optim-space.
                     let optimPoint =

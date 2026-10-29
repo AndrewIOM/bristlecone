@@ -189,12 +189,12 @@ module RungeKutta =
             if Vector.length y <> keysArr.Length then
                 failwithf "wrapRhs: state length %d does not match keys length %d" (Vector.length y) keysArr.Length
             let resultMap = rhs t y
-            keysArr |> Array.map (fun k -> resultMap.[k]) |> Stats.stack1D numEngine.vectorBackend numEngine.vectorAccess
+            keysArr |> Array.map (fun k -> resultMap.[k]) |> Stats.stack1D numEngine.vectorBackend numEngine.vectorAccess        
 
     /// Unflatten trajectory Tensor back into ``CodedMap<Vector,state>``.
     /// traj has shape [timeSteps; stateCount].
-    let unflattenTrajectory (keys: ShortCode.ShortCode list) (traj: FsMatrix<'S,'M,'s>) =
-        let comps = Stats.unstack2D traj
+    let unflattenTrajectory numEngine (keys: ShortCode.ShortCode list) (traj: FsMatrix<'S,'M,'s>) =
+        let comps = traj |> Matrix.transpose |> Stats.unstack2D numEngine
         (keys, comps)
         ||> Seq.map2 (fun k comp -> k, comp)
         |> Map.ofSeq
@@ -204,4 +204,4 @@ module RungeKutta =
             let keys, y0 = flattenState numEngine t0
             let fWrapped = wrapRhs numEngine keys rhs
             let traj = rk4WithStepWidth numEngine tInitial tEnd tStep y0 fWrapped
-            unflattenTrajectory keys traj
+            unflattenTrajectory numEngine keys traj

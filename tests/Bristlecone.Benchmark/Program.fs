@@ -43,7 +43,6 @@ module TestSuite =
     let twoDim f (x: float[]) = f x.[0] x.[1]
     let oneDim f (x: float[]) = f x.[0]
     let multidim f (x: float[]) = f x
-    let twoDimT f (x: FsVector<'S,'V,'a>) = f (Vector.itemAt 0 x) (Vector.itemAt 1 x)
 
     // Functions, input domain, global minimum, and global minimum point(s)
     let fixedDimension =
@@ -212,42 +211,72 @@ let summariseRuns
               |> Seq.length
           MillisecondsMedian = elapsedAverage }
 
-let numEngine = Backends.DiffSharp.engine
-
-let mkEvalFn (fn:float<'space>[] -> float) : EstimationEngine.Optimisation.EvaluateObjective<'space> = {
-    Evaluate = fun p -> p |> fn |> (*) 1.<``-logL``>
+let mkEvalFn (fn:float[] -> float) : EstimationEngine.Optimisation.EvaluateObjective<'space> = {
+    Evaluate = fun p -> p |> Array.map((/) (LanguagePrimitives.FloatWithMeasure<'space> 1.)) |> fn |> (*) 1.<``-logL``>
     Gradient = fun p -> failwith "gradients unavailable" // TODO
     EvaluateVectorised = fun p -> failwith "vectorised objective unavailable" // TODO
 }
 
 type OptimSpace<'S,'V,'M> =
-    | Bounded of EstimationEngine.Optimisation.Optimiser<``optim-space``,'S,'V,'M>
-    | Transformed of EstimationEngine.Optimisation.Optimiser<``optim-space-transformed``,'S,'V,'M>
+    | Bounded of EstimationEngine.Optimisation.Optimiser<``optim-space``,'S,'V,'M> * EstimationEngine.EndCondition<``optim-space``>
+    | Transformed of EstimationEngine.Optimisation.Optimiser<``optim-space-transformed``,'S,'V,'M> * EstimationEngine.EndCondition<``optim-space-transformed``>
 
-let runOptimTests (optimFunctions: (string * OptimSpace<'d,'e,'f> * EstimationEngine.EndCondition<'s>) list) =
+open EstimationEngine.Optimisation
+
+let runOptimTests (optimFunctions: (string * OptimSpace<'d,'e,'f>) list) =
     optimFunctions
-    |> List.collect (fun (optimName, optimise, endCondition) ->
+    |> List.collect (fun (optimName, optimise) ->
         TestSuite.fixedDimension
         |> List.map (fun (modelName, f, domain, minVal, minima) ->
-            let domain =
-                domain
-                |> List.map (fun (min, max) ->
-                    min, max, Parameter.Constraint.Bounded(min,max))
-                |> List.toArray
 
             runReplicated Config.startPointCount (fun () ->
-                let startPoint =
-                    domain
-                    |> Array.map (fun (min, max, _) -> TestSuite.between (float min) (float max))
-                printfn "START POINT = %A" startPoint
-
                 try
                     let result =
                         match optimise with
-                        | Bounded optim ->  optim.Optimise Config.rng logger endCondition domain (Some startPoint) (mkEvalFn f)
-                        | Transformed optim ->  optim.Optimise Config.rng logger endCondition domain (Some startPoint) (mkEvalFn f)
+                        | Bounded (optim,endCon) ->
+                            let domain =
+                                domain
+                                |> List.map (fun (min, max) ->
+                                    min * 1.<``optim-space``>, max * 1.<``optim-space``>, Parameter.Constraint.Bounded(min * 1.<``optim-space``>,max * 1.<``optim-space``>))
+                                |> List.toArray
+                            let startPoint =
+                                domain
+                                |> Array.map (fun (min, max, _) -> TestSuite.between (float min) (float max))
+                                |> Array.map((*) 1.<``optim-space``>)
+
+                            let r = optim.Optimise Config.rng logger endCon domain (Some startPoint) (mkEvalFn f)
+                            r |> List.map(fun x ->
+                                {
+                                    Component = x.Component
+                                    Stage = x.Stage
+                                    Replicate = x.Replicate
+                                    Results = x.Results |> List.map(fun (y1,y2) -> y1, y2 |> Array.map float)
+                                }
+                            ), startPoint |> Array.map float
+
+                        | Transformed (optim,endCon) ->
+                            let domain =
+                                domain
+                                |> List.map (fun (min, max) ->
+                                    min * 1.<``optim-space-transformed``>, max * 1.<``optim-space-transformed``>, Parameter.Constraint.Bounded(min * 1.<``optim-space-transformed``>,max * 1.<``optim-space-transformed``>))
+                                |> List.toArray
+                            let startPoint =
+                                domain
+                                |> Array.map (fun (min, max, _) -> TestSuite.between (float min) (float max))
+                                |> Array.map((*) 1.<``optim-space-transformed``>)
+
+                            let r = optim.Optimise Config.rng logger endCon domain (Some startPoint) (mkEvalFn f)
+                            r |> List.map(fun x ->
+                                {
+                                    Component = x.Component
+                                    Stage = x.Stage
+                                    Replicate = x.Replicate
+                                    Results = x.Results |> List.map(fun (y1,y2) -> y1, y2 |> Array.map float)
+                                }
+                            ), startPoint |> Array.map float
+                            
                     logger Logging.CompleteEvent
-                    Ok(result, startPoint |> Array.map float)
+                    Ok result
                 with
                 | e -> Error e.Message
                 )
@@ -333,13 +362,13 @@ module Metrics =
 // MODELS / OPTIM Fn
 // -------
 
-let optimFunctions =
-    [  "amoeba",                    Transformed (Amoeba.single Amoeba.Solver.Default), EndConditions.whenNoBestValueImprovement 300<iteration>
-       "amoeba [swarm]",            Transformed (Amoeba.swarm 5 20 Amoeba.Solver.Default), EndConditions.whenNoBestValueImprovement 300<iteration>
+let optimFunctions () =
+    [  //"amoeba",                    Transformed (Amoeba.single Amoeba.Solver.Default, EndConditions.whenNoBestValueImprovement 300<iteration>)
+       //"amoeba [swarm]",            Transformed (Amoeba.swarm 5 20 Amoeba.Solver.Default, EndConditions.whenNoBestValueImprovement 300<iteration>)
     //    "sim. anneal. [classic]",    MonteCarlo.SimulatedAnnealing.classicalSimulatedAnnealing 0.01<``optim-space``> false Optimisation.MonteCarlo.SimulatedAnnealing.AnnealSettings.Classical, EndConditions.atIteration 100000<iteration>
     //    "sim. anneal. [fast]",       MonteCarlo.SimulatedAnnealing.fastSimulatedAnnealing 0.01<``optim-space``> false Optimisation.MonteCarlo.SimulatedAnnealing.AnnealSettings.Fast, EndConditions.atIteration 100000<iteration>
-       "sim. anneal. [bristlecone]",Bounded (MonteCarlo.bristleconeSampler ()), EndConditions.Profiles.mcmc 100000<iteration> ignore
-       "filzbach",                  Bounded (MonteCarlo.Filzbach.filzbach MonteCarlo.Filzbach.FilzbachSettings.Default), EndConditions.Profiles.mcmc 100000<iteration> ignore
+      // "sim. anneal. [bristlecone]",Bounded (MonteCarlo.bristleconeSampler (), EndConditions.Profiles.mcmc 100000<iteration> ignore)
+       "filzbach",                  Bounded (MonteCarlo.Filzbach.filzbach MonteCarlo.Filzbach.FilzbachSettings.Default, EndConditions.Profiles.mcmc 100000<iteration> ignore)
     //    "random walk [AM burn-in]",  MonteCarlo.randomWalk [
     //         { Method = MonteCarlo.TuneMethod.CovarianceWithScale 0.25
     //           Frequency = 500<iteration>
@@ -437,7 +466,7 @@ let main argv =
     let testSuccess = runTestsInAssemblyWithCLIArgs [] argv
 
     if testSuccess = 0 then
-        let optimResults = runOptimTests optimFunctions
+        let optimResults = runOptimTests (optimFunctions ())
 
         let optimTable =
             Output.markdownTable
