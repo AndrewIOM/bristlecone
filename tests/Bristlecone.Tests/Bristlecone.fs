@@ -268,6 +268,7 @@ module ``Fit`` =
                     Map.ofList [
                         (ShortCode.create "Temp").Value, env
                         (ShortCode.create "X").Value, obs
+                        (ShortCode.create "dummy").Value, obs
                     ]
 
                 let engineLower =

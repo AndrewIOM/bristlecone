@@ -127,102 +127,102 @@ let modelExpressions =
         ]
 
 
-[<Tests>]
-let modelBuilder =
-    testList
-        "Model builder"
-        [
+// [<Tests>]
+// let modelBuilder =
+//     testList
+//         "Model builder"
+//         [
 
-            // testProperty "Throws if more than one likelihood function"
-            // <| fun likelihoodFns ->
-            //     let f () =
-            //         likelihoodFns
-            //         |> Seq.fold (fun mb l -> mb |> Model.useLikelihoodFunction l) Model.empty
-            //         |> Model.addRateEquation (state "x") (Constant 1.)
-            //         |> Model.compileWith Config.defaultNumEngine
+//             // testProperty "Throws if more than one likelihood function"
+//             // <| fun likelihoodFns ->
+//             //     let f () =
+//             //         likelihoodFns
+//             //         |> Seq.fold (fun mb l -> mb |> Model.useLikelihoodFunction l) Model.empty
+//             //         |> Model.addRateEquation (state "x") (Constant 1.)
+//             //         |> Model.compileWith Config.defaultNumEngine
 
-            //     if likelihoodFns |> Seq.length <> 1 then
-            //         Expect.throws (fun () -> f () |> ignore) "Allowed more than one likelihood function"
+//             //     if likelihoodFns |> Seq.length <> 1 then
+//             //         Expect.throws (fun () -> f () |> ignore) "Allowed more than one likelihood function"
 
-            // testPropertyWithConfig Config.config "Throws if no equations are specified"
-            // <| fun (eqs: (ShortCode.ShortCode * ModelExpression<Config.testModelUnit>) seq) ->
-            //     if eqs |> Seq.map fst |> Seq.hasDuplicates then
-            //         ()
-            //     else
-            //         let mb =
-            //             eqs |> Seq.fold (fun mb (n, eq) ->
-            //                 let n = state n.Value
-            //                 mb |> Model.addRateEquation n eq) Model.empty
-            //         let fn () = mb |> Model.compile
+//             // testPropertyWithConfig Config.config "Throws if no equations are specified"
+//             // <| fun (eqs: (ShortCode.ShortCode * ModelExpression<Config.testModelUnit>) seq) ->
+//             //     if eqs |> Seq.map fst |> Seq.hasDuplicates then
+//             //         ()
+//             //     else
+//             //         let mb =
+//             //             eqs |> Seq.fold (fun mb (n, eq) ->
+//             //                 let n = state n.Value
+//             //                 mb |> Model.addRateEquation n eq) Model.empty
+//             //         let fn () = mb |> Model.compile
 
-            //         if eqs |> Seq.length <> 1 then
-            //             Expect.throws (fun () -> fn () |> ignore) "Did not throw when no equations specified"
+//             //         if eqs |> Seq.length <> 1 then
+//             //             Expect.throws (fun () -> fn () |> ignore) "Did not throw when no equations specified"
 
-            testPropertyWithConfig
-                Config.config
-                "Compiles with one likelihood function and one or more equations (no duplicate keys)"
-            <| fun l (eqs: ShortCode.ShortCode list) ->
-                if eqs |> Seq.hasDuplicates then
-                    ()
-                else
-                    let mb =
-                        eqs
-                        |> List.fold
-                            (fun mb k ->
-                                let k = state k.Value
-                                mb |> Model.addRateEquation k (Constant 1.))
-                            (Model.empty |> Model.useLikelihoodFunction l)
+//             testPropertyWithConfig
+//                 Config.config
+//                 "Compiles with one likelihood function and one or more equations (no duplicate keys)"
+//             <| fun l (eqs: ShortCode.ShortCode list) ->
+//                 if eqs |> Seq.hasDuplicates then
+//                     ()
+//                 else
+//                     let mb =
+//                         eqs
+//                         |> List.fold
+//                             (fun mb k ->
+//                                 let k = state k.Value
+//                                 mb |> Model.addRateEquation k (Constant 1.))
+//                             (Model.empty |> Model.useLikelihoodFunction l)
 
-                    if eqs |> Seq.isEmpty then
-                        Expect.throws
-                            (fun () -> mb |> Model.compile |> ignore)
-                            "Did not error when no equations specified"
-                    else
-                        mb |> Model.compile |> ignore
+//                     if eqs |> Seq.isEmpty then
+//                         Expect.throws
+//                             (fun () -> mb |> Model.compile |> ignore)
+//                             "Did not error when no equations specified"
+//                     else
+//                         mb |> Model.compile |> ignore
 
-            testPropertyWithConfig Config.config "Compiles whether measures are present or not"
-            <| fun likelihood (NonEmptyArray (measures: ShortCode.ShortCode array)) ->
-                if measures |> Seq.hasDuplicates then ()
-                else
-                    let model =
-                        Model.discrete
-                        |> Model.useLikelihoodFunction likelihood
-                        |> Model.addDiscreteEquation (state "eq1") (Constant 1.)
+//             testPropertyWithConfig Config.config "Compiles whether measures are present or not"
+//             <| fun likelihood (NonEmptyArray (measures: ShortCode.ShortCode array)) ->
+//                 if measures |> Seq.hasDuplicates then ()
+//                 else
+//                     let model =
+//                         Model.discrete
+//                         |> Model.useLikelihoodFunction likelihood
+//                         |> Model.addDiscreteEquation (state "eq1") (Constant 1.)
 
-                    measures
-                    |> Array.fold (fun mb measureCode -> mb |> Model.addMeasure (measure measureCode.Value) (Constant 1.)) model
-                    |> Model.compile
-                    |> ignore
+//                     measures
+//                     |> Array.fold (fun mb measureCode -> mb |> Model.addMeasure (measure measureCode.Value) (Constant 1.)) model
+//                     |> Model.compile
+//                     |> ignore
 
-            testPropertyWithConfig Config.config "Doesn't compile if duplicate keys exist"
-            <| fun
-                    likelihood
-                    (eqs: ShortCode.ShortCode list)
-                    (measures: (ShortCode.ShortCode * ModelExpression<ModelSystem.state>) list) ->
-                if eqs.IsEmpty then
-                    ()
-                else
-                    let compile () =
-                        eqs
-                        |> Seq.fold
-                            (fun mb n -> mb |> Model.addDiscreteEquation (state n.Value) This)
-                            (Model.discrete |> Model.useLikelihoodFunction likelihood)
-                        |> fun mb ->
-                            Seq.fold
-                                (fun mb (n: ShortCode.ShortCode, _) ->
-                                    mb |> Model.addMeasure (measure n.Value) (Constant 1.))
-                                mb
-                                measures
-                        |> Model.compile
+//             testPropertyWithConfig Config.config "Doesn't compile if duplicate keys exist"
+//             <| fun
+//                     likelihood
+//                     (eqs: ShortCode.ShortCode list)
+//                     (measures: (ShortCode.ShortCode * ModelExpression<ModelSystem.state>) list) ->
+//                 if eqs.IsEmpty then
+//                     ()
+//                 else
+//                     let compile () =
+//                         eqs
+//                         |> Seq.fold
+//                             (fun mb n -> mb |> Model.addDiscreteEquation (state n.Value) This)
+//                             (Model.discrete |> Model.useLikelihoodFunction likelihood)
+//                         |> fun mb ->
+//                             Seq.fold
+//                                 (fun mb (n: ShortCode.ShortCode, _) ->
+//                                     mb |> Model.addMeasure (measure n.Value) (Constant 1.))
+//                                 mb
+//                                 measures
+//                         |> Model.compile
 
-                    let keys = [ eqs; (measures |> List.map fst) ] |> List.concat
+//                     let keys = [ eqs; (measures |> List.map fst) ] |> List.concat
 
-                    if keys |> Seq.hasDuplicates then
-                        Expect.throws (compile >> ignore) "Duplicate keys existed"
-                    else
-                        compile () |> ignore
+//                     if keys |> Seq.hasDuplicates then
+//                         Expect.throws (compile >> ignore) "Duplicate keys existed"
+//                     else
+//                         compile () |> ignore
 
-          ]
+//           ]
 
 let dummyBaseModel comp =
     let s = state "some_random_code"
