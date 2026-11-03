@@ -25,7 +25,7 @@ module Parameter =
             match con with
             | Unconstrained -> true
             | PositiveOnly -> x > Units.tagUnit 0.
-            | Bounded(lo, hi) -> x > lo && x < hi
+            | Bounded(lo, hi) -> x >= lo && x <= hi
 
     let create con (bound1: float<'u>) (bound2: float<'u>) =
         if isValid con bound1 && isValid con bound2 then
