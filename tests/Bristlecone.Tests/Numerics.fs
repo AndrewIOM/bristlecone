@@ -77,7 +77,7 @@ let typedNumerics (numEngine: NumericEngine<'S,'V,'M>) =
     ]
 
 [<Tests>]
-let typedDiffSharp = typedNumerics Backends.DiffSharp.engine
+let typedDiffSharp = typedNumerics Backends.FsDiff.engine
 
 let integration (numEngine: NumericEngine<'S,'V,'M>) =
     testList "Numerics (FsScalar/FsVector/FsMatrix) integration tests" [
@@ -123,5 +123,5 @@ let integration (numEngine: NumericEngine<'S,'V,'M>) =
     ]
 
 [<Tests>]
-let integrationDiffSharp = integration Backends.DiffSharp.engine
+let integrationDiffSharp = integration Backends.FsDiff.engine
 

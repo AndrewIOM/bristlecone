@@ -51,38 +51,14 @@ let rk4EdgeCases =
             let t0Map = Map.ofList [ (key, Config.defaultOfScalar 1.0<state>) ]
 
             // RHS: dy/dt = constant 2.0
-            printfn "TEST 1"
             let rhs : EstimationEngine.ParameterisedRHS<'S,'V> =
                 fun _t _yVec ->
-                    printfn "Hello %A" _yVec
                     Map.ofList [ (key, Config.defaultOfScalar 2.0<state/``time index``>) ]
 
-            printfn "TEST 2"
-            let x = Numerics.Typed.ofVector Numerics.Backends.DiffSharp.engine.vectorBackend Numerics.Backends.DiffSharp.engine.vectorAccess [| 1.; 2.; 3.|]
-            let y = Numerics.Stats.stack2D Numerics.Backends.DiffSharp.engine [| x |]
-            printfn "TEST 2.1"
-
             let keys, y0 = flattenState Config.defaultNumEngine t0Map
-            printfn "TEST 2.2"
-
-            printfn "T1 T0 %A %A %A" t1 t0 dt
-            let x2221 = Scalar.add t1 t0 //(((t1 * t0) / dt))
-            // printfn "%A" x2221
-            // let teststest = Units.floatToInt (((t1 - t0) / dt) |> Scalar.toFloat)
-            // printfn "TEST = %A" teststest
-            printfn "TEST 2.45"
-
             let traj = rk4WithStepWidth Config.defaultNumEngine t0 t1 dt y0 (wrapRhs Config.defaultNumEngine keys rhs)
-            printfn "TEST 2.3"
             let series = unflattenTrajectory Config.defaultNumEngine keys traj
-            printfn "TEST 3"
-
-            let xs = series.[key] |> Vector.toArrayFloat Config.defaultNumEngine.scalarBackend
-            
-            let xs = series.[key] |> Vector.toArrayFloat Config.defaultNumEngine.scalarBackend
-            printfn "TOTAL SERIES ELEMENT COUNT: %i" xs.Length
-            xs |> Array.iteri (fun i v -> printfn "Step [%i] = %f" i v)
-            
+            let xs = series.[key] |> Vector.toArrayFloat Config.defaultNumEngine.scalarBackend      
             Expect.floatClose Accuracy.high (xs.[xs.Length - 1] |> Units.removeUnitFromFloat) (1.0 + 2.0*1.0) "Final value mismatch"
 
     ]

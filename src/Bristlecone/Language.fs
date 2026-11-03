@@ -481,7 +481,6 @@ module Language =
             (shouldCache: ModelExpression<'u> -> bool)
             (cache: Caching.QuotationCache<'C, 'u>)
             (backend: NumericBackend<'S, 'C>)
-            (scalarBackend: NumericBackend<'S, 'S>)
             inverseFn
             requiresGradients
             (context:OpsContext<'S,'u>)
@@ -490,7 +489,7 @@ module Language =
             (expr: ModelExpression<'u>)
             : Expr<'C>
             =
-            let build : ModelExpression<'u> -> Expr<'C> = buildQuotationCore shouldCache cache backend scalarBackend inverseFn requiresGradients context symbols batchLength
+            let build : ModelExpression<'u> -> Expr<'C> = buildQuotationCore shouldCache cache backend inverseFn requiresGradients context symbols batchLength
             let withCache expr mk = Caching.apply cache shouldCache expr mk
 
             let promote (scalarExpr: Expr<'S>) : Expr<'C> = <@ backend.promote %scalarExpr batchLength @>
@@ -518,7 +517,7 @@ module Language =
 
             | ME(Divide(l, r)) -> withCache expr (fun () -> (build (ME l), build (ME r)) |> fun (l,r) -> <@ backend.div %l %r @>)
 
-            // | ME(Power(l, r)) -> withCache expr (fun () -> (build (ME l), build (ME r)) |> fun (l,r) -> <@ backend.pow %l %r @>)
+            | ME(Power(l, r)) -> withCache expr (fun () -> (build (ME l), build (ME r)) |> fun (l,r) -> <@ backend.pow %l %r @>)
 
             | ME(Logarithm e) -> withCache expr (fun () -> (build (ME e)) |> fun e -> <@ backend.log %e @>)
 
@@ -570,9 +569,9 @@ module Language =
                                     let one = backend.div %xExpr %xExpr
                                     backend.mul %ex one
                                 @>
-                            buildQuotationCore shouldCache innerCache backend scalarBackend inverseFn requiresGradients context symbolsForFn batchLength (ME fn) |> adLift
+                            buildQuotationCore shouldCache innerCache backend inverseFn requiresGradients context symbolsForFn batchLength (ME fn) |> adLift
                         else
-                            buildQuotationCore shouldCache innerCache backend scalarBackend inverseFn requiresGradients context symbolsForFn batchLength (ME fn)
+                            buildQuotationCore shouldCache innerCache backend inverseFn requiresGradients context symbolsForFn batchLength (ME fn)
                     
                     let innerPairs: (Var * Expr<'C>) list = innerBindings |> Seq.toList
                     let fBodyWithLets: Expr<'C> =
@@ -602,7 +601,6 @@ module Language =
         let internal buildQuotation'
             (policy: ModelExpression<'u> -> bool)
             (backend: NumericBackend<'S,'C>)
-            scalarBackend
             ctx
             inverseFn
             (symbols: Map<string, Var>)
@@ -613,7 +611,7 @@ module Language =
 
             let batchLength = 1
             let reqGrad = false
-            let body: Expr<'C> = buildQuotationCore policy bindingCache backend scalarBackend inverseFn reqGrad ctx symbols batchLength expr
+            let body: Expr<'C> = buildQuotationCore policy bindingCache backend inverseFn reqGrad ctx symbols batchLength expr
 
             let full: Expr<'C> =
                 List.foldBack
@@ -625,8 +623,8 @@ module Language =
 
         /// Builds a quotation from a model expression tree simply,
         /// with no internal caching or let bindings.
-        let buildQuotation containerBackend scalarBackend ctx inverseFn symbols expr =
-            buildQuotation' Caching.Policies.noCaching containerBackend scalarBackend ctx inverseFn symbols expr
+        let buildQuotation containerBackend ctx inverseFn symbols expr =
+            buildQuotation' Caching.Policies.noCaching containerBackend ctx inverseFn symbols expr
 
         /// Builds a quotation from a model expression tree,
         /// using an internal cache to avoid rebuilding 'heavy'
@@ -635,7 +633,6 @@ module Language =
         /// of work in computation.
         let buildQuotationCached
             (backend: NumericBackend<'S,'C>)
-            scalarBackend
             ctx
             inverseFn
             (symbols: Map<string, Var>)
@@ -646,7 +643,7 @@ module Language =
             let reqGrad = false
             let batchLen = 1
             let body: Expr<'C> =
-                buildQuotationCore Caching.Policies.cacheHeavy bindingCache backend scalarBackend inverseFn reqGrad ctx symbols batchLen expr
+                buildQuotationCore Caching.Policies.cacheHeavy bindingCache backend inverseFn reqGrad ctx symbols batchLen expr
 
             let full: Expr<'C> =
                 List.foldBack
@@ -709,7 +706,7 @@ module Language =
 
             // NB The quotation compiler doesn't currently support units. Strip here and reapply later.
             let exprNoUnit = expr |> fun (ME expr) -> expr |> ME
-            let core: Expr<'S> = buildQuotationCached backend backend ctx inverseFn Map.empty exprNoUnit
+            let core: Expr<'S> = buildQuotationCached backend ctx inverseFn Map.empty exprNoUnit
 
             // Convert from 'stateUnit/'timeUnit to internal state/'timeUnit
             <@ %core |> Scalar.ofRaw backend |> Scalar.retype<'S,1,ModelSystem.state/'timeUnit> @> // Retype unit onto solution here
@@ -748,7 +745,7 @@ module Language =
 
             // NB The quotation compiler doesn't currently support units. Strip here and reapply later.
             let exprNoUnit = expr |> fun (ME expr) -> expr |> ME
-            let core: Expr<'S> = buildQuotationCached backend backend discreteContext inverseFn Map.empty exprNoUnit
+            let core: Expr<'S> = buildQuotationCached backend discreteContext inverseFn Map.empty exprNoUnit
 
             <@ %core |> Scalar.ofRaw backend |> Scalar.retype<'S,1, ModelSystem.state> @> // Retype unit back here
             |> toLambda4 pVar eVar tVar xVar
@@ -810,7 +807,7 @@ module Language =
 
             // NB The quotation compiler doesn't currently support units. Strip here and reapply later.
             let exprNoUnit = expr |> fun (ME expr) -> expr |> ME
-            let core: Expr<'S> = buildQuotationCached backend backend ctx inverseFn Map.empty exprNoUnit
+            let core: Expr<'S> = buildQuotationCached backend ctx inverseFn Map.empty exprNoUnit
 
             <@ %core |> Scalar.ofRaw backend |> Scalar.retype<'S,1, ModelSystem.state> @> // Retype unit on here
             |> fun body -> Expr.Lambda(pVar, Expr.Lambda(statesVar, Expr.Lambda(thisVar, Expr.Lambda(tIdxVar, body))))
@@ -853,7 +850,7 @@ module Language =
 
             // NB The quotation compiler doesn't currently support units. Strip here and reapply later.
             let exprNoUnit = expr |> fun (ME expr) -> expr |> ME
-            let core: Expr<'S> = buildQuotationCached backend backend ctx inverseFn Map.empty exprNoUnit
+            let core: Expr<'S> = buildQuotationCached backend ctx inverseFn Map.empty exprNoUnit
 
             <@ %core |> Scalar.ofRaw backend |> Scalar.retype<'S,1, ModelSystem.state> @> // Retype unit on here.
             |> fun body -> Expr.Lambda(pVar, Expr.Lambda(eVar, Expr.Lambda(bVar, body)))
@@ -1051,7 +1048,7 @@ module Language =
 
             open Bristlecone.Numerics
 
-            let internal assertParams parameters requirements likelihoodRequired =
+            let internal assertParams parameters requirements likelihoodRequired states =
                 let present = Map.keys parameters |> Set.ofSeq
                 let requiredParams =
                     requirements
@@ -1067,7 +1064,7 @@ module Language =
                 then
                     let unnecessary = Set.difference present requiredParams
                     if not unnecessary.IsEmpty
-                    then failwithf "The following parameters were specified but are unnecessary: %A" unnecessary
+                    then failwithf "The following parameters were specified but are unnecessary: %A (ALL req = %A; L = %A; ALL param = %A -> %A)" unnecessary requiredParams requirements parameters states
 
                     let missing = Set.difference requiredParams present
                     if not missing.IsEmpty
@@ -1083,11 +1080,14 @@ module Language =
                 let likelihoodReqs = builder.Likelihood |> Option.map(fun l -> l.RequiredParameters |> List.map fst) |> Option.defaultValue []
                 let requirements =
                     [
-                        builder.States |> Seq.choose(fun kv -> kv.Value |> snd |> Option.map fst)
+                        builder.States |> Seq.map(fun kv ->
+                            match kv.Value |> fst with
+                            | Rate (reqs,_) -> reqs
+                            | Discrete (reqs,_) -> reqs)
                         builder.Measures |> Seq.map(fun kv -> kv.Value |> fst)
                     ] |> Seq.concat |> Seq.concat |> Seq.toList |> List.distinct
 
-                assertParams builder.Parameters requirements likelihoodReqs
+                assertParams builder.Parameters requirements likelihoodReqs builder.States
 
                 // Add likelihood parameters? Is this needed now?
                 let parameters = builder.Parameters |> Parameter.Pool.Pool
@@ -1117,8 +1117,14 @@ module Language =
                     builder.States
                     |> Seq.choose(fun kv ->
                         match fst kv.Value with
-                        | Discrete (_,expr) -> Some (kv.Key, expr)
+                        | Rate (_,expr) -> Some (kv.Key, expr)
                         | _ -> None) |> Seq.toList
+
+                if continEqs.Length + diffEqs.Length = 0 then
+                    failwith "No equations specified."
+
+                if continEqs.Length > 0 && diffEqs.Length > 0 then
+                    failwith "Specified both rate-based and discrete equations, which not not permitted."
 
                 let stateEqs : ModelSystem.ModelForm<'S,'V,'time> =
                     match diffEqs.Length, continEqs.Length with
@@ -1152,9 +1158,9 @@ module Language =
                   Measures = measures }
 
         /// Pre-compile a model system for use in Bristlecone.
-        /// Uses the default numeric engine (DiffSharp).
+        /// Uses the default numeric engine (FsDiff).
         let compile mb =
-            Compile.compile Numerics.Backends.DiffSharp.engine mb
+            Compile.compile Numerics.Backends.FsDiff.engine mb
 
         /// Pre-compile a model system for use in Bristlecone.
         /// Specify a custom numeric engine that matches the estimation

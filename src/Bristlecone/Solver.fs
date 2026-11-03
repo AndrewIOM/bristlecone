@@ -485,7 +485,7 @@ module Solver =
                     | DifferenceEqs eqs, Discrete ->
                         SolverRunners.DiscreteTime.fixedRunner numericEngine eqs fixedTimeline envIndex t0States
 
-                    | _ -> invalidOp "Mismatch between time-mode and differential/difference equation form."
+                    | _ -> failwithf "Mismatch between time-mode and differential/difference equation form. (%A -> %A)" modelInTI engineTimeMode
 
                 | Resolution.Variable ->
 

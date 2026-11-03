@@ -27,7 +27,7 @@ module Bristlecone =
           ToModelTime = DateMode.Conversion.CalendarDates.toYears
           InterpolationGlobal = Solver.InterpolationMode.Lower
           InterpolationPerVariable = Map.empty
-          Backend = Numerics.Backends.DiffSharp.engine
+          Backend = Numerics.Backends.FsDiff.engine
           Conditioning = Conditioning.NoConditioning }
 
     /// <summary>A basic estimation engine for ordinary differential equations, using a Nelder-Mead optimiser.</summary>
@@ -39,7 +39,7 @@ module Bristlecone =
           ToModelTime = DateMode.Conversion.CalendarDates.toYears
           InterpolationGlobal = Solver.InterpolationMode.Lower
           InterpolationPerVariable = Map.empty
-          Backend = Numerics.Backends.DiffSharp.engine
+          Backend = Numerics.Backends.FsDiff.engine
           Conditioning = Conditioning.RepeatFirstDataPoint }
 
 

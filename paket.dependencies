@@ -7,10 +7,10 @@ storage: none
 
 nuget FSharp.Core ~> 8 redirects: force
 nuget FSharp.Data
+nuget FsDiff 1.0.0-beta1
 nuget MathNet.Numerics
 nuget MathNet.Numerics.FSharp
 nuget RProvider 3.0.0
-nuget DiffSharp 0.8.4-beta
 
 group Test
     source https://nuget.org/api/v2

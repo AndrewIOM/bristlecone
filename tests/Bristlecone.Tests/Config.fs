@@ -8,7 +8,7 @@ open Bristlecone.Language
 open FsCheck
 
 // Use DiffSharp backend for all tests
-let defaultNumEngine = Numerics.Backends.DiffSharp.engine
+let defaultNumEngine = Numerics.Backends.FsDiff.engine
 let defaultOfVector v = Numerics.Typed.ofVector defaultNumEngine.vectorBackend defaultNumEngine.vectorAccess v
 let defaultOfScalar v = Numerics.Typed.ofScalar defaultNumEngine.scalarBackend v
 

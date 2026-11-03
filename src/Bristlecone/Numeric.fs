@@ -48,7 +48,7 @@ type NumericBackend<'S,'C> = {
     abs : 'C -> 'C
     exp : 'C -> 'C
     log : 'C -> 'C
-    pow : 'C -> 'S -> 'C
+    pow : 'C -> 'C -> 'C
     sqrt : 'C -> 'C
     floor : 'C -> 'C
     gt : 'C -> 'C -> 'C
@@ -366,7 +366,7 @@ module Typed =
 
         let scale (s: FsScalar<'S,'a>) (v: FsVector<'S,'V,'b>) : FsVector<'S,'V,'a * 'b> = s * v
 
-        let square (x: FsVector<'S,'V,'u>) : FsVector<'S,'V,'u^2> = { Inner = x.Backend.pow x.Inner x.Backend.atomic.constants.two; Backend = x.Backend; Access = x.Access }
+        let square (x: FsVector<'S,'V,'u>) : FsVector<'S,'V,'u^2> = { Inner = x.Backend.pow x.Inner (x.Backend.promote x.Backend.atomic.constants.two (x.Backend.length x.Inner)); Backend = x.Backend; Access = x.Access }
         let sqrt (x: FsVector<'S,'V,'u^2>) : FsVector<'S,'V,'u> = { Inner = x.Backend.sqrt x.Inner; Backend = x.Backend; Access = x.Access }
 
         let sum scalarBackend (a: FsVector<'S,'V,'u>) : FsScalar<'S,'u> =
@@ -493,9 +493,10 @@ module ActivePatterns =
 
 module Backends =
 
-    module DiffSharp =
+    module FsDiff =
 
-        open DiffSharp.AD.Float64
+        open FsDiff.AD
+        open FsDiff.AD.Float64
 
         let constants = {
             invalid = D 1e8
@@ -615,7 +616,7 @@ module Backends =
                 abs = DV.Abs
                 exp = DV.Exp
                 log = DV.Log
-                pow = fun s p -> DV.Pow(s,p)
+                pow = fun v pow -> DV.Pow(v, pow)
                 sqrt = DV.Sqrt
                 floor = DV.Floor
                 gt = VectorOps.gt
@@ -695,7 +696,7 @@ module Backends =
                 abs = DM.Abs
                 exp = DM.Exp
                 log = DM.Log
-                pow = fun x y -> DM.Pow(y,x)
+                pow = fun m1 m2 -> DM.Pow(m1,m2)
                 sqrt = DM.Sqrt
                 floor = DM.Floor
                 gt = MatrixOps.elementwise (fun x y -> if x > y then D 1.0 else D 0.0)

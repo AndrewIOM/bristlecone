@@ -2,9 +2,8 @@ STORAGE: NONE
 RESTRICTION: == net10.0
 NUGET
   remote: https://www.nuget.org/api/v2
-    DiffSharp (0.8.4-beta)
-      FSharp.Core (>= 4.3.4)
-      FSharp.Quotations.Evaluator (>= 1.1.2)
+    FsDiff (1.0.0-beta1)
+      FSharp.Core (>= 8.0.403 < 9.0)
     FSharp.Core (8.0.403) - redirects: force
     FSharp.Data (8.2)
       FSharp.Core (>= 6.0.1)
@@ -42,8 +41,6 @@ NUGET
       FSharp.Data.Http (>= 8.2)
       FSharp.Data.Json.Core (>= 8.2)
       FSharp.Data.Runtime.Utilities (>= 8.2)
-    FSharp.Quotations.Evaluator (2.1)
-      FSharp.Core (>= 4.3.1)
     MathNet.Numerics (5.0)
     MathNet.Numerics.FSharp (5.0)
       FSharp.Core (>= 6.0.2)
