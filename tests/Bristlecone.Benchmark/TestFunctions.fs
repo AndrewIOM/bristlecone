@@ -137,6 +137,8 @@ module Timeseries =
                 NegLogLikelihood.LogNormal numEngine (Require.state L) σL
 
             predatorPreyBase
+            |> Model.estimateParameter σH
+            |> Model.estimateParameter σL
             |> Model.useLikelihoodFunction NLL
             |> Model.compile
 
@@ -179,6 +181,7 @@ module Timeseries =
         // States
         let Cf = state<gram/area> "Cf" // fast pool
         let Cs = state<gram/area> "Cs" // slow pool
+        let cumulativeR = state<gram/area> "cumResp" // slow pool
 
         // Environmental input: soil temperature
         let Ts = environment "T_soil"
@@ -189,8 +192,8 @@ module Timeseries =
         let soilCarbonBase =
 
             // Parameters
-            let kf = parameter "kf" Positive 0.001< / day> 0.1< / day> // fast pool base decay rate
-            let ks = parameter "ks" Positive 0.0001< / day> 0.01< / day> // slow pool base decay rate
+            let kf = parameter "kf" Positive 0.001</day> 0.1</day> // fast pool base decay rate
+            let ks = parameter "ks" Positive 0.0001</day> 0.01</day> // slow pool base decay rate
             let Q10 = parameter "Q10" Positive 1.5 3.0 // temperature sensitivity
             let alpha = parameter "alpha" Positive 0.1 0.9 // efficiency of humification
 
@@ -200,15 +203,17 @@ module Timeseries =
             // Rate equations
             let ``dCf/dt``: ModelExpression<(gram/area)/day> = -(P kf * tempEffect) * This
             let ``dCs/dt``: ModelExpression<(gram/area)/day> =
-                P alpha * (P kf * tempEffect) * Environment Cf - (P ks * tempEffect) * This
+                P alpha * (P kf * tempEffect) * State Cf - (P ks * tempEffect) * This
 
             // Derived measurement: soil respiration flux
+            let ``dCumulativeR/dt`` = (P kf * tempEffect) * State Cf + (P ks * tempEffect) * State Cs
             let respiration: ModelExpression<(gram/area)/day> =
-                (P kf * tempEffect) * State Cf + (P ks * tempEffect) * State Cs
+                (State cumulativeR - StateAt(-1<``time index``>, cumulativeR)) / Constant 1.<day>
 
             Model.empty
             |> Model.addRateEquation Cf ``dCf/dt``
             |> Model.addRateEquation Cs ``dCs/dt``
+            |> Model.addRateEquation cumulativeR ``dCumulativeR/dt``
             |> Model.addMeasure R respiration
             |> Model.estimateParameter kf
             |> Model.estimateParameter ks
@@ -227,6 +232,7 @@ module Timeseries =
         let noisy backend =
             let NLL = NegLogLikelihood.Normal backend (Require.measure R) sigma
             soilCarbonBase
+            |> Model.estimateParameter sigma
             |> Model.useLikelihoodFunction NLL
             |> Model.compile
 
@@ -242,15 +248,27 @@ module Timeseries =
                 Dendro.Environment.Synthetic.genTemperatureSeasonal
                     10.<celsius> 10.<celsius> 365.<day> 0.
 
+
+            // TODO Problems running daily model in test harness here:
+            // -> Crashes if omit Test.resolution (key not in dict)
+            // -> Crashes if Daily 1 (some states not conditioned at t0):
             let settings =
                 Test.defaultSettings
                 |> Test.resolution (Daily 1<day>)
                 |> Test.seriesLength 30
-                |> Test.withObservationError (Require.measure R) (Test.Error.normal sigma)
                 |> Test.rule (Require.measure R) (Test.GenerationRules.alwaysLessThan 1000.)
+                |> Test.t1 (Require.state Cf) 50.0<gram/area>
+                |> Test.t1 (Require.state Cs) 50.0<gram/area>
+                |> Test.t1 (Require.state cumulativeR) 0.<gram/area>
                 |> Test.withEnvironmentGenBySpan Ts mkTemperature (fun x -> float x.Days * 1.<day>)
 
-            Bristlecone.tryTestModel engine endCondition settings (if withNoise then noisy numEngine else deterministic numEngine)
+            if withNoise
+            then
+                let settings =
+                    settings
+                    |> Test.withObservationError (Require.measure R) (Test.Error.normal sigma)
+                Bristlecone.tryTestModel engine endCondition settings (noisy numEngine)
+            else Bristlecone.tryTestModel engine endCondition settings (deterministic numEngine)
 
 
     /// A discrete-time test model, which represents the temperature-dependence
@@ -295,6 +313,7 @@ module Timeseries =
 
             rickerBase
             |> Model.useLikelihoodFunction NLL
+            |> Model.estimateParameter sigma
             |> Model.compile
 
         let test withNoise numEngine logger optimise endCondition =

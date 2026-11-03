@@ -363,7 +363,7 @@ module Metrics =
 // -------
 
 let optimFunctions () =
-    [  //"amoeba",                    Transformed (Amoeba.single Amoeba.Solver.Default, EndConditions.whenNoBestValueImprovement 300<iteration>)
+    [  "amoeba",                    Transformed (Amoeba.single Amoeba.Solver.Default, EndConditions.whenNoBestValueImprovement 300<iteration>)
        //"amoeba [swarm]",            Transformed (Amoeba.swarm 5 20 Amoeba.Solver.Default, EndConditions.whenNoBestValueImprovement 300<iteration>)
     //    "sim. anneal. [classic]",    MonteCarlo.SimulatedAnnealing.classicalSimulatedAnnealing 0.01<``optim-space``> false Optimisation.MonteCarlo.SimulatedAnnealing.AnnealSettings.Classical, EndConditions.atIteration 100000<iteration>
     //    "sim. anneal. [fast]",       MonteCarlo.SimulatedAnnealing.fastSimulatedAnnealing 0.01<``optim-space``> false Optimisation.MonteCarlo.SimulatedAnnealing.AnnealSettings.Fast, EndConditions.atIteration 100000<iteration>
@@ -377,37 +377,62 @@ let optimFunctions () =
     ]
 
 type BackendOption =
-    | DiffSharp of NumericEngine<DiffSharp.AD.Float64.D,DiffSharp.AD.Float64.DV,DiffSharp.AD.Float64.DM>
+    | DiffSharp of NumericEngine<FsDiff.AD.Float64.D,FsDiff.AD.Float64.DV,FsDiff.AD.Float64.DM>
     | FSharpFloat of NumericEngine<float,float[],float[,]>
 
 let backends =
-    [ DiffSharp Backends.DiffSharp.engine ]
+    [ DiffSharp Backends.FsDiff.engine ]
 
-// let runTs (backendName, backend: NumericEngine<'S,'V,'M>) (modelName, modelTestFn: NumericEngine<'S,'V,'M> -> (Logging.LogEvent -> unit) -> EstimationEngine.Optimisation.Optimiser<'space,'S,'V,'M> -> EstimationEngine.EndCondition<'space> -> Result<Test.TestResult<'a,'b,'c,'u>,string>) =
-//     optimFunctions
-//     |> List.map (fun ((optimName: string, optimise, endCondition)) ->
-//         runReplicated Config.startPointCount (fun () ->
-//             try
-//                 match optimise with
-//                 | Bounded optim ->  modelTestFn backend logger optim endCondition
-//                 | Transformed optim ->  modelTestFn backend logger optim endCondition
-//             with e ->
-//                 printfn "Error in model run (%s): %s, %s" modelName e.Message e.StackTrace
-//                 Error e.Message)
-//         |> fun r ->
-//             let ok = r |> Array.filter(fun (r,_) -> Result.isOk r) |> Array.map(fun (r,i) -> Result.forceOk r, i)
-//             if ok.Length = 0 then modelName, optimName, backendName, Error "no results"
-//             else modelName, optimName, backendName, Ok (Metrics.summariseRuns Config.likTol Config.paramTol ok))
-
-let timeModels backend =
+let timeModels () =
     [ 
-    //   runTs backend ("predator-prey",             TestFunctions.Timeseries.PredatorPrey.test false)
-    //   runTs backend ("predator-prey (noisy)",     TestFunctions.Timeseries.PredatorPrey.test true)
-    //   runTs backend ("soil respiration",          TestFunctions.Timeseries.SoilCarbon.test false)
-    //   runTs backend ("soil respiration (noisy)",  TestFunctions.Timeseries.SoilCarbon.test true)
-    //   runTs backend ("ricker temperature",          TestFunctions.Timeseries.RickerTemperature.test false)
-    //   runTs backend ("ricker temperature (noisy)",  TestFunctions.Timeseries.RickerTemperature.test true)
+    //  ("predator-prey",             TestFunctions.Timeseries.PredatorPrey.test false)
+    //   ("predator-prey (noisy)",     TestFunctions.Timeseries.PredatorPrey.test true)
+    //   ("soil respiration",          TestFunctions.Timeseries.SoilCarbon.test false)
+    //   ("soil respiration (noisy)",  TestFunctions.Timeseries.SoilCarbon.test true)
+      ("ricker temperature",          TestFunctions.Timeseries.RickerTemperature.test false)
+    //   ("ricker temperature (noisy)",  TestFunctions.Timeseries.RickerTemperature.test true)
     ]
+
+let runTs backendName (backend: NumericEngine<'S,'V,'M>) (optimName: string) optimise =
+    
+    let results =
+        match optimise with
+        | Bounded (optim, endCon) ->
+            let models = timeModels ()
+            models |> List.map(fun (modelName, modelTestFn)->
+                ((modelName, optimName), modelTestFn backend logger optim endCon)
+                runReplicated Config.startPointCount (fun () ->
+                    try
+                        ((modelName, optimName), modelTestFn backend logger optim endCon) |> Ok
+                    with e ->
+                        printfn "Error in model run (%s): %s, %s" modelName e.Message e.Source
+                        Error e.Message )
+            )
+
+        | Transformed (optim, endCon) ->
+            let models = timeModels ()
+            models |> List.map(fun (modelName, modelTestFn)->
+                runReplicated Config.startPointCount (fun () ->
+                    try ((modelName, optimName), modelTestFn backend logger optim endCon) |> Ok
+                    with e ->
+                        printfn "Error in model run (%s): %s, %s" modelName e.Message e.StackTrace
+                        Error e.Message )
+            )
+        |> List.toArray
+        |> Array.concat
+
+    let okByModelOptimCombo =
+        results |> Array.filter(fun (r,_) -> Result.isOk r) |> Array.map(fun (r,i) -> Result.forceOk r,i)
+        |> Array.map(fun (((modelName, optimName),result), i) ->
+            {| Model = modelName; Optim = optimName; Result = result; TimeTaken = i |}
+        )
+
+    okByModelOptimCombo |> Array.groupBy(fun x -> x.Model)
+    |> Array.map(fun (model,results) ->
+        let rWasOk =  results |> Array.filter(fun x -> x.Result.IsOk) |> Array.map(fun x -> Result.forceOk x.Result, x.TimeTaken)
+        if rWasOk.Length > 0 then  model, optimName, backendName, Ok (Metrics.summariseRuns Config.likTol Config.paramTol rWasOk)
+        else model, optimName, backendName, Error (results |> Array.map(fun r -> match r.Result with | Error e -> e | _ -> "") |> String.concat ",")
+    )
 
 module Output =
 
@@ -466,69 +491,73 @@ let main argv =
     let testSuccess = runTestsInAssemblyWithCLIArgs [] argv
 
     if testSuccess = 0 then
-        let optimResults = runOptimTests (optimFunctions ())
+        // let optimResults = runOptimTests (optimFunctions ())
 
-        let optimTable =
-            Output.markdownTable
-                [ "Model name"
-                  "Optimisation method"
-                  "n runs"
-                  "Target minimum"
-                  "Best estimated minimum"
-                  "Median estimated minimum"
-                  "Sum distance from true parameters"
-                  "Parameter estimates (individual)"
-                  "True solutions"
-                  "Milliseconds taken (median)" ]
-                (optimResults
-                 |> Seq.map (fun o ->
-                     [ o.ModelName
-                       o.OptimMethod
-                       o.Runs.ToString()
-                       Output.threeDp o.MinimumReal
-                       sprintf
-                           "%s (%s -> min)"
-                           (Output.threeDp o.MinimumEstimatedBest)
-                           (Output.threeDp o.DistanceFromMinimumBest)
-                       Output.threeDp o.MinimumEstimatedMedian
-                       Output.threeDp o.ParameterSpaceDistanceMedian
-                       Output.paramEstimatesToCell o.ParameterEstimates
-                       Output.pointsToCell o.MinimumRealPoints
-                       o.MillisecondsMedian.ToString() ]))
-
-        System.IO.File.WriteAllText(Output.fileName, Output.markdown optimTable "")
-
-        // let timeResults = List.concat <| List.concat [
-        //     timeModels ("DiffSharp 0.8", Backends.DiffSharp.engine)
-        // ]
-
-        // let timeTable =
+        // let optimTable =
         //     Output.markdownTable
-        //         [ "Model"
+        //         [ "Model name"
         //           "Optimisation method"
-        //           "Backend"
-        //           "Success %"
-        //           "n"
-        //           "Likelihood gap (med, tol=1.0)"
-        //           "Param RMSE (rel, median)"
-        //           "n iterations (median)"
-        //           "Time to solution (ms, median)" ]
-        //         (timeResults
-        //          |> Seq.filter(fun (_,_,_,m) -> Result.isOk m)
-        //          |> Seq.map(fun (a,b,backend,m) -> a, b, backend, Result.forceOk m )
-        //          |> Seq.map (fun (modelName, optimName, backendName, metrics) ->
-        //              [ modelName
-        //                optimName
-        //                backendName
-        //                Output.threeDp metrics.SuccessPct + "%"
-        //                metrics.RunN.ToString()
-        //                Output.threeDp metrics.MedianLikelihoodGap
-        //                Output.threeDp metrics.MedianParamRMSE
-        //             //    Output.summariseParameters metrics.MedianParamRMSE
-        //                metrics.MedianIterations.ToString()
-        //                metrics.MedianTimeMs.ToString() ]))
+        //           "n runs"
+        //           "Target minimum"
+        //           "Best estimated minimum"
+        //           "Median estimated minimum"
+        //           "Sum distance from true parameters"
+        //           "Parameter estimates (individual)"
+        //           "True solutions"
+        //           "Milliseconds taken (median)" ]
+        //         (optimResults
+        //          |> Seq.map (fun o ->
+        //              [ o.ModelName
+        //                o.OptimMethod
+        //                o.Runs.ToString()
+        //                Output.threeDp o.MinimumReal
+        //                sprintf
+        //                    "%s (%s -> min)"
+        //                    (Output.threeDp o.MinimumEstimatedBest)
+        //                    (Output.threeDp o.DistanceFromMinimumBest)
+        //                Output.threeDp o.MinimumEstimatedMedian
+        //                Output.threeDp o.ParameterSpaceDistanceMedian
+        //                Output.paramEstimatesToCell o.ParameterEstimates
+        //                Output.pointsToCell o.MinimumRealPoints
+        //                o.MillisecondsMedian.ToString() ]))
 
-        // System.IO.File.WriteAllText(Output.fileName, Output.markdown optimTable timeTable)
+        // System.IO.File.WriteAllText(Output.fileName, Output.markdown optimTable "")
+
+        let timeResults = 
+            optimFunctions()
+            |> List.map (fun (oN,o) -> runTs "DiffSharp 0.8" Backends.FsDiff.engine oN o)
+            |> List.toArray
+            |> Array.concat
+
+        printfn "TIME %A " timeResults
+
+        let timeTable =
+            Output.markdownTable
+                [ "Model"
+                  "Optimisation method"
+                  "Backend"
+                  "Success %"
+                  "n"
+                  "Likelihood gap (med, tol=1.0)"
+                  "Param RMSE (rel, median)"
+                  "n iterations (median)"
+                  "Time to solution (ms, median)" ]
+                (timeResults
+                 |> Seq.filter(fun (_,_,_,m) -> Result.isOk m)
+                 |> Seq.map(fun (a,b,backend,m) -> a, b, backend, Result.forceOk m )
+                 |> Seq.map (fun (modelName, optimName, backendName, metrics) ->
+                     [ modelName
+                       optimName
+                       backendName
+                       Output.threeDp metrics.SuccessPct + "%"
+                       metrics.RunN.ToString()
+                       Output.threeDp metrics.MedianLikelihoodGap
+                       Output.threeDp metrics.MedianParamRMSE
+                    //    Output.summariseParameters metrics.MedianParamRMSE
+                       metrics.MedianIterations.ToString()
+                       metrics.MedianTimeMs.ToString() ]))
+
+        System.IO.File.WriteAllText(Output.fileName, Output.markdown "" timeTable)
         0
     else
         testSuccess
